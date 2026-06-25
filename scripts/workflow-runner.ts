@@ -6,6 +6,18 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+
+export { parseRunnerCliArgs, normalizePlanArgument } from './workflow-runner/cli.ts';
+import { parseRunnerCliArgs, normalizePlanArgument } from './workflow-runner/cli.ts';
+export { parseContextUsage, parseCodexTokenUsage } from './workflow-runner/token-usage.ts';
+import {
+  parseContextUsage,
+  parseCodexTokenUsage,
+  unavailableContextUsage,
+  type CodexTokenUsage,
+  type ContextUsageLogFields,
+} from './workflow-runner/token-usage.ts';
+import { collectWorkflowThresholdWarnings } from './workflow-runner/token-warnings.ts';
 type CodexProfile = 'codex-work' | 'codex-personal' | 'codex-adam' | 'codex-work6598';
 type ReasoningEffort = 'medium' | 'high' | 'xhigh';
 
@@ -47,9 +59,6 @@ const TERMINAL_FAILED_COMMAND_OUTPUT_LINE_LIMIT = 4;
 const TERMINAL_FAILED_COMMAND_OUTPUT_CHAR_LIMIT = 1000;
 const TERMINAL_FILE_DETAIL_LIMIT = 3;
 const STOP_REASON_EXCERPT_CHAR_LIMIT = 240;
-const WORKFLOW_CONTEXT_PLAN_SIZE_WARNING_BYTES = 100 * 1024;
-const WORKFLOW_CONTEXT_STAGE_INPUT_WARNING_TOKENS = 2_000_000;
-const WORKFLOW_CONTEXT_STAGE_UNCACHED_WARNING_TOKENS = 100_000;
 const THIN_PLAN_CONTRACT = 'thin-plan-v1';
 const THIN_PLAN_ENTRY_MAX_BYTES = 512;
 const THIN_PLAN_HISTORY_MAX_BYTES = 4 * 1024;
@@ -213,24 +222,7 @@ type WorkflowFileLockMetadata = {
   path: string;
 };
 
-type ContextUsageLogFields = {
-  contextWindowTokens: number | 'unavailable';
-  contextWindowUsedTokens: number | 'unavailable';
-  contextWindowUsedPercent: string;
-};
-
-export type CodexTokenUsage = {
-  usageAvailable: boolean;
-  inputTokens: number | null;
-  cachedInputTokens: number | null;
-  uncachedInputTokens: number | null;
-  outputTokens: number | null;
-  reasoningOutputTokens: number | null;
-  totalTokens: number | null;
-  contextWindowTokens: number | 'unavailable';
-  contextWindowUsedTokens: number | 'unavailable';
-  contextWindowUsedPercent: string;
-};
+export type { CodexTokenUsage, ContextUsageLogFields } from './workflow-runner/token-usage.ts';
 
 type TokenUsageTotals = {
   inputTokens: number;
@@ -361,23 +353,6 @@ const workflowFileLockDir = (rootDir: string): string =>
 export const workflowFileLockPath = (rootDir: string, relativePath: string): string => {
   const digest = createHash('sha256').update(relativePath).digest('hex');
   return path.join(workflowFileLockDir(rootDir), `${digest}.json`);
-};
-
-const unavailableContextUsage: ContextUsageLogFields = {
-  contextWindowTokens: 'unavailable',
-  contextWindowUsedTokens: 'unavailable',
-  contextWindowUsedPercent: 'unavailable',
-};
-
-const unavailableCodexTokenUsage: CodexTokenUsage = {
-  usageAvailable: false,
-  inputTokens: null,
-  cachedInputTokens: null,
-  uncachedInputTokens: null,
-  outputTokens: null,
-  reasoningOutputTokens: null,
-  totalTokens: null,
-  ...unavailableContextUsage,
 };
 
 const zeroTokenUsageTotals: TokenUsageTotals = {
@@ -1035,10 +1010,7 @@ const summarizeFilteredPnpmCommand = (tokens: string[]): CommandTerminalSummary 
   };
 };
 
-const summarizeGitDiffCommand = (
-  tokens: string[],
-  fullTokens = tokens,
-): CommandTerminalSummary | null => {
+const summarizeGitDiffCommand = (tokens: string[]): CommandTerminalSummary | null => {
   if (tokens[0] !== 'git' || tokens[1] !== 'diff') {
     return null;
   }
@@ -1161,7 +1133,7 @@ const commandTerminalSummary = (command: string): CommandTerminalSummary => {
   const vitestSummary = summarizeVitestRunCommand(tokens);
   const jestSummary = summarizeJestRunCommand(tokens);
   const lineCountSummary = summarizeLineCountCommand(tokens);
-  const gitDiffSummary = summarizeGitDiffCommand(tokens, fullTokens);
+  const gitDiffSummary = summarizeGitDiffCommand(tokens);
   const planSectionReadSummary = summarizePlanSectionReadCommand(tokens);
 
   if (filteredPnpmSummary) {
@@ -1323,8 +1295,6 @@ const failedTestAssertionLines = (text: string): string[] => {
 const formatFailedTestCommandTerminalBlock = (
   command: string,
   text: string,
-  exitCode: CommandExitCode,
-  color = false,
 ): string | null => {
   const summary = summarizeFailedTestCommand(command);
   if (!summary) {
@@ -1616,7 +1586,7 @@ const formatCommandTerminalOutput = (
     return '';
   }
   return (
-    formatFailedTestCommandTerminalBlock(command, stats.output, exitCode, color) ??
+    formatFailedTestCommandTerminalBlock(command, stats.output) ??
     formatFailedCommandTerminalBlock(stats.output)
   );
 };
@@ -1690,6 +1660,37 @@ const formatCommandFailureHeadline = (
   return `${formatTerminalLabel('[failed]', 'commandFailed', color)} ${commandLabel} (exit ${exitDescription})`;
 };
 
+const terminalPathMarkers = [
+  '/.ai/',
+  '/apps/',
+  '/packages/',
+  '/src/',
+  '/docs/',
+  '/supabase/',
+  '/scripts/',
+  '/tests/',
+  '/e2e/',
+];
+
+const displayPathForTerminal = (filePath: string): string => {
+  const slashPath = filePath.replace(/\\/g, '/');
+  const relativePath = path.isAbsolute(filePath)
+    ? path.relative(process.cwd(), filePath).replace(/\\/g, '/')
+    : slashPath;
+  if (!relativePath.startsWith('../') && relativePath !== '..') {
+    return relativePath;
+  }
+
+  for (const marker of terminalPathMarkers) {
+    const markerIndex = slashPath.lastIndexOf(marker);
+    if (markerIndex >= 0) {
+      return slashPath.slice(markerIndex + 1);
+    }
+  }
+
+  return relativePath;
+};
+
 const applyPatchVerificationFailureSummary = (text: string, color = false): string | null => {
   const match = text.match(
     /ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in (.+?):/,
@@ -1699,9 +1700,7 @@ const applyPatchVerificationFailureSummary = (text: string, color = false): stri
   }
 
   const absoluteOrRelativeFile = match[1] ?? '';
-  const file = path.isAbsolute(absoluteOrRelativeFile)
-    ? path.relative(process.cwd(), absoluteOrRelativeFile)
-    : absoluteOrRelativeFile;
+  const file = displayPathForTerminal(absoluteOrRelativeFile);
   const contextStart = match.index === undefined ? 0 : match.index + match[0].length;
   const missingContextLine = text
     .slice(contextStart)
@@ -2094,132 +2093,6 @@ export const createCodexLiveOutputFormatter = (
         flushPendingTurnCompleted();
       }
     },
-  };
-};
-
-export const parseContextUsage = (stdout: string): ContextUsageLogFields => {
-  let latest: ContextUsageLogFields | undefined;
-  let sawTokenCount = false;
-
-  for (const line of stdout.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed) {
-      continue;
-    }
-
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(trimmed);
-    } catch {
-      continue;
-    }
-
-    const event = asRecord(parsed);
-    const payload = asRecord(event?.payload);
-    if (payload?.type === 'token_count') {
-      const info = asRecord(payload.info);
-      const lastTokenUsage = asRecord(info?.last_token_usage);
-      const usedTokens = lastTokenUsage?.total_tokens;
-      const contextWindowTokens = info?.model_context_window;
-      if (!isFiniteNumber(usedTokens) || usedTokens < 0) {
-        continue;
-      }
-      if (!isFiniteNumber(contextWindowTokens) || contextWindowTokens <= 0) {
-        continue;
-      }
-
-      sawTokenCount = true;
-      latest = {
-        contextWindowTokens,
-        contextWindowUsedTokens: usedTokens,
-        contextWindowUsedPercent: ((usedTokens / contextWindowTokens) * 100).toFixed(2),
-      };
-      continue;
-    }
-
-    if (!sawTokenCount && event?.type === 'turn.completed') {
-      const usage = asRecord(event.usage);
-      const usedTokens = usage?.input_tokens;
-      if (!isFiniteNumber(usedTokens) || usedTokens < 0) {
-        continue;
-      }
-
-      latest = {
-        contextWindowTokens: 'unavailable',
-        contextWindowUsedTokens: usedTokens,
-        contextWindowUsedPercent: 'unavailable',
-      };
-    }
-  }
-
-  return latest ?? unavailableContextUsage;
-};
-
-export const parseCodexTokenUsage = (stdout: string): CodexTokenUsage => {
-  const contextUsage = parseContextUsage(stdout);
-  let detailedUsage: Omit<
-    CodexTokenUsage,
-    'contextWindowTokens' | 'contextWindowUsedTokens' | 'contextWindowUsedPercent'
-  > | null = null;
-
-  for (const line of stdout.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed) {
-      continue;
-    }
-
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(trimmed);
-    } catch {
-      continue;
-    }
-
-    const event = asRecord(parsed);
-    if (event?.type !== 'turn.completed') {
-      continue;
-    }
-
-    const usage = asRecord(event.usage);
-    const inputTokens = usage?.input_tokens;
-    const outputTokens = usage?.output_tokens;
-    if (!isFiniteNumber(inputTokens) || inputTokens < 0) {
-      continue;
-    }
-    if (!isFiniteNumber(outputTokens) || outputTokens < 0) {
-      continue;
-    }
-
-    const cachedInputTokens = isFiniteNumber(usage?.cached_input_tokens)
-      ? Math.max(0, usage.cached_input_tokens)
-      : 0;
-    const reasoningOutputTokens = isFiniteNumber(usage?.reasoning_output_tokens)
-      ? Math.max(0, usage.reasoning_output_tokens)
-      : 0;
-    const uncachedInputTokens = Math.max(0, inputTokens - cachedInputTokens);
-
-    detailedUsage = {
-      usageAvailable: true,
-      inputTokens,
-      cachedInputTokens,
-      uncachedInputTokens,
-      outputTokens,
-      reasoningOutputTokens,
-      totalTokens: inputTokens + outputTokens,
-    };
-  }
-
-  return {
-    ...(detailedUsage ?? {
-      usageAvailable: false,
-      inputTokens: null,
-      cachedInputTokens: null,
-      uncachedInputTokens: null,
-      outputTokens: null,
-      reasoningOutputTokens: null,
-      totalTokens: null,
-    }),
-    ...contextUsage,
   };
 };
 
@@ -3322,44 +3195,6 @@ const summarizeLatestTokenUsage = (
   return lines.slice(0, 6);
 };
 
-const formatKilobytes = (bytes: number): string => `${(bytes / 1024).toFixed(1)} KB`;
-
-const collectWorkflowThresholdWarnings = ({
-  planByteSize,
-  latestTokenUsage,
-}: {
-  planByteSize: number;
-  latestTokenUsage?: WorkflowContextSnapshotTokenUsage;
-}): string[] => {
-  const warnings: string[] = [];
-
-  if (planByteSize > WORKFLOW_CONTEXT_PLAN_SIZE_WARNING_BYTES) {
-    warnings.push(
-      `Plan file is ${formatKilobytes(planByteSize)} (> 100 KB). This workflow is becoming pathological; move bulky workflow detail into .ai/artifacts/<plan-name>/events/ and keep the plan thin.`,
-    );
-  }
-
-  if (
-    isFiniteNumber(latestTokenUsage?.stageInputTokens) &&
-    latestTokenUsage.stageInputTokens > WORKFLOW_CONTEXT_STAGE_INPUT_WARNING_TOKENS
-  ) {
-    warnings.push(
-      `Latest stage input tokens are ${latestTokenUsage.stageInputTokens.toLocaleString('en-US')} (> 2,000,000). This workflow is becoming pathological; move bulky workflow detail into .ai/artifacts/<plan-name>/events/ and keep the plan thin.`,
-    );
-  }
-
-  if (
-    isFiniteNumber(latestTokenUsage?.stageUncachedInputTokens) &&
-    latestTokenUsage.stageUncachedInputTokens > WORKFLOW_CONTEXT_STAGE_UNCACHED_WARNING_TOKENS
-  ) {
-    warnings.push(
-      `Latest stage uncached input tokens are ${latestTokenUsage.stageUncachedInputTokens.toLocaleString('en-US')} (> 100,000). This workflow is becoming pathological; move bulky workflow detail into .ai/artifacts/<plan-name>/events/ and keep the plan thin.`,
-    );
-  }
-
-  return warnings;
-};
-
 const formatSnapshotSection = (heading: string, items: string[], empty = '(none)'): string =>
   `${heading}\n${items.length > 0 ? items.map((item) => `* ${item}`).join('\n') : empty}`;
 
@@ -3522,8 +3357,10 @@ ${warmPaths.map((warmPath) => `- ${warmPath}`).join('\n')}
 
 Use the Active Context Packet and index-selected instruction files only. Do not broadly load \`.ai/instructions/*\`.
 
-These paths are cold unless debugging them:
-- .ai/artifacts/**
+Artifact loading rule:
+- Use ${contextSnapshotPath} first.
+- Open event artifacts only when the snapshot references them and specific evidence is needed.
+- Do not broadly load \`.ai/artifacts/**\`.
 `;
 };
 
@@ -3542,55 +3379,6 @@ const success = (reason: string, iterations: number): RunnerResult => ({
   iterations,
   exitCode: 0,
 });
-
-const parseRunnerCliArgs = (
-  argv: string[] = [],
-):
-  | {
-      ok: true;
-      planArgument: string;
-      compactOutput: boolean;
-      unblockNote?: string;
-    }
-  | Failure => {
-  let compactOutput = false;
-  let unblockNote: string | undefined;
-  let planArgument = '';
-
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
-    if (arg === '--compact') {
-      if (index !== 0 || planArgument) {
-        return { ok: false, reason: '--compact must appear before the plan argument' };
-      }
-      compactOutput = true;
-      continue;
-    }
-    if (arg === '--unblock-note') {
-      const note = argv[index + 1];
-      if (!note || note.startsWith('--')) {
-        return { ok: false, reason: '--unblock-note requires a value' };
-      }
-      unblockNote = note;
-      index += 1;
-      continue;
-    }
-    if (arg.startsWith('--')) {
-      return { ok: false, reason: `unknown workflow runner flag: ${arg}` };
-    }
-    if (planArgument) {
-      return { ok: false, reason: `unexpected extra workflow runner argument: ${arg}` };
-    }
-    planArgument = arg;
-  }
-
-  return {
-    ok: true,
-    planArgument,
-    compactOutput,
-    unblockNote,
-  };
-};
 
 const extractSectionValue = (content: string, heading: string): string | null => {
   const lines = content.split(/\r?\n/);
@@ -3613,46 +3401,6 @@ const extractSectionValue = (content: string, heading: string): string | null =>
 const isStatus = (value: string): value is Status => VALID_STATUSES.includes(value as Status);
 const isNextAction = (value: string): value is NextAction =>
   VALID_NEXT_ACTIONS.includes(value as NextAction);
-
-const normalizePlanArgument = (
-  planName: string,
-): { ok: true; planName: string; planPath: string } | Failure => {
-  const trimmed = planName.trim();
-  if (trimmed.length === 0) {
-    return { ok: false, reason: 'plan name is required' };
-  }
-  if (path.isAbsolute(trimmed)) {
-    return {
-      ok: false,
-      reason: `plan argument must be a repo-relative .ai/plans/<plan-name>.md path: ${trimmed}`,
-    };
-  }
-  if (!trimmed.startsWith('.ai/plans/') || !trimmed.endsWith('.md')) {
-    return {
-      ok: false,
-      reason: `plan argument must be a repo-relative .ai/plans/<plan-name>.md path: ${trimmed}`,
-    };
-  }
-
-  const fileName = trimmed.slice('.ai/plans/'.length);
-  if (fileName.includes('/') || fileName.includes('..')) {
-    return {
-      ok: false,
-      reason: `plan argument must not contain nested paths or parent traversal: ${trimmed}`,
-    };
-  }
-
-  const normalizedPlanName = fileName.slice(0, -'.md'.length);
-  if (normalizedPlanName.length === 0) {
-    return { ok: false, reason: `plan argument must include a plan name: ${trimmed}` };
-  }
-
-  return {
-    ok: true,
-    planName: normalizedPlanName,
-    planPath: rel('.ai', 'plans', `${normalizedPlanName}.md`),
-  };
-};
 
 export const parsePlan = async ({
   planName,
