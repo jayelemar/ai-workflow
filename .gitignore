@@ -1,0 +1,25 @@
+# Source-only nested repo: ignore everything by default.
+*
+
+# Repo metadata
+!/.gitignore
+!/README.md
+
+# Allowlisted source directories
+!/prompts/
+!/prompts/**
+!/scripts/
+!/scripts/**
+!/templates/
+!/templates/**
+!/wrappers/
+!/wrappers/**
+
+# Dynamic/local-only workflow data
+/artifacts/
+/changelogs/
+/instructions/
+/logs/
+/plans/
+/specs/
+/state/

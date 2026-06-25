@@ -1,0 +1,213 @@
+# Reopen Plan (State-Machine Driven)
+
+This prompt reopens a completed plan when post-completion bugs or regressions are found.
+
+It does NOT implement fixes.
+
+It does NOT perform review.
+
+It does NOT generate a commit summary.
+
+---
+
+## Instruction Loading
+
+Read:
+
+* `.codex/AGENTS.md`
+* `.ai/instructions/workflow-state.instructions.md`
+* `.ai/specs/<feature>.spec.md` (if exists)
+* Active Context Packet instruction files selected from `.ai/instructions/index.instructions.md`
+* the plan file
+
+Use the runner-provided Active Context Packet and index-selected instruction files only. Do not broadly load `.ai/instructions/*`.
+
+Load:
+
+* `.ai/prompts/superpowers.md`
+
+Use superpower skills:
+
+* analyze
+* edge-cases
+
+---
+
+## Plan Input (MANDATORY)
+
+.ai/plans/<plan-name>.md
+
+If not provided:
+
+-> output `STOP`
+-> state blocking reason (`plan file is required`)
+-> do not proceed
+
+---
+
+## Reopen Findings Input (MANDATORY)
+
+Use the latest bug findings from one of:
+
+* the user's current request
+* the latest `## Review History` entry
+* the latest `## Blockers` entry
+* a clearly referenced issue report in the plan
+
+If no concrete findings exist:
+
+-> output `STOP`
+-> state blocking reason (`reopen findings are required`)
+-> do not proceed
+
+---
+
+## State Validation (CRITICAL)
+
+Read:
+
+## Status
+
+### Already Reopened Fast Path
+
+IF Status == active:
+
+Read:
+
+## Next Action
+
+IF Next Action == execute-plan AND `## Reopen History` contains a latest reopen entry with `Decision: active`:
+
+-> do not output `STOP`
+-> do not edit the plan
+-> output that the plan is already reopened
+-> output the next step as `execute-plan`
+-> end
+
+IF Status == active and this fast path does not apply:
+
+-> STOP (`plan is active but reopen handoff evidence is missing`)
+
+---
+
+Expected:
+
+reopening
+
+IF Status != reopening:
+
+-> STOP (`plan must be in reopening state`)
+
+---
+
+Read:
+
+## Next Action
+
+Any value is allowed.
+
+Do not STOP based on the current Next Action value.
+
+---
+
+## Reopen Scope
+
+Analyze ONLY the concrete bug findings that caused reopening.
+
+Do NOT:
+
+* expand scope beyond the findings
+* introduce speculative behavior
+* remove previous validation, execution, review, or commit history
+* mark the plan completed
+* generate a commit summary
+
+---
+
+## Required Plan Updates
+
+Update the plan with:
+
+* `## Reopen History` entry
+* required fixes
+* missing or repeated validations
+* unresolved risks
+* implementation gaps
+* phase/task updates needed to execute the fixes
+
+Rules:
+
+* preserve existing history sections
+* append new history entries
+* keep file ownership explicit
+* keep fixes traceable to the reopen findings
+
+---
+
+## State Transition (MANDATORY)
+
+After the plan is updated for the reopened work:
+
+update:
+
+## Status
+
+active
+
+## Next Action
+
+execute-plan
+
+---
+
+## Reopen History (MANDATORY)
+
+Append the next sequential reopen entry.
+
+If the plan already contains `## Reopen History`, append only:
+
+### Reopen vX
+
+* Summary:
+* Findings:
+* Required Fixes:
+* Required Validation:
+* Decision: active
+
+Rules:
+
+* Every reopen MUST append a new entry
+* MUST NOT overwrite previous reopen entries
+* Reopen versions MUST be sequential
+* MUST NOT duplicate the `## Reopen History` heading when it already exists
+* MUST create `## Reopen History` only if the section is missing
+
+---
+
+## Output (MANDATORY)
+
+### Plan
+
+.ai/plans/<plan-name>.md
+
+---
+
+### Reopen Summary
+
+* findings used
+* fixes added to the plan
+* validation added to the plan
+
+---
+
+### State Transition
+
+reopening -> active
+
+---
+
+### Next Step
+
+Run:
+
+execute-plan
