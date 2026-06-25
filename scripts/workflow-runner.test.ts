@@ -2294,8 +2294,8 @@ test("workflow prompt injects active context packet with current prompt, plan, s
   assert.match(prompt, /\.ai\/instructions\/index\.instructions\.md/);
   assert.match(prompt, /\.ai\/instructions\/workflow-state\.instructions\.md/);
   assert.match(prompt, /\.ai\/specs\/dashboard-home\.spec\.md/);
-  assert.match(prompt, /\.ai\/artifacts\/\*\*/);
-  assert.match(prompt, /cold unless debugging/i);
+  assert.match(prompt, /Open event artifacts only when the snapshot references them and specific evidence is needed/i);
+  assert.match(prompt, /Do not broadly load `\.ai\/artifacts\/\*\*`/i);
   assert.match(prompt, /Use the Active Context Packet and index-selected instruction files only/i);
   assert.match(prompt, /Plan-scoped diff boundary:/);
 });
@@ -4129,6 +4129,60 @@ test("pathological workflow thresholds warn in terminal output, logs, and the sn
     );
     assert.match(log, /thresholdWarnings:/);
     assert.match(log, /2,000,000/);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("pathological token warnings distinguish thin plans from long cached stages", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(workspace.root, "thin-token-spike", planWith("completed", "commit-summary"));
+    mkdirSync(join(workspace.root, ".ai", "artifacts", "thin-token-spike", "logs"), { recursive: true });
+    writeFileSync(
+      join(workspace.root, ".ai", "artifacts", "thin-token-spike", "logs", "token-usage.jsonl"),
+      `${JSON.stringify({
+        timestamp: "2026-06-26T00:00:00.000Z",
+        iteration: 9,
+        promptPath: ".ai/prompts/execute-plan.md",
+        stageInputTokens: 6_173_271,
+        stageCachedInputTokens: 5_856_512,
+        stageUncachedInputTokens: 316_759,
+        stageOutputTokens: 10_000,
+        stageTotalTokens: 6_183_271,
+        totalTokens: 6_183_271,
+      })}\n`,
+      "utf8",
+    );
+    const output = collectConsole();
+
+    const result = await runWorkflowRunner({
+      planName: planArg("thin-token-spike"),
+      rootDir: workspace.root,
+      console: output.console,
+      processRunner: runnerReturning({
+        launched: true,
+        stdout: turnCompletedUsageDetailLine({
+          inputTokens: 100,
+          cachedInputTokens: 20,
+          outputTokens: 30,
+          reasoningOutputTokens: 10,
+        }),
+        stderr: "",
+        exitCode: 0,
+      }),
+    });
+
+    assert.equal(result.success, true);
+    const terminalOutput = output.lines.join("\n");
+    assert.match(terminalOutput, /Latest stage total input tokens/i);
+    assert.match(terminalOutput, /Latest stage uncached input tokens/i);
+    assert.doesNotMatch(terminalOutput, /Latest stage input tokens are/i);
+    assert.match(terminalOutput, /plan is already thin/i);
+    assert.match(terminalOutput, /cached context/i);
+    assert.match(terminalOutput, /long stage/i);
+    assert.match(terminalOutput, /uncached input/i);
+    assert.doesNotMatch(terminalOutput, /move bulky workflow detail into \.ai\/artifacts\/<plan-name>\/events/i);
   } finally {
     await workspace.cleanup();
   }
