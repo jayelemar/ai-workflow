@@ -277,6 +277,10 @@ Rules:
 * MUST append a new entry for every validation run
 * MUST NOT overwrite previous entries
 * Validation versions MUST be sequential
+* MUST create `.ai/artifacts/<plan-name>/events/validation-vX.md` before updating the plan
+* The validation artifact MUST contain detailed critical issues, warnings, spec repair classifications, allowed spec repairs, recommendations, and evidence
+* The plan entry MUST contain only `Summary`, `Result`, and `Evidence`
+* The plan entry MUST stay under 512 bytes
 
 ---
 
@@ -318,18 +322,9 @@ append:
 
 ### Validation vX
 
+* Summary: minor spec repair required
 * Result: NEEDS FIX
-* Recommendation: perform minor spec repair, then revise plan if needed
-* Spec Issue Classification: MINOR SPEC REPAIR
-* Allowed Spec Repairs:
-
-  * `.ai/specs/<feature>.spec.md` — `<exact section heading>`: `<exact repair permitted>`
-* Critical Issues:
-
-  * ...
-* Warnings:
-
-  * ...
+* Evidence: .ai/artifacts/<plan-name>/events/validation-vX.md
 
 ---
 
@@ -351,14 +346,9 @@ append:
 
 ### Validation vX
 
+* Summary: plan requires fixes before approval
 * Result: NEEDS FIX
-* Recommendation: revise plan
-* Critical Issues:
-
-  * ...
-* Warnings:
-
-  * ...
+* Evidence: .ai/artifacts/<plan-name>/events/validation-vX.md
 
 ---
 
@@ -378,14 +368,9 @@ append:
 
 ### Validation vX
 
+* Summary: plan is approved for execution
 * Result: APPROVED
-* Recommendation: approve plan
-* Critical Issues:
-
-  * none
-* Warnings:
-
-  * ...
+* Evidence: .ai/artifacts/<plan-name>/events/validation-vX.md
 
 ---
 

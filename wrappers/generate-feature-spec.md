@@ -22,7 +22,7 @@ Strict Constraints:
 Source Material:
 - You may inspect the codebase to identify current implementation facts.
 - You may inspect `.ai/instructions/*` when relevant.
-- Exclude `.ai/logs` unless debugging historical runner output.
+- Exclude `.ai/artifacts` from broad searches unless reading current-plan runner evidence.
 - Do not infer desired behavior from codebase context.
 - Desired behavior must come from the user-provided details below.
 - If desired behavior, edge cases, or acceptance criteria are unclear, STOP and ask.

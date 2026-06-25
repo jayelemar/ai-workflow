@@ -150,7 +150,7 @@ If a `MINOR SPEC REPAIR` would require behavior not already decided in the exist
 
 ## Minor Spec Repair Rules
 
-Spec edits are allowed ONLY when the latest validation history entry:
+Spec edits are allowed ONLY when the latest validation history entry points to an evidence artifact and that latest validation artifact:
 
 * marks the issue exactly as `MINOR SPEC REPAIR`
 * lists the exact spec file that may be edited
@@ -159,8 +159,8 @@ Spec edits are allowed ONLY when the latest validation history entry:
 
 When allowed:
 
-1. edit only the named spec file and named spec section(s) from the latest validation entry
-2. make only the exact repair permitted by the latest validation entry
+1. edit only the named spec file and named spec section(s) from the latest validation artifact
+2. make only the exact repair permitted by the latest validation artifact
 3. do not add new behavior, changed business logic, product decisions, API/data-shape decisions, or edge-case rules
 4. update the plan only if needed to align with the repaired spec text
 5. return to `draft + plan-validator`

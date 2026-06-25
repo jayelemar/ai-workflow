@@ -48,9 +48,16 @@ const TERMINAL_FAILED_COMMAND_OUTPUT_CHAR_LIMIT = 1000;
 const TERMINAL_FILE_DETAIL_LIMIT = 3;
 const STOP_REASON_EXCERPT_CHAR_LIMIT = 240;
 const WORKFLOW_CONTEXT_PLAN_SIZE_WARNING_BYTES = 100 * 1024;
-const WORKFLOW_CONTEXT_PLAN_AUTO_SUMMARIZE_BYTES = 150 * 1024;
 const WORKFLOW_CONTEXT_STAGE_INPUT_WARNING_TOKENS = 2_000_000;
 const WORKFLOW_CONTEXT_STAGE_UNCACHED_WARNING_TOKENS = 100_000;
+const THIN_PLAN_CONTRACT = 'thin-plan-v1';
+const THIN_PLAN_ENTRY_MAX_BYTES = 512;
+const THIN_PLAN_HISTORY_MAX_BYTES = 4 * 1024;
+const WORKFLOW_EVENT_ARTIFACT_MAX_BYTES = 20 * 1024;
+const WORKFLOW_EVENT_ARTIFACT_SUMMARY_MAX_BYTES = 1024;
+const THIN_PLAN_ALLOWED_EVENT_FIELDS = new Set(['Summary', 'Result', 'Decision', 'Status', 'Evidence']);
+const THIN_PLAN_STATE_EVENT_FIELDS = ['Result', 'Decision', 'Status'] as const;
+const THIN_PLAN_FORBIDDEN_NARRATIVE_SECTIONS = ['## Review Required Fixes'];
 const ANSI_RESET = '\u001b[0m';
 const ANSI_SEQUENCE_PATTERN =
   /\u001b(?:\[([0-?]*[ -/]*)([@-~])|\][^\u0007]*(?:\u0007|\u001b\\)|[@-_])/g;
@@ -69,13 +76,6 @@ const WORKFLOW_WAIT_NOTICE_COLOR = '\u001b[38;2;255;244;143m';
 
 type Status = (typeof VALID_STATUSES)[number];
 type NextAction = (typeof VALID_NEXT_ACTIONS)[number];
-
-const PLAN_HISTORY_COMPACTION_ELIGIBLE_STATUSES = [
-  'active',
-  'review',
-  'deployment-validation',
-  'completed',
-] as const satisfies readonly Status[];
 
 export type ProcessCall = {
   command: string;
@@ -167,7 +167,6 @@ type RunWorkflowOptions = {
   outputStream?: OutputStream;
   streamOutput?: boolean;
   compactOutput?: boolean;
-  compactPlan?: boolean;
   unblockNote?: string;
   isIgnored?: (relativePath: string) => Promise<boolean>;
   now?: () => number;
@@ -261,25 +260,6 @@ type WorkflowContextSnapshotTokenUsage = {
 type WorkflowContextSnapshotResult = {
   snapshotPath: string;
   thresholdWarnings: string[];
-};
-
-type PlanHistoryCompactionWriteResult = {
-  ok: true;
-  archivePath: string;
-  compactedContent: string;
-};
-
-type PlanHistoryAutoSummaryResult = {
-  content: string;
-  originalByteSize: number;
-  newByteSize: number;
-  summarizedEntryLines: string[];
-};
-
-export type PlanHistoryCompactionResult = {
-  compactedContent: string;
-  archiveContent: string;
-  archivePath: string;
 };
 
 type FailureMetadataLogFields = {
@@ -376,7 +356,7 @@ const shellQuote = (value: string): string => {
 const shellPathspecs = (paths: string[]): string => paths.map(shellQuote).join(' ');
 
 const workflowFileLockDir = (rootDir: string): string =>
-  path.join(rootDir, '.ai', 'state', 'workflow-runner', 'file-locks');
+  path.join(rootDir, '.ai', 'artifacts', 'file-locks');
 
 export const workflowFileLockPath = (rootDir: string, relativePath: string): string => {
   const digest = createHash('sha256').update(relativePath).digest('hex');
@@ -2909,6 +2889,247 @@ const extractVersionedSectionEntries = (
   return entries.filter((entry) => entry.lines.some((line) => line.trim().length > 0));
 };
 
+type WorkflowEventKind =
+  | 'execution'
+  | 'validation'
+  | 'review'
+  | 'unblock'
+  | 'reopen'
+  | 'deployment-validation';
+
+const workflowEventSections = [
+  { section: '## Execution Log', label: 'Execution', kind: 'execution' },
+  { section: '## Validation History', label: 'Validation', kind: 'validation' },
+  { section: '## Review History', label: 'Review', kind: 'review' },
+  { section: '## Unblock History', label: 'Unblock', kind: 'unblock' },
+  { section: '## Reopen History', label: 'Reopen', kind: 'reopen' },
+  {
+    section: '## Deployment Validation',
+    label: 'Deployment Validation',
+    kind: 'deployment-validation',
+  },
+] as const satisfies readonly Array<{
+  section: string;
+  label: string;
+  kind: WorkflowEventKind;
+}>;
+
+const expectedWorkflowEventArtifactPath = (
+  planName: string,
+  kind: WorkflowEventKind,
+  version: number,
+): string => rel('.ai', 'artifacts', planName, 'events', `${kind}-v${version}.md`);
+
+const parseWorkflowEventHeading = (
+  heading: string,
+  label: string,
+): { ok: true; version: number } | Failure => {
+  const match = heading.match(new RegExp(`^###\\s+${escapeRegExp(label)}\\s+v(\\d+)\\s*$`, 'i'));
+  if (!match) {
+    return {
+      ok: false,
+      reason: `thin-plan entry heading must be "### ${label} v<N>", got ${heading}`,
+    };
+  }
+  const version = Number(match[1]);
+  if (!Number.isInteger(version) || version <= 0) {
+    return { ok: false, reason: `thin-plan entry version must be positive: ${heading}` };
+  }
+  return { ok: true, version };
+};
+
+const rawFieldValue = (lines: string[], fieldName: string): string | undefined => {
+  const pattern = new RegExp(`^\\*\\s*${escapeRegExp(fieldName)}:\\s*(.+)$`, 'i');
+  for (const line of lines) {
+    const match = line.trim().match(pattern);
+    if (match) {
+      return match[1]?.trim();
+    }
+  }
+  return undefined;
+};
+
+const workflowEventFieldNames = (lines: string[]): string[] => {
+  const fields: string[] = [];
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const match = trimmed.match(/^\*\s*([^:]+):(?:\s*(.*))?$/);
+    if (match) {
+      fields.push(match[1]?.trim() ?? '');
+      continue;
+    }
+    if (trimmed.length === 0) {
+      continue;
+    }
+    return [...fields, ''];
+  }
+  return fields;
+};
+
+const markdownSectionBody = (content: string, heading: string): string | undefined => {
+  const lines = content.split(/\r?\n/);
+  const start = lines.findIndex((line) => line.trim() === heading);
+  if (start === -1) {
+    return undefined;
+  }
+  const collected: string[] = [];
+  for (const line of lines.slice(start + 1)) {
+    if (/^##\s+/.test(line.trim())) {
+      break;
+    }
+    collected.push(line);
+  }
+  return collected.join('\n').trim();
+};
+
+const validateWorkflowEventArtifact = async ({
+  rootDir,
+  relativePath,
+}: {
+  rootDir: string;
+  relativePath: string;
+}): Promise<{ ok: true } | Failure> => {
+  const absolutePath = path.join(rootDir, relativePath);
+  if (!existsSync(absolutePath)) {
+    return { ok: false, reason: `workflow event artifact does not exist: ${relativePath}` };
+  }
+
+  let artifactStat;
+  let content: string;
+  try {
+    artifactStat = await stat(absolutePath);
+    content = await readFile(absolutePath, 'utf8');
+  } catch (error) {
+    return { ok: false, reason: `workflow event artifact cannot be read: ${relativePath}: ${String(error)}` };
+  }
+
+  if (artifactStat.size > WORKFLOW_EVENT_ARTIFACT_MAX_BYTES) {
+    return { ok: false, reason: `workflow event artifact exceeds 20 KB: ${relativePath}` };
+  }
+  if (!/^#\s+.+$/m.test(content)) {
+    return { ok: false, reason: `workflow event artifact is missing a top-level heading: ${relativePath}` };
+  }
+  const summary = markdownSectionBody(content, '## Summary');
+  if (!summary) {
+    return { ok: false, reason: `workflow event artifact is missing ## Summary: ${relativePath}` };
+  }
+  if (Buffer.byteLength(summary, 'utf8') > WORKFLOW_EVENT_ARTIFACT_SUMMARY_MAX_BYTES) {
+    return { ok: false, reason: `workflow event artifact summary exceeds 1 KB: ${relativePath}` };
+  }
+  const evidence = markdownSectionBody(content, '## Evidence');
+  if (!evidence) {
+    return { ok: false, reason: `workflow event artifact is missing ## Evidence: ${relativePath}` };
+  }
+
+  return { ok: true };
+};
+
+const validateThinPlanContract = async ({
+  rootDir,
+  planName,
+  content,
+}: {
+  rootDir: string;
+  planName: string;
+  content: string;
+}): Promise<{ ok: true } | Failure> => {
+  const contentRules = planSectionLines(content, '## Workflow Content Rules');
+  if (!contentRules.some((line) => line.trim() === THIN_PLAN_CONTRACT)) {
+    return { ok: false, reason: `plan is missing ${THIN_PLAN_CONTRACT}` };
+  }
+
+  for (const section of THIN_PLAN_FORBIDDEN_NARRATIVE_SECTIONS) {
+    if (content.split(/\r?\n/).some((line) => line.trim() === section)) {
+      return {
+        ok: false,
+        reason: `thin-plan contains forbidden narrative section ${section.replace(/^##\s+/, '')}`,
+      };
+    }
+  }
+
+  let workflowHistoryBytes = 0;
+  for (const { section, label, kind } of workflowEventSections) {
+    const entries = extractVersionedSectionEntries(content, section);
+    for (const entry of entries) {
+      const parsedHeading = parseWorkflowEventHeading(entry.heading, label);
+      if (!parsedHeading.ok) {
+        return parsedHeading;
+      }
+
+      const entryContent = [entry.heading, ...entry.lines].join('\n').trim();
+      if (Buffer.byteLength(entryContent, 'utf8') > THIN_PLAN_ENTRY_MAX_BYTES) {
+        return {
+          ok: false,
+          reason: `thin-plan ${label} v${parsedHeading.version} entry exceeds 512 bytes`,
+        };
+      }
+      workflowHistoryBytes += Buffer.byteLength(entryContent, 'utf8');
+
+      const fieldNames = workflowEventFieldNames(entry.lines);
+      const unsupportedField = fieldNames.find((fieldName) => {
+        if (!fieldName) {
+          return true;
+        }
+        return ![...THIN_PLAN_ALLOWED_EVENT_FIELDS].some(
+          (allowedField) => allowedField.toLowerCase() === fieldName.toLowerCase(),
+        );
+      });
+      if (unsupportedField !== undefined) {
+        return {
+          ok: false,
+          reason: `thin-plan ${label} v${parsedHeading.version} has unsupported field ${unsupportedField || '<inline detail>'}`,
+        };
+      }
+
+      const summary = rawFieldValue(entry.lines, 'Summary');
+      if (!summary) {
+        return {
+          ok: false,
+          reason: `thin-plan ${label} v${parsedHeading.version} is missing Summary`,
+        };
+      }
+      const stateFields = THIN_PLAN_STATE_EVENT_FIELDS.filter((fieldName) =>
+        rawFieldValue(entry.lines, fieldName),
+      );
+      if (stateFields.length !== 1) {
+        return {
+          ok: false,
+          reason: `thin-plan ${label} v${parsedHeading.version} must contain exactly one of Result, Decision, or Status`,
+        };
+      }
+      const evidencePath = rawFieldValue(entry.lines, 'Evidence');
+      const expectedPath = expectedWorkflowEventArtifactPath(
+        planName,
+        kind,
+        parsedHeading.version,
+      );
+      if (!evidencePath) {
+        return {
+          ok: false,
+          reason: `thin-plan ${label} v${parsedHeading.version} is missing Evidence`,
+        };
+      }
+      if (evidencePath !== expectedPath) {
+        return {
+          ok: false,
+          reason: `thin-plan ${label} v${parsedHeading.version} evidence path must be ${expectedPath}`,
+        };
+      }
+
+      const artifact = await validateWorkflowEventArtifact({ rootDir, relativePath: evidencePath });
+      if (!artifact.ok) {
+        return artifact;
+      }
+    }
+  }
+
+  if (workflowHistoryBytes > THIN_PLAN_HISTORY_MAX_BYTES) {
+    return { ok: false, reason: `thin-plan workflow history exceeds 4 KB` };
+  }
+
+  return { ok: true };
+};
+
 const extractCurrentPhaseSummary = (planContent: string): string[] => {
   for (const heading of [
     '## Current Phase',
@@ -2969,7 +3190,13 @@ const extractLatestValidationSummary = (
 
 const extractLatestReviewSummary = (
   planContent: string,
-): { heading?: string; summary?: string; decision?: string; unresolvedFindings: string[] } => {
+): {
+  heading?: string;
+  summary?: string;
+  decision?: string;
+  evidence?: string;
+  unresolvedFindings: string[];
+} => {
   const latestReview = extractVersionedSectionEntries(planContent, '## Review History').at(-1);
   if (!latestReview) {
     return { unresolvedFindings: [] };
@@ -2985,6 +3212,7 @@ const extractLatestReviewSummary = (
       : undefined,
     summary: extractFieldValue(latestReview.lines, 'Summary'),
     decision: extractFieldValue(latestReview.lines, 'Decision'),
+    evidence: extractFieldValue(latestReview.lines, 'Evidence'),
     unresolvedFindings,
   };
 };
@@ -2997,7 +3225,7 @@ const extractLatestReviewRemediationContext = (planContent: string): string[] =>
   }
 
   const review = extractLatestReviewSummary(planContent);
-  if (review.unresolvedFindings.length === 0) {
+  if (review.unresolvedFindings.length === 0 && !review.evidence) {
     return [];
   }
 
@@ -3010,6 +3238,9 @@ const extractLatestReviewRemediationContext = (planContent: string): string[] =>
   }
   if (review.decision) {
     context.push(`Decision: ${review.decision}`);
+  }
+  if (review.evidence) {
+    context.push(`Evidence: ${review.evidence}`);
   }
   context.push(...review.unresolvedFindings);
   return context;
@@ -3104,7 +3335,7 @@ const collectWorkflowThresholdWarnings = ({
 
   if (planByteSize > WORKFLOW_CONTEXT_PLAN_SIZE_WARNING_BYTES) {
     warnings.push(
-      `Plan file is ${formatKilobytes(planByteSize)} (> 100 KB). This workflow is becoming pathological; consider decomposition or history compaction follow-up.`,
+      `Plan file is ${formatKilobytes(planByteSize)} (> 100 KB). This workflow is becoming pathological; move bulky workflow detail into .ai/artifacts/<plan-name>/events/ and keep the plan thin.`,
     );
   }
 
@@ -3113,7 +3344,7 @@ const collectWorkflowThresholdWarnings = ({
     latestTokenUsage.stageInputTokens > WORKFLOW_CONTEXT_STAGE_INPUT_WARNING_TOKENS
   ) {
     warnings.push(
-      `Latest stage input tokens are ${latestTokenUsage.stageInputTokens.toLocaleString('en-US')} (> 2,000,000). This workflow is becoming pathological; consider decomposition or history compaction follow-up.`,
+      `Latest stage input tokens are ${latestTokenUsage.stageInputTokens.toLocaleString('en-US')} (> 2,000,000). This workflow is becoming pathological; move bulky workflow detail into .ai/artifacts/<plan-name>/events/ and keep the plan thin.`,
     );
   }
 
@@ -3122,39 +3353,11 @@ const collectWorkflowThresholdWarnings = ({
     latestTokenUsage.stageUncachedInputTokens > WORKFLOW_CONTEXT_STAGE_UNCACHED_WARNING_TOKENS
   ) {
     warnings.push(
-      `Latest stage uncached input tokens are ${latestTokenUsage.stageUncachedInputTokens.toLocaleString('en-US')} (> 100,000). This workflow is becoming pathological; consider decomposition or history compaction follow-up.`,
+      `Latest stage uncached input tokens are ${latestTokenUsage.stageUncachedInputTokens.toLocaleString('en-US')} (> 100,000). This workflow is becoming pathological; move bulky workflow detail into .ai/artifacts/<plan-name>/events/ and keep the plan thin.`,
     );
   }
 
   return warnings;
-};
-
-const collectWorkflowPlanCompactionRecommendation = ({
-  planPath,
-  status,
-  planByteSize,
-}: {
-  planPath: string;
-  status: Status;
-  planByteSize: number;
-}): string[] => {
-  if (planByteSize <= WORKFLOW_CONTEXT_PLAN_SIZE_WARNING_BYTES) {
-    return [];
-  }
-
-  const command = `pnpm exec tsx .ai/scripts/workflow-runner.ts --compact-plan ${planPath}`;
-  if (canCompactPlanHistory(status)) {
-    return [
-      `COMPACTION: Plan history compaction is available for ${status} plans.`,
-      `COMPACTION: Run: ${command}`,
-    ];
-  }
-
-  return [
-    `COMPACTION: Plan history compaction is not available while status is ${status}.`,
-    `COMPACTION: Eligible statuses: ${PLAN_HISTORY_COMPACTION_ELIGIBLE_STATUSES.join(', ')}.`,
-    `COMPACTION: Run after status is eligible: ${command}`,
-  ];
 };
 
 const formatSnapshotSection = (heading: string, items: string[], empty = '(none)'): string =>
@@ -3164,354 +3367,10 @@ const extractSnapshotActiveBlockers = (planContent: string): string[] =>
   extractActiveBlockers(planContent).filter((blocker) => blocker !== '## Blockers');
 
 export const workflowContextSnapshotRelativePath = (planName: string): string =>
-  rel('.ai', 'state', 'workflow-runner', `${planName}.context.md`);
+  rel('.ai', 'artifacts', planName, 'state', 'context.md');
 
 const workflowContextSnapshotAbsolutePath = (rootDir: string, planName: string): string =>
   path.join(rootDir, workflowContextSnapshotRelativePath(planName));
-
-export const planHistoryArchiveRelativePath = (planName: string): string =>
-  rel('.ai', 'artifacts', 'plan-history', `${planName}.history.md`);
-
-const planHistoryArchiveAbsolutePath = (rootDir: string, planName: string): string =>
-  path.join(rootDir, planHistoryArchiveRelativePath(planName));
-
-const sectionText = (planContent: string, heading: string): string | undefined => {
-  const lines = planSectionLines(planContent, heading);
-  if (lines.length === 0) {
-    return undefined;
-  }
-  const trimmed = [...lines];
-  while (trimmed[0]?.trim() === '') {
-    trimmed.shift();
-  }
-  while (trimmed.at(-1)?.trim() === '') {
-    trimmed.pop();
-  }
-  if (trimmed.length === 0) {
-    return undefined;
-  }
-  return `${heading}\n\n${trimmed.join('\n')}`;
-};
-
-const latestVersionedEntryText = (planContent: string, heading: string): string | undefined => {
-  const latestEntry = extractVersionedSectionEntries(planContent, heading).at(-1);
-  if (!latestEntry) {
-    return undefined;
-  }
-  const trimmed = [...latestEntry.lines];
-  while (trimmed[0]?.trim() === '') {
-    trimmed.shift();
-  }
-  while (trimmed.at(-1)?.trim() === '') {
-    trimmed.pop();
-  }
-  if (latestEntry.heading === heading) {
-    const summary = summarizeMeaningfulLines(trimmed.slice().reverse(), 8).reverse();
-    return `${heading}\n\n${summary.length > 0 ? summary.map((item) => `* ${item}`).join('\n') : '(empty)'}`;
-  }
-  return `${heading}\n\n${latestEntry.heading}\n\n${trimmed.join('\n')}`;
-};
-
-const compactBlockersSection = (planContent: string): string | undefined => {
-  const blockers = extractActiveBlockers(planContent).filter((blocker) => blocker !== '## Blockers');
-  if (blockers.length === 0) {
-    return sectionLines(planContent, '## Blockers') === null ? undefined : '## Blockers\n\n(empty)';
-  }
-  return `## Blockers\n\n${blockers.map((blocker) => `* ${blocker}`).join('\n')}`;
-};
-
-const versionedHistoryHeadings = [
-  '## Execution Log',
-  '## Validation History',
-  '## Review History',
-  '## Reopen History',
-] as const;
-
-const autoSummaryEntryLines = (planContent: string): string[] =>
-  versionedHistoryHeadings
-    .map((heading) => {
-      const entries = extractVersionedSectionEntries(planContent, heading);
-      const label = heading.replace(/^##\s+/, '');
-      if (entries.length > 1) {
-        const count = entries.length - 1;
-        return `${label}: summarized ${count} older ${count === 1 ? 'entry' : 'entries'}.`;
-      }
-      if (entries.length === 1 && entries[0]?.heading === heading) {
-        const entryByteSize = Buffer.byteLength(entries[0].lines.join('\n'), 'utf8');
-        if (entryByteSize > 10 * 1024) {
-          return `${label}: summarized unversioned history into bounded latest bullets.`;
-        }
-      }
-      return undefined;
-    })
-    .filter((line): line is string => typeof line === 'string');
-
-const autoSummarizedHistorySection = ({
-  planContent,
-  timestamp,
-  originalByteSize,
-  newByteSize,
-  summarizedEntryLines,
-}: {
-  planContent: string;
-  timestamp: string;
-  originalByteSize: number;
-  newByteSize?: number;
-  summarizedEntryLines: string[];
-}): string => {
-  const previousLines = planSectionLines(planContent, '## Auto-Summarized History');
-  const trimmedPrevious = [...previousLines];
-  while (trimmedPrevious[0]?.trim() === '') {
-    trimmedPrevious.shift();
-  }
-  while (trimmedPrevious.at(-1)?.trim() === '') {
-    trimmedPrevious.pop();
-  }
-
-  const latestRecord = [
-    `### Auto Summary ${timestamp}`,
-    '',
-    `* Original Size: ${formatKilobytes(originalByteSize)}`,
-    typeof newByteSize === 'number' ? `* New Size: ${formatKilobytes(newByteSize)}` : undefined,
-    ...summarizedEntryLines.map((line) => `* ${line}`),
-  ].filter((line): line is string => typeof line === 'string');
-
-  const body = trimmedPrevious.length > 0 ? [...trimmedPrevious, '', ...latestRecord] : latestRecord;
-  return `## Auto-Summarized History\n\n${body.join('\n')}`;
-};
-
-const buildAutoSummarizedPlanHistory = ({
-  planName,
-  planContent,
-  timestamp,
-  originalByteSize,
-  newByteSize,
-  summarizedEntryLines,
-}: {
-  planName: string;
-  planContent: string;
-  timestamp: string;
-  originalByteSize: number;
-  newByteSize?: number;
-  summarizedEntryLines: string[];
-}): string => {
-  const title = planContent.match(/^#\s+.+$/m)?.[0] ?? `# Plan: ${planName}`;
-  const sections = [
-    title,
-    sectionText(planContent, '## Status'),
-    sectionText(planContent, '## Next Action'),
-    sectionText(planContent, '## Spec'),
-    sectionText(planContent, '## Phases'),
-    sectionText(planContent, '## Files (MANDATORY)'),
-    sectionText(planContent, '## Summary'),
-    sectionText(planContent, '## Current Implementation Status'),
-    sectionText(planContent, '## Verification Status'),
-    latestVersionedEntryText(planContent, '## Execution Log'),
-    latestVersionedEntryText(planContent, '## Validation History'),
-    latestVersionedEntryText(planContent, '## Review History'),
-    latestVersionedEntryText(planContent, '## Reopen History'),
-    autoSummarizedHistorySection({
-      planContent,
-      timestamp,
-      originalByteSize,
-      newByteSize,
-      summarizedEntryLines,
-    }),
-    compactBlockersSection(planContent),
-    sectionText(planContent, '## Workflow State Rules'),
-    sectionText(planContent, '## Rules'),
-    sectionText(planContent, '## Completion Condition'),
-  ].filter((section): section is string => typeof section === 'string' && section.trim().length > 0);
-
-  return `${sections.join('\n\n')}\n`;
-};
-
-const autoSummarizePlanHistory = ({
-  planName,
-  planContent,
-  status,
-  timestamp = () => new Date().toISOString(),
-}: {
-  planName: string;
-  planContent: string;
-  status: Status;
-  timestamp?: () => string;
-}): PlanHistoryAutoSummaryResult | undefined => {
-  const originalByteSize = Buffer.byteLength(planContent, 'utf8');
-  if (
-    originalByteSize <= WORKFLOW_CONTEXT_PLAN_AUTO_SUMMARIZE_BYTES ||
-    !canCompactPlanHistory(status)
-  ) {
-    return undefined;
-  }
-
-  const summarizedEntryLines = autoSummaryEntryLines(planContent);
-  if (summarizedEntryLines.length === 0) {
-    return undefined;
-  }
-
-  const summarizedAt = timestamp();
-  const firstPassContent = buildAutoSummarizedPlanHistory({
-    planName,
-    planContent,
-    timestamp: summarizedAt,
-    originalByteSize,
-    summarizedEntryLines,
-  });
-  const firstPassByteSize = Buffer.byteLength(firstPassContent, 'utf8');
-  const content = buildAutoSummarizedPlanHistory({
-    planName,
-    planContent,
-    timestamp: summarizedAt,
-    originalByteSize,
-    newByteSize: firstPassByteSize,
-    summarizedEntryLines,
-  });
-  const newByteSize = Buffer.byteLength(content, 'utf8');
-  if (newByteSize >= originalByteSize) {
-    return undefined;
-  }
-
-  return {
-    content,
-    originalByteSize,
-    newByteSize,
-    summarizedEntryLines,
-  };
-};
-
-export const compactPlanHistory = ({
-  planName,
-  planPath,
-  planContent,
-  timestamp = () => new Date().toISOString(),
-}: {
-  planName: string;
-  planPath: string;
-  planContent: string;
-  timestamp?: () => string;
-}): PlanHistoryCompactionResult => {
-  const archivedAt = timestamp();
-  const archivePath = planHistoryArchiveRelativePath(planName);
-  const title = planContent.match(/^#\s+.+$/m)?.[0] ?? `# Plan: ${planName}`;
-  const sections = [
-    title,
-    sectionText(planContent, '## Status'),
-    sectionText(planContent, '## Next Action'),
-    sectionText(planContent, '## Spec'),
-    sectionText(planContent, '## Phases'),
-    sectionText(planContent, '## Files (MANDATORY)'),
-    sectionText(planContent, '## Summary'),
-    sectionText(planContent, '## Current Implementation Status'),
-    sectionText(planContent, '## Verification Status'),
-    latestVersionedEntryText(planContent, '## Execution Log'),
-    latestVersionedEntryText(planContent, '## Validation History'),
-    latestVersionedEntryText(planContent, '## Review History'),
-    latestVersionedEntryText(planContent, '## Reopen History'),
-    compactBlockersSection(planContent),
-    sectionText(planContent, '## Workflow State Rules'),
-    sectionText(planContent, '## Rules'),
-    sectionText(planContent, '## Completion Condition'),
-    `## Archived History
-
-Older resolved execution, validation, review, and reopen history was compacted on ${archivedAt}.
-
-Archive:
-${archivePath}`,
-  ].filter((section): section is string => typeof section === 'string' && section.trim().length > 0);
-
-  return {
-    compactedContent: `${sections.join('\n\n')}\n`,
-    archiveContent: `# Archived Plan History: ${planName}
-
-Original Plan: ${planPath}
-Archived At: ${archivedAt}
-
-The active plan keeps current workflow state and latest history only. This archive preserves the full pre-compaction plan content for traceability.
-
-## Original Plan Content
-
-${planContent.trimEnd()}
-`,
-    archivePath,
-  };
-};
-
-const canCompactPlanHistory = (status: Status): boolean =>
-  PLAN_HISTORY_COMPACTION_ELIGIBLE_STATUSES.includes(status);
-
-const writeAutoSummarizedPlanHistory = async ({
-  plan,
-  timestamp,
-}: {
-  plan: ParsedPlan;
-  timestamp: () => string;
-}): Promise<PlanHistoryAutoSummaryResult | undefined | Failure> => {
-  const autoSummary = autoSummarizePlanHistory({
-    planName: plan.planName,
-    planContent: plan.content,
-    status: plan.status,
-    timestamp,
-  });
-  if (!autoSummary) {
-    return undefined;
-  }
-
-  try {
-    await writeFile(plan.absolutePlanPath, autoSummary.content, 'utf8');
-    return autoSummary;
-  } catch (error) {
-    return {
-      ok: false,
-      reason: `plan history auto-summarization cannot be written: ${String(error)}`,
-    };
-  }
-};
-
-const writePlanHistoryCompaction = async ({
-  rootDir,
-  plan,
-  timestamp,
-}: {
-  rootDir: string;
-  plan: ParsedPlan;
-  timestamp: () => string;
-}): Promise<PlanHistoryCompactionWriteResult | Failure> => {
-  if (!canCompactPlanHistory(plan.status)) {
-    return {
-      ok: false,
-      reason: `plan history compaction only supports active, review, deployment-validation, or completed plans; current status is ${plan.status}`,
-    };
-  }
-
-  const compaction = compactPlanHistory({
-    planName: plan.planName,
-    planPath: plan.planPath,
-    planContent: plan.content,
-    timestamp,
-  });
-
-  try {
-    await mkdir(path.dirname(planHistoryArchiveAbsolutePath(rootDir, plan.planName)), {
-      recursive: true,
-    });
-    if (!existsSync(planHistoryArchiveAbsolutePath(rootDir, plan.planName))) {
-      await writeFile(
-        planHistoryArchiveAbsolutePath(rootDir, plan.planName),
-        compaction.archiveContent,
-        'utf8',
-      );
-    }
-    await writeFile(plan.absolutePlanPath, compaction.compactedContent, 'utf8');
-    return {
-      ok: true,
-      archivePath: compaction.archivePath,
-      compactedContent: compaction.compactedContent,
-    };
-  } catch (error) {
-    return { ok: false, reason: `plan history compaction cannot be written: ${String(error)}` };
-  }
-};
 
 export const generateWorkflowContextSnapshot = ({
   planName,
@@ -3561,6 +3420,7 @@ ${validation.details.length > 0 ? validation.details.map((detail) => `* ${detail
 
 * Summary: ${review.summary ?? '(none recorded)'}
 * Decision: ${review.decision ?? '(none recorded)'}
+* Evidence: ${review.evidence ?? '(none recorded)'}
 ${formatSnapshotSection('### Unresolved Findings', review.unresolvedFindings)}
 
 ${formatSnapshotSection('## Latest Review Remediation Context', reviewRemediationContext)}
@@ -3663,8 +3523,6 @@ ${warmPaths.map((warmPath) => `- ${warmPath}`).join('\n')}
 Use the Active Context Packet and index-selected instruction files only. Do not broadly load \`.ai/instructions/*\`.
 
 These paths are cold unless debugging them:
-- .ai/logs/**
-- .ai/state/**
 - .ai/artifacts/**
 `;
 };
@@ -3692,12 +3550,10 @@ const parseRunnerCliArgs = (
       ok: true;
       planArgument: string;
       compactOutput: boolean;
-      compactPlan: boolean;
       unblockNote?: string;
     }
   | Failure => {
   let compactOutput = false;
-  let compactPlan = false;
   let unblockNote: string | undefined;
   let planArgument = '';
 
@@ -3708,10 +3564,6 @@ const parseRunnerCliArgs = (
         return { ok: false, reason: '--compact must appear before the plan argument' };
       }
       compactOutput = true;
-      continue;
-    }
-    if (arg === '--compact-plan') {
-      compactPlan = true;
       continue;
     }
     if (arg === '--unblock-note') {
@@ -3736,7 +3588,6 @@ const parseRunnerCliArgs = (
     ok: true,
     planArgument,
     compactOutput,
-    compactPlan,
     unblockNote,
   };
 };
@@ -3845,6 +3696,15 @@ export const parsePlan = async ({
   }
   if (!isNextAction(rawNextAction)) {
     return { ok: false, reason: `unknown next action value: ${rawNextAction}` };
+  }
+
+  const thinPlan = await validateThinPlanContract({
+    rootDir,
+    planName: normalized.planName,
+    content,
+  });
+  if (!thinPlan.ok) {
+    return thinPlan;
   }
 
   return {
@@ -3995,8 +3855,8 @@ const appendLog = async (
   planName: string,
   fields: Array<[string, string | number | undefined]>,
 ): Promise<{ ok: true } | Failure> => {
-  const logDir = path.join(rootDir, '.ai', 'logs', 'workflow-runner');
-  const logPath = path.join(logDir, `${planName}.log`);
+  const logDir = path.join(rootDir, '.ai', 'artifacts', planName, 'logs');
+  const logPath = path.join(logDir, 'runner.log');
   try {
     await mkdir(logDir, { recursive: true });
     const body = ['---', ...fields.map(([key, value]) => `${key}: ${value ?? ''}`), ''].join('\n');
@@ -4008,7 +3868,7 @@ const appendLog = async (
 };
 
 const failureDebugLedgerRelativePath = (planName: string): string =>
-  rel('.ai', 'logs', 'workflow-runner', `${planName}.failure.jsonl`);
+  rel('.ai', 'artifacts', planName, 'logs', 'failure.jsonl');
 
 const failureDebugLedgerAbsolutePath = (rootDir: string, planName: string): string =>
   path.join(rootDir, failureDebugLedgerRelativePath(planName));
@@ -4050,7 +3910,7 @@ const appendFailureDebugLedger = async (
 };
 
 const tokenUsageLedgerRelativePath = (planName: string): string =>
-  rel('.ai', 'logs', 'workflow-runner', `${planName}.token-usage.jsonl`);
+  rel('.ai', 'artifacts', planName, 'logs', 'token-usage.jsonl');
 
 const tokenUsageLedgerAbsolutePath = (rootDir: string, planName: string): string =>
   path.join(rootDir, tokenUsageLedgerRelativePath(planName));
@@ -4176,40 +4036,6 @@ const writeWorkflowContextSnapshot = async ({
     return {
       ok: false,
       reason: `workflow context snapshot cannot be written: ${String(error)}`,
-    };
-  }
-};
-
-const writePostCompactionWorkflowContextSnapshot = async ({
-  rootDir,
-  plan,
-  compactedContent,
-}: {
-  rootDir: string;
-  plan: ParsedPlan;
-  compactedContent: string;
-}): Promise<WorkflowContextSnapshotResult | Failure> => {
-  const thresholdWarnings = collectWorkflowThresholdWarnings({
-    planByteSize: Buffer.byteLength(compactedContent, 'utf8'),
-  });
-  const snapshotPath = workflowContextSnapshotRelativePath(plan.planName);
-  const snapshot = generateWorkflowContextSnapshot({
-    planName: plan.planName,
-    planPath: plan.planPath,
-    planContent: compactedContent,
-    thresholdWarnings,
-  });
-
-  try {
-    await mkdir(path.dirname(workflowContextSnapshotAbsolutePath(rootDir, plan.planName)), {
-      recursive: true,
-    });
-    await writeFile(workflowContextSnapshotAbsolutePath(rootDir, plan.planName), snapshot, 'utf8');
-    return { snapshotPath, thresholdWarnings };
-  } catch (error) {
-    return {
-      ok: false,
-      reason: `post-compaction workflow context snapshot cannot be written: ${String(error)}`,
     };
   }
 };
@@ -5491,7 +5317,6 @@ export const runWorkflowRunner = async (
   }
   const planArgument = options.planName ?? cliArgs.planArgument;
   const compactOutput = options.compactOutput ?? cliArgs.compactOutput;
-  const compactPlan = options.compactPlan ?? cliArgs.compactPlan;
   const unblockNote = options.unblockNote ?? cliArgs.unblockNote;
   const processRunner = options.processRunner ?? defaultProcessRunner;
   const now = options.now ?? Date.now;
@@ -5509,10 +5334,9 @@ export const runWorkflowRunner = async (
   let tokenUsageLogPath: string | undefined;
   let tokenUsageTotals = { ...zeroTokenUsageTotals };
   const emittedWorkflowWarnings = new Set<string>();
-  const emittedPlanCompactionRecommendations = new Set<string>();
   const heldWorkflowFileLockPaths = new Set<string>();
   const markWorkflowLogCreated = (planName: string) => {
-    workflowLogPath = rel('.ai', 'logs', 'workflow-runner', `${planName}.log`);
+    workflowLogPath = rel('.ai', 'artifacts', planName, 'logs', 'runner.log');
   };
   const markTokenUsageLogCreated = (planName: string) => {
     tokenUsageLogPath = tokenUsageLedgerRelativePath(planName);
@@ -5525,31 +5349,6 @@ export const runWorkflowRunner = async (
       emittedWorkflowWarnings.add(warning);
       logger.error(`WARNING: ${warning}`);
     }
-  };
-  const emitWorkflowPlanCompactionRecommendation = (plan: ParsedPlan) => {
-    const recommendationLines = collectWorkflowPlanCompactionRecommendation({
-      planPath: plan.planPath,
-      status: plan.status,
-      planByteSize: Buffer.byteLength(plan.content, 'utf8'),
-    });
-    if (recommendationLines.length === 0) {
-      return;
-    }
-    const key = `${plan.planPath}\0${plan.status}`;
-    if (emittedPlanCompactionRecommendations.has(key)) {
-      return;
-    }
-    emittedPlanCompactionRecommendations.add(key);
-    for (const line of recommendationLines) {
-      logger.error(line);
-    }
-  };
-  const emitWorkflowPlanAutoSummary = (autoSummary: PlanHistoryAutoSummaryResult) => {
-    logger.error(
-      `COMPACTION: Auto-summarized old plan history from ${formatKilobytes(
-        autoSummary.originalByteSize,
-      )} to ${formatKilobytes(autoSummary.newByteSize)}.`,
-    );
   };
   const currentInterruptSignal = (): NodeJS.Signals | undefined => {
     const explicitSignal = options.interruptSignal?.();
@@ -5669,48 +5468,15 @@ export const runWorkflowRunner = async (
   if (!parsed.ok) {
     return await finishFailure(parsed.reason);
   }
-  if (compactPlan) {
-    const compaction = await writePlanHistoryCompaction({
-      rootDir,
-      plan: parsed,
-      timestamp,
-    });
-    if (!compaction.ok) {
-      return await finishFailure(compaction.reason);
-    }
-    const snapshotResult = await writePostCompactionWorkflowContextSnapshot({
-      rootDir,
-      plan: parsed,
-      compactedContent: compaction.compactedContent,
-    });
-    if ('ok' in snapshotResult && snapshotResult.ok === false) {
-      return await finishFailure(snapshotResult.reason);
-    }
-    emitWorkflowThresholdWarnings(snapshotResult.thresholdWarnings);
-    logger.log('Plan history compacted');
-    logger.log(`- Plan: ${parsed.planPath}`);
-    logger.log(`- Archive: ${compaction.archivePath}`);
-    logger.log(`- Context snapshot: ${snapshotResult.snapshotPath}`);
-    return await finishSuccess('plan history compacted', iterations);
-  }
   tokenUsageTotals = await readTokenUsageTotals(rootDir, parsed.planName);
   const syncWorkflowSnapshot = async (
     plan: ParsedPlan,
   ): Promise<WorkflowContextSnapshotResult | Failure> => {
-    const autoSummary = await writeAutoSummarizedPlanHistory({ plan, timestamp });
-    if (autoSummary && 'ok' in autoSummary && autoSummary.ok === false) {
-      return autoSummary;
-    }
-    if (autoSummary) {
-      plan.content = autoSummary.content;
-      emitWorkflowPlanAutoSummary(autoSummary);
-    }
     const snapshotResult = await writeWorkflowContextSnapshot({ rootDir, plan });
     if ('ok' in snapshotResult && snapshotResult.ok === false) {
       return snapshotResult;
     }
     emitWorkflowThresholdWarnings(snapshotResult.thresholdWarnings);
-    emitWorkflowPlanCompactionRecommendation(plan);
     return snapshotResult;
   };
 
