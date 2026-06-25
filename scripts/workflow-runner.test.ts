@@ -3969,6 +3969,160 @@ test("compaction recommendation reports ineligible oversized draft plans", async
   }
 });
 
+test("normal workflow runs auto-summarize old history for eligible plans above the auto threshold", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(
+      workspace.root,
+      "workflow-runner",
+      planWith(
+        "completed",
+        "commit-summary",
+        `## Execution Log
+
+### Execution v1
+
+* old execution detail that should be auto-summarized
+* ${"x".repeat(160 * 1024)}
+
+### Execution v2
+
+* latest execution detail that should stay in the plan
+
+## Validation History
+
+### Validation v1
+
+* Result: PASS
+* old validation detail that should be auto-summarized
+
+### Validation v2
+
+* Result: PASS
+* latest validation detail that should stay in the plan
+
+## Review History
+
+### Review v1
+
+* Summary: NEEDS FIX
+* Issues:
+  * old review issue that should be auto-summarized
+* Decision: active
+
+### Review v2
+
+* Summary: APPROVED
+* Issues:
+  * latest review note that should stay in the plan
+* Decision: completed
+`,
+      ),
+    );
+    const output = collectConsole();
+
+    const result = await runWorkflowRunner({
+      planName: planArg("workflow-runner"),
+      rootDir: workspace.root,
+      console: output.console,
+      timestamp: () => "2026-06-25T10:11:12.000Z",
+      processRunner: runnerReturning({
+        launched: true,
+        stdout: "",
+        stderr: "",
+        exitCode: 0,
+      }),
+    });
+
+    const terminalOutput = output.lines.join("\n");
+    const planContent = await readFile(
+      join(workspace.root, ".ai", "plans", "workflow-runner.md"),
+      "utf8",
+    );
+    const snapshot = await readFile(
+      join(workspace.root, workflowContextSnapshotRelativePath("workflow-runner")),
+      "utf8",
+    );
+
+    assert.equal(result.success, true);
+    assert.match(
+      terminalOutput,
+      /COMPACTION: Auto-summarized old plan history from 160\.\d KB to \d+\.\d KB\./,
+    );
+    assert.match(planContent, /## Auto-Summarized History/);
+    assert.match(planContent, /2026-06-25T10:11:12\.000Z/);
+    assert.match(planContent, /Execution Log: summarized 1 older entr/);
+    assert.match(planContent, /Validation History: summarized 1 older entr/);
+    assert.match(planContent, /Review History: summarized 1 older entr/);
+    assert.match(planContent, /latest execution detail that should stay in the plan/);
+    assert.match(planContent, /latest validation detail that should stay in the plan/);
+    assert.match(planContent, /latest review note that should stay in the plan/);
+    assert.match(snapshot, /latest execution detail that should stay in the plan/);
+    assert.doesNotMatch(snapshot, /old execution detail that should be auto-summarized/);
+    assert.doesNotMatch(planContent, /old execution detail that should be auto-summarized/);
+    assert.doesNotMatch(planContent, /old validation detail that should be auto-summarized/);
+    assert.doesNotMatch(planContent, /old review issue that should be auto-summarized/);
+    assert.equal(
+      existsSync(join(workspace.root, ".ai", "artifacts", "plan-history", "workflow-runner.history.md")),
+      false,
+    );
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("normal workflow runs do not auto-summarize plans below the auto threshold", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(
+      workspace.root,
+      "workflow-runner",
+      planWith(
+        "completed",
+        "commit-summary",
+        `## Execution Log
+
+### Execution v1
+
+* old execution detail should remain below the auto threshold
+* ${"x".repeat(110 * 1024)}
+
+### Execution v2
+
+* latest execution detail should remain below the auto threshold
+`,
+      ),
+    );
+    const output = collectConsole();
+
+    const result = await runWorkflowRunner({
+      planName: planArg("workflow-runner"),
+      rootDir: workspace.root,
+      console: output.console,
+      processRunner: runnerReturning({
+        launched: true,
+        stdout: "",
+        stderr: "",
+        exitCode: 0,
+      }),
+    });
+
+    const terminalOutput = output.lines.join("\n");
+    const planContent = await readFile(
+      join(workspace.root, ".ai", "plans", "workflow-runner.md"),
+      "utf8",
+    );
+
+    assert.equal(result.success, true);
+    assert.doesNotMatch(terminalOutput, /Auto-summarized old plan history/);
+    assert.doesNotMatch(planContent, /## Auto-Summarized History/);
+    assert.match(planContent, /old execution detail should remain below the auto threshold/);
+    assert.match(planContent, /latest execution detail should remain below the auto threshold/);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
 test("token usage ledger accumulates totals across multiple workflow stages", async () => {
   const workspace = await setupWorkspace();
   try {

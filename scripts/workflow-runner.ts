@@ -48,6 +48,7 @@ const TERMINAL_FAILED_COMMAND_OUTPUT_CHAR_LIMIT = 1000;
 const TERMINAL_FILE_DETAIL_LIMIT = 3;
 const STOP_REASON_EXCERPT_CHAR_LIMIT = 240;
 const WORKFLOW_CONTEXT_PLAN_SIZE_WARNING_BYTES = 100 * 1024;
+const WORKFLOW_CONTEXT_PLAN_AUTO_SUMMARIZE_BYTES = 150 * 1024;
 const WORKFLOW_CONTEXT_STAGE_INPUT_WARNING_TOKENS = 2_000_000;
 const WORKFLOW_CONTEXT_STAGE_UNCACHED_WARNING_TOKENS = 100_000;
 const ANSI_RESET = '\u001b[0m';
@@ -266,6 +267,13 @@ type PlanHistoryCompactionWriteResult = {
   ok: true;
   archivePath: string;
   compactedContent: string;
+};
+
+type PlanHistoryAutoSummaryResult = {
+  content: string;
+  originalByteSize: number;
+  newByteSize: number;
+  summarizedEntryLines: string[];
 };
 
 export type PlanHistoryCompactionResult = {
@@ -3212,6 +3220,166 @@ const compactBlockersSection = (planContent: string): string | undefined => {
   return `## Blockers\n\n${blockers.map((blocker) => `* ${blocker}`).join('\n')}`;
 };
 
+const versionedHistoryHeadings = [
+  '## Execution Log',
+  '## Validation History',
+  '## Review History',
+  '## Reopen History',
+] as const;
+
+const autoSummaryEntryLines = (planContent: string): string[] =>
+  versionedHistoryHeadings
+    .map((heading) => {
+      const entries = extractVersionedSectionEntries(planContent, heading);
+      const label = heading.replace(/^##\s+/, '');
+      if (entries.length > 1) {
+        const count = entries.length - 1;
+        return `${label}: summarized ${count} older ${count === 1 ? 'entry' : 'entries'}.`;
+      }
+      if (entries.length === 1 && entries[0]?.heading === heading) {
+        const entryByteSize = Buffer.byteLength(entries[0].lines.join('\n'), 'utf8');
+        if (entryByteSize > 10 * 1024) {
+          return `${label}: summarized unversioned history into bounded latest bullets.`;
+        }
+      }
+      return undefined;
+    })
+    .filter((line): line is string => typeof line === 'string');
+
+const autoSummarizedHistorySection = ({
+  planContent,
+  timestamp,
+  originalByteSize,
+  newByteSize,
+  summarizedEntryLines,
+}: {
+  planContent: string;
+  timestamp: string;
+  originalByteSize: number;
+  newByteSize?: number;
+  summarizedEntryLines: string[];
+}): string => {
+  const previousLines = planSectionLines(planContent, '## Auto-Summarized History');
+  const trimmedPrevious = [...previousLines];
+  while (trimmedPrevious[0]?.trim() === '') {
+    trimmedPrevious.shift();
+  }
+  while (trimmedPrevious.at(-1)?.trim() === '') {
+    trimmedPrevious.pop();
+  }
+
+  const latestRecord = [
+    `### Auto Summary ${timestamp}`,
+    '',
+    `* Original Size: ${formatKilobytes(originalByteSize)}`,
+    typeof newByteSize === 'number' ? `* New Size: ${formatKilobytes(newByteSize)}` : undefined,
+    ...summarizedEntryLines.map((line) => `* ${line}`),
+  ].filter((line): line is string => typeof line === 'string');
+
+  const body = trimmedPrevious.length > 0 ? [...trimmedPrevious, '', ...latestRecord] : latestRecord;
+  return `## Auto-Summarized History\n\n${body.join('\n')}`;
+};
+
+const buildAutoSummarizedPlanHistory = ({
+  planName,
+  planContent,
+  timestamp,
+  originalByteSize,
+  newByteSize,
+  summarizedEntryLines,
+}: {
+  planName: string;
+  planContent: string;
+  timestamp: string;
+  originalByteSize: number;
+  newByteSize?: number;
+  summarizedEntryLines: string[];
+}): string => {
+  const title = planContent.match(/^#\s+.+$/m)?.[0] ?? `# Plan: ${planName}`;
+  const sections = [
+    title,
+    sectionText(planContent, '## Status'),
+    sectionText(planContent, '## Next Action'),
+    sectionText(planContent, '## Spec'),
+    sectionText(planContent, '## Phases'),
+    sectionText(planContent, '## Files (MANDATORY)'),
+    sectionText(planContent, '## Summary'),
+    sectionText(planContent, '## Current Implementation Status'),
+    sectionText(planContent, '## Verification Status'),
+    latestVersionedEntryText(planContent, '## Execution Log'),
+    latestVersionedEntryText(planContent, '## Validation History'),
+    latestVersionedEntryText(planContent, '## Review History'),
+    latestVersionedEntryText(planContent, '## Reopen History'),
+    autoSummarizedHistorySection({
+      planContent,
+      timestamp,
+      originalByteSize,
+      newByteSize,
+      summarizedEntryLines,
+    }),
+    compactBlockersSection(planContent),
+    sectionText(planContent, '## Workflow State Rules'),
+    sectionText(planContent, '## Rules'),
+    sectionText(planContent, '## Completion Condition'),
+  ].filter((section): section is string => typeof section === 'string' && section.trim().length > 0);
+
+  return `${sections.join('\n\n')}\n`;
+};
+
+const autoSummarizePlanHistory = ({
+  planName,
+  planContent,
+  status,
+  timestamp = () => new Date().toISOString(),
+}: {
+  planName: string;
+  planContent: string;
+  status: Status;
+  timestamp?: () => string;
+}): PlanHistoryAutoSummaryResult | undefined => {
+  const originalByteSize = Buffer.byteLength(planContent, 'utf8');
+  if (
+    originalByteSize <= WORKFLOW_CONTEXT_PLAN_AUTO_SUMMARIZE_BYTES ||
+    !canCompactPlanHistory(status)
+  ) {
+    return undefined;
+  }
+
+  const summarizedEntryLines = autoSummaryEntryLines(planContent);
+  if (summarizedEntryLines.length === 0) {
+    return undefined;
+  }
+
+  const summarizedAt = timestamp();
+  const firstPassContent = buildAutoSummarizedPlanHistory({
+    planName,
+    planContent,
+    timestamp: summarizedAt,
+    originalByteSize,
+    summarizedEntryLines,
+  });
+  const firstPassByteSize = Buffer.byteLength(firstPassContent, 'utf8');
+  const content = buildAutoSummarizedPlanHistory({
+    planName,
+    planContent,
+    timestamp: summarizedAt,
+    originalByteSize,
+    newByteSize: firstPassByteSize,
+    summarizedEntryLines,
+  });
+  const newByteSize = Buffer.byteLength(content, 'utf8');
+  if (newByteSize >= originalByteSize) {
+    return undefined;
+  }
+
+  return {
+    content,
+    originalByteSize,
+    newByteSize,
+    summarizedEntryLines,
+  };
+};
+
 export const compactPlanHistory = ({
   planName,
   planPath,
@@ -3271,6 +3439,34 @@ ${planContent.trimEnd()}
 
 const canCompactPlanHistory = (status: Status): boolean =>
   PLAN_HISTORY_COMPACTION_ELIGIBLE_STATUSES.includes(status);
+
+const writeAutoSummarizedPlanHistory = async ({
+  plan,
+  timestamp,
+}: {
+  plan: ParsedPlan;
+  timestamp: () => string;
+}): Promise<PlanHistoryAutoSummaryResult | undefined | Failure> => {
+  const autoSummary = autoSummarizePlanHistory({
+    planName: plan.planName,
+    planContent: plan.content,
+    status: plan.status,
+    timestamp,
+  });
+  if (!autoSummary) {
+    return undefined;
+  }
+
+  try {
+    await writeFile(plan.absolutePlanPath, autoSummary.content, 'utf8');
+    return autoSummary;
+  } catch (error) {
+    return {
+      ok: false,
+      reason: `plan history auto-summarization cannot be written: ${String(error)}`,
+    };
+  }
+};
 
 const writePlanHistoryCompaction = async ({
   rootDir,
@@ -5348,6 +5544,13 @@ export const runWorkflowRunner = async (
       logger.error(line);
     }
   };
+  const emitWorkflowPlanAutoSummary = (autoSummary: PlanHistoryAutoSummaryResult) => {
+    logger.error(
+      `COMPACTION: Auto-summarized old plan history from ${formatKilobytes(
+        autoSummary.originalByteSize,
+      )} to ${formatKilobytes(autoSummary.newByteSize)}.`,
+    );
+  };
   const currentInterruptSignal = (): NodeJS.Signals | undefined => {
     const explicitSignal = options.interruptSignal?.();
     if (explicitSignal) {
@@ -5494,6 +5697,14 @@ export const runWorkflowRunner = async (
   const syncWorkflowSnapshot = async (
     plan: ParsedPlan,
   ): Promise<WorkflowContextSnapshotResult | Failure> => {
+    const autoSummary = await writeAutoSummarizedPlanHistory({ plan, timestamp });
+    if (autoSummary && 'ok' in autoSummary && autoSummary.ok === false) {
+      return autoSummary;
+    }
+    if (autoSummary) {
+      plan.content = autoSummary.content;
+      emitWorkflowPlanAutoSummary(autoSummary);
+    }
     const snapshotResult = await writeWorkflowContextSnapshot({ rootDir, plan });
     if ('ok' in snapshotResult && snapshotResult.ok === false) {
       return snapshotResult;
