@@ -164,21 +164,23 @@ execute-plan
 
 Append the next sequential reopen entry.
 
+Before updating the plan, create `.ai/artifacts/<plan-name>/events/reopen-vX.md` with `# Reopen vX`, `## Summary`, and `## Evidence`.
+
 If the plan already contains `## Reopen History`, append only:
 
 ### Reopen vX
 
 * Summary:
-* Findings:
-* Required Fixes:
-* Required Validation:
 * Decision: active
+* Evidence: .ai/artifacts/<plan-name>/events/reopen-vX.md
 
 Rules:
 
 * Every reopen MUST append a new entry
 * MUST NOT overwrite previous reopen entries
 * Reopen versions MUST be sequential
+* Reopen History entries may contain only `Summary`, `Decision`, and `Evidence`
+* Put findings, required fixes, required validation, and detailed reopen reasoning in the reopen artifact
 * MUST NOT duplicate the `## Reopen History` heading when it already exists
 * MUST create `## Reopen History` only if the section is missing
 

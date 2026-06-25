@@ -12,10 +12,13 @@ Read:
 * `.ai/instructions/workflow-state.instructions.md`
 * `.ai/instructions/testing.instructions.md` before running, skipping, or classifying validation
 * `.ai/specs/<feature>.spec.md` (if exists)
+* runner-owned context snapshot `.ai/artifacts/<plan-name>/state/context.md` as the primary current-state source
 * Active Context Packet instruction files selected from `.ai/instructions/index.instructions.md`
-* the plan file
+* the full plan file only when exact plan edits are required or the snapshot is insufficient
 
 Use the runner-provided Active Context Packet and index-selected instruction files only. Do not broadly load `.ai/instructions/*`.
+Read the full plan only when exact plan edits are required or the snapshot is insufficient.
+Do not load full historical sections unless the snapshot is insufficient.
 
 Load:
 
@@ -306,13 +309,13 @@ execute-plan
 ### Review vX
 
 * Summary: NEEDS FIX
-* Issues:
-
-  * ...
+* Evidence: .ai/artifacts/<plan-name>/events/review-vX.md
 * Decision: active
 
-Review History issue bullets must be one sentence each and actionable.
-Do not use Review History for compacted terminal output alone.
+Before updating the plan, create `.ai/artifacts/<plan-name>/events/review-vX.md` with `# Review vX`, `## Summary`, and `## Evidence`.
+Put all issue bullets, file references, remediation notes, missing validations, and unresolved risks in the review artifact.
+Review History entries may contain only `Summary`, `Decision`, and `Evidence`.
+Review History entries must stay under 512 bytes.
 
 3. update plan with:
 
@@ -346,11 +349,11 @@ commit-summary
 Add a deferred validation note:
 
 * Summary: SAFE - DEFERRED VALIDATION
-* Issues:
-
-  * (optional warnings/suggestions)
-* Deferred Validation: <specific manual/deployed/external validation the operator still needs to perform>
+* Evidence: .ai/artifacts/<plan-name>/events/review-vX.md
 * Decision: completed
+
+Before updating the plan, create `.ai/artifacts/<plan-name>/events/review-vX.md` with `# Review vX`, `## Summary`, and `## Evidence`.
+Put optional warnings, suggestions, and the specific deferred validation in the review artifact.
 
 3. do not add or update `## Deployment Validation` for this path. `commit-summary` records the local commit metadata. The operator performs the deferred validation manually after commit/deploy and reopens the plan if that check finds a required fix.
 
@@ -375,10 +378,11 @@ commit-summary
 ### Review vX
 
 * Summary: SAFE
-* Issues:
-
-  * (optional warnings/suggestions)
+* Evidence: .ai/artifacts/<plan-name>/events/review-vX.md
 * Decision: completed
+
+Before updating the plan, create `.ai/artifacts/<plan-name>/events/review-vX.md` with `# Review vX`, `## Summary`, and `## Evidence`.
+Put optional warnings and suggestions in the review artifact.
 
 ---
 
@@ -391,9 +395,11 @@ Rules:
 * Summary: one status bullet plus at most two short detail bullets.
 * If Summary is `NEEDS FIX` or `HIGH RISK`, `### Issues` must include at least one issue bullet.
 * If Summary is `NEEDS FIX` or `HIGH RISK`, do not rely on a plan-update summary alone; print the concrete conflict, defect, missing validation, or required fix in `### Issues`.
-* `### Issues` must mirror the actionable Review History findings written to the plan so terminal output shows what needs to be fixed without opening the plan file.
-* Review History issue bullets must be one sentence each and actionable.
-* Do not use Review History for compacted terminal output alone.
+* `### Issues` must mirror the actionable review artifact findings so terminal output shows what needs to be fixed without opening the artifact file.
+* Issue bullets must be one sentence each and actionable.
+* Issue bullets must be self-contained and remediation-ready.
+* Issue bullets must not rely on surrounding prose, earlier review versions, or shorthand like `same as above`.
+* Do not use Review History for terminal-output summaries; keep detailed findings in the artifact.
 * Issues: include all CRITICAL issues; include WARNING and SUGGESTION items only when actionable.
 * Each issue bullet should be one sentence and include the file/line reference when available.
 * Do not include long examples unless they are required to prove the issue.

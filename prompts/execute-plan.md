@@ -12,10 +12,15 @@ Read:
 * `.ai/instructions/workflow-state.instructions.md`
 * `.ai/instructions/testing.instructions.md` before running, skipping, or classifying validation
 * `.ai/specs/<feature>.spec.md` (if exists)
+* runner-owned context snapshot `.ai/artifacts/<plan-name>/state/context.md` as the primary current-state source
 * Active Context Packet instruction files selected from `.ai/instructions/index.instructions.md`
-* the plan file
+* the full plan file only when exact plan edits are required or the snapshot is insufficient
 
 Use the runner-provided Active Context Packet and index-selected instruction files only. Do not broadly load `.ai/instructions/*`.
+When resuming `active` + `execute-plan` after review feedback, use `## Latest Review Remediation Context` from the snapshot as the default fix list.
+Read the full plan only when exact plan edits are required or the snapshot is insufficient.
+Do not load `## Review History` by default; read the full plan only when exact plan edits or missing detail cannot be derived from the snapshot.
+Do not load full historical sections unless the snapshot is insufficient.
 
 Load:
 
@@ -294,18 +299,42 @@ Update:
 
 ### Execution Log (MANDATORY)
 
-Append:
+Before updating the plan, create the next sequential execution artifact:
+
+```text
+.ai/artifacts/<plan-name>/events/execution-vX.md
+```
+
+The artifact must include:
+
+```markdown
+# Execution vX
+
+## Summary
+
+<short execution summary>
+
+## Evidence
+
+<commands, outputs, files changed, or blockers that support the plan entry>
+```
+
+Then append a thin plan entry:
 
 ## Execution Log
 
-* Phase X completed
-* key actions taken
-* issues encountered
+### Execution vX
+
+* Summary:
+* Result: completed | partial | blocked
+* Evidence: .ai/artifacts/<plan-name>/events/execution-vX.md
 
 Wording rules:
 
-* Execution Log and validation notes must use short outcome bullets.
-* Do not record reasoning narration or wait-state updates.
+* Execution Log entries may contain only `Summary`, `Result`, and `Evidence`.
+* Keep inline execution entries under 512 bytes.
+* Put command output, detailed file notes, blocker explanations, validation output, and reasoning in the artifact.
+* Do not record reasoning narration, wait-state updates, or artifact body text in the plan.
 * Plan updates should state what changed, what was validated, and remaining action.
 
 ---
@@ -435,7 +464,8 @@ Update the plan with:
 
 Reconcile `## Files (MANDATORY)` after implementation to the actual created, modified, and deleted plan-owned paths before moving to `Status = review`.
 
-Keep `Execution Log` and validation note wording concise: short outcome bullets only, no reasoning narration, no wait-state updates.
+Keep `Execution Log` and `Validation History` entries concise: `Summary`, one state field, and `Evidence` only, with each entry under 512 bytes.
+Detailed validation evidence belongs in `.ai/artifacts/<plan-name>/events/validation-vX.md`, with only the summary/result/evidence path kept inline under `## Validation History`.
 
 ---
 

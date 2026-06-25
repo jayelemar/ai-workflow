@@ -23,7 +23,7 @@ Required Behavior:
 - Read relevant `.ai/instructions/*`.
 - Read `.ai/templates/plan.template.md`.
 - Read the spec file.
-- Exclude `.ai/logs` unless debugging historical runner output.
+- Exclude `.ai/artifacts` from broad searches unless reading current-plan runner evidence.
 - Use the spec as the single source of truth.
 - Do not introduce behavior outside the spec.
 - If the spec is incomplete, vague, or ambiguous, STOP and list the missing decisions instead of creating a plan.

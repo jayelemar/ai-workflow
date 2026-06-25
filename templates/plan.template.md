@@ -6,6 +6,23 @@ The generated plan MUST follow this exact structure.
 
 # Plan: <plan-name>
 
+## Workflow Content Rules
+
+thin-plan-v1
+
+Rules:
+
+* Runtime artifacts for this plan belong under `.ai/artifacts/<plan-name>/`.
+* Event artifacts belong under `.ai/artifacts/<plan-name>/events/<kind>-v<N>.md`.
+* Every event artifact MUST include `# ...`, `## Summary`, and `## Evidence`.
+* Keep workflow history entries under 512 bytes.
+* Keep aggregate workflow history under 4 KB.
+* Plan workflow entries may contain only `Summary`, exactly one of `Result`, `Decision`, or `Status`, and `Evidence`.
+* Put detailed issue lists, fixes, validation output, blocker notes, reopen notes, and deployment metadata in event artifacts.
+* Do not paste artifact bodies or narrative workflow sections into the plan.
+
+---
+
 ## Status
 
 draft
@@ -134,15 +151,15 @@ Example:
 
 ### Validation v1
 
+* Summary:
 * Result: NEEDS FIX
-* Critical Issues:
-* Warnings:
+* Evidence: .ai/artifacts/<plan-name>/events/validation-v1.md
 
 ### Validation v2
 
+* Summary:
 * Result: APPROVED
-* Critical Issues:
-* Warnings:
+* Evidence: .ai/artifacts/<plan-name>/events/validation-v2.md
 
 ---
 
@@ -161,14 +178,14 @@ Example:
 ### Review v1
 
 * Summary:
-* Issues:
 * Decision:
+* Evidence: .ai/artifacts/<plan-name>/events/review-v1.md
 
 ### Review v2
 
 * Summary:
-* Issues:
 * Decision:
+* Evidence: .ai/artifacts/<plan-name>/events/review-v2.md
 
 ---
 
@@ -187,18 +204,14 @@ Example:
 ### Reopen v1
 
 * Summary:
-* Findings:
-* Required Fixes:
-* Required Validation:
 * Decision:
+* Evidence: .ai/artifacts/<plan-name>/events/reopen-v1.md
 
 ### Reopen v2
 
 * Summary:
-* Findings:
-* Required Fixes:
-* Required Validation:
 * Decision:
+* Evidence: .ai/artifacts/<plan-name>/events/reopen-v2.md
 
 ---
 

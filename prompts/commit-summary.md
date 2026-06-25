@@ -22,8 +22,12 @@ Read:
 
 * `.codex/AGENTS.md`
 * `.ai/instructions/workflow-state.instructions.md`
-* the plan file
+* runner-owned context snapshot `.ai/artifacts/<plan-name>/state/context.md` as the primary current-state source
+* the full plan file only when exact plan edits are required or the snapshot is insufficient
 * `.ai/specs/<feature>.spec.md` (if exists)
+
+Read the full plan only when exact plan edits are required or the snapshot is insufficient.
+Do not load full historical sections unless the snapshot is insufficient.
 
 ---
 
@@ -72,7 +76,7 @@ If Status is `completed`, use the completed commit rules below.
 
 If Status is `deployment-validation`, use the deployment-validation commit rules below.
 
-If Status is `completed` and `## Deployment Validation` contains a recorded `Commit:` and `Status: passed`, do not create a second commit when no plan-owned changes remain. Produce the final completion summary using the recorded commit.
+If Status is `completed` and the latest `## Deployment Validation` entry has `Status: passed`, read its evidence artifact for the recorded commit metadata. Do not create a second commit when no plan-owned changes remain. Produce the final completion summary using the recorded commit from the artifact.
 
 ---
 
@@ -210,10 +214,7 @@ completed
 
 commit-summary
 
-and `## Deployment Validation` does NOT already contain both:
-
-* Commit: <sha>
-* Status: passed
+and the latest `## Deployment Validation` entry is not `Status: passed` with a recorded commit in its evidence artifact.
 
 Required behavior:
 
@@ -256,22 +257,19 @@ Required behavior:
 3. MUST NOT push.
 4. If `git commit` fails, output `STOP`, state the git failure, and do not record a commit hash.
 5. After the commit succeeds, read the commit SHA and current branch.
-6. Update the plan with:
+6. Create `.ai/artifacts/<plan-name>/events/deployment-validation-vX.md` with `# Deployment Validation vX`, `## Summary`, and `## Evidence`.
+   The artifact must include the commit SHA, branch, commit timestamp, push status, deployment status, reason deployed validation is required, and specific pending validation.
+7. Update the plan with:
 
 ## Deployment Validation
 
-### Deployment Validation v1
+### Deployment Validation vX
 
-* Commit: <sha>
-* Branch: <branch>
-* Commit Created At: <timestamp>
-* Push Status: pending
-* Deployment Status: pending
-* Reason: <why deployed validation is required>
-* Pending Validation: <specific validation to perform>
+* Summary:
+* Evidence: .ai/artifacts/<plan-name>/events/deployment-validation-vX.md
 * Status: pending
 
-7. Transition the plan to:
+8. Transition the plan to:
 
 ## Status
 
@@ -285,7 +283,8 @@ Rules:
 
 * Preserve previous execution, review, validation, and blocker history.
 * Append the next sequential `### Deployment Validation vX` entry if the section already exists.
-* Do not overwrite an existing deployment-validation commit entry unless it belongs to the same current run and the previous `git commit` failed before a hash was recorded.
+* Deployment Validation entries may contain only `Summary`, `Status`, and `Evidence`.
+* Do not overwrite an existing deployment-validation artifact unless it belongs to the same current run and the previous `git commit` failed before a hash was recorded.
 * The output must include the created commit SHA, branch, pending push/deploy status, and pending validation.
 
 ---
@@ -302,14 +301,11 @@ completed
 
 commit-summary
 
-and `## Deployment Validation` already contains:
-
-* Commit: <sha>
-* Status: passed
+and the latest `## Deployment Validation` entry has `Status: passed` with a recorded commit in its evidence artifact.
 
 Rules:
 
-* Use the recorded commit for the final completion summary.
+* Read the evidence artifact and use the recorded commit for the final completion summary.
 * If no plan-owned changes remain, do not create a second commit.
 * Do not push.
 * Do not alter the recorded deployment-validation evidence.

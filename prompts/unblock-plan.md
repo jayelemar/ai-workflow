@@ -69,10 +69,10 @@ If a blocker describes implementation work that can be performed by continuing `
 
 If a blocker is `Type: plan dependency`:
 
-* require evidence that the owner plan reached `completed + commit-summary`, that the owner plan is stable at `deployment-validation + unblock-plan` with a recorded `Commit:`, OR that the owner plan released the shared file ownership
+* require evidence that the owner plan reached `completed + commit-summary`, that the owner plan is stable at `deployment-validation + unblock-plan` with a recorded commit in its deployment-validation artifact, OR that the owner plan released the shared file ownership
 * evidence MUST identify the owner plan and the shared file path
 * do not unblock from a `plan dependency` using only an assumption that the owner plan is inactive
-* a `deployment-validation + unblock-plan` owner plan with a recorded `Commit:` is stable dependency evidence because dependent plans can build on that local commit while push, deploy, and final validation remain pending
+* a `deployment-validation + unblock-plan` owner plan with a recorded commit in its deployment-validation artifact is stable dependency evidence because dependent plans can build on that local commit while push, deploy, and final validation remain pending
 * if the evidence proves the dependency is resolved, mark the blocker resolved and allow the normal `blocked -> active` transition
 * if the evidence is missing or incomplete, keep the plan blocked with `Next Action = unblock-plan`
 
@@ -196,9 +196,7 @@ unblock-plan
 
 If push or deploy evidence is present but final validation evidence is missing:
 
-* update `## Deployment Validation`
-* set or keep `Push Status` from the supplied evidence
-* set or keep `Deployment Status` from the supplied evidence
+* update the latest deployment-validation artifact with `Push Status` and `Deployment Status` from the supplied evidence
 * keep `Status: pending`
 * keep:
 
@@ -212,22 +210,21 @@ unblock-plan
 
 If final validation evidence passes:
 
-* update `## Deployment Validation`
-* set `Push Status` and `Deployment Status` from evidence
+* update the latest deployment-validation artifact with final validation evidence, expected result, actual result, `Push Status`, and `Deployment Status`
 * set `Status: passed`
 * transition to `completed + commit-summary`
 
 If final validation evidence fails:
 
-* update `## Deployment Validation`
+* update the latest deployment-validation artifact with the failure evidence and failed expected vs actual behavior
 * set `Status: failed`
-* record the failure evidence and failed expected vs actual behavior
 * transition to `reopening + reopen-plan`
 
 Rules:
 
-* Preserve the recorded `Commit:`.
+* Preserve the recorded commit in the deployment-validation artifact.
 * Do not remove prior deployment-validation entries.
+* Deployment Validation plan entries may contain only `Summary`, `Status`, and `Evidence`.
 * Append or update the latest deployment-validation entry with traceable evidence.
 * If concrete new push or deploy evidence is incomplete but still traceable, keep `deployment-validation + unblock-plan`.
 * If evidence is incomplete because no concrete new deployment-validation evidence is available, output `STOP` with reason `deployment-validation evidence is required`.
@@ -254,14 +251,14 @@ execute-plan
 
 Append the next sequential unblock entry.
 
+Before updating the plan, create `.ai/artifacts/<plan-name>/events/unblock-vX.md` with `# Unblock vX`, `## Summary`, and `## Evidence`.
+
 If the plan already contains `## Unblock History`, append only:
 
 ### Unblock vX
 
 * Summary:
-* Evidence:
-* Resolved Blockers:
-* Remaining Blockers:
+* Evidence: .ai/artifacts/<plan-name>/events/unblock-vX.md
 * Decision: active | blocked
 
 Rules:
@@ -269,6 +266,8 @@ Rules:
 * Every unblock run that changes the plan MUST append a new entry
 * MUST NOT overwrite previous unblock entries
 * Unblock versions MUST be sequential
+* Unblock History entries may contain only `Summary`, `Decision`, and `Evidence`
+* Put resolved blocker lists, remaining blocker lists, deployment evidence, and detailed unblock reasoning in the unblock artifact
 * MUST NOT duplicate the `## Unblock History` heading when it already exists
 * MUST create `## Unblock History` only if the section is missing
 

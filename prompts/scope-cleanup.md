@@ -9,6 +9,9 @@ Rules:
 * Never output `STOP`.
 * Do not explain your reasoning.
 * Output exactly one JSON object and nothing else.
+* Use the runner-owned context snapshot as the primary ownership context.
+* Read the full plan or referenced spec files only when the snapshot is insufficient.
+* Do not load full historical plan/spec sections unless the snapshot is insufficient.
 * Valid outputs:
   * `{"action":"keep"}`
   * `{"action":"unstage","patch":"<exact unified diff for unrelated hunks only>"}`
