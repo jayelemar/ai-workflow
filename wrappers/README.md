@@ -17,6 +17,8 @@ Core prompts in `.ai/prompts/` define workflow behavior. Wrappers define the tex
 pnpm exec tsx .ai/scripts/workflow-runner.ts .ai/plans/<plan-name>.md
 ```
 
+Repeated review-remediation loops use the runner snapshot at `.ai/state/workflow-runner/<plan-name>.context.md` as the hot-path context. In particular, follow-up `execute-plan` runs should consume the snapshot's latest unresolved review findings first, while the live plan remains the source of truth for exact edits and history.
+
 Optional quiet mode:
 
 ```bash

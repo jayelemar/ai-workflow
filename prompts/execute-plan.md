@@ -12,10 +12,15 @@ Read:
 * `.ai/instructions/workflow-state.instructions.md`
 * `.ai/instructions/testing.instructions.md` before running, skipping, or classifying validation
 * `.ai/specs/<feature>.spec.md` (if exists)
+* runner-owned context snapshot `.ai/state/workflow-runner/<plan-name>.context.md` as the primary current-state source
 * Active Context Packet instruction files selected from `.ai/instructions/index.instructions.md`
-* the plan file
+* the full plan file only when exact plan edits are required or the snapshot is insufficient
 
 Use the runner-provided Active Context Packet and index-selected instruction files only. Do not broadly load `.ai/instructions/*`.
+When resuming `active` + `execute-plan` after review feedback, use `## Latest Review Remediation Context` from the snapshot as the default fix list.
+Read the full plan only when exact plan edits are required or the snapshot is insufficient.
+Do not load `## Review History` by default; read the full plan only when exact plan edits or missing detail cannot be derived from the snapshot.
+Do not load full historical sections unless the snapshot is insufficient.
 
 Load:
 

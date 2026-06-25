@@ -12,6 +12,9 @@ import {
   codexOutputStopReason,
   codexWorkEnvironment,
   createCodexLiveOutputFormatter,
+  generateScopeCleanupPrompt,
+  generateWorkflowContextSnapshot,
+  compactPlanHistory,
   createWorkflowWaitNotice,
   formatCodexJsonlEventForTerminal,
   formatWorkflowElapsedTime,
@@ -27,6 +30,8 @@ import {
   supportsWorkflowAnsiColor,
   WORKFLOW_WAIT_NOTICE_INTERVAL_MS,
   WORKFLOW_RUNNER_CODEX_PROFILE,
+  workflowContextSnapshotRelativePath,
+  planHistoryArchiveRelativePath,
   workflowFileLockPath,
   writeProcessInput,
   type ProcessRunner,
@@ -545,7 +550,17 @@ test("review-changes prompt requires concise actionable Review History entries",
   const prompt = await readWorkflowPrompt("review-changes.md");
 
   assert.match(prompt, /Review History issue bullets must be one sentence each and actionable/);
+  assert.match(prompt, /self-contained/i);
+  assert.match(prompt, /must not rely on surrounding prose, earlier review versions, or shorthand like `same as above`/i);
   assert.match(prompt, /Do not use Review History for compacted terminal output alone/);
+});
+
+test("execute-plan prompt uses snapshot remediation context before full review history", async () => {
+  const prompt = await readWorkflowPrompt("execute-plan.md");
+
+  assert.match(prompt, /Latest Review Remediation Context/i);
+  assert.match(prompt, /default fix list/i);
+  assert.match(prompt, /Do not load `## Review History` by default/i);
 });
 
 test("fix-review prompt requires concise corrective plan updates", async () => {
@@ -1483,6 +1498,20 @@ test("codex live output formatter renders recognized vitest file runs as structu
   );
 
   assert.equal(
+    formatCodexJsonlEventForTerminal(
+      codexCommandStartedLine(
+        "wc -l .codex/AGENTS.md .ai/prompts/review-changes.md .ai/state/workflow-runner/market-research-competitor-discovery.context.md .ai/instructions/index.instructions.md .ai/instructions/workflow-state.instructions.md .ai/specs/market-research-competitor-discovery.spec.md .ai/instructions/architecture.instructions.md .ai/instructions/web.instructions.md .ai/instructions/backend.instructions.md .ai/instructions/testing.instructions.md .ai/plans/market-research-competitor-discovery.md",
+      ),
+      { color: false },
+    ),
+    [
+      "Ran line count for 11 files",
+      "",
+      "",
+    ].join("\n"),
+  );
+
+  assert.equal(
     formatCodexJsonlEventForTerminal(codexCommandStartedLine(JEST_FILE_COMMAND), { color: false }),
     [
       "Ran tests",
@@ -1872,6 +1901,50 @@ test("codex live output formatter separates adjacent JSONL event blocks", () => 
   assert.equal(stdout, "Ran git status --short\n\n");
 });
 
+test("codex live output formatter suppresses successful plan section read commands", () => {
+  const planPath = ".ai/plans/market-research-competitor-discovery.md";
+  const headingSearchCommand = String.raw`rg -n '^## (Status|Next Action|Files \(MANDATORY\)|Hunk Ownership|File Ownership Releases|Validation Evidence|Review History|Blockers)' ${planPath}`;
+  const sectionReadCommand = String.raw`awk '/^## File Ownership Releases$/{flag=1; print; next} flag && /^## /{exit} flag{print}' ${planPath}`;
+
+  assert.equal(formatCodexJsonlEventForTerminal(codexCommandStartedLine(headingSearchCommand), { color: false }), "");
+  assert.equal(
+    formatCodexJsonlEventForTerminal(codexCommandOutputLine("12:## Status\n", headingSearchCommand), {
+      color: false,
+    }),
+    "",
+  );
+  assert.equal(formatCodexJsonlEventForTerminal(codexCommandStartedLine(sectionReadCommand), { color: false }), "");
+  assert.equal(
+    formatCodexJsonlEventForTerminal(codexCommandOutputLine("## File Ownership Releases\n\n(empty)\n", sectionReadCommand), {
+      color: false,
+    }),
+    "",
+  );
+  assert.equal(
+    formatCodexJsonlEventForTerminal(
+      JSON.stringify({
+        type: "item.completed",
+        item: {
+          id: "item_command",
+          command: sectionReadCommand,
+          type: "command_execution",
+          aggregated_output: "missing section\n",
+          exit_code: 1,
+          status: "completed",
+        },
+      }),
+      { color: false },
+    ),
+    [
+      "[failed] plan section read (exit 1)",
+      "  missing section",
+      "  command output omitted from workflow log",
+      "",
+      "",
+    ].join("\n"),
+  );
+});
+
 test("codex live output formatter keeps every explored summary in streamed output", () => {
   let stdout = "";
   const formatter = createCodexLiveOutputFormatter({
@@ -2098,7 +2171,7 @@ test("generates manual workflow prompts for every prompt action", () => {
     assert.doesNotMatch(prompt, /use superpower skills: analyze/);
     assert.match(prompt, /Active Context Packet:/);
     assert.match(prompt, new RegExp(`- ${promptPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
-    assert.match(prompt, /- \.ai\/plans\/workflow-runner\.md/);
+    assert.match(prompt, /- \.ai\/state\/workflow-runner\/workflow-runner\.context\.md/);
     assert.match(prompt, /- \.ai\/instructions\/index\.instructions\.md/);
     assert.match(prompt, /- \.ai\/instructions\/workflow-state\.instructions\.md/);
     assert.match(prompt, new RegExp(`${action}:\\n\\.ai/plans/workflow-runner\\.md`));
@@ -2156,10 +2229,12 @@ test("workflow prompt injects active context packet with current prompt, plan, s
     reviewStagingPaths: ["apps/web/src/features/dashboard/home-page.tsx"],
   });
 
+  const activeContextPacket = prompt.match(/Active Context Packet:[\s\S]*?Use the Active Context Packet and index-selected instruction files only\./)?.[0] ?? prompt;
   assert.match(prompt, /Active Context Packet:/);
   assert.match(prompt, /\.codex\/AGENTS\.md/);
   assert.match(prompt, /\.ai\/prompts\/review-changes\.md/);
-  assert.match(prompt, /\.ai\/plans\/workflow-runner\.md/);
+  assert.match(prompt, /\.ai\/state\/workflow-runner\/workflow-runner\.context\.md/);
+  assert.doesNotMatch(activeContextPacket, /\n- \.ai\/plans\/workflow-runner\.md/);
   assert.match(prompt, /\.ai\/instructions\/index\.instructions\.md/);
   assert.match(prompt, /\.ai\/instructions\/workflow-state\.instructions\.md/);
   assert.match(prompt, /\.ai\/specs\/dashboard-home\.spec\.md/);
@@ -2169,6 +2244,561 @@ test("workflow prompt injects active context packet with current prompt, plan, s
   assert.match(prompt, /cold unless debugging/i);
   assert.match(prompt, /Use the Active Context Packet and index-selected instruction files only/i);
   assert.match(prompt, /Plan-scoped diff boundary:/);
+});
+
+test("workflow context snapshot keeps current state and latest unresolved history only", () => {
+  const snapshot = generateWorkflowContextSnapshot({
+    planName: "workflow-runner",
+    planPath: ".ai/plans/workflow-runner.md",
+    planContent: `# Plan: workflow-runner
+
+## Status
+
+active
+
+## Next Action
+
+execute-plan
+
+## Spec
+
+.ai/specs/workflow-runner.spec.md
+
+## Files (MANDATORY)
+
+### Created files
+
+* None
+
+### Modified files
+
+* .ai/scripts/workflow-runner.ts
+* .ai/prompts/execute-plan.md
+
+### Deleted files
+
+* None
+
+## Current Implementation Status
+
+Completed so far:
+
+* Snapshot generation is implemented.
+* Prompt loading now prefers the compact context.
+
+Remaining:
+
+* Verify threshold warnings in logs and snapshots.
+
+## Execution Log
+
+### Execution v1
+
+* old execution history that should be dropped
+
+### Execution v2
+
+* latest execution summary to keep
+* scope cleanup now receives referenced paths only
+
+## Validation History
+
+### Validation v1
+
+* Result: NEEDS FIX
+* Critical Issues:
+  * old validation history that should be dropped
+
+### Validation v2
+
+* Result: PASS
+* Warnings:
+  * latest validation warning to keep
+
+## Review History
+
+### Review v1
+
+* Summary: NEEDS FIX
+* Issues:
+  * old review history that should be dropped
+* Decision: active
+
+### Review v2
+
+* Summary: NEEDS FIX
+* Issues:
+  * latest unresolved review finding to keep
+  * Resolved: historical fix should not be repeated
+* Decision: active
+
+## Blockers
+
+### Blocker 1
+
+* Status: resolved
+* Description: old resolved blocker
+
+### Blocker 2
+
+* Status: unresolved
+* Description: active blocker to keep
+* Required Action: compact the plan history
+* Next Step: rerun execute-plan
+`,
+    latestTokenUsage: {
+      iteration: 7,
+      promptPath: ".ai/prompts/review-changes.md",
+      model: "gpt-5.5",
+      reasoning: "xhigh",
+      stageInputTokens: 1234,
+      stageUncachedInputTokens: 934,
+      stageOutputTokens: 120,
+      stageTotalTokens: 1354,
+      totalTokens: 54321,
+    },
+    thresholdWarnings: ["Plan file is 101.0 KB, which is above the 100 KB warning threshold."],
+  });
+
+  assert.match(snapshot, /# Workflow Context Snapshot: workflow-runner/);
+  assert.match(snapshot, /## Current State/);
+  assert.match(snapshot, /\* Status: active/);
+  assert.match(snapshot, /\* Next Action: execute-plan/);
+  assert.match(snapshot, /\.ai\/specs\/workflow-runner\.spec\.md/);
+  assert.match(snapshot, /Snapshot generation is implemented/);
+  assert.match(snapshot, /latest execution summary to keep/);
+  assert.match(snapshot, /latest validation warning to keep/);
+  assert.match(snapshot, /latest unresolved review finding to keep/);
+  assert.match(snapshot, /## Latest Review Remediation Context/);
+  assert.match(snapshot, /\* Source Review: Review v2/);
+  assert.match(snapshot, /\* Summary: NEEDS FIX/);
+  assert.match(snapshot, /\* Decision: active/);
+  assert.match(snapshot, /active blocker to keep/);
+  assert.match(snapshot, /Stage Input Tokens: 1234/);
+  assert.match(snapshot, /Plan file is 101\.0 KB/);
+  assert.doesNotMatch(snapshot, /old execution history that should be dropped/);
+  assert.doesNotMatch(snapshot, /old validation history that should be dropped/);
+  assert.doesNotMatch(snapshot, /old review history that should be dropped/);
+  assert.doesNotMatch(snapshot, /Resolved: historical fix should not be repeated/);
+});
+
+test("workflow context snapshot emits no remediation context when not resuming execute after review", () => {
+  const snapshot = generateWorkflowContextSnapshot({
+    planName: "workflow-runner",
+    planPath: ".ai/plans/workflow-runner.md",
+    planContent: `# Plan: workflow-runner
+
+## Status
+
+review
+
+## Next Action
+
+review-plan
+
+## Review History
+
+### Review v3
+
+* Summary: NEEDS FIX
+* Issues:
+  * latest unresolved review finding that should not be treated as execute hot-path context yet
+* Decision: active
+`,
+  });
+
+  assert.match(snapshot, /## Latest Review Remediation Context\s*\n\(none\)/);
+  assert.match(snapshot, /## Latest Review Result/);
+  assert.match(
+    snapshot,
+    /latest unresolved review finding that should not be treated as execute hot-path context yet/,
+  );
+});
+
+test("workflow context snapshot renders empty blockers as none", () => {
+  const snapshot = generateWorkflowContextSnapshot({
+    planName: "workflow-runner",
+    planPath: ".ai/plans/workflow-runner.md",
+    planContent: `# Plan: workflow-runner
+
+## Status
+
+active
+
+## Next Action
+
+execute-plan
+
+## Blockers
+
+(empty)
+`,
+  });
+
+  assert.match(snapshot, /## Active Blockers\s*\n\(none\)/);
+  assert.doesNotMatch(snapshot, /\* ## Blockers/);
+});
+
+test("plan history compaction archives old history and preserves current workflow state", () => {
+  const planContent = `# Plan: old-large-plan
+
+## Status
+
+completed
+
+## Next Action
+
+commit-summary
+
+## Spec
+
+.ai/specs/old-large-plan.spec.md
+
+## Phases
+
+### Implementation
+
+* Objective: finish the workflow compaction change
+* Tasks:
+  1. Add tests
+  2. Add implementation
+* Expected Outcome: compact old plans
+
+## Files (MANDATORY)
+
+### Created files
+
+* None
+
+### Modified files
+
+* .ai/scripts/workflow-runner.ts
+* .ai/scripts/workflow-runner.test.ts
+
+### Deleted files
+
+* None
+
+## Current Implementation Status
+
+Completed so far:
+
+* Current summary survives compaction.
+
+Remaining:
+
+* Commit the completed work.
+
+## Execution Log
+
+### Execution v1
+
+* old execution detail that should move to archive
+
+### Execution v2
+
+* latest execution detail that should stay summarized
+
+## Validation History
+
+### Validation v1
+
+* Result: NEEDS FIX
+* Critical Issues:
+  * old validation issue that should move to archive
+
+### Validation v2
+
+* Result: PASS
+* Warnings:
+  * latest validation warning that should stay summarized
+
+## Review History
+
+### Review v1
+
+* Summary: NEEDS FIX
+* Issues:
+  * old review issue that should move to archive
+* Decision: active
+
+### Review v2
+
+* Summary: APPROVED
+* Issues:
+  * latest review note that should stay summarized
+  * Resolved: old fix should not reappear as unresolved
+* Decision: completed
+
+## Reopen History
+
+### Reopen v1
+
+* Summary: old reopen detail that should move to archive
+* Decision: active
+
+### Reopen v2
+
+* Summary: latest reopen detail that should stay summarized
+* Decision: completed
+
+## Blockers
+
+### Blocker 1
+
+* Status: resolved
+* Description: old resolved blocker
+
+### Blocker 2
+
+* Status: unresolved
+* Description: current blocker summary survives
+* Required Action: finish compaction
+
+## Workflow State Rules
+
+See \`.ai/instructions/workflow-state.instructions.md\`.
+`;
+
+  const result = compactPlanHistory({
+    planName: "old-large-plan",
+    planPath: ".ai/plans/old-large-plan.md",
+    planContent,
+    timestamp: () => "2026-06-25T10:11:12.000Z",
+  });
+
+  assert.equal(result.archivePath, ".ai/artifacts/plan-history/old-large-plan.history.md");
+  assert.ok(result.compactedContent.length < planContent.length);
+  assert.match(result.compactedContent, /## Status\s+completed/);
+  assert.match(result.compactedContent, /## Next Action\s+commit-summary/);
+  assert.match(result.compactedContent, /\.ai\/specs\/old-large-plan\.spec\.md/);
+  assert.match(result.compactedContent, /## Files \(MANDATORY\)/);
+  assert.match(result.compactedContent, /\.ai\/scripts\/workflow-runner\.ts/);
+  assert.match(result.compactedContent, /Current summary survives compaction/);
+  assert.match(result.compactedContent, /latest execution detail that should stay summarized/);
+  assert.match(result.compactedContent, /latest validation warning that should stay summarized/);
+  assert.match(result.compactedContent, /latest review note that should stay summarized/);
+  assert.match(result.compactedContent, /latest reopen detail that should stay summarized/);
+  assert.match(result.compactedContent, /current blocker summary survives/);
+  assert.match(result.compactedContent, /## Archived History/);
+  assert.match(result.compactedContent, /2026-06-25T10:11:12\.000Z/);
+  assert.match(result.compactedContent, /\.ai\/artifacts\/plan-history\/old-large-plan\.history\.md/);
+  assert.doesNotMatch(result.compactedContent, /old execution detail that should move to archive/);
+  assert.doesNotMatch(result.compactedContent, /old validation issue that should move to archive/);
+  assert.doesNotMatch(result.compactedContent, /old review issue that should move to archive/);
+  assert.doesNotMatch(result.compactedContent, /old reopen detail that should move to archive/);
+  assert.match(result.archiveContent, /# Archived Plan History: old-large-plan/);
+  assert.match(result.archiveContent, /old execution detail that should move to archive/);
+  assert.match(result.archiveContent, /old validation issue that should move to archive/);
+  assert.match(result.archiveContent, /old review issue that should move to archive/);
+  assert.match(result.archiveContent, /old reopen detail that should move to archive/);
+  assert.match(result.archiveContent, /Original Plan: \.ai\/plans\/old-large-plan\.md/);
+});
+
+test("workflow runner compacts plan history without launching Codex when requested", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    const planName = "old-large-plan";
+    await writePlan(
+      workspace.root,
+      planName,
+      planWith(
+        "completed",
+        "commit-summary",
+        `## Execution Log
+
+### Execution v1
+
+* old execution detail that should be archived
+
+### Execution v2
+
+* latest execution detail that should stay summarized
+
+## Validation History
+
+### Validation v1
+
+* Result: PASS
+* Notes:
+  * latest validation note
+
+## Review History
+
+### Review v1
+
+* Summary: APPROVED
+* Issues:
+  * latest review note
+* Decision: completed
+
+## Blockers
+
+(empty)
+`,
+      ),
+    );
+    mkdirSync(join(workspace.root, ".ai", "logs", "workflow-runner"), { recursive: true });
+    await writeFile(
+      join(workspace.root, ".ai", "logs", "workflow-runner", `${planName}.token-usage.jsonl`),
+      `${JSON.stringify({
+        iteration: 7,
+        promptPath: ".ai/prompts/review-changes.md",
+        stageInputTokens: 2_204_140,
+        stageUncachedInputTokens: 198_380,
+        stageOutputTokens: 18_604,
+        stageTotalTokens: 2_222_744,
+      })}\n`,
+      "utf8",
+    );
+    const output = collectConsole();
+    let launched = false;
+
+    const result = await runWorkflowRunner({
+      argv: ["--compact-plan", planArg(planName)],
+      rootDir: workspace.root,
+      console: output.console,
+      processRunner: async () => {
+        launched = true;
+        return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+      },
+    });
+
+    const compactedPlan = await readFile(join(workspace.root, ".ai", "plans", `${planName}.md`), "utf8");
+    const archivePath = join(workspace.root, planHistoryArchiveRelativePath(planName));
+    const archiveContent = await readFile(archivePath, "utf8");
+    const snapshot = await readFile(
+      join(workspace.root, workflowContextSnapshotRelativePath(planName)),
+      "utf8",
+    );
+
+    assert.equal(result.success, true);
+    assert.equal(launched, false);
+    assert.match(result.reason, /plan history compacted/);
+    assert.match(output.lines.join("\n"), /Plan history compacted/);
+    assert.match(compactedPlan, /## Archived History/);
+    assert.match(compactedPlan, /latest execution detail that should stay summarized/);
+    assert.doesNotMatch(compactedPlan, /old execution detail that should be archived/);
+    assert.match(archiveContent, /old execution detail that should be archived/);
+    assert.match(snapshot, /## Latest Token Usage Summary\s*\n\(none\)/);
+    assert.match(snapshot, /## Threshold Warnings\s*\n\(none\)/);
+    assert.match(snapshot, /## Active Blockers\s*\n\(none\)/);
+    assert.doesNotMatch(snapshot, /2,204,140/);
+    assert.doesNotMatch(snapshot, /198,380/);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("plan history compaction handles unversioned history without duplicate headings", () => {
+  const result = compactPlanHistory({
+    planName: "unversioned-plan",
+    planPath: ".ai/plans/unversioned-plan.md",
+    planContent: `# Plan: unversioned-plan
+
+## Status
+
+active
+
+## Next Action
+
+execute-plan
+
+## Execution Log
+
+* old detail one
+* latest detail two
+
+## Blockers
+
+(empty)
+`,
+    timestamp: () => "2026-06-25T10:11:12.000Z",
+  });
+
+  assert.match(result.compactedContent, /## Execution Log/);
+  assert.doesNotMatch(result.compactedContent, /## Execution Log\s+## Execution Log/);
+  assert.match(result.compactedContent, /latest detail two/);
+  assert.match(result.compactedContent, /## Blockers\s+\(empty\)/);
+  assert.doesNotMatch(result.compactedContent, /\* ## Blockers/);
+});
+
+test("workflow runner keeps the first plan history archive on repeat compaction", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    const planName = "repeat-compact";
+    await writePlan(
+      workspace.root,
+      planName,
+      planWith(
+        "active",
+        "execute-plan",
+        `## Execution Log
+
+* old execution detail
+`,
+      ),
+    );
+    const archivePath = join(workspace.root, planHistoryArchiveRelativePath(planName));
+    mkdirSync(dirname(archivePath), { recursive: true });
+    await writeFile(archivePath, "original archive must survive", "utf8");
+
+    const result = await runWorkflowRunner({
+      argv: ["--compact-plan", planArg(planName)],
+      rootDir: workspace.root,
+      processRunner: async () => {
+        throw new Error("compact-plan must not launch a subprocess");
+      },
+    });
+    const archiveContent = await readFile(archivePath, "utf8");
+
+    assert.equal(result.success, true);
+    assert.equal(archiveContent, "original archive must survive");
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("workflow prompts tell agents to use the snapshot first and avoid full historical plan loads", async () => {
+  const executePrompt = await readFile(".ai/prompts/execute-plan.md", "utf8");
+  const reviewPrompt = await readFile(".ai/prompts/review-changes.md", "utf8");
+  const commitSummaryPrompt = await readFile(".ai/prompts/commit-summary.md", "utf8");
+
+  for (const prompt of [executePrompt, reviewPrompt, commitSummaryPrompt]) {
+    assert.match(prompt, /context snapshot/i);
+    assert.match(prompt, /primary current-state source/i);
+    assert.match(prompt, /read the full plan only/i);
+    assert.match(prompt, /do not load full historical sections unless the snapshot is insufficient/i);
+  }
+});
+
+test("scope cleanup prompt references the snapshot and paths instead of inlining full plan or spec content", () => {
+  const prompt = generateScopeCleanupPrompt({
+    promptContent: "SCOPE CLEANUP PROMPT",
+    planPath: ".ai/plans/workflow-runner.md",
+    contextSnapshotPath: ".ai/state/workflow-runner/workflow-runner.context.md",
+    specPaths: [".ai/specs/workflow-runner.spec.md"],
+    paths: ["src/file.ts"],
+    diff: [
+      "diff --git a/src/file.ts b/src/file.ts",
+      "index 1111111..2222222 100644",
+      "--- a/src/file.ts",
+      "+++ b/src/file.ts",
+      "@@ -1 +1,2 @@",
+      ' const keep = "yes";',
+      '+const remove = "no";',
+    ].join("\n"),
+    mode: "review",
+  });
+
+  assert.match(prompt, /Plan path: \.ai\/plans\/workflow-runner\.md/);
+  assert.match(prompt, /Snapshot path: \.ai\/state\/workflow-runner\/workflow-runner\.context\.md/);
+  assert.match(prompt, /Spec paths:/);
+  assert.match(prompt, /\.ai\/specs\/workflow-runner\.spec\.md/);
+  assert.match(prompt, /Path-scoped staged diff:/);
+  assert.match(prompt, /const remove = "no"/);
+  assert.doesNotMatch(prompt, /Plan content:/);
+  assert.doesNotMatch(prompt, /Spec content:/);
 });
 
 test("workflow prompt pins superpower skills to the installed global skill root", () => {
@@ -3157,6 +3787,183 @@ test("successful workflow stages append token usage ledger entries and report th
       reasoningOutputTokens: 30,
       totalTokens: 1290,
     });
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("workflow runner writes the context snapshot before launching a workflow prompt", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(workspace.root, "workflow-runner", planWith("completed", "commit-summary"));
+    let sawSnapshot = false;
+    const result = await runWorkflowRunner({
+      planName: planArg("workflow-runner"),
+      rootDir: workspace.root,
+      processRunner: async (call) => {
+        if (call.command === "git" && call.args[0] === "status") {
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
+        if (call.command === CODEX_COMMAND) {
+          sawSnapshot = existsSync(join(workspace.root, workflowContextSnapshotRelativePath("workflow-runner")));
+          const snapshot = await readFile(
+            join(workspace.root, workflowContextSnapshotRelativePath("workflow-runner")),
+            "utf8",
+          );
+          assert.match(snapshot, /## Current State/);
+          assert.match(snapshot, /\* Status: completed/);
+        }
+        return {
+          launched: true,
+          stdout: turnCompletedUsageDetailLine({
+            inputTokens: 100,
+            cachedInputTokens: 50,
+            outputTokens: 40,
+            reasoningOutputTokens: 10,
+          }),
+          stderr: "",
+          exitCode: 0,
+        };
+      },
+    });
+
+    assert.equal(result.success, true);
+    assert.equal(sawSnapshot, true);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("pathological workflow thresholds warn in terminal output, logs, and the snapshot", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(
+      workspace.root,
+      "workflow-runner",
+      `${planWith("completed", "commit-summary")}\n${"x".repeat(110 * 1024)}`,
+    );
+    const output = collectConsole();
+    const result = await runWorkflowRunner({
+      planName: planArg("workflow-runner"),
+      rootDir: workspace.root,
+      console: output.console,
+      processRunner: runnerReturning({
+        launched: true,
+        stdout: turnCompletedUsageDetailLine({
+          inputTokens: 2_000_100,
+          cachedInputTokens: 50,
+          outputTokens: 90,
+          reasoningOutputTokens: 30,
+        }),
+        stderr: "",
+        exitCode: 0,
+      }),
+    });
+
+    assert.equal(result.success, true);
+    assert.equal(output.lines.some((line) => /pathological/i.test(line)), true);
+    assert.equal(output.lines.some((line) => /100 KB/i.test(line)), true);
+    assert.equal(output.lines.some((line) => /2,000,000/i.test(line)), true);
+    assert.equal(output.lines.some((line) => /100,000/i.test(line)), true);
+
+    const snapshot = await readFile(
+      join(workspace.root, workflowContextSnapshotRelativePath("workflow-runner")),
+      "utf8",
+    );
+    assert.match(snapshot, /## Threshold Warnings/);
+    assert.match(snapshot, /100 KB/);
+    assert.match(snapshot, /2,000,000/);
+    assert.match(snapshot, /100,000/);
+
+    const log = await readFile(
+      join(workspace.root, ".ai", "logs", "workflow-runner", "workflow-runner.log"),
+      "utf8",
+    );
+    assert.match(log, /thresholdWarnings:/);
+    assert.match(log, /2,000,000/);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("compaction recommendation is emitted once for eligible oversized completed plans", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(
+      workspace.root,
+      "workflow-runner",
+      `${planWith("completed", "commit-summary")}\n${"x".repeat(110 * 1024)}`,
+    );
+    const output = collectConsole();
+
+    const result = await runWorkflowRunner({
+      planName: planArg("workflow-runner"),
+      rootDir: workspace.root,
+      console: output.console,
+      processRunner: runnerReturning({
+        launched: true,
+        stdout: "",
+        stderr: "",
+        exitCode: 0,
+      }),
+    });
+
+    const terminalOutput = output.lines.join("\n");
+    const command =
+      "pnpm exec tsx .ai/scripts/workflow-runner.ts --compact-plan .ai/plans/workflow-runner.md";
+
+    assert.equal(result.success, true);
+    assert.match(terminalOutput, /Plan file is 110\.\d KB \(> 100 KB\)/);
+    assert.match(
+      terminalOutput,
+      /COMPACTION: Plan history compaction is available for completed plans\./,
+    );
+    assert.match(terminalOutput, new RegExp(command.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    assert.equal(output.lines.filter((line) => line.includes(command)).length, 1);
+    assert.equal(
+      existsSync(join(workspace.root, ".ai", "artifacts", "plan-history", "workflow-runner.history.md")),
+      false,
+    );
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("compaction recommendation reports ineligible oversized draft plans", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(
+      workspace.root,
+      "workflow-runner",
+      `${planWith("draft", "fix-plan")}\n${"x".repeat(110 * 1024)}`,
+    );
+    const output = collectConsole();
+
+    await runWorkflowRunner({
+      planName: planArg("workflow-runner"),
+      rootDir: workspace.root,
+      console: output.console,
+      processRunner: runnerReturning({
+        launched: true,
+        stdout: "",
+        stderr: "",
+        exitCode: 0,
+      }),
+    });
+
+    const terminalOutput = output.lines.join("\n");
+    assert.match(
+      terminalOutput,
+      /COMPACTION: Plan history compaction is not available while status is draft\./,
+    );
+    assert.match(
+      terminalOutput,
+      /COMPACTION: Eligible statuses: active, review, deployment-validation, completed\./,
+    );
+    assert.match(
+      terminalOutput,
+      /COMPACTION: Run after status is eligible: pnpm exec tsx \.ai\/scripts\/workflow-runner\.ts --compact-plan \.ai\/plans\/workflow-runner\.md/,
+    );
   } finally {
     await workspace.cleanup();
   }
@@ -4945,6 +5752,7 @@ test(`review returning to active unstages plan-owned files before resuming execu
   try {
     await writePlan(workspace.root, "review-active", planWith("review", "review-plan"));
     const calls: Parameters<ProcessRunner>[0][] = [];
+    let executeSnapshot = "";
     const result = await runWorkflowRunner({
       planName: planArg("review-active"),
       rootDir: workspace.root,
@@ -4956,11 +5764,19 @@ test(`review returning to active unstages plan-owned files before resuming execu
         if (call.command === CODEX_COMMAND && call.promptPath === ".ai/prompts/review-changes.md") {
           writeFileSync(
             join(workspace.root, ".ai", "plans", "review-active.md"),
-            planWith("active", "execute-plan", "\n## Review History\n\n### Review v1\n\n* Summary: NEEDS FIX\n"),
+            planWith(
+              "active",
+              "execute-plan",
+              "\n## Review History\n\n### Review v1\n\n* Summary: NEEDS FIX\n* Issues:\n  * Update .ai/scripts/workflow-runner.ts to consume the latest remediation snapshot section.\n* Decision: active\n",
+            ),
           );
           return { launched: true, stdout: "needs fix", stderr: "", exitCode: 0 };
         }
         if (call.command === CODEX_COMMAND && call.promptPath === ".ai/prompts/execute-plan.md") {
+          executeSnapshot = await readFile(
+            join(workspace.root, workflowContextSnapshotRelativePath("review-active")),
+            "utf8",
+          );
           writeFileSync(
             join(workspace.root, ".ai", "plans", "review-active.md"),
             planWith("blocked", "unblock-plan", "\n## Blockers\n\n### Blocker 1\n\n* Description: follow-up fix required\n"),
@@ -4987,6 +5803,9 @@ test(`review returning to active unstages plan-owned files before resuming execu
       ".ai/scripts/workflow-runner.test.ts",
       ".ai/scripts/workflow-runner.ts",
     ]);
+    assert.match(executeSnapshot, /## Latest Review Remediation Context/);
+    assert.match(executeSnapshot, /\* Source Review: Review v1/);
+    assert.match(executeSnapshot, /\* Summary: NEEDS FIX/);
   } finally {
     await workspace.cleanup();
   }

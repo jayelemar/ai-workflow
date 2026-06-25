@@ -12,10 +12,13 @@ Read:
 * `.ai/instructions/workflow-state.instructions.md`
 * `.ai/instructions/testing.instructions.md` before running, skipping, or classifying validation
 * `.ai/specs/<feature>.spec.md` (if exists)
+* runner-owned context snapshot `.ai/state/workflow-runner/<plan-name>.context.md` as the primary current-state source
 * Active Context Packet instruction files selected from `.ai/instructions/index.instructions.md`
-* the plan file
+* the full plan file only when exact plan edits are required or the snapshot is insufficient
 
 Use the runner-provided Active Context Packet and index-selected instruction files only. Do not broadly load `.ai/instructions/*`.
+Read the full plan only when exact plan edits are required or the snapshot is insufficient.
+Do not load full historical sections unless the snapshot is insufficient.
 
 Load:
 
@@ -312,6 +315,8 @@ execute-plan
 * Decision: active
 
 Review History issue bullets must be one sentence each and actionable.
+Review History issue bullets must be self-contained and remediation-ready.
+Review History issue bullets must not rely on surrounding prose, earlier review versions, or shorthand like `same as above`.
 Do not use Review History for compacted terminal output alone.
 
 3. update plan with:
@@ -393,6 +398,8 @@ Rules:
 * If Summary is `NEEDS FIX` or `HIGH RISK`, do not rely on a plan-update summary alone; print the concrete conflict, defect, missing validation, or required fix in `### Issues`.
 * `### Issues` must mirror the actionable Review History findings written to the plan so terminal output shows what needs to be fixed without opening the plan file.
 * Review History issue bullets must be one sentence each and actionable.
+* Review History issue bullets must be self-contained and remediation-ready.
+* Review History issue bullets must not rely on surrounding prose, earlier review versions, or shorthand like `same as above`.
 * Do not use Review History for compacted terminal output alone.
 * Issues: include all CRITICAL issues; include WARNING and SUGGESTION items only when actionable.
 * Each issue bullet should be one sentence and include the file/line reference when available.

@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 type CodexProfile = 'codex-work' | 'codex-personal' | 'codex-adam' | 'codex-work6598';
 type ReasoningEffort = 'medium' | 'high' | 'xhigh';
 
-export const WORKFLOW_RUNNER_CODEX_PROFILE: CodexProfile = 'codex-adam' as const;
+export const WORKFLOW_RUNNER_CODEX_PROFILE: CodexProfile = 'codex-work6598' as const;
 
 const VALID_STATUSES = [
   'draft',
@@ -47,6 +47,9 @@ const TERMINAL_FAILED_COMMAND_OUTPUT_LINE_LIMIT = 4;
 const TERMINAL_FAILED_COMMAND_OUTPUT_CHAR_LIMIT = 1000;
 const TERMINAL_FILE_DETAIL_LIMIT = 3;
 const STOP_REASON_EXCERPT_CHAR_LIMIT = 240;
+const WORKFLOW_CONTEXT_PLAN_SIZE_WARNING_BYTES = 100 * 1024;
+const WORKFLOW_CONTEXT_STAGE_INPUT_WARNING_TOKENS = 2_000_000;
+const WORKFLOW_CONTEXT_STAGE_UNCACHED_WARNING_TOKENS = 100_000;
 const ANSI_RESET = '\u001b[0m';
 const ANSI_SEQUENCE_PATTERN =
   /\u001b(?:\[([0-?]*[ -/]*)([@-~])|\][^\u0007]*(?:\u0007|\u001b\\)|[@-_])/g;
@@ -65,6 +68,13 @@ const WORKFLOW_WAIT_NOTICE_COLOR = '\u001b[38;2;255;244;143m';
 
 type Status = (typeof VALID_STATUSES)[number];
 type NextAction = (typeof VALID_NEXT_ACTIONS)[number];
+
+const PLAN_HISTORY_COMPACTION_ELIGIBLE_STATUSES = [
+  'active',
+  'review',
+  'deployment-validation',
+  'completed',
+] as const satisfies readonly Status[];
 
 export type ProcessCall = {
   command: string;
@@ -156,6 +166,7 @@ type RunWorkflowOptions = {
   outputStream?: OutputStream;
   streamOutput?: boolean;
   compactOutput?: boolean;
+  compactPlan?: boolean;
   unblockNote?: string;
   isIgnored?: (relativePath: string) => Promise<boolean>;
   now?: () => number;
@@ -232,6 +243,37 @@ type TokenUsageTotals = {
 
 type TokenUsageLedgerResult = 'success' | 'failed' | 'interrupted';
 
+type WorkflowContextSnapshotTokenUsage = {
+  iteration?: number;
+  promptPath?: string;
+  model?: string;
+  reasoning?: string;
+  stageInputTokens?: number | null;
+  stageCachedInputTokens?: number | null;
+  stageUncachedInputTokens?: number | null;
+  stageOutputTokens?: number | null;
+  stageReasoningOutputTokens?: number | null;
+  stageTotalTokens?: number | null;
+  totalTokens?: number | null;
+};
+
+type WorkflowContextSnapshotResult = {
+  snapshotPath: string;
+  thresholdWarnings: string[];
+};
+
+type PlanHistoryCompactionWriteResult = {
+  ok: true;
+  archivePath: string;
+  compactedContent: string;
+};
+
+export type PlanHistoryCompactionResult = {
+  compactedContent: string;
+  archiveContent: string;
+  archivePath: string;
+};
+
 type FailureMetadataLogFields = {
   failureKind: string;
   failureReason: string;
@@ -297,6 +339,8 @@ type CommandTerminalSummary = {
   description: string;
   files?: string[];
   details?: string[];
+  silent?: boolean;
+  failureLabel?: string;
 };
 type FailedTestCommandSummary = {
   label: 'jest test' | 'vitest test';
@@ -620,6 +664,50 @@ const summarizeFindCommand = (tokens: string[]): CommandTerminalSummary => {
   return { group: 'Explored', description: `Explore ${pathToken}` };
 };
 
+const isWorkflowPlanMarkdownPath = (token: string): boolean =>
+  /^\.ai\/plans\/[^/]+\.md$/.test(token);
+
+const isPlanSectionHeadingSearchPattern = (pattern: string): boolean => {
+  const normalized = pattern.replace(/\\\(/g, '(').replace(/\\\)/g, ')').trim();
+  if (/^\^##\s+\(.+\)$/.test(normalized)) {
+    return true;
+  }
+
+  const terms = normalized
+    .split('|')
+    .map((term) => term.trim())
+    .filter(Boolean);
+  return terms.length > 0 && terms.every((term) => /^\^#{2,3}\s+/.test(term));
+};
+
+const summarizePlanSectionReadCommand = (tokens: string[]): CommandTerminalSummary | null => {
+  const executable = tokens[0];
+  if (executable !== 'rg' && executable !== 'awk') {
+    return null;
+  }
+  if (!tokens.some(isWorkflowPlanMarkdownPath)) {
+    return null;
+  }
+
+  if (executable === 'rg') {
+    const pattern = tokens
+      .slice(1)
+      .find((token) => token !== '--' && !token.startsWith('-') && !isWorkflowPlanMarkdownPath(token));
+    if (!pattern || !isPlanSectionHeadingSearchPattern(pattern)) {
+      return null;
+    }
+  } else if (!tokens.some((token) => token.includes('^##'))) {
+    return null;
+  }
+
+  return {
+    group: 'Explored',
+    description: 'Read plan sections',
+    silent: true,
+    failureLabel: 'plan section read',
+  };
+};
+
 const rgOptionsWithSkippedValue = new Set([
   '-A',
   '-B',
@@ -882,6 +970,30 @@ const summarizeJestRunCommand = (tokens: string[]): CommandTerminalSummary | nul
   };
 };
 
+const summarizeLineCountCommand = (tokens: string[]): CommandTerminalSummary | null => {
+  if (tokens[0] !== 'wc') {
+    return null;
+  }
+
+  const args = tokens.slice(1);
+  const countsLines = args.some(
+    (token) => token === '-l' || token === '--lines' || /^-[^-].*l/.test(token),
+  );
+  if (!countsLines) {
+    return null;
+  }
+
+  const files = args.filter((token) => token !== '--' && !token.startsWith('-'));
+  if (files.length === 0) {
+    return null;
+  }
+
+  return {
+    group: 'Ran',
+    description: `line count for ${files.length} ${files.length === 1 ? 'file' : 'files'}`,
+  };
+};
+
 const summarizeFilteredPnpmCommand = (tokens: string[]): CommandTerminalSummary | null => {
   if (tokens[0] !== 'pnpm' || tokens[1] !== '--filter' || !tokens[2]) {
     return null;
@@ -1060,7 +1172,9 @@ const commandTerminalSummary = (command: string): CommandTerminalSummary => {
   const filteredPnpmSummary = summarizeFilteredPnpmCommand(tokens);
   const vitestSummary = summarizeVitestRunCommand(tokens);
   const jestSummary = summarizeJestRunCommand(tokens);
+  const lineCountSummary = summarizeLineCountCommand(tokens);
   const gitDiffSummary = summarizeGitDiffCommand(tokens, fullTokens);
+  const planSectionReadSummary = summarizePlanSectionReadCommand(tokens);
 
   if (filteredPnpmSummary) {
     return filteredPnpmSummary;
@@ -1071,8 +1185,14 @@ const commandTerminalSummary = (command: string): CommandTerminalSummary => {
   if (jestSummary) {
     return jestSummary;
   }
+  if (lineCountSummary) {
+    return lineCountSummary;
+  }
   if (gitDiffSummary) {
     return gitDiffSummary;
+  }
+  if (planSectionReadSummary) {
+    return planSectionReadSummary;
   }
 
   if (executable === 'sed') {
@@ -1147,7 +1267,7 @@ const formatPassedCommandTerminalBlock = (
   color = false,
 ): string => {
   const summary = commandTerminalSummary(command);
-  if (summary.group === 'Ran') {
+  if (summary.group === 'Ran' || summary.silent) {
     return '';
   }
 
@@ -1577,7 +1697,8 @@ const formatCommandFailureHeadline = (
 ): string => {
   const exitDescription = exitCode === 'unknown' ? 'unknown' : String(exitCode);
   const failedTestSummary = summarizeFailedTestCommand(command);
-  const commandLabel = failedTestSummary?.label ?? command;
+  const commandSummary = commandTerminalSummary(command);
+  const commandLabel = failedTestSummary?.label ?? commandSummary.failureLabel ?? command;
   return `${formatTerminalLabel('[failed]', 'commandFailed', color)} ${commandLabel} (exit ${exitDescription})`;
 };
 
@@ -2665,6 +2786,597 @@ const extractPlanOwnedPaths = (planContent: string): string[] => {
   return uniquePaths(paths);
 };
 
+const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const extractPlanOwnedFileSection = (planContent: string): string[] => {
+  const lines = planSectionLines(planContent, '## Files (MANDATORY)');
+  const trimmed = [...lines];
+  while (trimmed[0]?.trim() === '') {
+    trimmed.shift();
+  }
+  while (trimmed.at(-1)?.trim() === '') {
+    trimmed.pop();
+  }
+  return trimmed;
+};
+
+const extractFieldValue = (lines: string[], fieldName: string): string | undefined => {
+  const pattern = new RegExp(`^\\*\\s*${escapeRegExp(fieldName)}:\\s*(.+)$`, 'i');
+  for (const line of lines) {
+    const match = line.trim().match(pattern);
+    if (match) {
+      return boundedInlineExcerpt(match[1]);
+    }
+  }
+  return undefined;
+};
+
+const extractNestedListItems = (lines: string[], fieldName: string, limit = 5): string[] => {
+  const pattern = new RegExp(`^\\*\\s*${escapeRegExp(fieldName)}:\\s*$`, 'i');
+  const values: string[] = [];
+  let collecting = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (pattern.test(trimmed)) {
+      collecting = true;
+      continue;
+    }
+    if (!collecting) {
+      continue;
+    }
+    if (/^###\s+/.test(trimmed)) {
+      break;
+    }
+    if (/^\*\s+/.test(trimmed) && !/^\s+/.test(line)) {
+      break;
+    }
+    const bulletMatch = trimmed.match(/^(?:[-*]|\d+\.)\s+(.+)$/);
+    if (!bulletMatch) {
+      continue;
+    }
+    const value = boundedInlineExcerpt(bulletMatch[1]);
+    if (value) {
+      values.push(value);
+      if (values.length >= limit) {
+        break;
+      }
+    }
+  }
+
+  return values;
+};
+
+const summarizeMeaningfulLines = (lines: string[], limit = 5): string[] => {
+  const values: string[] = [];
+  let inCodeFence = false;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('```')) {
+      inCodeFence = !inCodeFence;
+      continue;
+    }
+    if (inCodeFence || trimmed.length === 0 || /^###\s+/.test(trimmed)) {
+      continue;
+    }
+    const bulletMatch = trimmed.match(/^(?:[-*]|\d+\.)\s+(.+)$/);
+    const candidate = bulletMatch ? bulletMatch[1] : trimmed;
+    const excerpt = boundedInlineExcerpt(candidate);
+    if (!excerpt) {
+      continue;
+    }
+    values.push(excerpt);
+    if (values.length >= limit) {
+      break;
+    }
+  }
+  return values;
+};
+
+const extractVersionedSectionEntries = (
+  content: string,
+  heading: string,
+): Array<{ heading: string; lines: string[] }> => {
+  const lines = sectionLines(content, heading);
+  if (lines === null) {
+    return [];
+  }
+
+  const entries: Array<{ heading: string; lines: string[] }> = [];
+  let current: { heading: string; lines: string[] } | undefined;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('### ')) {
+      current = { heading: trimmed, lines: [] };
+      entries.push(current);
+      continue;
+    }
+    current ??= { heading, lines: [] };
+    if (!entries.includes(current)) {
+      entries.push(current);
+    }
+    current.lines.push(line);
+  }
+
+  return entries.filter((entry) => entry.lines.some((line) => line.trim().length > 0));
+};
+
+const extractCurrentPhaseSummary = (planContent: string): string[] => {
+  for (const heading of [
+    '## Current Phase',
+    '## Current Implementation Status',
+    '## Summary',
+    '## Verification Status',
+  ]) {
+    const lines = sectionLines(planContent, heading);
+    if (lines === null) {
+      continue;
+    }
+    const summary = summarizeMeaningfulLines(lines);
+    if (summary.length > 0) {
+      return summary;
+    }
+  }
+
+  const latestExecution = extractVersionedSectionEntries(planContent, '## Execution Log').at(-1);
+  return latestExecution ? summarizeMeaningfulLines(latestExecution.lines) : [];
+};
+
+const extractLatestExecutionSummary = (planContent: string): string[] => {
+  const latestExecution = extractVersionedSectionEntries(planContent, '## Execution Log').at(-1);
+  return latestExecution ? summarizeMeaningfulLines(latestExecution.lines) : [];
+};
+
+const extractLatestValidationSummary = (
+  planContent: string,
+): { result?: string; details: string[] } => {
+  const latestValidation = extractVersionedSectionEntries(planContent, '## Validation History').at(
+    -1,
+  );
+  if (!latestValidation) {
+    return { details: [] };
+  }
+
+  const details = [
+    ...extractNestedListItems(latestValidation.lines, 'Critical Issues'),
+    ...extractNestedListItems(latestValidation.lines, 'Warnings'),
+    ...extractNestedListItems(latestValidation.lines, 'Notes'),
+  ];
+
+  if (details.length === 0) {
+    details.push(
+      ...summarizeMeaningfulLines(
+        latestValidation.lines.filter(
+          (line) => !/^\*\s*(Result|Recommendation):/i.test(line.trim()),
+        ),
+      ),
+    );
+  }
+
+  return {
+    result: extractFieldValue(latestValidation.lines, 'Result'),
+    details: details.slice(0, 5),
+  };
+};
+
+const extractLatestReviewSummary = (
+  planContent: string,
+): { heading?: string; summary?: string; decision?: string; unresolvedFindings: string[] } => {
+  const latestReview = extractVersionedSectionEntries(planContent, '## Review History').at(-1);
+  if (!latestReview) {
+    return { unresolvedFindings: [] };
+  }
+
+  const unresolvedFindings = extractNestedListItems(latestReview.lines, 'Issues')
+    .filter((value) => !/^resolved:/i.test(value))
+    .slice(0, 5);
+
+  return {
+    heading: latestReview.heading.startsWith('### ')
+      ? latestReview.heading.replace(/^###\s+/, '')
+      : undefined,
+    summary: extractFieldValue(latestReview.lines, 'Summary'),
+    decision: extractFieldValue(latestReview.lines, 'Decision'),
+    unresolvedFindings,
+  };
+};
+
+const extractLatestReviewRemediationContext = (planContent: string): string[] => {
+  const status = extractSectionValue(planContent, '## Status');
+  const nextAction = extractSectionValue(planContent, '## Next Action');
+  if (status !== 'active' || nextAction !== 'execute-plan') {
+    return [];
+  }
+
+  const review = extractLatestReviewSummary(planContent);
+  if (review.unresolvedFindings.length === 0) {
+    return [];
+  }
+
+  const context: string[] = [];
+  if (review.heading) {
+    context.push(`Source Review: ${review.heading}`);
+  }
+  if (review.summary) {
+    context.push(`Summary: ${review.summary}`);
+  }
+  if (review.decision) {
+    context.push(`Decision: ${review.decision}`);
+  }
+  context.push(...review.unresolvedFindings);
+  return context;
+};
+
+const extractActiveBlockers = (planContent: string): string[] => {
+  const lines = sectionLines(planContent, '## Blockers');
+  if (lines === null) {
+    return [];
+  }
+
+  const blockers: Array<{ heading: string; lines: string[] }> = [];
+  const hasExplicitBlockerSections = lines.some((line) => /^###\s+Blocker\b/i.test(line.trim()));
+  let current: { heading: string; lines: string[] } | undefined;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (/^###\s+Blocker\b/i.test(trimmed)) {
+      current = { heading: trimmed, lines: [] };
+      blockers.push(current);
+      continue;
+    }
+    if (hasExplicitBlockerSections) {
+      current?.lines.push(line);
+      continue;
+    }
+    current ??= { heading: '## Blockers', lines: [] };
+    if (!blockers.includes(current)) {
+      blockers.push(current);
+    }
+    current.lines.push(line);
+  }
+
+  return blockers
+    .filter((blocker) => {
+      const status = extractFieldValue(blocker.lines, 'Status');
+      return !(status && /^resolved$/i.test(status));
+    })
+    .map((blocker) => {
+      const details = [
+        extractFieldValue(blocker.lines, 'Description'),
+        extractFieldValue(blocker.lines, 'Required Action'),
+        extractFieldValue(blocker.lines, 'Next Step'),
+      ].filter((value): value is string => typeof value === 'string');
+      return boundedInlineExcerpt([blocker.heading.replace(/^###\s+/, ''), ...details].join(' | '));
+    })
+    .filter((value): value is string => typeof value === 'string')
+    .slice(0, 5);
+};
+
+const summarizeLatestTokenUsage = (
+  latestTokenUsage?: WorkflowContextSnapshotTokenUsage,
+): string[] => {
+  if (!latestTokenUsage) {
+    return [];
+  }
+
+  const lines: string[] = [];
+  if (isFiniteNumber(latestTokenUsage.iteration)) {
+    lines.push(`Iteration: ${latestTokenUsage.iteration}`);
+  }
+  if (typeof latestTokenUsage.promptPath === 'string' && latestTokenUsage.promptPath.length > 0) {
+    lines.push(`Prompt: ${latestTokenUsage.promptPath}`);
+  }
+  if (isFiniteNumber(latestTokenUsage.stageInputTokens)) {
+    lines.push(`Stage Input Tokens: ${latestTokenUsage.stageInputTokens}`);
+  }
+  if (isFiniteNumber(latestTokenUsage.stageUncachedInputTokens)) {
+    lines.push(`Stage Uncached Input Tokens: ${latestTokenUsage.stageUncachedInputTokens}`);
+  }
+  if (isFiniteNumber(latestTokenUsage.stageOutputTokens)) {
+    lines.push(`Stage Output Tokens: ${latestTokenUsage.stageOutputTokens}`);
+  }
+  if (isFiniteNumber(latestTokenUsage.stageTotalTokens)) {
+    lines.push(`Stage Total Tokens: ${latestTokenUsage.stageTotalTokens}`);
+  }
+  if (isFiniteNumber(latestTokenUsage.totalTokens)) {
+    lines.push(`Cumulative Total Tokens: ${latestTokenUsage.totalTokens}`);
+  }
+  return lines.slice(0, 6);
+};
+
+const formatKilobytes = (bytes: number): string => `${(bytes / 1024).toFixed(1)} KB`;
+
+const collectWorkflowThresholdWarnings = ({
+  planByteSize,
+  latestTokenUsage,
+}: {
+  planByteSize: number;
+  latestTokenUsage?: WorkflowContextSnapshotTokenUsage;
+}): string[] => {
+  const warnings: string[] = [];
+
+  if (planByteSize > WORKFLOW_CONTEXT_PLAN_SIZE_WARNING_BYTES) {
+    warnings.push(
+      `Plan file is ${formatKilobytes(planByteSize)} (> 100 KB). This workflow is becoming pathological; consider decomposition or history compaction follow-up.`,
+    );
+  }
+
+  if (
+    isFiniteNumber(latestTokenUsage?.stageInputTokens) &&
+    latestTokenUsage.stageInputTokens > WORKFLOW_CONTEXT_STAGE_INPUT_WARNING_TOKENS
+  ) {
+    warnings.push(
+      `Latest stage input tokens are ${latestTokenUsage.stageInputTokens.toLocaleString('en-US')} (> 2,000,000). This workflow is becoming pathological; consider decomposition or history compaction follow-up.`,
+    );
+  }
+
+  if (
+    isFiniteNumber(latestTokenUsage?.stageUncachedInputTokens) &&
+    latestTokenUsage.stageUncachedInputTokens > WORKFLOW_CONTEXT_STAGE_UNCACHED_WARNING_TOKENS
+  ) {
+    warnings.push(
+      `Latest stage uncached input tokens are ${latestTokenUsage.stageUncachedInputTokens.toLocaleString('en-US')} (> 100,000). This workflow is becoming pathological; consider decomposition or history compaction follow-up.`,
+    );
+  }
+
+  return warnings;
+};
+
+const collectWorkflowPlanCompactionRecommendation = ({
+  planPath,
+  status,
+  planByteSize,
+}: {
+  planPath: string;
+  status: Status;
+  planByteSize: number;
+}): string[] => {
+  if (planByteSize <= WORKFLOW_CONTEXT_PLAN_SIZE_WARNING_BYTES) {
+    return [];
+  }
+
+  const command = `pnpm exec tsx .ai/scripts/workflow-runner.ts --compact-plan ${planPath}`;
+  if (canCompactPlanHistory(status)) {
+    return [
+      `COMPACTION: Plan history compaction is available for ${status} plans.`,
+      `COMPACTION: Run: ${command}`,
+    ];
+  }
+
+  return [
+    `COMPACTION: Plan history compaction is not available while status is ${status}.`,
+    `COMPACTION: Eligible statuses: ${PLAN_HISTORY_COMPACTION_ELIGIBLE_STATUSES.join(', ')}.`,
+    `COMPACTION: Run after status is eligible: ${command}`,
+  ];
+};
+
+const formatSnapshotSection = (heading: string, items: string[], empty = '(none)'): string =>
+  `${heading}\n${items.length > 0 ? items.map((item) => `* ${item}`).join('\n') : empty}`;
+
+const extractSnapshotActiveBlockers = (planContent: string): string[] =>
+  extractActiveBlockers(planContent).filter((blocker) => blocker !== '## Blockers');
+
+export const workflowContextSnapshotRelativePath = (planName: string): string =>
+  rel('.ai', 'state', 'workflow-runner', `${planName}.context.md`);
+
+const workflowContextSnapshotAbsolutePath = (rootDir: string, planName: string): string =>
+  path.join(rootDir, workflowContextSnapshotRelativePath(planName));
+
+export const planHistoryArchiveRelativePath = (planName: string): string =>
+  rel('.ai', 'artifacts', 'plan-history', `${planName}.history.md`);
+
+const planHistoryArchiveAbsolutePath = (rootDir: string, planName: string): string =>
+  path.join(rootDir, planHistoryArchiveRelativePath(planName));
+
+const sectionText = (planContent: string, heading: string): string | undefined => {
+  const lines = planSectionLines(planContent, heading);
+  if (lines.length === 0) {
+    return undefined;
+  }
+  const trimmed = [...lines];
+  while (trimmed[0]?.trim() === '') {
+    trimmed.shift();
+  }
+  while (trimmed.at(-1)?.trim() === '') {
+    trimmed.pop();
+  }
+  if (trimmed.length === 0) {
+    return undefined;
+  }
+  return `${heading}\n\n${trimmed.join('\n')}`;
+};
+
+const latestVersionedEntryText = (planContent: string, heading: string): string | undefined => {
+  const latestEntry = extractVersionedSectionEntries(planContent, heading).at(-1);
+  if (!latestEntry) {
+    return undefined;
+  }
+  const trimmed = [...latestEntry.lines];
+  while (trimmed[0]?.trim() === '') {
+    trimmed.shift();
+  }
+  while (trimmed.at(-1)?.trim() === '') {
+    trimmed.pop();
+  }
+  if (latestEntry.heading === heading) {
+    const summary = summarizeMeaningfulLines(trimmed.slice().reverse(), 8).reverse();
+    return `${heading}\n\n${summary.length > 0 ? summary.map((item) => `* ${item}`).join('\n') : '(empty)'}`;
+  }
+  return `${heading}\n\n${latestEntry.heading}\n\n${trimmed.join('\n')}`;
+};
+
+const compactBlockersSection = (planContent: string): string | undefined => {
+  const blockers = extractActiveBlockers(planContent).filter((blocker) => blocker !== '## Blockers');
+  if (blockers.length === 0) {
+    return sectionLines(planContent, '## Blockers') === null ? undefined : '## Blockers\n\n(empty)';
+  }
+  return `## Blockers\n\n${blockers.map((blocker) => `* ${blocker}`).join('\n')}`;
+};
+
+export const compactPlanHistory = ({
+  planName,
+  planPath,
+  planContent,
+  timestamp = () => new Date().toISOString(),
+}: {
+  planName: string;
+  planPath: string;
+  planContent: string;
+  timestamp?: () => string;
+}): PlanHistoryCompactionResult => {
+  const archivedAt = timestamp();
+  const archivePath = planHistoryArchiveRelativePath(planName);
+  const title = planContent.match(/^#\s+.+$/m)?.[0] ?? `# Plan: ${planName}`;
+  const sections = [
+    title,
+    sectionText(planContent, '## Status'),
+    sectionText(planContent, '## Next Action'),
+    sectionText(planContent, '## Spec'),
+    sectionText(planContent, '## Phases'),
+    sectionText(planContent, '## Files (MANDATORY)'),
+    sectionText(planContent, '## Summary'),
+    sectionText(planContent, '## Current Implementation Status'),
+    sectionText(planContent, '## Verification Status'),
+    latestVersionedEntryText(planContent, '## Execution Log'),
+    latestVersionedEntryText(planContent, '## Validation History'),
+    latestVersionedEntryText(planContent, '## Review History'),
+    latestVersionedEntryText(planContent, '## Reopen History'),
+    compactBlockersSection(planContent),
+    sectionText(planContent, '## Workflow State Rules'),
+    sectionText(planContent, '## Rules'),
+    sectionText(planContent, '## Completion Condition'),
+    `## Archived History
+
+Older resolved execution, validation, review, and reopen history was compacted on ${archivedAt}.
+
+Archive:
+${archivePath}`,
+  ].filter((section): section is string => typeof section === 'string' && section.trim().length > 0);
+
+  return {
+    compactedContent: `${sections.join('\n\n')}\n`,
+    archiveContent: `# Archived Plan History: ${planName}
+
+Original Plan: ${planPath}
+Archived At: ${archivedAt}
+
+The active plan keeps current workflow state and latest history only. This archive preserves the full pre-compaction plan content for traceability.
+
+## Original Plan Content
+
+${planContent.trimEnd()}
+`,
+    archivePath,
+  };
+};
+
+const canCompactPlanHistory = (status: Status): boolean =>
+  PLAN_HISTORY_COMPACTION_ELIGIBLE_STATUSES.includes(status);
+
+const writePlanHistoryCompaction = async ({
+  rootDir,
+  plan,
+  timestamp,
+}: {
+  rootDir: string;
+  plan: ParsedPlan;
+  timestamp: () => string;
+}): Promise<PlanHistoryCompactionWriteResult | Failure> => {
+  if (!canCompactPlanHistory(plan.status)) {
+    return {
+      ok: false,
+      reason: `plan history compaction only supports active, review, deployment-validation, or completed plans; current status is ${plan.status}`,
+    };
+  }
+
+  const compaction = compactPlanHistory({
+    planName: plan.planName,
+    planPath: plan.planPath,
+    planContent: plan.content,
+    timestamp,
+  });
+
+  try {
+    await mkdir(path.dirname(planHistoryArchiveAbsolutePath(rootDir, plan.planName)), {
+      recursive: true,
+    });
+    if (!existsSync(planHistoryArchiveAbsolutePath(rootDir, plan.planName))) {
+      await writeFile(
+        planHistoryArchiveAbsolutePath(rootDir, plan.planName),
+        compaction.archiveContent,
+        'utf8',
+      );
+    }
+    await writeFile(plan.absolutePlanPath, compaction.compactedContent, 'utf8');
+    return {
+      ok: true,
+      archivePath: compaction.archivePath,
+      compactedContent: compaction.compactedContent,
+    };
+  } catch (error) {
+    return { ok: false, reason: `plan history compaction cannot be written: ${String(error)}` };
+  }
+};
+
+export const generateWorkflowContextSnapshot = ({
+  planName,
+  planPath,
+  planContent,
+  latestTokenUsage,
+  thresholdWarnings = [],
+}: {
+  planName: string;
+  planPath: string;
+  planContent: string;
+  latestTokenUsage?: WorkflowContextSnapshotTokenUsage;
+  thresholdWarnings?: string[];
+}): string => {
+  const validation = extractLatestValidationSummary(planContent);
+  const review = extractLatestReviewSummary(planContent);
+  const reviewRemediationContext = extractLatestReviewRemediationContext(planContent);
+  const tokenSummary = summarizeLatestTokenUsage(latestTokenUsage);
+
+  return `# Workflow Context Snapshot: ${planName}
+
+## Plan Path
+
+${planPath}
+
+## Current State
+
+* Status: ${extractSectionValue(planContent, '## Status') ?? '(missing)'}
+* Next Action: ${extractSectionValue(planContent, '## Next Action') ?? '(missing)'}
+
+${formatSnapshotSection('## Spec Paths', extractSpecPaths(planContent))}
+
+## Plan-Owned Files
+
+${extractPlanOwnedFileSection(planContent).length > 0 ? extractPlanOwnedFileSection(planContent).join('\n') : '(none)'}
+
+${formatSnapshotSection('## Current Phase Summary', extractCurrentPhaseSummary(planContent))}
+
+${formatSnapshotSection('## Latest Execution Summary', extractLatestExecutionSummary(planContent))}
+
+## Latest Validation Result
+
+* Result: ${validation.result ?? '(none recorded)'}
+${validation.details.length > 0 ? validation.details.map((detail) => `* ${detail}`).join('\n') : '(none)'}
+
+## Latest Review Result
+
+* Summary: ${review.summary ?? '(none recorded)'}
+* Decision: ${review.decision ?? '(none recorded)'}
+${formatSnapshotSection('### Unresolved Findings', review.unresolvedFindings)}
+
+${formatSnapshotSection('## Latest Review Remediation Context', reviewRemediationContext)}
+
+${formatSnapshotSection('## Active Blockers', extractSnapshotActiveBlockers(planContent))}
+
+${formatSnapshotSection('## Latest Token Usage Summary', tokenSummary)}
+
+${formatSnapshotSection('## Threshold Warnings', thresholdWarnings)}
+`;
+};
+
 const selectInstructionPaths = (planContent: string): string[] => {
   const planOwnedPaths = extractPlanOwnedPaths(planContent);
   const selected = new Set<string>();
@@ -2729,15 +3441,17 @@ const activeContextPacket = ({
   promptPath,
   planPath,
   planContent,
+  contextSnapshotPath = workflowContextSnapshotRelativePath(path.posix.basename(planPath, '.md')),
 }: {
   promptPath: string;
   planPath: string;
   planContent: string;
+  contextSnapshotPath?: string;
 }): string => {
   const warmPaths = uniquePaths([
     rel('.codex', 'AGENTS.md'),
     promptPath,
-    planPath,
+    contextSnapshotPath,
     rel('.ai', 'instructions', 'index.instructions.md'),
     ...(stateMachinePromptPaths.has(promptPath)
       ? [rel('.ai', 'instructions', 'workflow-state.instructions.md')]
@@ -2777,8 +3491,17 @@ const success = (reason: string, iterations: number): RunnerResult => ({
 
 const parseRunnerCliArgs = (
   argv: string[] = [],
-): { ok: true; planArgument: string; compactOutput: boolean; unblockNote?: string } | Failure => {
+):
+  | {
+      ok: true;
+      planArgument: string;
+      compactOutput: boolean;
+      compactPlan: boolean;
+      unblockNote?: string;
+    }
+  | Failure => {
   let compactOutput = false;
+  let compactPlan = false;
   let unblockNote: string | undefined;
   let planArgument = '';
 
@@ -2789,6 +3512,10 @@ const parseRunnerCliArgs = (
         return { ok: false, reason: '--compact must appear before the plan argument' };
       }
       compactOutput = true;
+      continue;
+    }
+    if (arg === '--compact-plan') {
+      compactPlan = true;
       continue;
     }
     if (arg === '--unblock-note') {
@@ -2813,6 +3540,7 @@ const parseRunnerCliArgs = (
     ok: true,
     planArgument,
     compactOutput,
+    compactPlan,
     unblockNote,
   };
 };
@@ -2970,6 +3698,7 @@ export const generateWorkflowPrompt = ({
   planPath,
   promptContent,
   planContent = '',
+  contextSnapshotPath = workflowContextSnapshotRelativePath(path.posix.basename(planPath, '.md')),
   reviewStagingPaths = [],
   commitSummaryPaths = [],
   unblockNote,
@@ -2978,6 +3707,7 @@ export const generateWorkflowPrompt = ({
   planPath: string;
   promptContent: string;
   planContent?: string;
+  contextSnapshotPath?: string;
   reviewStagingPaths?: string[];
   commitSummaryPaths?: string[];
   unblockNote?: string;
@@ -3052,7 +3782,7 @@ When loading superpower skills, use this root, for example:
 Do not read superpower skills from ${SHARED_SKILL_ROOT}; that root contains separate shared/caveman skills only.
 Apply the superpowers advisory guidance for analysis and edge-case checks.${subAgentGuidance}
 
-${activeContextPacket({ promptPath, planPath, planContent })}
+${activeContextPacket({ promptPath, planPath, planContent, contextSnapshotPath })}
 
 ${actionLabel}:
 ${planPath}${reviewBoundary}${commitBoundary}${unblockEvidence}
@@ -3151,11 +3881,7 @@ const readTokenUsageTotals = async (
 ): Promise<TokenUsageTotals> => {
   try {
     const content = await readFile(tokenUsageLedgerAbsolutePath(rootDir, planName), 'utf8');
-    const lines = content
-      .trim()
-      .split(/\r?\n/)
-      .filter(Boolean)
-      .reverse();
+    const lines = content.trim().split(/\r?\n/).filter(Boolean).reverse();
     for (const line of lines) {
       try {
         const parsed = asRecord(JSON.parse(line));
@@ -3176,6 +3902,122 @@ const readTokenUsageTotals = async (
   return { ...zeroTokenUsageTotals };
 };
 
+const toWorkflowContextSnapshotTokenUsage = (
+  record: Record<string, unknown>,
+): WorkflowContextSnapshotTokenUsage => ({
+  iteration: isFiniteNumber(record.iteration) ? record.iteration : undefined,
+  promptPath: toDisplayString(record.promptPath),
+  model: toDisplayString(record.model),
+  reasoning: toDisplayString(record.reasoning),
+  stageInputTokens: isFiniteNumber(record.stageInputTokens) ? record.stageInputTokens : null,
+  stageCachedInputTokens: isFiniteNumber(record.stageCachedInputTokens)
+    ? record.stageCachedInputTokens
+    : null,
+  stageUncachedInputTokens: isFiniteNumber(record.stageUncachedInputTokens)
+    ? record.stageUncachedInputTokens
+    : null,
+  stageOutputTokens: isFiniteNumber(record.stageOutputTokens) ? record.stageOutputTokens : null,
+  stageReasoningOutputTokens: isFiniteNumber(record.stageReasoningOutputTokens)
+    ? record.stageReasoningOutputTokens
+    : null,
+  stageTotalTokens: isFiniteNumber(record.stageTotalTokens) ? record.stageTotalTokens : null,
+  totalTokens: isFiniteNumber(record.totalTokens) ? record.totalTokens : null,
+});
+
+const readLatestTokenUsage = async (
+  rootDir: string,
+  planName: string,
+): Promise<WorkflowContextSnapshotTokenUsage | undefined> => {
+  try {
+    const content = await readFile(tokenUsageLedgerAbsolutePath(rootDir, planName), 'utf8');
+    const lines = content.trim().split(/\r?\n/).filter(Boolean).reverse();
+    for (const line of lines) {
+      try {
+        const parsed = asRecord(JSON.parse(line));
+        if (!parsed) {
+          continue;
+        }
+        return toWorkflowContextSnapshotTokenUsage(parsed);
+      } catch {
+        continue;
+      }
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
+};
+
+const writeWorkflowContextSnapshot = async ({
+  rootDir,
+  plan,
+}: {
+  rootDir: string;
+  plan: ParsedPlan;
+}): Promise<WorkflowContextSnapshotResult | Failure> => {
+  const planByteSize = Buffer.byteLength(plan.content, 'utf8');
+  const latestTokenUsage = await readLatestTokenUsage(rootDir, plan.planName);
+  const thresholdWarnings = collectWorkflowThresholdWarnings({
+    planByteSize,
+    latestTokenUsage,
+  });
+  const snapshotPath = workflowContextSnapshotRelativePath(plan.planName);
+  const snapshot = generateWorkflowContextSnapshot({
+    planName: plan.planName,
+    planPath: plan.planPath,
+    planContent: plan.content,
+    latestTokenUsage,
+    thresholdWarnings,
+  });
+
+  try {
+    await mkdir(path.dirname(workflowContextSnapshotAbsolutePath(rootDir, plan.planName)), {
+      recursive: true,
+    });
+    await writeFile(workflowContextSnapshotAbsolutePath(rootDir, plan.planName), snapshot, 'utf8');
+    return { snapshotPath, thresholdWarnings };
+  } catch (error) {
+    return {
+      ok: false,
+      reason: `workflow context snapshot cannot be written: ${String(error)}`,
+    };
+  }
+};
+
+const writePostCompactionWorkflowContextSnapshot = async ({
+  rootDir,
+  plan,
+  compactedContent,
+}: {
+  rootDir: string;
+  plan: ParsedPlan;
+  compactedContent: string;
+}): Promise<WorkflowContextSnapshotResult | Failure> => {
+  const thresholdWarnings = collectWorkflowThresholdWarnings({
+    planByteSize: Buffer.byteLength(compactedContent, 'utf8'),
+  });
+  const snapshotPath = workflowContextSnapshotRelativePath(plan.planName);
+  const snapshot = generateWorkflowContextSnapshot({
+    planName: plan.planName,
+    planPath: plan.planPath,
+    planContent: compactedContent,
+    thresholdWarnings,
+  });
+
+  try {
+    await mkdir(path.dirname(workflowContextSnapshotAbsolutePath(rootDir, plan.planName)), {
+      recursive: true,
+    });
+    await writeFile(workflowContextSnapshotAbsolutePath(rootDir, plan.planName), snapshot, 'utf8');
+    return { snapshotPath, thresholdWarnings };
+  } catch (error) {
+    return {
+      ok: false,
+      reason: `post-compaction workflow context snapshot cannot be written: ${String(error)}`,
+    };
+  }
+};
+
 const addTokenUsageToTotals = (
   totals: TokenUsageTotals,
   usage: CodexTokenUsage,
@@ -3188,8 +4030,7 @@ const addTokenUsageToTotals = (
     cachedInputTokens: totals.cachedInputTokens + (usage.cachedInputTokens ?? 0),
     uncachedInputTokens: totals.uncachedInputTokens + (usage.uncachedInputTokens ?? 0),
     outputTokens: totals.outputTokens + (usage.outputTokens ?? 0),
-    reasoningOutputTokens:
-      totals.reasoningOutputTokens + (usage.reasoningOutputTokens ?? 0),
+    reasoningOutputTokens: totals.reasoningOutputTokens + (usage.reasoningOutputTokens ?? 0),
     totalTokens: totals.totalTokens + (usage.totalTokens ?? 0),
   };
 };
@@ -3201,11 +4042,9 @@ const appendTokenUsageLedger = async (
 ): Promise<{ ok: true } | Failure> => {
   try {
     await mkdir(path.dirname(tokenUsageLedgerAbsolutePath(rootDir, planName)), { recursive: true });
-    await writeFile(
-      tokenUsageLedgerAbsolutePath(rootDir, planName),
-      `${JSON.stringify(entry)}\n`,
-      { flag: 'a' },
-    );
+    await writeFile(tokenUsageLedgerAbsolutePath(rootDir, planName), `${JSON.stringify(entry)}\n`, {
+      flag: 'a',
+    });
     return { ok: true };
   } catch (error) {
     return {
@@ -3802,38 +4641,19 @@ const readCachedDiffForPaths = async (
   return diff.length > 0 ? diff : undefined;
 };
 
-const readScopeCleanupSpecs = async (
-  rootDir: string,
-  planContent: string,
-): Promise<Array<{ path: string; content: string }>> => {
-  const specs: Array<{ path: string; content: string }> = [];
-  for (const specPath of extractSpecPaths(planContent)) {
-    const absoluteSpecPath = path.join(rootDir, specPath);
-    if (!existsSync(absoluteSpecPath)) {
-      continue;
-    }
-    try {
-      specs.push({ path: specPath, content: await readFile(absoluteSpecPath, 'utf8') });
-    } catch {
-      continue;
-    }
-  }
-  return specs;
-};
-
-const generateScopeCleanupPrompt = ({
+export const generateScopeCleanupPrompt = ({
   promptContent,
   planPath,
-  planContent,
-  specs,
+  contextSnapshotPath,
+  specPaths,
   paths,
   diff,
   mode,
 }: {
   promptContent: string;
   planPath: string;
-  planContent: string;
-  specs: Array<{ path: string; content: string }>;
+  contextSnapshotPath: string;
+  specPaths: string[];
   paths: string[];
   diff: string;
   mode: 'review' | 'commit-summary';
@@ -3852,14 +4672,13 @@ Rules for this run:
 
 Plan path: ${planPath}
 
+Snapshot path: ${contextSnapshotPath}
+
+Spec paths:
+${specPaths.length > 0 ? specPaths.map((specPath) => `- ${specPath}`).join('\n') : '(none)'}
+
 Plan-owned staged paths:
 ${paths.map((stagingPath) => `- ${stagingPath}`).join('\n')}
-
-Plan content:
-${planContent}
-
-Spec content:
-${specs.length > 0 ? specs.map((spec) => `### ${spec.path}\n${spec.content}`).join('\n\n') : '(none)'}
 
 Path-scoped staged diff:
 ${diff}
@@ -3894,12 +4713,11 @@ const runScopeCleanupForPaths = async ({
     return;
   }
 
-  const specs = await readScopeCleanupSpecs(rootDir, planContent);
   const cleanupPrompt = generateScopeCleanupPrompt({
     promptContent: prompt.content,
     planPath,
-    planContent,
-    specs,
+    contextSnapshotPath: workflowContextSnapshotRelativePath(path.posix.basename(planPath, '.md')),
+    specPaths: extractSpecPaths(planContent),
     paths,
     diff,
     mode,
@@ -4299,6 +5117,7 @@ const logFields = ({
   stopReason,
   failureDebugPath,
   editedFiles,
+  thresholdWarnings,
   stdout,
   stderr,
   staging,
@@ -4319,6 +5138,7 @@ const logFields = ({
   stopReason?: string;
   failureDebugPath?: string;
   editedFiles?: EditedFileSummary[];
+  thresholdWarnings?: string[];
   stdout: string;
   stderr: string;
   staging?: ReviewStagingProcess;
@@ -4356,6 +5176,11 @@ const logFields = ({
       : []),
     ...(editedFilesLog
       ? ([['editedFiles', editedFilesLog]] as Array<[string, string | number | undefined]>)
+      : []),
+    ...(thresholdWarnings && thresholdWarnings.length > 0
+      ? ([['thresholdWarnings', thresholdWarnings.join(' | ')]] as Array<
+          [string, string | number | undefined]
+        >)
       : []),
     ['stdout', compactCapturedOutputForLog(stdout)],
     ['stderr', compactCapturedOutputForLog(stderr)],
@@ -4470,6 +5295,7 @@ export const runWorkflowRunner = async (
   }
   const planArgument = options.planName ?? cliArgs.planArgument;
   const compactOutput = options.compactOutput ?? cliArgs.compactOutput;
+  const compactPlan = options.compactPlan ?? cliArgs.compactPlan;
   const unblockNote = options.unblockNote ?? cliArgs.unblockNote;
   const processRunner = options.processRunner ?? defaultProcessRunner;
   const now = options.now ?? Date.now;
@@ -4486,12 +5312,41 @@ export const runWorkflowRunner = async (
   let workflowLogPath: string | undefined;
   let tokenUsageLogPath: string | undefined;
   let tokenUsageTotals = { ...zeroTokenUsageTotals };
+  const emittedWorkflowWarnings = new Set<string>();
+  const emittedPlanCompactionRecommendations = new Set<string>();
   const heldWorkflowFileLockPaths = new Set<string>();
   const markWorkflowLogCreated = (planName: string) => {
     workflowLogPath = rel('.ai', 'logs', 'workflow-runner', `${planName}.log`);
   };
   const markTokenUsageLogCreated = (planName: string) => {
     tokenUsageLogPath = tokenUsageLedgerRelativePath(planName);
+  };
+  const emitWorkflowThresholdWarnings = (warnings: string[]) => {
+    for (const warning of warnings) {
+      if (emittedWorkflowWarnings.has(warning)) {
+        continue;
+      }
+      emittedWorkflowWarnings.add(warning);
+      logger.error(`WARNING: ${warning}`);
+    }
+  };
+  const emitWorkflowPlanCompactionRecommendation = (plan: ParsedPlan) => {
+    const recommendationLines = collectWorkflowPlanCompactionRecommendation({
+      planPath: plan.planPath,
+      status: plan.status,
+      planByteSize: Buffer.byteLength(plan.content, 'utf8'),
+    });
+    if (recommendationLines.length === 0) {
+      return;
+    }
+    const key = `${plan.planPath}\0${plan.status}`;
+    if (emittedPlanCompactionRecommendations.has(key)) {
+      return;
+    }
+    emittedPlanCompactionRecommendations.add(key);
+    for (const line of recommendationLines) {
+      logger.error(line);
+    }
   };
   const currentInterruptSignal = (): NodeJS.Signals | undefined => {
     const explicitSignal = options.interruptSignal?.();
@@ -4611,7 +5466,42 @@ export const runWorkflowRunner = async (
   if (!parsed.ok) {
     return await finishFailure(parsed.reason);
   }
+  if (compactPlan) {
+    const compaction = await writePlanHistoryCompaction({
+      rootDir,
+      plan: parsed,
+      timestamp,
+    });
+    if (!compaction.ok) {
+      return await finishFailure(compaction.reason);
+    }
+    const snapshotResult = await writePostCompactionWorkflowContextSnapshot({
+      rootDir,
+      plan: parsed,
+      compactedContent: compaction.compactedContent,
+    });
+    if ('ok' in snapshotResult && snapshotResult.ok === false) {
+      return await finishFailure(snapshotResult.reason);
+    }
+    emitWorkflowThresholdWarnings(snapshotResult.thresholdWarnings);
+    logger.log('Plan history compacted');
+    logger.log(`- Plan: ${parsed.planPath}`);
+    logger.log(`- Archive: ${compaction.archivePath}`);
+    logger.log(`- Context snapshot: ${snapshotResult.snapshotPath}`);
+    return await finishSuccess('plan history compacted', iterations);
+  }
   tokenUsageTotals = await readTokenUsageTotals(rootDir, parsed.planName);
+  const syncWorkflowSnapshot = async (
+    plan: ParsedPlan,
+  ): Promise<WorkflowContextSnapshotResult | Failure> => {
+    const snapshotResult = await writeWorkflowContextSnapshot({ rootDir, plan });
+    if ('ok' in snapshotResult && snapshotResult.ok === false) {
+      return snapshotResult;
+    }
+    emitWorkflowThresholdWarnings(snapshotResult.thresholdWarnings);
+    emitWorkflowPlanCompactionRecommendation(plan);
+    return snapshotResult;
+  };
 
   while (true) {
     const route = routeFor(parsed.status, parsed.nextAction);
@@ -4895,11 +5785,16 @@ export const runWorkflowRunner = async (
         color: colorOutput,
       }),
     );
+    const contextSnapshot = await syncWorkflowSnapshot(parsed);
+    if ('ok' in contextSnapshot && contextSnapshot.ok === false) {
+      return await finishFailure(contextSnapshot.reason);
+    }
     const generatedPrompt = generateWorkflowPrompt({
       promptPath: route.promptPath,
       planPath: parsed.planPath,
       promptContent: prompt.content,
       planContent: parsed.content,
+      contextSnapshotPath: contextSnapshot.snapshotPath,
       reviewStagingPaths,
       commitSummaryPaths,
       unblockNote,
@@ -4995,6 +5890,18 @@ export const runWorkflowRunner = async (
       endingPlan?: ParsedPlan,
     ): Promise<{ ok: true } | Failure> => {
       const logTimestamp = timestamp();
+      const tokenUsage = parseCodexTokenUsage(result.stdout);
+      const thresholdWarnings = collectWorkflowThresholdWarnings({
+        planByteSize: Buffer.byteLength((endingPlan ?? parsed).content, 'utf8'),
+        latestTokenUsage: {
+          stageInputTokens: tokenUsage.inputTokens,
+          stageCachedInputTokens: tokenUsage.cachedInputTokens,
+          stageUncachedInputTokens: tokenUsage.uncachedInputTokens,
+          stageOutputTokens: tokenUsage.outputTokens,
+          stageReasoningOutputTokens: tokenUsage.reasoningOutputTokens,
+          stageTotalTokens: tokenUsage.totalTokens,
+        },
+      });
       const failureMetadata = iterationStopReason
         ? classifyFailureForLog(iterationStopReason)
         : undefined;
@@ -5046,6 +5953,7 @@ export const runWorkflowRunner = async (
           stopReason: iterationStopReason,
           failureDebugPath,
           editedFiles,
+          thresholdWarnings,
           stdout: result.stdout,
           stderr: result.stderr,
           staging,
@@ -5059,7 +5967,6 @@ export const runWorkflowRunner = async (
         return logResult;
       }
 
-      const tokenUsage = parseCodexTokenUsage(result.stdout);
       tokenUsageTotals = addTokenUsageToTotals(tokenUsageTotals, tokenUsage);
       const ledgerResult: TokenUsageLedgerResult = interruptSignal
         ? 'interrupted'
@@ -5104,6 +6011,10 @@ export const runWorkflowRunner = async (
       if (!logResult.ok) {
         return await finishFailure(logResult.reason);
       }
+      const snapshotResult = await syncWorkflowSnapshot(parsed);
+      if ('ok' in snapshotResult && snapshotResult.ok === false) {
+        return await finishFailure(snapshotResult.reason);
+      }
       return await finishFailure(
         finalStopReason,
         iterations,
@@ -5122,11 +6033,19 @@ export const runWorkflowRunner = async (
         if (!logResult.ok) {
           return await finishFailure(logResult.reason);
         }
+        const snapshotResult = await syncWorkflowSnapshot(parsed);
+        if ('ok' in snapshotResult && snapshotResult.ok === false) {
+          return await finishFailure(snapshotResult.reason);
+        }
         return await finishFailure(cleanCheck.reason);
       }
       const logResult = await appendIterationLog();
       if (!logResult.ok) {
         return await finishFailure(logResult.reason);
+      }
+      const snapshotResult = await syncWorkflowSnapshot(parsed);
+      if ('ok' in snapshotResult && snapshotResult.ok === false) {
+        return await finishFailure(snapshotResult.reason);
       }
       const reason = 'completed + commit-summary finished';
       return await finishSuccess(reason, iterations);
@@ -5141,6 +6060,10 @@ export const runWorkflowRunner = async (
       if (!logResult.ok) {
         return await finishFailure(logResult.reason);
       }
+      const snapshotResult = await syncWorkflowSnapshot(parsed);
+      if ('ok' in snapshotResult && snapshotResult.ok === false) {
+        return await finishFailure(snapshotResult.reason);
+      }
       return await finishFailure(reason);
     }
     if (updated.content === previousContent) {
@@ -5152,6 +6075,10 @@ export const runWorkflowRunner = async (
       if (!logResult.ok) {
         return await finishFailure(logResult.reason);
       }
+      const snapshotResult = await syncWorkflowSnapshot(parsed);
+      if ('ok' in snapshotResult && snapshotResult.ok === false) {
+        return await finishFailure(snapshotResult.reason);
+      }
       return await finishFailure(reason);
     }
 
@@ -5162,6 +6089,10 @@ export const runWorkflowRunner = async (
       const logResult = await appendIterationLog(reason);
       if (!logResult.ok) {
         return await finishFailure(logResult.reason);
+      }
+      const snapshotResult = await syncWorkflowSnapshot(updated);
+      if ('ok' in snapshotResult && snapshotResult.ok === false) {
+        return await finishFailure(snapshotResult.reason);
       }
       return await finishFailure(reason);
     }
@@ -5177,6 +6108,10 @@ export const runWorkflowRunner = async (
         if (!logResult.ok) {
           return await finishFailure(logResult.reason);
         }
+        const snapshotResult = await syncWorkflowSnapshot(updated);
+        if ('ok' in snapshotResult && snapshotResult.ok === false) {
+          return await finishFailure(snapshotResult.reason);
+        }
         return await finishFailure(cleanup.reason);
       }
     }
@@ -5184,6 +6119,10 @@ export const runWorkflowRunner = async (
     const logResult = await appendIterationLog(undefined, updated);
     if (!logResult.ok) {
       return await finishFailure(logResult.reason);
+    }
+    const snapshotResult = await syncWorkflowSnapshot(updated);
+    if ('ok' in snapshotResult && snapshotResult.ok === false) {
+      return await finishFailure(snapshotResult.reason);
     }
 
     if (
