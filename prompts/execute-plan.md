@@ -319,15 +319,17 @@ The artifact must include:
 <commands, outputs, files changed, or blockers that support the plan entry>
 ```
 
-Then append a thin plan entry:
+Then append the next thin plan entry.
 
-## Execution Log
+If the plan already contains `## Execution Log`, append only:
 
 ### Execution vX
 
 * Summary:
 * Result: completed | partial | blocked
 * Evidence: .ai/artifacts/<plan-name>/events/execution-vX.md
+
+Create `## Execution Log` only if the section is missing.
 
 Wording rules:
 
@@ -336,6 +338,7 @@ Wording rules:
 * Put command output, detailed file notes, blocker explanations, validation output, and reasoning in the artifact.
 * Do not record reasoning narration, wait-state updates, or artifact body text in the plan.
 * Plan updates should state what changed, what was validated, and remaining action.
+* MUST NOT duplicate the `## Execution Log` heading when it already exists.
 
 ---
 

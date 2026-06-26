@@ -2752,6 +2752,45 @@ execute-plan
   }
 });
 
+test("parsePlan accepts empty thin-plan workflow history stubs", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(
+      workspace.root,
+      "workflow-runner",
+      `${planWith("draft", "plan-validator")}## Execution Log
+
+(empty)
+
+## Validation History
+
+(empty)
+
+## Review History
+
+(empty)
+
+## Reopen History
+
+(empty)
+
+## Blockers
+
+(empty)
+`,
+    );
+
+    const parsed = await parsePlan({
+      planName: planArg("workflow-runner"),
+      rootDir: workspace.root,
+    });
+
+    assert.equal(parsed.ok, true);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
 test("parsePlan accepts bounded thin-plan entries with matching artifact evidence", async () => {
   const workspace = await setupWorkspace();
   try {

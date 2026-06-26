@@ -302,9 +302,9 @@ active
 
 execute-plan
 
-2. add:
+2. add the next review entry.
 
-## Review History
+If the plan already contains `## Review History`, append only:
 
 ### Review vX
 
@@ -312,10 +312,13 @@ execute-plan
 * Evidence: .ai/artifacts/<plan-name>/events/review-vX.md
 * Decision: active
 
+Create `## Review History` only if the section is missing.
+
 Before updating the plan, create `.ai/artifacts/<plan-name>/events/review-vX.md` with `# Review vX`, `## Summary`, and `## Evidence`.
 Put all issue bullets, file references, remediation notes, missing validations, and unresolved risks in the review artifact.
 Review History entries may contain only `Summary`, `Decision`, and `Evidence`.
 Review History entries must stay under 512 bytes.
+MUST NOT duplicate the `## Review History` heading when it already exists.
 
 3. update plan with:
 
@@ -340,9 +343,9 @@ completed
 
 commit-summary
 
-2. add:
+2. add the next review entry.
 
-## Review History
+If the plan already contains `## Review History`, append only:
 
 ### Review vX
 
@@ -351,6 +354,8 @@ Add a deferred validation note:
 * Summary: SAFE - DEFERRED VALIDATION
 * Evidence: .ai/artifacts/<plan-name>/events/review-vX.md
 * Decision: completed
+
+Create `## Review History` only if the section is missing.
 
 Before updating the plan, create `.ai/artifacts/<plan-name>/events/review-vX.md` with `# Review vX`, `## Summary`, and `## Evidence`.
 Put optional warnings, suggestions, and the specific deferred validation in the review artifact.
@@ -371,15 +376,17 @@ completed
 
 commit-summary
 
-2. add:
+2. add the next review entry.
 
-## Review History
+If the plan already contains `## Review History`, append only:
 
 ### Review vX
 
 * Summary: SAFE
 * Evidence: .ai/artifacts/<plan-name>/events/review-vX.md
 * Decision: completed
+
+Create `## Review History` only if the section is missing.
 
 Before updating the plan, create `.ai/artifacts/<plan-name>/events/review-vX.md` with `# Review vX`, `## Summary`, and `## Evidence`.
 Put optional warnings and suggestions in the review artifact.
