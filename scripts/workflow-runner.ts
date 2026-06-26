@@ -21,7 +21,7 @@ import { collectWorkflowThresholdWarnings } from './workflow-runner/token-warnin
 type CodexProfile = 'codex-work' | 'codex-personal' | 'codex-adam' | 'codex-work6598';
 type ReasoningEffort = 'medium' | 'high' | 'xhigh';
 
-export const WORKFLOW_RUNNER_CODEX_PROFILE: CodexProfile = 'codex-work6598' as const;
+export const WORKFLOW_RUNNER_CODEX_PROFILE: CodexProfile = 'codex-adam' as const;
 
 const VALID_STATUSES = [
   'draft',
@@ -64,7 +64,13 @@ const THIN_PLAN_ENTRY_MAX_BYTES = 512;
 const THIN_PLAN_HISTORY_MAX_BYTES = 4 * 1024;
 const WORKFLOW_EVENT_ARTIFACT_MAX_BYTES = 20 * 1024;
 const WORKFLOW_EVENT_ARTIFACT_SUMMARY_MAX_BYTES = 1024;
-const THIN_PLAN_ALLOWED_EVENT_FIELDS = new Set(['Summary', 'Result', 'Decision', 'Status', 'Evidence']);
+const THIN_PLAN_ALLOWED_EVENT_FIELDS = new Set([
+  'Summary',
+  'Result',
+  'Decision',
+  'Status',
+  'Evidence',
+]);
 const THIN_PLAN_STATE_EVENT_FIELDS = ['Result', 'Decision', 'Status'] as const;
 const THIN_PLAN_FORBIDDEN_NARRATIVE_SECTIONS = ['## Review Required Fixes'];
 const ANSI_RESET = '\u001b[0m';
@@ -655,7 +661,9 @@ const summarizePlanSectionReadCommand = (tokens: string[]): CommandTerminalSumma
   if (executable === 'rg') {
     const pattern = tokens
       .slice(1)
-      .find((token) => token !== '--' && !token.startsWith('-') && !isWorkflowPlanMarkdownPath(token));
+      .find(
+        (token) => token !== '--' && !token.startsWith('-') && !isWorkflowPlanMarkdownPath(token),
+      );
     if (!pattern || !isPlanSectionHeadingSearchPattern(pattern)) {
       return null;
     }
@@ -1292,10 +1300,7 @@ const failedTestAssertionLines = (text: string): string[] => {
   return assertionLines;
 };
 
-const formatFailedTestCommandTerminalBlock = (
-  command: string,
-  text: string,
-): string | null => {
+const formatFailedTestCommandTerminalBlock = (command: string, text: string): string | null => {
   const summary = summarizeFailedTestCommand(command);
   if (!summary) {
     return null;
@@ -2747,14 +2752,16 @@ const extractVersionedSectionEntries = (
   let current: { heading: string; lines: string[] } | undefined;
   for (const line of lines) {
     const trimmed = line.trim();
+    if (!current && (trimmed.length === 0 || trimmed === '(empty)' || trimmed === '---')) {
+      continue;
+    }
     if (trimmed.startsWith('### ')) {
       current = { heading: trimmed, lines: [] };
       entries.push(current);
       continue;
     }
-    current ??= { heading, lines: [] };
-    if (!entries.includes(current)) {
-      entries.push(current);
+    if (!current) {
+      continue;
     }
     current.lines.push(line);
   }
@@ -2873,14 +2880,20 @@ const validateWorkflowEventArtifact = async ({
     artifactStat = await stat(absolutePath);
     content = await readFile(absolutePath, 'utf8');
   } catch (error) {
-    return { ok: false, reason: `workflow event artifact cannot be read: ${relativePath}: ${String(error)}` };
+    return {
+      ok: false,
+      reason: `workflow event artifact cannot be read: ${relativePath}: ${String(error)}`,
+    };
   }
 
   if (artifactStat.size > WORKFLOW_EVENT_ARTIFACT_MAX_BYTES) {
     return { ok: false, reason: `workflow event artifact exceeds 20 KB: ${relativePath}` };
   }
   if (!/^#\s+.+$/m.test(content)) {
-    return { ok: false, reason: `workflow event artifact is missing a top-level heading: ${relativePath}` };
+    return {
+      ok: false,
+      reason: `workflow event artifact is missing a top-level heading: ${relativePath}`,
+    };
   }
   const summary = markdownSectionBody(content, '## Summary');
   if (!summary) {
@@ -2971,11 +2984,7 @@ const validateThinPlanContract = async ({
         };
       }
       const evidencePath = rawFieldValue(entry.lines, 'Evidence');
-      const expectedPath = expectedWorkflowEventArtifactPath(
-        planName,
-        kind,
-        parsedHeading.version,
-      );
+      const expectedPath = expectedWorkflowEventArtifactPath(planName, kind, parsedHeading.version);
       if (!evidencePath) {
         return {
           ok: false,
