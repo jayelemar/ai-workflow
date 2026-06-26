@@ -167,13 +167,19 @@ execute-plan
 
 ## Output (MANDATORY)
 
-### Plan
+Use this shared terminal-facing contract for non-review stages.
+
+**Plan**
 
 .ai/plans/<plan-name>.md
 
----
+**Summary**
 
-### Review Issues Addressed
+* PLAN UPDATED
+* stage result/state line first
+* at most 2-3 short high-signal bullets
+
+**Key Details**
 
 * issue
 * affected section(s)
@@ -181,20 +187,10 @@ execute-plan
 
 Keep each addressed issue concise: issue, affected section, and action taken only.
 
----
-
-### State Transition
+**Next**
 
 Status:
 active
 
 Next Action:
-execute-plan
-
----
-
-### Next Step
-
-Run:
-
 execute-plan

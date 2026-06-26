@@ -474,37 +474,38 @@ Detailed validation evidence belongs in `.ai/artifacts/<plan-name>/events/valida
 
 ## Output (MANDATORY)
 
-### Plan
+Use this shared terminal-facing contract for non-review stages.
+
+Rules:
+
+* `**Summary**` starts with the stage result/state line, then at most 2-3 short high-signal bullets.
+* `**Key Details**` carries the important human-readable substance for the stage.
+* `**Validation**` should stay compact and usually prefer compact result labels or artifact paths over detailed inline diagnostics.
+* `**Next**` must always use explicit `Status:` and `Next Action:` lines.
+
+**Plan**
 
 .ai/plans/<plan-name>.md
 
----
+**Summary**
 
-### Updated Phases
+* REVIEW READY | ACTIVE | BLOCKED
+* stage result/state line first
+* at most 2-3 short high-signal bullets
 
-* Preparation: complete | incomplete
-* Implementation: complete | incomplete
-* Validation: complete | incomplete
-
----
-
-### Execution Summary
+**Key Details**
 
 * key actions performed
 * major changes
 * important notes
 
----
-
-### Validation Summary
+**Validation**
 
 * tests executed
 * results
 * known limitations (if any)
 
----
-
-### State Transition
+**Next**
 
 Status:
 
@@ -513,24 +514,6 @@ Status:
 * blocked
 
 Next Action:
-
-* execute-plan
-* unblock-plan
-* review-plan
-
----
-
-### Summary
-
-plan: .ai/plans/<plan-name>.md
-
-new status:
-
-* review
-* active
-* blocked
-
-next action:
 
 * execute-plan
 * unblock-plan

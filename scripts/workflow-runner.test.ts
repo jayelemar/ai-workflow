@@ -710,7 +710,7 @@ test("review-changes prompt routes deferred external validation to completed com
 test("review-changes prompt requires actionable issue output for failed reviews", async () => {
   const prompt = await readWorkflowPrompt("review-changes.md");
 
-  assert.match(prompt, /If Summary is `NEEDS FIX` or `HIGH RISK`, `### Issues` must include at least one issue bullet/);
+  assert.match(prompt, /If Summary is `NEEDS FIX` or `HIGH RISK`, `\*\*Issues\*\*` must include at least one issue bullet/);
   assert.match(prompt, /concrete conflict, defect, missing validation, or required fix/);
   assert.match(prompt, /terminal output shows what needs to be fixed without opening the artifact file/);
 });
@@ -790,7 +790,9 @@ test("reopen-plan prompt accepts canonical reopening state", async () => {
   assert.match(prompt, /do not output `STOP`/);
   assert.match(prompt, /Expected:\s*\n\s*reopening/);
   assert.match(prompt, /IF Status != reopening:/);
-  assert.match(prompt, /reopening -> active/);
+  assert.match(prompt, /After the plan is updated for the reopened work:/);
+  assert.match(prompt, /## Status\s*\n\s*\nactive/);
+  assert.match(prompt, /## Next Action\s*\n\s*\nexecute-plan/);
   assert.doesNotMatch(prompt, /plan must be completed before reopening/);
 });
 
@@ -1011,33 +1013,28 @@ test("codex live output formatter condenses workflow completion summaries", () =
     "**Plan**",
     "`.ai/plans/market-research-competitor-discovery.md`",
     "",
-    "**Updated Phases**",
-    "* Preparation: complete",
-    "* Implementation: complete",
-    "* Validation: complete",
-    "",
-    "**Execution Summary**",
+    "**Summary**",
+    "* REVIEW READY",
     "* Implemented Review v7 remediation for suffixless local/regional widening.",
+    "* Preserved strict direct-competitor verification while widening matching-country local labels.",
+    "* Manual browser validation remains deferred to review.",
+    "",
+    "**Key Details**",
     "* Added guarded handling for Seattle -> United States and Makati -> Philippines.",
     "* Prevented explicit country/region labels like UK, UAE, and Puerto Rico from widening to unrelated registration countries.",
     "* Fixed a regression where descriptor localities like `Iloilo City` could widen to a conflicting country.",
     "* Used read-only sub-agents for root-cause, spec, and code-quality review; final review approved.",
     "",
-    "**Validation Summary**",
+    "**Validation**",
     "* `pnpm --filter @gondoor/backend test -- test/onboarding/document-content-generator.service.spec.ts`: passed, 214 tests.",
     "* `pnpm --filter @gondoor/backend test -- test/documents/document-content-generator.service.spec.ts`: passed, 10 tests.",
     "* `pnpm --filter @gondoor/backend build`: passed, SWC compiled 987 files.",
     "* `pnpm --filter @gondoor/web exec vitest run src/features/dashboard/docs/services/docs.test.ts src/features/dashboard/docs/components/docs-document-dialog.test.tsx`: passed, 2 files / 30 tests.",
     "* Known limitation: live/manual checks for real generation logs, generated payload inspection, and opened dashboard dialog remain deferred to review.",
     "",
-    "**State Transition**",
+    "**Next**",
     "Status: `review`",
     "Next Action: `review-plan`",
-    "",
-    "**Summary**",
-    "plan: `.ai/plans/market-research-competitor-discovery.md`",
-    "new status: `review`",
-    "next action: `review-plan`",
   ].join("\n");
 
   assert.equal(
@@ -1047,8 +1044,13 @@ test("codex live output formatter condenses workflow completion summaries", () =
       "**Plan**",
       "`.ai/plans/market-research-competitor-discovery.md`",
       "",
-      "**Execution Summary**",
+      "**Summary**",
+      "* REVIEW READY",
       "* Implemented Review v7 remediation for suffixless local/regional widening.",
+      "* Preserved strict direct-competitor verification while widening matching-country local labels.",
+      "* Manual browser validation remains deferred to review.",
+      "",
+      "**Key Details**",
       "* Added guarded handling for Seattle -> United States and Makati -> Philippines.",
       "* Prevented explicit country/region labels like UK, UAE, and Puerto Rico from widening to unrelated registration countries.",
       "* Fixed a regression where descriptor localities like `Iloilo City` could widen to a conflicting country.",
@@ -1069,74 +1071,95 @@ test("codex live output formatter condenses workflow completion summaries", () =
   );
 });
 
+test("codex live output formatter condenses shared non-review summaries without validation", () => {
+  const workflowSummary = [
+    "**Plan**",
+    "`.ai/plans/workflow-stage-output-contract-unification.md`",
+    "",
+    "**Summary**",
+    "* PLAN UPDATED",
+    "* Tightened the non-review stage output contract around shared terminal sections.",
+    "* Kept thin-plan history and event artifacts unchanged.",
+    "",
+    "**Key Details**",
+    "* Updated prompt output templates for validator, fix-plan, fix-review, reopen-plan, and unblock-plan.",
+    "* Preserved review-changes as the only stage-specific terminal schema.",
+    "",
+    "**Next**",
+    "Status: `draft`",
+    "Next Action: `plan-validator`",
+  ].join("\n");
+
+  assert.equal(
+    formatCodexJsonlEventForTerminal(codexAgentMessageLine(workflowSummary), { color: false }),
+    [
+      "[agent]",
+      "**Plan**",
+      "`.ai/plans/workflow-stage-output-contract-unification.md`",
+      "",
+      "**Summary**",
+      "* PLAN UPDATED",
+      "* Tightened the non-review stage output contract around shared terminal sections.",
+      "* Kept thin-plan history and event artifacts unchanged.",
+      "",
+      "**Key Details**",
+      "* Updated prompt output templates for validator, fix-plan, fix-review, reopen-plan, and unblock-plan.",
+      "* Preserved review-changes as the only stage-specific terminal schema.",
+      "",
+      "**Next**",
+      "Status: `draft`",
+      "Next Action: `plan-validator`",
+      "",
+      "",
+    ].join("\n"),
+  );
+});
+
 test("codex live output formatter condenses review summaries", () => {
   const reviewSummary = [
-    "### Plan",
-    "",
+    "**Plan**",
     "[.ai/plans/market-research-competitor-discovery.md](/home/jetermulo/projects/futr-wsl/Gondoor/.ai/plans/market-research-competitor-discovery.md:630)",
     "",
-    "### Summary",
+    "**Summary**",
+    "* NEEDS FIX",
+    "* Direct competitor fallback still leaks unverified competitors into preview output.",
+    "* Dashboard dialog can show misleading competitors when search evidence is unavailable.",
+    "* Manual validation remains pending.",
     "",
-    "NEEDS FIX. I updated the plan state to `active` / `execute-plan` and added Review v8.",
+    "**Issues**",
+    "* Critical: unknown suffixless geographies can widen to any registration country. [document-content-generator.service.ts](/home/jetermulo/projects/futr-wsl/Gondoor/apps/backend/src/documents/document-content-generator.service.ts:449)",
+    "* Critical: descriptor-bearing non-Philippine local or regional labels can still fail to widen. [document-content-generator.service.ts](/home/jetermulo/projects/futr-wsl/Gondoor/apps/backend/src/documents/document-content-generator.service.ts:444)",
+    "* Warning: Manual validation remains pending for real generation logs, generated payload separation, and dashboard dialog inspection.",
+    "* Suggestion: Consolidate duplicate rejection checks around the existing rejection paths. [document-content-generator.service.ts](/home/jetermulo/projects/futr-wsl/Gondoor/apps/backend/src/documents/document-content-generator.service.ts:2657) [document-content-generator.service.ts](/home/jetermulo/projects/futr-wsl/Gondoor/apps/backend/src/documents/document-content-generator.service.ts:2740)",
     "",
-    "### Issues",
-    "",
-    "#### CRITICAL",
-    "",
-    "- [document-content-generator.service.ts](/home/jetermulo/projects/futr-wsl/Gondoor/apps/backend/src/documents/document-content-generator.service.ts:449): unknown suffixless geographies can widen to any registration country. Example: `Barcelona`, `Luzon`, or `Southeast Asia` with United States registration can emit unrelated United States competitor queries.",
-    "",
-    "- [document-content-generator.service.ts](/home/jetermulo/projects/futr-wsl/Gondoor/apps/backend/src/documents/document-content-generator.service.ts:444): descriptor-bearing non-Philippine local/regional labels can still fail to widen. Example: `Quebec Province` with Canada registration remains local-only, missing the required country-level query.",
-    "",
-    "#### WARNING",
-    "",
-    "- Manual validation remains pending: real generation logs, generated payload `directCompetitors` / `likelyCompetitors` separation, and dashboard dialog inspection.",
-    "- Existing negative suffixless tests cover known labels, not the generic unknown-suffixless branch.",
-    "",
-    "#### SUGGESTION",
-    "",
-    "- Consolidate duplicate rejection checks around [line 2657](/home/jetermulo/projects/futr-wsl/Gondoor/apps/backend/src/documents/document-content-generator.service.ts:2657) and [line 2740](/home/jetermulo/projects/futr-wsl/Gondoor/apps/backend/src/documents/document-content-generator.service.ts:2740).",
-    "",
-    "### Spec Coverage",
-    "",
-    "Implemented: likely competitor contract, dashboard separation, strict direct verification, source-id handling, local-first ordering.",
-    "",
-    "Missing/risky: robust local/regional-to-country widening without wrong-country over-widening or valid-region under-widening.",
-    "",
-    "### Regression Risk",
-    "",
-    "High. The remaining issues directly affect competitor discovery queries.",
-    "",
-    "### State Transition",
-    "",
-    "review -> active",
-    "",
-    "### Final Verdict",
-    "",
+    "**Final Verdict**",
     "- [ ] safe to merge",
     "- [x] requires fixes",
     "- [x] block merge",
+    "",
+    "**Next**",
+    "Status: `active`",
+    "Next Action: `execute-plan`",
   ].join("\n");
 
   assert.equal(
     formatCodexJsonlEventForTerminal(codexAgentMessageLine(reviewSummary), { color: false }),
     [
       "[agent]",
-      "**Review**",
+      "**Plan**",
       "`.ai/plans/market-research-competitor-discovery.md`",
       "",
       "**Summary**",
-      "NEEDS FIX. I updated the plan state to `active` / `execute-plan` and added Review v8.",
+      "* NEEDS FIX",
+      "* Direct competitor fallback still leaks unverified competitors into preview output.",
+      "* Dashboard dialog can show misleading competitors when search evidence is unavailable.",
+      "  +1 more",
       "",
       "**Issues**",
       "* Critical: unknown suffixless geographies can widen to any registration country.",
-      "  `document-content-generator.service.ts:449`",
-      "* Critical: descriptor-bearing non-Philippine local/regional labels can still fail to widen.",
-      "  `document-content-generator.service.ts:444`",
-      "* Warning: Manual validation remains pending.",
-      "* Warning: Existing negative suffixless tests cover known labels, not the generic unknown-suffixless branch.",
+      "* Critical: descriptor-bearing non-Philippine local or regional labels can still fail to widen.",
+      "* Warning: Manual validation remains pending for real generation logs, generated payload separation, and dashboard dialog inspection.",
       "* Suggestion: Consolidate duplicate rejection checks.",
-      "  `document-content-generator.service.ts:2657`",
-      "  `document-content-generator.service.ts:2740`",
       "",
       "**Final Verdict**",
       "- [ ] safe to merge",
@@ -1154,25 +1177,19 @@ test("codex live output formatter condenses review summaries", () => {
 
 test("codex live output formatter keeps bounded review summary details", () => {
   const reviewSummary = [
-    "### Plan",
-    "",
+    "**Plan**",
     "`.ai/plans/market-research-competitor-discovery.md`",
     "",
-    "### Summary",
-    "",
+    "**Summary**",
     "* NEEDS FIX",
     "* Direct competitor fallback still leaks unverified competitors into preview output.",
     "* Dashboard dialog can show misleading competitors when search evidence is unavailable.",
     "* Manual validation remains pending.",
     "",
-    "### Issues",
+    "**Issues**",
+    "* Critical: fallback competitors are still shown without verification. [document-content-generator.service.ts](/home/jetermulo/projects/futr-wsl/Gondoor/apps/backend/src/documents/document-content-generator.service.ts:449)",
     "",
-    "#### CRITICAL",
-    "",
-    "- [document-content-generator.service.ts](/home/jetermulo/projects/futr-wsl/Gondoor/apps/backend/src/documents/document-content-generator.service.ts:449): fallback competitors are still shown without verification.",
-    "",
-    "### Final Verdict",
-    "",
+    "**Final Verdict**",
     "- [ ] safe to merge",
     "- [x] requires fixes",
     "- [x] block merge",
@@ -1182,7 +1199,7 @@ test("codex live output formatter keeps bounded review summary details", () => {
     formatCodexJsonlEventForTerminal(codexAgentMessageLine(reviewSummary), { color: false }),
     [
       "[agent]",
-      "**Review**",
+      "**Plan**",
       "`.ai/plans/market-research-competitor-discovery.md`",
       "",
       "**Summary**",
@@ -1193,7 +1210,6 @@ test("codex live output formatter keeps bounded review summary details", () => {
       "",
       "**Issues**",
       "* Critical: fallback competitors are still shown without verification.",
-      "  `document-content-generator.service.ts:449`",
       "",
       "**Final Verdict**",
       "- [ ] safe to merge",
@@ -1207,23 +1223,17 @@ test("codex live output formatter keeps bounded review summary details", () => {
 
 test("codex live output formatter includes review issues written as asterisk bullets", () => {
   const reviewSummary = [
-    "### Plan",
-    "",
+    "**Plan**",
     "`.ai/plans/market-research-competitor-discovery.md`",
     "",
-    "### Summary",
-    "",
+    "**Summary**",
     "* NEEDS FIX",
     "",
-    "### Issues",
+    "**Issues**",
+    "* Critical: add a guarded matching-country widening path so ordinary United States and Canada local labels cannot emit only local competitor queries. `apps/backend/src/documents/document-content-generator.service.ts:452`",
+    "* Critical: restrict likely-competitor relevance to category, product, competitor, or alternative evidence. `apps/backend/src/documents/document-content-generator.service.ts:2468`",
     "",
-    "#### CRITICAL",
-    "",
-    "* `apps/backend/src/documents/document-content-generator.service.ts:452` needs a guarded matching-country widening path because ordinary United States and Canada local labels can still emit only local competitor queries.",
-    "* `apps/backend/src/documents/document-content-generator.service.ts:2468` must restrict likely-competitor relevance to category, product, competitor, or alternative evidence.",
-    "",
-    "### Final Verdict",
-    "",
+    "**Final Verdict**",
     "- [ ] safe to merge",
     "- [x] requires fixes",
     "- [x] block merge",
@@ -1233,20 +1243,67 @@ test("codex live output formatter includes review issues written as asterisk bul
     formatCodexJsonlEventForTerminal(codexAgentMessageLine(reviewSummary), { color: false }),
     [
       "[agent]",
-      "**Review**",
+      "**Plan**",
       "`.ai/plans/market-research-competitor-discovery.md`",
       "",
       "**Summary**",
       "* NEEDS FIX",
       "",
       "**Issues**",
-      "* Critical: `apps/backend/src/documents/document-content-generator.service.ts:452` needs a guarded matching-country widening path because ordinary United States and Canada local labels can still emit only local competitor queries.",
-      "* Critical: `apps/backend/src/documents/document-content-generator.service.ts:2468` must restrict likely-competitor relevance to category, product, competitor, or alternative evidence.",
+      "* Critical: add a guarded matching-country widening path so ordinary United States and Canada local labels cannot emit only local competitor queries. `apps/backend/src/documents/document-content-generator.service.ts:452`.",
+      "* Critical: restrict likely-competitor relevance to category, product, competitor, or alternative evidence. `apps/backend/src/documents/document-content-generator.service.ts:2468`.",
       "",
       "**Final Verdict**",
       "- [ ] safe to merge",
       "- [x] requires fixes",
       "- [x] block merge",
+      "",
+      "",
+    ].join("\n"),
+  );
+});
+
+test("codex live output formatter preserves commit-summary subject and user bullets", () => {
+  const workflowSummary = [
+    "**Plan**",
+    "`.ai/plans/workflow-stage-output-contract-unification.md`",
+    "",
+    "**Summary**",
+    "* COMMIT CREATED",
+    "* Local commit is ready for manual deployment validation.",
+    "",
+    "**Key Details**",
+    "fix(workflow): unify stage output contract",
+    "-- Unified non-review stage output sections across prompts.",
+    "-- Updated workflow-runner parsing and snapshot compaction.",
+    "-- Added contract coverage for prompts and terminal rendering.",
+    "* Branch: fix/competitive-gap-analysis",
+    "",
+    "**Next**",
+    "Status: `completed`",
+    "Next Action: `commit-summary`",
+  ].join("\n");
+
+  assert.equal(
+    formatCodexJsonlEventForTerminal(codexAgentMessageLine(workflowSummary), { color: false }),
+    [
+      "[agent]",
+      "**Plan**",
+      "`.ai/plans/workflow-stage-output-contract-unification.md`",
+      "",
+      "**Summary**",
+      "* COMMIT CREATED",
+      "* Local commit is ready for manual deployment validation.",
+      "",
+      "**Key Details**",
+      "fix(workflow): unify stage output contract",
+      "-- Unified non-review stage output sections across prompts.",
+      "-- Updated workflow-runner parsing and snapshot compaction.",
+      "-- Added contract coverage for prompts and terminal rendering.",
+      "",
+      "**Next**",
+      "Status: `completed`",
+      "Next Action: `commit-summary`",
       "",
       "",
     ].join("\n"),
@@ -2270,13 +2327,44 @@ test("review prompt requires compact terminal output", async () => {
   const prompt = await readFile(".ai/prompts/review-changes.md", "utf8");
 
   assert.match(prompt, /Keep output compact for terminal readability/);
-  assert.match(prompt, /Summary: one status bullet plus at most two short detail bullets/);
-  assert.match(prompt, /If Summary is `NEEDS FIX` or `HIGH RISK`, `### Issues` must include at least one issue bullet/);
-  assert.match(prompt, /Do not output separate `### Spec Coverage` or `### Regression Risk` sections/);
-  assert.match(prompt, /Fold spec coverage and regression risk into `### Issues` only when actionable/);
+  assert.match(prompt, /`\*\*Summary\*\*` starts with the stage result\/state line, then at most 2-3 short high-signal bullets/);
+  assert.match(prompt, /If Summary is `NEEDS FIX` or `HIGH RISK`, `\*\*Issues\*\*` must include at least one issue bullet/);
+  assert.match(prompt, /terminal issue bullets should focus on the problem details, not lead with file paths/i);
+  assert.match(prompt, /inline terminal refs only when needed to avoid ambiguity/i);
+  assert.match(prompt, /\*\*Plan\*\*/);
+  assert.match(prompt, /\*\*Summary\*\*/);
+  assert.match(prompt, /\*\*Issues\*\*/);
+  assert.match(prompt, /\*\*Final Verdict\*\*/);
+  assert.match(prompt, /\*\*Next\*\*/);
   assert.match(prompt, /- \[ \] safe to merge/);
   assert.match(prompt, /- \[ \] requires fixes/);
   assert.match(prompt, /- \[ \] block merge/);
+});
+
+test("non-review prompts use the shared terminal output contract", async () => {
+  const prompts = await Promise.all([
+    readWorkflowPrompt("plan-validator.md"),
+    readWorkflowPrompt("fix-plan.md"),
+    readWorkflowPrompt("execute-plan.md"),
+    readWorkflowPrompt("fix-review.md"),
+    readWorkflowPrompt("reopen-plan.md"),
+    readWorkflowPrompt("unblock-plan.md"),
+    readWorkflowPrompt("commit-summary.md"),
+  ]);
+
+  for (const prompt of prompts) {
+    assert.match(prompt, /\*\*Plan\*\*/);
+    assert.match(prompt, /\*\*Summary\*\*/);
+    assert.match(prompt, /\*\*Key Details\*\*/);
+    assert.match(prompt, /\*\*Next\*\*/);
+    assert.match(prompt, /Status:/);
+    assert.match(prompt, /Next Action:/);
+  }
+
+  assert.match(prompts[2], /\*\*Validation\*\*/);
+  assert.match(prompts[6], /single conventional-commit subject line/i);
+  assert.match(prompts[6], /short user-facing summary list prefixed with `--`/i);
+  assert.match(prompts[6], /do not include a branch line/i);
 });
 
 test("superpowers prompt describes analysis as advisory guidance, not a missing skill", async () => {
@@ -2446,6 +2534,10 @@ Remaining:
   assert.match(snapshot, /\* Status: active/);
   assert.match(snapshot, /\* Next Action: execute-plan/);
   assert.match(snapshot, /\.ai\/specs\/workflow-runner\.spec\.md/);
+  assert.match(snapshot, /## Summary/);
+  assert.match(snapshot, /## Key Details/);
+  assert.match(snapshot, /## Validation/);
+  assert.match(snapshot, /## Review/);
   assert.match(snapshot, /Snapshot generation is implemented/);
   assert.match(snapshot, /latest execution summary to keep/);
   assert.match(snapshot, /PASS/);
@@ -2492,7 +2584,7 @@ review-plan
   });
 
   assert.match(snapshot, /## Latest Review Remediation Context\s*\n\(none\)/);
-  assert.match(snapshot, /## Latest Review Result/);
+  assert.match(snapshot, /## Review/);
   assert.match(
     snapshot,
     /latest unresolved review finding that should not be treated as execute hot-path context yet/,
@@ -4439,13 +4531,7 @@ test("token usage ledger accumulates totals across multiple workflow stages", as
   }
 });
 
-<<<<<<< HEAD
 test("workflow runner stops after a pathological nonterminal stage to force a fresh handoff", async () => {
-=======
-<<<<<<< Updated upstream
-=======
-test("workflow runner continues automatically after a high-token nonterminal stage", async () => {
->>>>>>> e3b7ca1 (fix run blocker)
   const workspace = await setupWorkspace();
   try {
     await writePlan(workspace.root, "workflow-runner", planWith("active", "execute-plan"));
@@ -4460,23 +4546,11 @@ test("workflow runner continues automatically after a high-token nonterminal sta
           return { launched: true, stdout: "", stderr: "", exitCode: 0 };
         }
         codexCalls += 1;
-<<<<<<< HEAD
         await writePlan(
           workspace.root,
           "workflow-runner",
           planWith("active", "execute-plan", "\n## Latest Execution Summary\n\n* Finished one chunk.\n"),
         );
-=======
-        if (codexCalls === 1) {
-          await writePlan(
-            workspace.root,
-            "workflow-runner",
-            planWith("review", "review-plan", "\n## Latest Execution Summary\n\n* Finished one chunk.\n"),
-          );
-        } else {
-          await writePlan(workspace.root, "workflow-runner", planWith("completed", "commit-summary"));
-        }
->>>>>>> e3b7ca1 (fix run blocker)
         return {
           launched: true,
           stdout: turnCompletedUsageDetailLine({
@@ -4492,26 +4566,14 @@ test("workflow runner continues automatically after a high-token nonterminal sta
     });
 
     assert.equal(result.success, true);
-<<<<<<< HEAD
     assert.equal(result.iterations, 1);
     assert.equal(codexCalls, 1);
     assert.match(result.reason, /fresh workflow runner invocation/i);
     assert.equal(output.lines.some((line) => /fresh workflow runner invocation/i.test(line)), true);
-=======
-    assert.equal(result.iterations, 3);
-    assert.equal(codexCalls, 3);
-    assert.match(result.reason, /completed \+ commit-summary finished/i);
-    assert.equal(output.lines.some((line) => /fresh workflow runner invocation/i.test(line)), false);
->>>>>>> e3b7ca1 (fix run blocker)
   } finally {
     await workspace.cleanup();
   }
 });
-
-<<<<<<< HEAD
-=======
->>>>>>> Stashed changes
->>>>>>> e3b7ca1 (fix run blocker)
 test("interrupted workflow stages append partial token usage without changing exact cumulative totals", async () => {
   const workspace = await setupWorkspace();
   try {

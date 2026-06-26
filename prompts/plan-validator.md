@@ -376,39 +376,35 @@ append:
 
 ## Output
 
-### Summary
+Use this shared terminal-facing contract for non-review stages.
 
-* GOOD / NEEDS FIX
+**Plan**
 
----
+.ai/plans/<plan-name>.md
 
-### Issues
+**Summary**
 
-#### CRITICAL
+* GOOD | NEEDS FIX | STOP
+* stage result/state line first
+* at most 2-3 short high-signal bullets
 
-* ...
+**Key Details**
 
-#### WARNING
+* CRITICAL and WARNING findings
+* missing coverage that matters for execution readiness
+* recommendation or exact user decision required when stopping
 
-* ...
+**Next**
 
----
+Status:
 
-### Missing Coverage
+* draft
+* approved
 
-* spec behavior not implemented
-* edge cases not handled
+Next Action:
 
----
-
-### Recommendation
-
-* approve plan
-* revise plan
-
----
-
-### State Transition
+* fix-plan
+* execute-plan
 
 IF any CRITICAL issues exist and NO `MAJOR SPEC DECISION REQUIRED` issues exist and NO `MINOR SPEC REPAIR` issues exist:
 

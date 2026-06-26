@@ -314,14 +314,38 @@ Rules:
 
 ## Output (MANDATORY)
 
-### Git Commit Message
+Use this shared terminal-facing contract for non-review stages.
+
+Rules:
+
+* `**Summary**` starts with the stage result/state line, then at most 2-3 short high-signal bullets.
+* `**Key Details**` must use a single conventional-commit subject line followed by a short user-facing summary list prefixed with `--`.
+* Do not include a branch line in `**Key Details**`.
+
+**Plan**
+
+.ai/plans/<plan-name>.md
+
+**Summary**
+
+* COMMIT CREATED | DEPLOYMENT VALIDATION READY
+* stage result/state line first
+* at most 2-3 short high-signal bullets
+
+**Key Details**
 
 <type>(<feature>): <summary>
+-- short user-facing outcome
+-- short user-facing outcome
+-- short user-facing outcome
 
----
+**Next**
 
-### Summary
+Status:
 
-* ...
-* ...
-* ...
+* completed
+* deployment-validation
+
+Next Action:
+
+commit-summary

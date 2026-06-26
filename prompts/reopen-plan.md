@@ -188,28 +188,28 @@ Rules:
 
 ## Output (MANDATORY)
 
-### Plan
+Use this shared terminal-facing contract for non-review stages.
+
+**Plan**
 
 .ai/plans/<plan-name>.md
 
----
+**Summary**
 
-### Reopen Summary
+* REOPENED
+* stage result/state line first
+* at most 2-3 short high-signal bullets
+
+**Key Details**
 
 * findings used
 * fixes added to the plan
 * validation added to the plan
 
----
+**Next**
 
-### State Transition
+Status:
+active
 
-reopening -> active
-
----
-
-### Next Step
-
-Run:
-
+Next Action:
 execute-plan

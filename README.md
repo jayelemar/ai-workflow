@@ -40,6 +40,7 @@ The runner writes a hot-path context snapshot for each plan:
 ```
 
 Prompts should use that snapshot as the primary current-state source. The full plan remains the source of truth for exact history and edits.
+Snapshot sections are intentionally compact and stage-aligned: expect `## Summary`, `## Key Details`, `## Validation`, `## Review`, and `## Latest Review Remediation Context` rather than broad historical plan reads during normal workflow runs.
 
 Workflow plans use `thin-plan-v1`. Versioned workflow history entries stay short and point to event artifacts:
 
@@ -73,6 +74,7 @@ Runner-owned runtime files are written under the plan artifact root:
 ```
 
 When the runner warns that a plan is too large, move bulky workflow detail into event artifacts and keep only bounded summaries plus exact `Evidence:` paths in the plan.
+Non-review workflow stages share one terminal-facing output contract: `**Plan**`, `**Summary**`, `**Key Details**`, optional `**Validation**`, and `**Next**`. `review-changes` remains the only specialized output shape.
 
 ## Next Workflow Optimization
 

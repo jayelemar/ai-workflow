@@ -18,6 +18,7 @@ pnpm exec tsx .ai/scripts/workflow-runner.ts .ai/plans/<plan-name>.md
 ```
 
 Repeated review-remediation loops use the runner snapshot at `.ai/artifacts/<plan-name>/state/context.md` as the hot-path context. In particular, follow-up `execute-plan` runs should consume the snapshot's latest unresolved review findings first, while the live plan remains the source of truth for exact edits and history.
+That snapshot is intentionally compact: prefer its `## Summary`, `## Key Details`, `## Validation`, `## Review`, and `## Latest Review Remediation Context` sections before opening the full plan or event artifacts.
 
 Optional quiet mode:
 
@@ -32,3 +33,4 @@ pnpm exec tsx .ai/scripts/workflow-runner.ts --compact .ai/plans/<plan-name>.md
 - Do not write "based on context" for goals, expected behavior, or known decisions.
 - If a behavior decision is unknown, write `Unknown; ask me`.
 - Exclude `.ai/artifacts` from broad searches unless reading the active snapshot, event evidence, or runner logs for the current plan.
+- Non-review workflow stages should emit the shared terminal contract: `**Plan**`, `**Summary**`, `**Key Details**`, optional `**Validation**`, and `**Next**`.

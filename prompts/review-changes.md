@@ -399,63 +399,50 @@ Keep output compact for terminal readability.
 
 Rules:
 
-* Summary: one status bullet plus at most two short detail bullets.
-* If Summary is `NEEDS FIX` or `HIGH RISK`, `### Issues` must include at least one issue bullet.
-* If Summary is `NEEDS FIX` or `HIGH RISK`, do not rely on a plan-update summary alone; print the concrete conflict, defect, missing validation, or required fix in `### Issues`.
-* `### Issues` must mirror the actionable review artifact findings so terminal output shows what needs to be fixed without opening the artifact file.
+* `**Summary**` starts with the stage result/state line, then at most 2-3 short high-signal bullets.
+* If Summary is `NEEDS FIX` or `HIGH RISK`, `**Issues**` must include at least one issue bullet.
+* If Summary is `NEEDS FIX` or `HIGH RISK`, do not rely on a plan-update summary alone; print the concrete conflict, defect, missing validation, or required fix in `**Issues**`.
+* `**Issues**` must mirror the actionable review artifact findings so terminal output shows what needs to be fixed without opening the artifact file.
 * Issue bullets must be one sentence each and actionable.
 * Issue bullets must be self-contained and remediation-ready.
 * Issue bullets must not rely on surrounding prose, earlier review versions, or shorthand like `same as above`.
 * Do not use Review History for terminal-output summaries; keep detailed findings in the artifact.
 * Issues: include all CRITICAL issues; include WARNING and SUGGESTION items only when actionable.
-* Each issue bullet should be one sentence and include the file/line reference when available.
+* Terminal issue bullets should focus on the problem details, not lead with file paths.
+* File and line references should stay in the review artifact; use inline terminal refs only when needed to avoid ambiguity.
 * Do not include long examples unless they are required to prove the issue.
-* Do not output separate `### Spec Coverage` or `### Regression Risk` sections.
-* Fold spec coverage and regression risk into `### Issues` only when actionable.
-* Keep `### Final Verdict` exactly in the checkbox format below.
+* Do not output separate spec coverage or regression risk sections.
+* Fold spec coverage and regression risk into `**Issues**` only when actionable.
+* Keep `**Final Verdict**` exactly in the checkbox format below.
 
-### Plan
+**Plan**
 
 .ai/plans/<plan-name>.md
 
----
-
-### Summary
+**Summary**
 
 * SAFE
 * NEEDS FIX
 * HIGH RISK
 
----
-
-### Issues
-
-#### CRITICAL
+**Issues**
 
 * ...
 
-#### WARNING
-
-* ...
-
-#### SUGGESTION
-
-* ...
-
----
-
-### State Transition
-
-review → active
-
-OR
-
-review → completed
-
----
-
-### Final Verdict
+**Final Verdict**
 
 - [ ] safe to merge
 - [ ] requires fixes
 - [ ] block merge
+
+**Next**
+
+Status:
+
+* active
+* completed
+
+Next Action:
+
+* execute-plan
+* commit-summary

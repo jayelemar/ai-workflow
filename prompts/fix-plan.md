@@ -236,21 +236,25 @@ Do NOT:
 
 ## Output (MANDATORY)
 
-### Plan
+Use this shared terminal-facing contract for non-review stages.
+
+**Plan**
 
 .ai/plans/<plan-name>.md
 
----
+**Summary**
 
-### Fix Summary
+* PLAN UPDATED
+* stage result/state line first
+* at most 2-3 short high-signal bullets
+
+**Key Details**
 
 * issue addressed
 * affected section(s)
 * changes made
 
----
-
-### State Transition
+**Next**
 
 Status:
 draft
@@ -259,9 +263,3 @@ Next Action:
 plan-validator
 
 ---
-
-### Next Step
-
-Run:
-
-plan-validator

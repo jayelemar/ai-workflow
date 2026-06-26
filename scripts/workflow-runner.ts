@@ -17,18 +17,9 @@ import {
   type CodexTokenUsage,
   type ContextUsageLogFields,
 } from './workflow-runner/token-usage.ts';
-<<<<<<< HEAD
 export { analyzeTokenUsageLedger } from './workflow-runner/token-ledger.ts';
 import { collectWorkflowThresholdWarnings } from './workflow-runner/token-warnings.ts';
 import { validateThinPlanContract } from './workflow-runner/thin-plan.ts';
-=======
-<<<<<<< Updated upstream
-import { collectWorkflowThresholdWarnings } from './workflow-runner/token-warnings.ts';
-=======
-export { analyzeTokenUsageLedger } from './workflow-runner/token-ledger.ts';
-import { validateThinPlanContract } from './workflow-runner/thin-plan.ts';
->>>>>>> Stashed changes
->>>>>>> e3b7ca1 (fix run blocker)
 type CodexProfile = 'codex-work' | 'codex-personal' | 'codex-adam' | 'codex-work6598';
 type ReasoningEffort = 'medium' | 'high' | 'xhigh';
 
@@ -1356,11 +1347,6 @@ const workflowSummarySectionHeading = (line: string): string | null => {
   return match?.[1] ?? null;
 };
 
-const workflowReviewSectionHeading = (line: string): string | null => {
-  const match = line.match(/^###\s+(.+)$/);
-  return match?.[1] ?? null;
-};
-
 const parseWorkflowSections = (
   text: string,
   headingForLine: (line: string) => string | null,
@@ -1407,6 +1393,13 @@ const compactWorkflowValidationLine = (line: string): string => {
   return label ? `* ${label}: ${result}` : line;
 };
 
+const boundedSectionLines = (lines: string[], limit: number): string[] => {
+  const visibleLines = trimBlankLines(lines).filter((line) => line.trim().length > 0);
+  const shownLines = visibleLines.slice(0, limit);
+  const hiddenLines = visibleLines.length - shownLines.length;
+  return hiddenLines > 0 ? [...shownLines, `  +${hiddenLines} more`] : shownLines;
+};
+
 const sentenceWithPeriod = (text: string): string => {
   const trimmed = text.trim().replace(/[;,]$/, '');
   return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
@@ -1438,25 +1431,30 @@ const reviewIssueLocations = (text: string): string[] => {
 const formatReviewIssueBullet = (severity: string, bulletLine: string): string[] => {
   const rawText = bulletLine.replace(/^[-*]\s+/, '').trim();
   const linkedIssueMatch = rawText.match(/^\[[^\]]+\]\((.+):(\d+)\):\s*(.+)$/);
-  const locations = reviewIssueLocations(rawText);
   const issueText = linkedIssueMatch?.[3] ?? rawText.replace(/\[[^\]]+\]\([^)]+\)/g, '').trim();
-  return [
-    `* ${severity}: ${compactReviewIssueText(severity, issueText)}`,
-    ...locations.map((location) => `  \`${location}\``),
-  ];
+  return [`* ${severity}: ${compactReviewIssueText(severity, issueText)}`];
 };
 
 const formatReviewIssues = (lines: string[]): string[] => {
   const formattedLines: string[] = [];
   let severity = 'Issue';
   for (const line of lines) {
-    const severityMatch = line.match(/^####\s+(.+)$/);
+    const trimmed = line.trim();
+    const severityMatch = trimmed.match(/^####\s+(.+)$/);
     if (severityMatch?.[1]) {
       severity = severityMatch[1].toLowerCase().replace(/^\w/, (char) => char.toUpperCase());
       continue;
     }
-    if (/^[-*]\s+/.test(line.trim())) {
-      formattedLines.push(...formatReviewIssueBullet(severity, line.trim()));
+    const prefixedSeverityMatch = trimmed.match(
+      /^[-*]\s*(Critical|Warning|Suggestion|Issue)\s*:\s*(.+)$/i,
+    );
+    if (prefixedSeverityMatch) {
+      const explicitSeverity = prefixedSeverityMatch[1].replace(/^\w/, (char) => char.toUpperCase());
+      formattedLines.push(...formatReviewIssueBullet(explicitSeverity, `* ${prefixedSeverityMatch[2]}`));
+      continue;
+    }
+    if (/^[-*]\s+/.test(trimmed)) {
+      formattedLines.push(...formatReviewIssueBullet(severity, trimmed));
     }
   }
   return formattedLines;
@@ -1469,6 +1467,26 @@ const reviewPlanLine = (lines: string[]): string[] => {
   }
   const linkMatch = planLine.match(/^\[([^\]]+)\]\([^)]+\)$/);
   return [`\`${linkMatch?.[1] ?? planLine}\``];
+};
+
+const nextSectionLines = (lines: string[]): string[] => {
+  const trimmedLines = trimBlankLines(lines).filter((line) => line.trim().length > 0);
+  const explicitLines = trimmedLines.filter((line) =>
+    /^(Status|Next Action):\s*/i.test(line.trim()),
+  );
+  if (explicitLines.length > 0) {
+    return explicitLines;
+  }
+
+  const transitionLine = trimmedLines[0];
+  const status = transitionLine?.match(/->\s*([a-z-]+)\s*$/)?.[1];
+  if (!status) {
+    return [];
+  }
+  const nextAction = workflowNextActionForStatus(status);
+  return nextAction
+    ? [`Status: \`${status}\``, `Next Action: \`${nextAction}\``]
+    : [`Status: \`${status}\``];
 };
 
 const workflowNextActionForStatus = (status: string): NextAction | null => {
@@ -1489,42 +1507,27 @@ const workflowNextActionForStatus = (status: string): NextAction | null => {
   }
 };
 
-const reviewNextLines = (lines: string[]): string[] => {
-  const transitionLine = trimBlankLines(lines)[0];
-  const status = transitionLine?.match(/->\s*([a-z-]+)\s*$/)?.[1];
-  if (!status) {
-    return [];
-  }
-  const nextAction = workflowNextActionForStatus(status);
-  return nextAction
-    ? [`Status: \`${status}\``, `Next Action: \`${nextAction}\``]
-    : [`Status: \`${status}\``];
-};
-
 const reviewSummaryLines = (lines: string[]): string[] => {
-  const summaryLines = trimBlankLines(lines).filter((line) => line.trim().length > 0);
-  const visibleLines = summaryLines.slice(0, TERMINAL_FILE_DETAIL_LIMIT);
-  const hiddenLines = summaryLines.length - visibleLines.length;
-  return hiddenLines > 0 ? [...visibleLines, `  +${hiddenLines} more`] : visibleLines;
+  return boundedSectionLines(lines, TERMINAL_FILE_DETAIL_LIMIT);
 };
 
 const formatWorkflowReviewSummary = (trimmedText: string): string | null => {
   if (
-    !trimmedText.includes('### Plan') ||
-    !trimmedText.includes('### Summary') ||
-    !trimmedText.includes('### Issues') ||
-    !trimmedText.includes('### Final Verdict')
+    !trimmedText.includes('**Plan**') ||
+    !trimmedText.includes('**Summary**') ||
+    !trimmedText.includes('**Issues**') ||
+    !trimmedText.includes('**Final Verdict**')
   ) {
     return null;
   }
 
-  const sections = parseWorkflowSections(trimmedText, workflowReviewSectionHeading);
+  const sections = parseWorkflowSections(trimmedText, workflowSummarySectionHeading);
   const outputSections: Array<[string, string[]]> = [
-    ['Review', reviewPlanLine(sections.get('Plan') ?? [])],
+    ['Plan', reviewPlanLine(sections.get('Plan') ?? [])],
     ['Summary', reviewSummaryLines(sections.get('Summary') ?? [])],
     ['Issues', formatReviewIssues(sections.get('Issues') ?? [])],
     ['Final Verdict', trimBlankLines(sections.get('Final Verdict') ?? [])],
-    ['Next', reviewNextLines(sections.get('State Transition') ?? [])],
+    ['Next', nextSectionLines(sections.get('Next') ?? [])],
   ].filter(([, lines]) => lines.length > 0);
 
   return outputSections
@@ -1533,29 +1536,41 @@ const formatWorkflowReviewSummary = (trimmedText: string): string | null => {
     .trimEnd();
 };
 
-const formatWorkflowCompletionSummary = (trimmedText: string): string | null => {
+const formatSharedKeyDetails = (lines: string[]): string[] => {
+  const keyDetails = trimBlankLines(lines).filter((line) => {
+    const trimmed = line.trim();
+    if (trimmed.length === 0) {
+      return false;
+    }
+    if (/\bsub-agents?\b/i.test(trimmed)) {
+      return false;
+    }
+    if (/^\*?\s*Branch:/i.test(trimmed)) {
+      return false;
+    }
+    return true;
+  });
+  return keyDetails.slice(0, 5);
+};
+
+const formatWorkflowSharedSummary = (trimmedText: string): string | null => {
   if (
     !trimmedText.includes('**Plan**') ||
-    !trimmedText.includes('**Execution Summary**') ||
-    !trimmedText.includes('**Validation Summary**') ||
-    !trimmedText.includes('**State Transition**') ||
-    !trimmedText.includes('**Summary**')
+    !trimmedText.includes('**Summary**') ||
+    !trimmedText.includes('**Key Details**') ||
+    !trimmedText.includes('**Next**')
   ) {
     return null;
   }
 
   const sections = parseWorkflowSections(trimmedText, workflowSummarySectionHeading);
-  const executionLines = trimBlankLines(sections.get('Execution Summary') ?? []).filter(
-    (line) => !/\bsub-agents?\b/i.test(line),
-  );
-  const validationLines = trimBlankLines(sections.get('Validation Summary') ?? []).map(
-    compactWorkflowValidationLine,
-  );
+  const validationLines = trimBlankLines(sections.get('Validation') ?? []).map(compactWorkflowValidationLine);
   const outputSections: Array<[string, string[]]> = [
     ['Plan', trimBlankLines(sections.get('Plan') ?? [])],
-    ['Execution Summary', executionLines],
+    ['Summary', boundedSectionLines(sections.get('Summary') ?? [], TERMINAL_FILE_DETAIL_LIMIT + 1)],
+    ['Key Details', formatSharedKeyDetails(sections.get('Key Details') ?? [])],
     ['Validation', validationLines],
-    ['Next', trimBlankLines(sections.get('State Transition') ?? [])],
+    ['Next', nextSectionLines(sections.get('Next') ?? [])],
   ].filter(([, lines]) => lines.length > 0);
 
   return outputSections
@@ -1568,7 +1583,7 @@ const formatWorkflowAgentSummary = (text: string): string => {
   const trimmedText = text.trimEnd();
   return (
     formatWorkflowReviewSummary(trimmedText) ??
-    formatWorkflowCompletionSummary(trimmedText) ??
+    formatWorkflowSharedSummary(trimmedText) ??
     trimmedText
   );
 };
@@ -3001,16 +3016,16 @@ ${formatSnapshotSection('## Spec Paths', extractSpecPaths(planContent))}
 
 ${extractPlanOwnedFileSection(planContent).length > 0 ? extractPlanOwnedFileSection(planContent).join('\n') : '(none)'}
 
-${formatSnapshotSection('## Current Phase Summary', extractCurrentPhaseSummary(planContent))}
+${formatSnapshotSection('## Summary', extractCurrentPhaseSummary(planContent))}
 
-${formatSnapshotSection('## Latest Execution Summary', extractLatestExecutionSummary(planContent))}
+${formatSnapshotSection('## Key Details', extractLatestExecutionSummary(planContent))}
 
-## Latest Validation Result
+## Validation
 
 * Result: ${validation.result ?? '(none recorded)'}
 ${validation.details.length > 0 ? validation.details.map((detail) => `* ${detail}`).join('\n') : '(none)'}
 
-## Latest Review Result
+## Review
 
 * Summary: ${review.summary ?? '(none recorded)'}
 * Decision: ${review.decision ?? '(none recorded)'}
@@ -4826,13 +4841,13 @@ export const runWorkflowRunner = async (
   let tokenUsageLogPath: string | undefined;
   let tokenUsageTotals = { ...zeroTokenUsageTotals };
   const heldWorkflowFileLockPaths = new Set<string>();
+  const emittedWorkflowWarnings = new Set<string>();
   const markWorkflowLogCreated = (planName: string) => {
     workflowLogPath = rel('.ai', 'artifacts', planName, 'logs', 'runner.log');
   };
   const markTokenUsageLogCreated = (planName: string) => {
     tokenUsageLogPath = tokenUsageLedgerRelativePath(planName);
   };
-<<<<<<< Updated upstream
   const emitWorkflowThresholdWarnings = (warnings: string[]) => {
     for (const warning of warnings) {
       if (emittedWorkflowWarnings.has(warning)) {
@@ -4842,14 +4857,9 @@ export const runWorkflowRunner = async (
       logger.error(`WARNING: ${warning}`);
     }
   };
-<<<<<<< HEAD
   const isPathologicalStageWarning = (warning: string): boolean =>
     warning.startsWith('Latest stage total input tokens are ') ||
     warning.startsWith('Latest stage uncached input tokens are ');
-=======
-=======
->>>>>>> Stashed changes
->>>>>>> e3b7ca1 (fix run blocker)
   const currentInterruptSignal = (): NodeJS.Signals | undefined => {
     const explicitSignal = options.interruptSignal?.();
     if (explicitSignal) {
@@ -5368,7 +5378,6 @@ export const runWorkflowRunner = async (
     ): Promise<{ ok: true } | Failure> => {
       const logTimestamp = timestamp();
       const tokenUsage = parseCodexTokenUsage(result.stdout);
-<<<<<<< Updated upstream
       const thresholdWarnings = collectWorkflowThresholdWarnings({
         planByteSize: Buffer.byteLength((endingPlan ?? parsed).content, 'utf8'),
         latestTokenUsage: {
@@ -5380,12 +5389,7 @@ export const runWorkflowRunner = async (
           stageTotalTokens: tokenUsage.totalTokens,
         },
       });
-<<<<<<< HEAD
       latestIterationThresholdWarnings = thresholdWarnings;
-=======
-=======
->>>>>>> Stashed changes
->>>>>>> e3b7ca1 (fix run blocker)
       const failureMetadata = iterationStopReason
         ? classifyFailureForLog(iterationStopReason)
         : undefined;

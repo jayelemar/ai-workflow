@@ -275,53 +275,40 @@ Rules:
 
 ## Output (MANDATORY)
 
-### Plan
+Use this shared terminal-facing contract for non-review stages.
+
+**Plan**
 
 .ai/plans/<plan-name>.md
 
----
+**Summary**
 
-### Unblock Summary
+* ACTIVE | STILL BLOCKED | DEPLOYMENT VALIDATION PENDING | READY TO REOPEN
+* stage result/state line first
+* at most 2-3 short high-signal bullets
+
+**Key Details**
 
 * evidence used
 * blockers resolved
 * blockers remaining
 
----
+**Next**
 
-### State Transition
+Status:
 
-blocked -> active
+* active
+* blocked
+* deployment-validation
+* completed
+* reopening
 
-or:
+Next Action:
 
-blocked -> blocked
-
-or:
-
-deployment-validation -> deployment-validation
-
-or:
-
-deployment-validation -> completed
-
-or:
-
-deployment-validation -> reopening
-
----
-
-### Next Step
-
-Run:
-
-execute-plan
-
-or:
-
-unblock-plan
-
-or:
+* execute-plan
+* unblock-plan
+* commit-summary
+* reopen-plan
 
 commit-summary
 
