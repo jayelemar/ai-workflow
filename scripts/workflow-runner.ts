@@ -2752,7 +2752,7 @@ const extractVersionedSectionEntries = (
   let current: { heading: string; lines: string[] } | undefined;
   for (const line of lines) {
     const trimmed = line.trim();
-    if (!current && (trimmed.length === 0 || trimmed === '(empty)')) {
+    if (!current && (trimmed.length === 0 || trimmed === '(empty)' || trimmed === '---')) {
       continue;
     }
     if (trimmed.startsWith('### ')) {
@@ -2760,9 +2760,8 @@ const extractVersionedSectionEntries = (
       entries.push(current);
       continue;
     }
-    current ??= { heading, lines: [] };
-    if (!entries.includes(current)) {
-      entries.push(current);
+    if (!current) {
+      continue;
     }
     current.lines.push(line);
   }

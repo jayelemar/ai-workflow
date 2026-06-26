@@ -135,85 +135,17 @@ Rules:
 
 (empty)
 
----
-
 ## Validation History
 
 (empty)
-
-Rules:
-
-* Every validation iteration MUST append a new entry
-* MUST NOT overwrite previous validation entries
-* Validation versions MUST be sequential
-
-Example:
-
-### Validation v1
-
-* Summary:
-* Result: NEEDS FIX
-* Evidence: .ai/artifacts/<plan-name>/events/validation-v1.md
-
-### Validation v2
-
-* Summary:
-* Result: APPROVED
-* Evidence: .ai/artifacts/<plan-name>/events/validation-v2.md
-
----
 
 ## Review History
 
 (empty)
 
-Rules:
-
-* Every review iteration MUST append a new entry
-* MUST NOT overwrite previous reviews
-* Review versions MUST be sequential
-
-Example:
-
-### Review v1
-
-* Summary:
-* Decision:
-* Evidence: .ai/artifacts/<plan-name>/events/review-v1.md
-
-### Review v2
-
-* Summary:
-* Decision:
-* Evidence: .ai/artifacts/<plan-name>/events/review-v2.md
-
----
-
 ## Reopen History
 
 (empty)
-
-Rules:
-
-* Every reopen iteration MUST append a new entry
-* MUST NOT overwrite previous reopen entries
-* Reopen versions MUST be sequential
-
-Example:
-
-### Reopen v1
-
-* Summary:
-* Decision:
-* Evidence: .ai/artifacts/<plan-name>/events/reopen-v1.md
-
-### Reopen v2
-
-* Summary:
-* Decision:
-* Evidence: .ai/artifacts/<plan-name>/events/reopen-v2.md
-
----
 
 ## Blockers
 

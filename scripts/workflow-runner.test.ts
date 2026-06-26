@@ -609,6 +609,33 @@ test("plan template uses artifact-first thin-plan workflow stubs", async () => {
   assert.doesNotMatch(template, /\* Required Fixes:/);
 });
 
+test("plan template keeps workflow history sections as empty stubs", async () => {
+  const template = await readPlanTemplate();
+
+  const validationSection = template.match(/## Validation History([\s\S]*?)## Review History/);
+  const reviewSection = template.match(/## Review History([\s\S]*?)## Reopen History/);
+  const reopenSection = template.match(/## Reopen History([\s\S]*?)## Blockers/);
+
+  assert.ok(validationSection, "expected Validation History section");
+  assert.ok(reviewSection, "expected Review History section");
+  assert.ok(reopenSection, "expected Reopen History section");
+
+  for (const [sectionName, section] of [
+    ["Validation History", validationSection[1]],
+    ["Review History", reviewSection[1]],
+    ["Reopen History", reopenSection[1]],
+  ] as const) {
+    assert.match(section, /\(empty\)/, `${sectionName} should keep the empty stub`);
+    assert.doesNotMatch(section, /^---$/m, `${sectionName} must not include section separators`);
+    assert.doesNotMatch(section, /\bRules:\b/, `${sectionName} must not include inline rules`);
+    assert.doesNotMatch(
+      section,
+      /###\s+(Validation|Review|Reopen)\s+v\d+/,
+      `${sectionName} must not include inline entry examples`,
+    );
+  }
+});
+
 test("execute-plan prompt uses snapshot remediation context before full review history", async () => {
   const prompt = await readWorkflowPrompt("execute-plan.md");
 
@@ -2773,6 +2800,71 @@ test("parsePlan accepts empty thin-plan workflow history stubs", async () => {
 ## Reopen History
 
 (empty)
+
+## Blockers
+
+(empty)
+`,
+    );
+
+    const parsed = await parsePlan({
+      planName: planArg("workflow-runner"),
+      rootDir: workspace.root,
+    });
+
+    assert.equal(parsed.ok, true);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("parsePlan accepts empty thin-plan workflow history stubs with section separators", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(
+      workspace.root,
+      "workflow-runner",
+      `${planWith("draft", "plan-validator")}## Execution Log
+
+(empty)
+
+---
+
+## Validation History
+
+(empty)
+
+Rules:
+
+* Every validation iteration MUST append a new entry
+* MUST NOT overwrite previous validation entries
+* Validation versions MUST be sequential
+
+---
+
+## Review History
+
+(empty)
+
+Rules:
+
+* Every review iteration MUST append a new entry
+* MUST NOT overwrite previous reviews
+* Review versions MUST be sequential
+
+---
+
+## Reopen History
+
+(empty)
+
+Rules:
+
+* Every reopen iteration MUST append a new entry
+* MUST NOT overwrite previous reopen entries
+* Reopen versions MUST be sequential
+
+---
 
 ## Blockers
 
