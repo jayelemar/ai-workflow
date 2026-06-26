@@ -20,6 +20,7 @@ import {
   formatWorkflowProgressLine,
   formatWorkflowWaitLine,
   generateWorkflowPrompt,
+  analyzeTokenUsageLedger,
   processStdioForInput,
   parseCodexTokenUsage,
   parsePlan,
@@ -4171,6 +4172,55 @@ test("successful workflow stages append token usage ledger entries and report th
   }
 });
 
+test("token usage ledger analysis identifies the latest stage and prompt action", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(workspace.root, "workflow-runner", planWith("active", "execute-plan"));
+    mkdirSync(join(workspace.root, ".ai", "artifacts", "workflow-runner", "logs"), { recursive: true });
+    writeFileSync(
+      join(workspace.root, ".ai", "artifacts", "workflow-runner", "logs", "token-usage.jsonl"),
+      [
+        JSON.stringify({
+          iteration: 1,
+          promptPath: ".ai/prompts/execute-plan.md",
+          stageInputTokens: 90,
+          stageUncachedInputTokens: 40,
+          inputTokens: 90,
+          totalTokens: 120,
+        }),
+        JSON.stringify({
+          iteration: 2,
+          promptPath: ".ai/prompts/review-changes.md",
+          stageInputTokens: 2_100_000,
+          stageUncachedInputTokens: 120_000,
+          inputTokens: 2_100_090,
+          totalTokens: 2_100_250,
+        }),
+      ].join("\n") + "\n",
+      "utf8",
+    );
+
+    const analysis = await analyzeTokenUsageLedger(workspace.root, "workflow-runner");
+
+    assert.deepEqual(analysis, {
+      ledgerPath: ".ai/artifacts/workflow-runner/logs/token-usage.jsonl",
+      latestStage: {
+        iteration: 2,
+        promptPath: ".ai/prompts/review-changes.md",
+        promptAction: "review-changes",
+        totalInputTokens: 2_100_000,
+        uncachedInputTokens: 120_000,
+      },
+      cumulative: {
+        inputTokens: 2_100_090,
+        totalTokens: 2_100_250,
+      },
+    });
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
 test("workflow runner writes the context snapshot before launching a workflow prompt", async () => {
   const workspace = await setupWorkspace();
   try {
@@ -4378,6 +4428,50 @@ test("token usage ledger accumulates totals across multiple workflow stages", as
     assert.equal(ledger[1]?.outputTokens, 70);
     assert.equal(ledger[1]?.reasoningOutputTokens, 22);
     assert.equal(ledger[1]?.totalTokens, 370);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("workflow runner stops after a pathological nonterminal stage to force a fresh handoff", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(workspace.root, "workflow-runner", planWith("active", "execute-plan"));
+    const output = collectConsole();
+    let codexCalls = 0;
+    const result = await runWorkflowRunner({
+      planName: planArg("workflow-runner"),
+      rootDir: workspace.root,
+      console: output.console,
+      processRunner: async (call) => {
+        if (call.command !== CODEX_COMMAND) {
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
+        codexCalls += 1;
+        await writePlan(
+          workspace.root,
+          "workflow-runner",
+          planWith("active", "execute-plan", "\n## Latest Execution Summary\n\n* Finished one chunk.\n"),
+        );
+        return {
+          launched: true,
+          stdout: turnCompletedUsageDetailLine({
+            inputTokens: 2_100_000,
+            cachedInputTokens: 1_950_000,
+            outputTokens: 100,
+            reasoningOutputTokens: 20,
+          }),
+          stderr: "",
+          exitCode: 0,
+        };
+      },
+    });
+
+    assert.equal(result.success, true);
+    assert.equal(result.iterations, 1);
+    assert.equal(codexCalls, 1);
+    assert.match(result.reason, /fresh workflow runner invocation/i);
+    assert.equal(output.lines.some((line) => /fresh workflow runner invocation/i.test(line)), true);
   } finally {
     await workspace.cleanup();
   }
