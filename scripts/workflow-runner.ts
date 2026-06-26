@@ -17,9 +17,18 @@ import {
   type CodexTokenUsage,
   type ContextUsageLogFields,
 } from './workflow-runner/token-usage.ts';
+<<<<<<< HEAD
 export { analyzeTokenUsageLedger } from './workflow-runner/token-ledger.ts';
 import { collectWorkflowThresholdWarnings } from './workflow-runner/token-warnings.ts';
 import { validateThinPlanContract } from './workflow-runner/thin-plan.ts';
+=======
+<<<<<<< Updated upstream
+import { collectWorkflowThresholdWarnings } from './workflow-runner/token-warnings.ts';
+=======
+export { analyzeTokenUsageLedger } from './workflow-runner/token-ledger.ts';
+import { validateThinPlanContract } from './workflow-runner/thin-plan.ts';
+>>>>>>> Stashed changes
+>>>>>>> e3b7ca1 (fix run blocker)
 type CodexProfile = 'codex-work' | 'codex-personal' | 'codex-adam' | 'codex-work6598';
 type ReasoningEffort = 'medium' | 'high' | 'xhigh';
 
@@ -245,7 +254,6 @@ type WorkflowContextSnapshotTokenUsage = {
 
 type WorkflowContextSnapshotResult = {
   snapshotPath: string;
-  thresholdWarnings: string[];
 };
 
 type FailureMetadataLogFields = {
@@ -2965,13 +2973,11 @@ export const generateWorkflowContextSnapshot = ({
   planPath,
   planContent,
   latestTokenUsage,
-  thresholdWarnings = [],
 }: {
   planName: string;
   planPath: string;
   planContent: string;
   latestTokenUsage?: WorkflowContextSnapshotTokenUsage;
-  thresholdWarnings?: string[];
 }): string => {
   const validation = extractLatestValidationSummary(planContent);
   const review = extractLatestReviewSummary(planContent);
@@ -3016,8 +3022,6 @@ ${formatSnapshotSection('## Latest Review Remediation Context', reviewRemediatio
 ${formatSnapshotSection('## Active Blockers', extractSnapshotActiveBlockers(planContent))}
 
 ${formatSnapshotSection('## Latest Token Usage Summary', tokenSummary)}
-
-${formatSnapshotSection('## Threshold Warnings', thresholdWarnings)}
 `;
 };
 
@@ -3512,19 +3516,13 @@ const writeWorkflowContextSnapshot = async ({
   rootDir: string;
   plan: ParsedPlan;
 }): Promise<WorkflowContextSnapshotResult | Failure> => {
-  const planByteSize = Buffer.byteLength(plan.content, 'utf8');
   const latestTokenUsage = await readLatestTokenUsage(rootDir, plan.planName);
-  const thresholdWarnings = collectWorkflowThresholdWarnings({
-    planByteSize,
-    latestTokenUsage,
-  });
   const snapshotPath = workflowContextSnapshotRelativePath(plan.planName);
   const snapshot = generateWorkflowContextSnapshot({
     planName: plan.planName,
     planPath: plan.planPath,
     planContent: plan.content,
     latestTokenUsage,
-    thresholdWarnings,
   });
 
   try {
@@ -3532,7 +3530,7 @@ const writeWorkflowContextSnapshot = async ({
       recursive: true,
     });
     await writeFile(workflowContextSnapshotAbsolutePath(rootDir, plan.planName), snapshot, 'utf8');
-    return { snapshotPath, thresholdWarnings };
+    return { snapshotPath };
   } catch (error) {
     return {
       ok: false,
@@ -4640,7 +4638,6 @@ const logFields = ({
   stopReason,
   failureDebugPath,
   editedFiles,
-  thresholdWarnings,
   stdout,
   stderr,
   staging,
@@ -4661,7 +4658,6 @@ const logFields = ({
   stopReason?: string;
   failureDebugPath?: string;
   editedFiles?: EditedFileSummary[];
-  thresholdWarnings?: string[];
   stdout: string;
   stderr: string;
   staging?: ReviewStagingProcess;
@@ -4699,11 +4695,6 @@ const logFields = ({
       : []),
     ...(editedFilesLog
       ? ([['editedFiles', editedFilesLog]] as Array<[string, string | number | undefined]>)
-      : []),
-    ...(thresholdWarnings && thresholdWarnings.length > 0
-      ? ([['thresholdWarnings', thresholdWarnings.join(' | ')]] as Array<
-          [string, string | number | undefined]
-        >)
       : []),
     ['stdout', compactCapturedOutputForLog(stdout)],
     ['stderr', compactCapturedOutputForLog(stderr)],
@@ -4834,7 +4825,6 @@ export const runWorkflowRunner = async (
   let workflowLogPath: string | undefined;
   let tokenUsageLogPath: string | undefined;
   let tokenUsageTotals = { ...zeroTokenUsageTotals };
-  const emittedWorkflowWarnings = new Set<string>();
   const heldWorkflowFileLockPaths = new Set<string>();
   const markWorkflowLogCreated = (planName: string) => {
     workflowLogPath = rel('.ai', 'artifacts', planName, 'logs', 'runner.log');
@@ -4842,6 +4832,7 @@ export const runWorkflowRunner = async (
   const markTokenUsageLogCreated = (planName: string) => {
     tokenUsageLogPath = tokenUsageLedgerRelativePath(planName);
   };
+<<<<<<< Updated upstream
   const emitWorkflowThresholdWarnings = (warnings: string[]) => {
     for (const warning of warnings) {
       if (emittedWorkflowWarnings.has(warning)) {
@@ -4851,9 +4842,14 @@ export const runWorkflowRunner = async (
       logger.error(`WARNING: ${warning}`);
     }
   };
+<<<<<<< HEAD
   const isPathologicalStageWarning = (warning: string): boolean =>
     warning.startsWith('Latest stage total input tokens are ') ||
     warning.startsWith('Latest stage uncached input tokens are ');
+=======
+=======
+>>>>>>> Stashed changes
+>>>>>>> e3b7ca1 (fix run blocker)
   const currentInterruptSignal = (): NodeJS.Signals | undefined => {
     const explicitSignal = options.interruptSignal?.();
     if (explicitSignal) {
@@ -4980,7 +4976,6 @@ export const runWorkflowRunner = async (
     if ('ok' in snapshotResult && snapshotResult.ok === false) {
       return snapshotResult;
     }
-    emitWorkflowThresholdWarnings(snapshotResult.thresholdWarnings);
     return snapshotResult;
   };
 
@@ -5373,6 +5368,7 @@ export const runWorkflowRunner = async (
     ): Promise<{ ok: true } | Failure> => {
       const logTimestamp = timestamp();
       const tokenUsage = parseCodexTokenUsage(result.stdout);
+<<<<<<< Updated upstream
       const thresholdWarnings = collectWorkflowThresholdWarnings({
         planByteSize: Buffer.byteLength((endingPlan ?? parsed).content, 'utf8'),
         latestTokenUsage: {
@@ -5384,7 +5380,12 @@ export const runWorkflowRunner = async (
           stageTotalTokens: tokenUsage.totalTokens,
         },
       });
+<<<<<<< HEAD
       latestIterationThresholdWarnings = thresholdWarnings;
+=======
+=======
+>>>>>>> Stashed changes
+>>>>>>> e3b7ca1 (fix run blocker)
       const failureMetadata = iterationStopReason
         ? classifyFailureForLog(iterationStopReason)
         : undefined;
@@ -5436,7 +5437,6 @@ export const runWorkflowRunner = async (
           stopReason: iterationStopReason,
           failureDebugPath,
           editedFiles,
-          thresholdWarnings,
           stdout: result.stdout,
           stderr: result.stderr,
           staging,

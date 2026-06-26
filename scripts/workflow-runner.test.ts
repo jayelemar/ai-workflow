@@ -2439,7 +2439,6 @@ Remaining:
       stageTotalTokens: 1354,
       totalTokens: 54321,
     },
-    thresholdWarnings: ["Plan file is 101.0 KB, which is above the 100 KB warning threshold."],
   });
 
   assert.match(snapshot, /# Workflow Context Snapshot: workflow-runner/);
@@ -2458,11 +2457,13 @@ Remaining:
   assert.match(snapshot, /\* Evidence: \.ai\/artifacts\/workflow-runner\/events\/review-v2\.md/);
   assert.match(snapshot, /active blocker to keep/);
   assert.match(snapshot, /Stage Input Tokens: 1234/);
-  assert.match(snapshot, /Plan file is 101\.0 KB/);
+  assert.match(snapshot, /Stage Uncached Input Tokens: 934/);
+  assert.match(snapshot, /Stage Output Tokens: 120/);
   assert.doesNotMatch(snapshot, /old execution history that should be dropped/);
   assert.doesNotMatch(snapshot, /old validation history that should be dropped/);
   assert.doesNotMatch(snapshot, /old review history that should be dropped/);
   assert.doesNotMatch(snapshot, /Resolved: historical fix should not be repeated/);
+  assert.doesNotMatch(snapshot, /## Threshold Warnings/);
 });
 
 test("workflow context snapshot emits no remediation context when not resuming execute after review", () => {
@@ -4263,7 +4264,7 @@ test("workflow runner writes the context snapshot before launching a workflow pr
   }
 });
 
-test("pathological workflow thresholds warn in terminal output, logs, and the snapshot", async () => {
+test("high token stages keep token usage details without threshold warnings", async () => {
   const workspace = await setupWorkspace();
   try {
     await writePlan(
@@ -4290,32 +4291,32 @@ test("pathological workflow thresholds warn in terminal output, logs, and the sn
     });
 
     assert.equal(result.success, true);
-    assert.equal(output.lines.some((line) => /pathological/i.test(line)), true);
-    assert.equal(output.lines.some((line) => /100 KB/i.test(line)), true);
-    assert.equal(output.lines.some((line) => /2,000,000/i.test(line)), true);
-    assert.equal(output.lines.some((line) => /100,000/i.test(line)), true);
+    assert.equal(output.lines.some((line) => /pathological/i.test(line)), false);
+    assert.equal(output.lines.some((line) => /100 KB/i.test(line)), false);
+    assert.equal(output.lines.some((line) => /2,000,000/i.test(line)), false);
+    assert.equal(output.lines.some((line) => /100,000/i.test(line)), false);
 
     const snapshot = await readFile(
       join(workspace.root, workflowContextSnapshotRelativePath("workflow-runner")),
       "utf8",
     );
-    assert.match(snapshot, /## Threshold Warnings/);
-    assert.match(snapshot, /100 KB/);
-    assert.match(snapshot, /2,000,000/);
-    assert.match(snapshot, /100,000/);
+    assert.match(snapshot, /## Latest Token Usage Summary/);
+    assert.match(snapshot, /Stage Input Tokens: 2000100/);
+    assert.match(snapshot, /Stage Uncached Input Tokens: 2000050/);
+    assert.match(snapshot, /Stage Output Tokens: 90/);
+    assert.doesNotMatch(snapshot, /## Threshold Warnings/);
 
     const log = await readFile(
       join(workspace.root, ".ai", "artifacts", "workflow-runner", "logs", "runner.log"),
       "utf8",
     );
-    assert.match(log, /thresholdWarnings:/);
-    assert.match(log, /2,000,000/);
+    assert.doesNotMatch(log, /thresholdWarnings:/);
   } finally {
     await workspace.cleanup();
   }
 });
 
-test("pathological token warnings distinguish thin plans from long cached stages", async () => {
+test("thin plans keep latest-stage token summaries without warning remediation text", async () => {
   const workspace = await setupWorkspace();
   try {
     await writePlan(workspace.root, "thin-token-spike", planWith("completed", "commit-summary"));
@@ -4356,14 +4357,19 @@ test("pathological token warnings distinguish thin plans from long cached stages
 
     assert.equal(result.success, true);
     const terminalOutput = output.lines.join("\n");
-    assert.match(terminalOutput, /Latest stage total input tokens/i);
-    assert.match(terminalOutput, /Latest stage uncached input tokens/i);
-    assert.doesNotMatch(terminalOutput, /Latest stage input tokens are/i);
-    assert.match(terminalOutput, /plan is already thin/i);
-    assert.match(terminalOutput, /cached context/i);
-    assert.match(terminalOutput, /long stage/i);
-    assert.match(terminalOutput, /uncached input/i);
-    assert.doesNotMatch(terminalOutput, /move bulky workflow detail into \.ai\/artifacts\/<plan-name>\/events/i);
+    assert.doesNotMatch(terminalOutput, /Latest stage total input tokens/i);
+    assert.doesNotMatch(terminalOutput, /Latest stage uncached input tokens/i);
+    assert.doesNotMatch(terminalOutput, /pathological/i);
+
+    const snapshot = await readFile(
+      join(workspace.root, workflowContextSnapshotRelativePath("thin-token-spike")),
+      "utf8",
+    );
+    assert.match(snapshot, /## Latest Token Usage Summary/);
+    assert.match(snapshot, /Stage Input Tokens: 100/);
+    assert.match(snapshot, /Stage Uncached Input Tokens: 80/);
+    assert.match(snapshot, /Stage Output Tokens: 30/);
+    assert.doesNotMatch(snapshot, /## Threshold Warnings/);
   } finally {
     await workspace.cleanup();
   }
@@ -4433,7 +4439,13 @@ test("token usage ledger accumulates totals across multiple workflow stages", as
   }
 });
 
+<<<<<<< HEAD
 test("workflow runner stops after a pathological nonterminal stage to force a fresh handoff", async () => {
+=======
+<<<<<<< Updated upstream
+=======
+test("workflow runner continues automatically after a high-token nonterminal stage", async () => {
+>>>>>>> e3b7ca1 (fix run blocker)
   const workspace = await setupWorkspace();
   try {
     await writePlan(workspace.root, "workflow-runner", planWith("active", "execute-plan"));
@@ -4448,11 +4460,23 @@ test("workflow runner stops after a pathological nonterminal stage to force a fr
           return { launched: true, stdout: "", stderr: "", exitCode: 0 };
         }
         codexCalls += 1;
+<<<<<<< HEAD
         await writePlan(
           workspace.root,
           "workflow-runner",
           planWith("active", "execute-plan", "\n## Latest Execution Summary\n\n* Finished one chunk.\n"),
         );
+=======
+        if (codexCalls === 1) {
+          await writePlan(
+            workspace.root,
+            "workflow-runner",
+            planWith("review", "review-plan", "\n## Latest Execution Summary\n\n* Finished one chunk.\n"),
+          );
+        } else {
+          await writePlan(workspace.root, "workflow-runner", planWith("completed", "commit-summary"));
+        }
+>>>>>>> e3b7ca1 (fix run blocker)
         return {
           launched: true,
           stdout: turnCompletedUsageDetailLine({
@@ -4468,15 +4492,26 @@ test("workflow runner stops after a pathological nonterminal stage to force a fr
     });
 
     assert.equal(result.success, true);
+<<<<<<< HEAD
     assert.equal(result.iterations, 1);
     assert.equal(codexCalls, 1);
     assert.match(result.reason, /fresh workflow runner invocation/i);
     assert.equal(output.lines.some((line) => /fresh workflow runner invocation/i.test(line)), true);
+=======
+    assert.equal(result.iterations, 3);
+    assert.equal(codexCalls, 3);
+    assert.match(result.reason, /completed \+ commit-summary finished/i);
+    assert.equal(output.lines.some((line) => /fresh workflow runner invocation/i.test(line)), false);
+>>>>>>> e3b7ca1 (fix run blocker)
   } finally {
     await workspace.cleanup();
   }
 });
 
+<<<<<<< HEAD
+=======
+>>>>>>> Stashed changes
+>>>>>>> e3b7ca1 (fix run blocker)
 test("interrupted workflow stages append partial token usage without changing exact cumulative totals", async () => {
   const workspace = await setupWorkspace();
   try {
