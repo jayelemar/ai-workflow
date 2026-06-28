@@ -72,6 +72,11 @@ Rules:
 
 .ai/specs/<spec-file>.spec.md
 
+Rules:
+
+* MUST list repo-relative `*.spec.md` path entries
+* Use `.ai/specs/` by default for ordinary feature or bug specs
+
 ---
 
 ## Phases

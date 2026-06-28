@@ -214,6 +214,9 @@ After that, STOP.
 ## INPUT
 
 Spec file:
+<repo-relative path>.spec.md
+
+Default:
 .ai/specs/<spec-file>.spec.md
 
 ---

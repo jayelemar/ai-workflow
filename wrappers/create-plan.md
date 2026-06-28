@@ -3,6 +3,9 @@
 Use: .ai/prompts/create-plan.md
 
 Spec file:
+<repo-relative path>.spec.md
+
+Default:
 .ai/specs/<feature-or-bug-name>.spec.md
 
 Objective:

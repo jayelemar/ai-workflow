@@ -33,7 +33,7 @@ Do NOT modify:
 Read:
 
 * `.codex/AGENTS.md`
-* `.ai/instructions/index.md`
+* `.ai/instructions/index.md` when it already exists
 
 When updating existing instruction content, also read:
 
@@ -43,6 +43,7 @@ When updating existing instruction content, also read:
 Rules:
 
 * treat `.ai/instructions/index.md` as the repository instruction routing entrypoint
+* if `.ai/instructions/index.md` does not exist, bootstrap it first in the same run before using it for routing
 * use the index to discover existing repo-specific area files before deciding what to create, update, or skip
 * do not assume a missing area just because it is not mentioned in `.codex/AGENTS.md`
 
@@ -103,10 +104,17 @@ If uncertain:
 Always create:
 
 ```txt
+.ai/instructions/index.md
 .ai/instructions/architecture.md
 ```
 
 Do not create a repo-specific `testing.md` when the shared baseline file already exists. Keep repo-specific validation commands in local area files instead.
+
+If `.ai/instructions/index.md` is missing, also create:
+
+```txt
+.ai/changelogs/index.changelog.md
+```
 
 ---
 
@@ -259,6 +267,25 @@ Do NOT STOP for:
 
 * missing optional areas
 * weak or incomplete patterns
+
+---
+
+## Index Bootstrap (MANDATORY)
+
+If `.ai/instructions/index.md` is missing:
+
+* CREATE `.ai/instructions/index.md` first
+* CREATE `.ai/changelogs/index.changelog.md` first
+* use the new index as the routing entrypoint for any additional instruction updates in the same run
+
+Bootstrap rules:
+
+* derive the index only from the observed repository structure and repeated path ownership patterns
+* include the standard instruction sections and version headers
+* define the smallest justified set of repo-specific routing rules
+* reference shared baseline files from the index when the repo uses them
+* do not invent area files that are not yet justified by the codebase
+* if only `architecture.md` is justified beyond the index, create only those required files
 
 ---
 

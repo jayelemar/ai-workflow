@@ -2625,11 +2625,14 @@ const planSectionLines = (content: string, heading: string): string[] => {
   return collected;
 };
 
+const repoRelativeSpecPathPattern =
+  /(^|[`(\s*-])((?!\/)(?!\.\.?\/)(?:[A-Za-z0-9._-]+\/)*[A-Za-z0-9._-]+\.spec\.md)(?=$|[`)\s])/g;
+
 const extractSpecPaths = (planContent: string): string[] => {
   const paths: string[] = [];
   for (const line of planSectionLines(planContent, '## Spec')) {
-    for (const match of line.matchAll(/\.ai\/specs\/[^\s`)]+\.spec\.md/g)) {
-      paths.push(match[0]);
+    for (const match of line.matchAll(repoRelativeSpecPathPattern)) {
+      paths.push(match[2]);
     }
   }
   return uniquePaths(paths);

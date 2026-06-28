@@ -97,7 +97,8 @@ A spec is an optional but authoritative definition of behavior.
 
 Location:
 
-.ai/specs/<feature>.spec.md
+- Default: `.ai/specs/<feature>.spec.md`
+- Allowed in plans: repo-relative `*.spec.md` paths listed under `## Spec`
 
 Rules:
 
