@@ -1,7 +1,12 @@
-# Preview Before Apply (Manual Execution)
+# Preview Before Apply (Manual Post-Plan Controller)
 
-This prompt defines an explicit manual execution path for approved plans when
-the operator wants to review non-test changes before they are written.
+This prompt defines an explicit manual post-plan path for draft, approved, or
+active plans when the operator wants preview-gated execution writes.
+
+It has two internal phases:
+
+1. draft preflight validation/fix
+2. preview-gated execution
 
 It does NOT replace the workflow runner default.
 
@@ -18,7 +23,7 @@ Read:
 * `.ai/instructions/shared/testing.md`
 * `.ai/instructions/index.md`
 * the routed domain instruction files selected from `.ai/instructions/index.md` for the current plan step's code paths
-* `.ai/specs/<feature>.spec.md` (if it exists)
+* the repo-relative `*.spec.md` path(s) listed under the plan's `## Spec` section (if any)
 * the full plan file
 
 Load:
@@ -30,7 +35,7 @@ Use superpower skills:
 * analyze
 
 Do not broadly load `.ai/instructions/**` beyond the routed files required for
-the current plan step.
+the current preflight or execution work.
 
 ---
 
@@ -54,8 +59,8 @@ This prompt is valid only when invoked explicitly as:
 Use '.ai/prompts/preview-before-apply.prompt.md'
 ```
 
-Treat this as a manual post-plan execution path. The normal default path after
-plan approval remains:
+Treat this as a manual post-plan controller. The normal default path after plan
+approval remains:
 
 ```text
 pnpm exec tsx .ai/scripts/workflow-runner.ts .ai/plans/<plan-name>.md
@@ -73,15 +78,23 @@ Read:
 
 ## Status
 
-Allowed execution states:
+Allowed entry states:
 
+* draft
 * approved
 * active
+
+IF Status == draft:
+
+* keep `Status = draft`
+* require `Next Action = plan-validator` or `Next Action = fix-plan`
+* enter the draft preflight loop
 
 IF Status == approved:
 
 * update Status → active
 * keep Next Action → execute-plan
+* enter execution in the same invocation
 
 IF Status == active:
 
@@ -89,7 +102,7 @@ IF Status == active:
 
 IF Status is any other value:
 
-→ STOP (`plan is not in an executable state`)
+→ STOP (`plan is not in a supported manual preview state`)
 
 ---
 
@@ -97,19 +110,61 @@ Read:
 
 ## Next Action
 
+IF Status == draft:
+
+Allowed:
+
+* plan-validator
+* fix-plan
+
+IF `Next Action` is any other value:
+
+→ STOP (`unexpected next action for draft preflight`)
+
+IF Status == approved or Status == active:
+
 Expected:
 
 execute-plan
 
-IF Next Action != execute-plan:
+IF `Next Action` != execute-plan:
 
 → STOP (`unexpected next action for execution`)
 
 ---
 
+## Draft Preflight Loop (MANDATORY)
+
+If the input plan is `draft`, mirror the workflow runner semantics for
+`plan-validator.md` and `fix-plan.md` until one of these terminal conditions is
+reached:
+
+* the plan becomes `approved`
+* a real blocking issue requires `STOP`
+
+Loop rules:
+
+* follow the plan's current `Status` and `Next Action` after each preflight update
+* use `plan-validator.md` only when the plan is `draft + plan-validator`
+* use `fix-plan.md` only when the plan is `draft + fix-plan`
+* apply the same spec-origin handling as the runner path:
+  * `MINOR SPEC REPAIR` may update only the exact allowed spec file and sections
+  * plan-only overreach, omissions, file-scope issues, or reusable codebase contracts should be fixed without escalating to the user
+  * `MAJOR SPEC DECISION REQUIRED`, missing user authority, or any non-fixable blocker MUST output `STOP`
+* keep validation findings, plan edits, and allowed spec repairs aligned with the latest validation artifact/history
+* once the plan becomes `approved`, continue in the same invocation by transitioning to `active + execute-plan`
+
+Preflight write rules:
+
+* plan edits made during draft preflight do NOT require a diff preview or approval gate
+* allowed spec repairs made during draft preflight do NOT require a diff preview or approval gate
+* the preview approval gate starts only when the prompt is about to write a non-test execution file
+
+---
+
 ## Step Scope (MANDATORY)
 
-Execute exactly one current plan step at a time.
+During execution, handle exactly one current plan step at a time.
 
 Rules:
 
@@ -143,6 +198,9 @@ behavior, treat it as a non-test file.
 
 ## Non-Test Write Approval Gate (MANDATORY)
 
+This gate applies only after draft preflight has finished and the plan is in
+execution.
+
 Before any write to a non-test file:
 
 1. prepare the exact patch for the current step
@@ -157,6 +215,7 @@ Rules:
 * do not treat prior approval as permission for later steps
 * if the patch changes after approval, show the new exact patch and wait again
 * if test-only edits are needed to support the preview, those may be written before approval
+* draft-preflight plan/spec edits are outside this approval gate when they follow the preflight rules above
 
 When waiting for approval, output the patch in a fenced `diff` block.
 
@@ -174,6 +233,9 @@ If the current step requires a non-test file outside that boundary:
 → require a plan update before continuing
 
 Do not silently expand plan scope during manual execution.
+
+This gate does NOT block draft-preflight edits to the plan itself or allowed
+minor spec repairs.
 
 ---
 
@@ -195,12 +257,21 @@ execution:
 
 ## Artifact Compatibility (MANDATORY)
 
-Manual execution using this prompt MUST maintain a review-compatible artifact
+Manual work using this prompt MUST maintain a review-compatible artifact
 trail under:
 
 ```text
 .ai/artifacts/<plan-name>/
 ```
+
+### Draft Preflight Responsibilities
+
+During `draft` preflight:
+
+* keep `## Validation History` current through the normal `plan-validator` / `fix-plan` loop
+* keep any allowed plan/spec repairs traceable to the latest validation findings
+* do not use the execution diff approval gate for those preflight plan/spec writes
+* refresh the workflow context snapshot after each plan update so later review-compatible stages read current state
 
 ### Execution Artifacts
 

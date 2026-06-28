@@ -11,13 +11,15 @@ Core prompts in `.ai/prompts/` define workflow behavior. Wrappers define the tex
    - Bugfix: use `.ai/wrappers/generate-bugfix-spec.md`
 2. Create a plan:
    - Use `.ai/wrappers/create-plan.md`
-3. Run the workflow runner:
+3. Use one post-plan path:
+
+Default runner path:
 
 ```bash
 pnpm exec tsx .ai/scripts/workflow-runner.ts .ai/plans/<plan-name>.md
 ```
 
-4. Or use the explicit manual approval path:
+Manual preview path:
 
 ```text
 Use '.ai/prompts/preview-before-apply.prompt.md'
@@ -25,6 +27,14 @@ Use '.ai/prompts/preview-before-apply.prompt.md'
 Plan:
 .ai/plans/<plan-name>.md
 ```
+
+Manual preview rules:
+
+- `draft` plans self-run the `plan-validator` / `fix-plan` loop until they
+  either STOP on a real blocker or become ready for execution.
+- `approved` and `active` plans enter execution immediately.
+- The non-test diff approval gate starts only when execution is about to write
+  a non-test file.
 
 Repeated review-remediation loops use the runner snapshot at `.ai/artifacts/<plan-name>/state/context.md` as the hot-path context. In particular, follow-up `execute-plan` runs should consume the snapshot's latest unresolved review findings first, while the live plan remains the source of truth for exact edits and history.
 That snapshot is intentionally compact: prefer its `## Summary`, `## Key Details`, `## Validation`, `## Review`, and `## Latest Review Remediation Context` sections before opening the full plan or event artifacts.
@@ -43,6 +53,8 @@ pnpm exec tsx .ai/scripts/workflow-runner.ts --compact .ai/plans/<plan-name>.md
   `commit-summary`.
 - `preview-before-apply` is available only through explicit prompt-file
   invocation; it is not a keyword-triggered workflow mode.
+- `preview-before-apply` is a manual post-plan controller, not an
+  execution-only helper.
 - `preview-before-apply` should keep execution/validation artifacts and the
   workflow context snapshot current if you plan to use the normal review flow
   afterward.

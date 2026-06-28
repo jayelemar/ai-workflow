@@ -32,12 +32,65 @@ Shared behavioral rules live in `.ai/AGENTS.md`. Keep `.codex/AGENTS.md` as the 
 
 Remote setup is intentionally out of scope for this local initialization. Add a remote later from inside `.ai` when the target GitHub repository is ready.
 
+## Use In Another Repo
+
+From the target repository root:
+
+1. Add this workflow repository as `.ai/`.
+
+```bash
+git clone <your-ai-workflow-repo-url> .ai
+```
+
+2. Keep `.ai/` ignored by the parent repository unless you intentionally want
+   to allowlist specific shared files.
+
+3. Add the Codex bootstrap file:
+
+```text
+.codex/AGENTS.md
+```
+
+```md
+@../.ai/AGENTS.md
+
+# Local Project Rules
+
+- Use `.ai/instructions/index.md` as the repository instruction routing entrypoint.
+- Keep project-specific instruction routing and architecture guidance in `.ai/instructions/`.
+- Treat `.ai/AGENTS.md` as the shared behavior source for projects using this workflow starter kit.
+```
+
+4. Make sure the target repository can run the runner:
+
+- Node `>=20`
+- `pnpm`
+- `tsx` available from the repo root, usually as a dev dependency
+
+Example:
+
+```bash
+pnpm add -D tsx prettier
+```
+
+5. Add your local project instruction routing:
+
+- `.ai/instructions/index.md`
+- `.ai/instructions/architecture.md` when needed
+- other project-specific `.ai/instructions/*.md` files for code ownership and architecture
+
 ## Workflow Runner
 
-Run plans from the parent repository root:
+Run the workflow runner from the parent repository root:
 
 ```bash
 pnpm exec tsx .ai/scripts/workflow-runner.ts .ai/plans/<plan-name>.md
+```
+
+Example:
+
+```bash
+pnpm exec tsx .ai/scripts/workflow-runner.ts .ai/plans/add-billing-retries.md
 ```
 
 Use quiet terminal output when the workflow is noisy:
@@ -45,6 +98,40 @@ Use quiet terminal output when the workflow is noisy:
 ```bash
 pnpm exec tsx .ai/scripts/workflow-runner.ts --compact .ai/plans/<plan-name>.md
 ```
+
+The runner expects:
+
+- the plan file to live at `.ai/plans/<plan-name>.md`
+- execution from the repository root, not from inside `.ai/`
+- a repository-local `package.json` environment where `pnpm exec tsx ...` works
+
+Typical workflow:
+
+1. Create a spec in `.ai/specs/` for ordinary feature or bug work, or use
+   another repo-relative `*.spec.md` path when a workflow companion spec fits
+   better.
+2. Create a plan in `.ai/plans/`.
+3. Choose one post-plan path:
+   - Default: run the workflow runner.
+   - Manual preview path: invoke `preview-before-apply` directly on the plan.
+4. Let the plan status and next action drive the next stage.
+
+Manual preview path:
+
+```text
+Use '.ai/prompts/preview-before-apply.prompt.md'
+
+Plan:
+.ai/plans/<plan-name>.md
+```
+
+Rules:
+
+- `draft` plans self-run the `plan-validator` / `fix-plan` loop until they are
+  ready for execution or STOP on a real blocker.
+- `approved` and `active` plans enter execution immediately.
+- The non-test diff approval gate begins only when execution is about to write
+  a non-test file.
 
 The runner writes a hot-path context snapshot for each plan:
 

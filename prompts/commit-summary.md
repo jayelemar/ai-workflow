@@ -24,7 +24,7 @@ Read:
 * `.ai/instructions/shared/workflow-state.md`
 * runner-owned context snapshot `.ai/artifacts/<plan-name>/state/context.md` as the primary current-state source
 * the full plan file only when exact plan edits are required or the snapshot is insufficient
-* `.ai/specs/<feature>.spec.md` (if exists)
+* the repo-relative `*.spec.md` path(s) listed under the plan's `## Spec` section (if any)
 
 Read the full plan only when exact plan edits are required or the snapshot is insufficient.
 Do not load full historical sections unless the snapshot is insufficient.

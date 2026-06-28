@@ -1384,7 +1384,7 @@ test("codex live output formatter groups successful shell command summaries by a
     formatCodexJsonlEventForTerminal(
       codexCommandOutputLine(
         "match\n",
-        String.raw`/bin/bash -lc "rg -n 'workflow-runner' .ai/scripts/workflow-runner.ts .ai/specs/workflow-runner.spec.md"`,
+        String.raw`/bin/bash -lc "rg -n 'workflow-runner' .ai/scripts/workflow-runner.ts .ai/scripts/workflow-runner.spec.md"`,
       ),
       { color: false },
     ),
@@ -1556,13 +1556,13 @@ test("codex live output formatter groups successful shell command summaries by a
   assert.equal(
     formatCodexJsonlEventForTerminal(
       codexCommandOutputLine(
-        ".ai/specs/workflow-runner.spec.md\n",
-        String.raw`/bin/bash -lc 'find .ai/specs -type f -maxdepth 2 2>/dev/null | sort'`,
+        ".ai/scripts/workflow-runner.spec.md\n",
+        String.raw`/bin/bash -lc "find .ai/scripts -type f -name '*.spec.md' 2>/dev/null | sort"`,
       ),
       { color: false },
     ),
     [
-      "Explore .ai/specs",
+      "Explore .ai/scripts",
       "",
       "",
     ].join("\n"),
@@ -2100,7 +2100,7 @@ test("codex live output formatter keeps every explored summary in streamed outpu
       codexCommandOutputLine("content\n", "cat .ai/prompts/review-changes.md"),
       codexCommandOutputLine(
         "match\n",
-        String.raw`/bin/bash -lc "rg -n 'workflow-runner' .ai/scripts/workflow-runner.ts .ai/specs/workflow-runner.spec.md"`,
+        String.raw`/bin/bash -lc "rg -n 'workflow-runner' .ai/scripts/workflow-runner.ts .ai/scripts/workflow-runner.spec.md"`,
       ),
     ].join("\n") + "\n",
   );
@@ -2425,7 +2425,7 @@ test("workflow prompt includes ai-workflow instructions for .ai-owned plan files
       "review",
       "review-plan",
       { modified: [".ai/prompts/create-plan.md", ".ai/scripts/workflow-runner.ts"] },
-      "## Spec\n\n* .ai/specs/workflow-runner.spec.md\n",
+      "## Spec\n\n* .ai/scripts/workflow-runner.spec.md\n",
     ),
     reviewStagingPaths: [".ai/prompts/create-plan.md", ".ai/scripts/workflow-runner.ts"],
   });
@@ -2435,6 +2435,7 @@ test("workflow prompt includes ai-workflow instructions for .ai-owned plan files
     prompt;
 
   assert.match(activeContextPacket, /\.ai\/instructions\/ai-workflow\.md/);
+  assert.match(activeContextPacket, /\.ai\/scripts\/workflow-runner\.spec\.md/);
 });
 
 test("workflow context snapshot keeps current state and latest unresolved history only", () => {
@@ -2453,7 +2454,7 @@ execute-plan
 
 ## Spec
 
-.ai/specs/workflow-runner.spec.md
+.ai/scripts/workflow-runner.spec.md
 
 ## Files (MANDATORY)
 
@@ -2554,7 +2555,7 @@ Remaining:
   assert.match(snapshot, /## Current State/);
   assert.match(snapshot, /\* Status: active/);
   assert.match(snapshot, /\* Next Action: execute-plan/);
-  assert.match(snapshot, /\.ai\/specs\/workflow-runner\.spec\.md/);
+  assert.match(snapshot, /\.ai\/scripts\/workflow-runner\.spec\.md/);
   assert.match(snapshot, /## Summary/);
   assert.match(snapshot, /## Key Details/);
   assert.match(snapshot, /## Validation/);
@@ -2654,7 +2655,7 @@ test("scope cleanup prompt references the snapshot and paths instead of inlining
     promptContent: "SCOPE CLEANUP PROMPT",
     planPath: ".ai/plans/workflow-runner.md",
     contextSnapshotPath: ".ai/artifacts/workflow-runner/state/context.md",
-    specPaths: [".ai/specs/workflow-runner.spec.md"],
+    specPaths: [".ai/scripts/workflow-runner.spec.md"],
     paths: ["src/file.ts"],
     diff: [
       "diff --git a/src/file.ts b/src/file.ts",
@@ -2671,11 +2672,31 @@ test("scope cleanup prompt references the snapshot and paths instead of inlining
   assert.match(prompt, /Plan path: \.ai\/plans\/workflow-runner\.md/);
   assert.match(prompt, /Snapshot path: \.ai\/artifacts\/workflow-runner\/state\/context\.md/);
   assert.match(prompt, /Spec paths:/);
-  assert.match(prompt, /\.ai\/specs\/workflow-runner\.spec\.md/);
+  assert.match(prompt, /\.ai\/scripts\/workflow-runner\.spec\.md/);
   assert.match(prompt, /Path-scoped staged diff:/);
   assert.match(prompt, /const remove = "no"/);
   assert.doesNotMatch(prompt, /Plan content:/);
   assert.doesNotMatch(prompt, /Spec content:/);
+});
+
+test("workflow prompt injects repo-relative spec paths outside .ai/specs", () => {
+  const prompt = generateWorkflowPrompt({
+    promptPath: ".ai/prompts/execute-plan.md",
+    planPath: ".ai/plans/workflow-runner.md",
+    promptContent: "EXECUTE PLAN PROMPT",
+    planContent: planWithFileScope(
+      "active",
+      "execute-plan",
+      { modified: [".ai/scripts/workflow-runner.ts"] },
+      "## Spec\n\n* .ai/scripts/workflow-runner.spec.md\n",
+    ),
+  });
+
+  const activeContextPacket =
+    prompt.match(/Active Context Packet:[\s\S]*?Use the Active Context Packet and index-selected instruction files only\./)?.[0] ??
+    prompt;
+
+  assert.match(activeContextPacket, /\.ai\/scripts\/workflow-runner\.spec\.md/);
 });
 
 test("workflow prompt pins superpower skills to the installed global skill root", () => {

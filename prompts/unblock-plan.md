@@ -16,7 +16,7 @@ Read:
 
 * `.codex/AGENTS.md`
 * `.ai/instructions/shared/workflow-state.md`
-* `.ai/specs/<feature>.spec.md` (if exists)
+* the repo-relative `*.spec.md` path(s) listed under the plan's `## Spec` section (if any)
 * Active Context Packet instruction files selected from `.ai/instructions/index.md`
 * the plan file
 
