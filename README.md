@@ -262,6 +262,29 @@ Common stages:
 - `reopening + reopen-plan`
 - `completed + commit-summary`
 
+Default stage routing:
+
+| Stage | Model | Reasoning |
+| --- | --- | --- |
+| `plan-validator` | `gpt-5.4` | `high` |
+| `fix-plan` | `gpt-5.4` | `medium` |
+| `execute-plan` | `gpt-5.5` | `high` |
+| `unblock-plan` | `gpt-5.4` | `medium` |
+| `review-changes` | `gpt-5.5` | `xhigh` |
+| `reopen-plan` | `gpt-5.4` | `medium` |
+| `commit-summary` | `gpt-5.3-codex-spark` | `medium` |
+| `scope-cleanup` | `gpt-5.5` | `xhigh` |
+
+Notes:
+
+- `review-changes` remains the main correctness gate, so it keeps the
+  highest-quality model and reasoning tier.
+- `commit-summary` uses `gpt-5.3-codex-spark` because it is the cheapest
+  low-risk stage: formatting the final commit subject and user-facing summary,
+  not validating implementation correctness.
+- `scope-cleanup` is not a visible workflow state, but the runner uses it
+  before review and commit-summary cleanup decisions, so it has its own routing.
+
 The runner writes a hot-path context snapshot for each plan:
 
 ```text
@@ -317,6 +340,9 @@ Runner-owned runtime files are written under the plan artifact root:
 .ai/artifacts/<plan-name>/logs/failure.jsonl
 .ai/artifacts/<plan-name>/state/context.md
 ```
+
+Token usage warnings are advisory only. They help surface oversized stages, but
+they do not stop an otherwise successful workflow stage from continuing.
 
 When the runner warns that a plan is too large, move bulky workflow detail into
 event artifacts and keep only bounded summaries plus exact `Evidence:` paths in

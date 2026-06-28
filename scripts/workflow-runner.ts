@@ -21,9 +21,33 @@ export { analyzeTokenUsageLedger } from './workflow-runner/token-ledger.ts';
 import { collectWorkflowThresholdWarnings } from './workflow-runner/token-warnings.ts';
 import { validateThinPlanContract } from './workflow-runner/thin-plan.ts';
 type CodexProfile = 'codex-work' | 'codex-personal' | 'codex-adam' | 'codex-work6598';
+type CodexModel = 'gpt-5.5' | 'gpt-5.4' | 'gpt-5.4-mini' | 'gpt-5.3-codex-spark';
 type ReasoningEffort = 'medium' | 'high' | 'xhigh';
+type CodexExecutionConfig = {
+  model: CodexModel;
+  reasoning: ReasoningEffort;
+};
 
 export const WORKFLOW_RUNNER_CODEX_PROFILE: CodexProfile = 'codex-adam' as const;
+const PLAN_VALIDATOR_PROMPT_PATH = '.ai/prompts/plan-validator.md';
+const FIX_PLAN_PROMPT_PATH = '.ai/prompts/fix-plan.md';
+const EXECUTE_PLAN_PROMPT_PATH = '.ai/prompts/execute-plan.md';
+const UNBLOCK_PLAN_PROMPT_PATH = '.ai/prompts/unblock-plan.md';
+const REVIEW_CHANGES_PROMPT_PATH = '.ai/prompts/review-changes.md';
+const REOPEN_PLAN_PROMPT_PATH = '.ai/prompts/reopen-plan.md';
+const COMMIT_SUMMARY_PROMPT_PATH = '.ai/prompts/commit-summary.md';
+const SCOPE_CLEANUP_PROMPT_PATH = '.ai/prompts/scope-cleanup.md';
+
+const PROMPT_CODEX_EXECUTION_OVERRIDES: Record<string, CodexExecutionConfig> = {
+  [PLAN_VALIDATOR_PROMPT_PATH]: { model: 'gpt-5.4', reasoning: 'high' },
+  [FIX_PLAN_PROMPT_PATH]: { model: 'gpt-5.4', reasoning: 'medium' },
+  [EXECUTE_PLAN_PROMPT_PATH]: { model: 'gpt-5.5', reasoning: 'high' },
+  [UNBLOCK_PLAN_PROMPT_PATH]: { model: 'gpt-5.4', reasoning: 'medium' },
+  [REVIEW_CHANGES_PROMPT_PATH]: { model: 'gpt-5.5', reasoning: 'xhigh' },
+  [REOPEN_PLAN_PROMPT_PATH]: { model: 'gpt-5.4', reasoning: 'medium' },
+  [COMMIT_SUMMARY_PROMPT_PATH]: { model: 'gpt-5.3-codex-spark', reasoning: 'medium' },
+  [SCOPE_CLEANUP_PROMPT_PATH]: { model: 'gpt-5.5', reasoning: 'xhigh' },
+};
 
 const VALID_STATUSES = [
   'draft',
@@ -45,10 +69,6 @@ const VALID_NEXT_ACTIONS = [
   'commit-summary',
 ] as const;
 const MAX_ITERATIONS = 100;
-const CODEX_MODEL = 'gpt-5.5';
-const DEFAULT_REASONING: ReasoningEffort = 'medium';
-const HIGH_REASONING: ReasoningEffort = 'high';
-const REVIEW_REASONING: ReasoningEffort = 'xhigh';
 const CODEX_WORK_COMMAND = WORKFLOW_RUNNER_CODEX_PROFILE;
 const CODEX_BINARY_COMMAND = 'codex';
 const CODEX_HOME_DIRECTORY = `.${WORKFLOW_RUNNER_CODEX_PROFILE}`;
@@ -56,7 +76,6 @@ const CODEX_EXEC_LABEL = `${CODEX_WORK_COMMAND} exec`;
 const CODEX_WORK_NODE_VERSION = 'v20.20.2';
 const SUPERPOWER_SKILL_ROOT = path.join(homedir(), '.agents', 'skills');
 const SHARED_SKILL_ROOT = path.join(homedir(), '.codex-shared', 'skills');
-const SCOPE_CLEANUP_PROMPT_PATH = '.ai/prompts/scope-cleanup.md';
 const TERMINAL_FAILED_COMMAND_OUTPUT_LINE_LIMIT = 4;
 const TERMINAL_FAILED_COMMAND_OUTPUT_CHAR_LIMIT = 1000;
 const TERMINAL_FILE_DETAIL_LIMIT = 3;
@@ -244,6 +263,7 @@ type WorkflowContextSnapshotTokenUsage = {
 };
 
 type WorkflowContextSnapshotResult = {
+  ok: true;
   snapshotPath: string;
 };
 
@@ -1416,18 +1436,6 @@ const compactReviewIssueText = (severity: string, text: string): string => {
   return sentenceWithPeriod(withoutExample);
 };
 
-const reviewIssueLocations = (text: string): string[] => {
-  const locations: string[] = [];
-  for (const match of text.matchAll(/\[[^\]]+\]\(([^)]+):(\d+)\)/g)) {
-    const targetPath = match[1];
-    const lineNumber = match[2];
-    if (targetPath && lineNumber) {
-      locations.push(`${path.basename(targetPath)}:${lineNumber}`);
-    }
-  }
-  return Array.from(new Set(locations));
-};
-
 const formatReviewIssueBullet = (severity: string, bulletLine: string): string[] => {
   const rawText = bulletLine.replace(/^[-*]\s+/, '').trim();
   const linkedIssueMatch = rawText.match(/^\[[^\]]+\]\((.+):(\d+)\):\s*(.+)$/);
@@ -1511,6 +1519,12 @@ const reviewSummaryLines = (lines: string[]): string[] => {
   return boundedSectionLines(lines, TERMINAL_FILE_DETAIL_LIMIT);
 };
 
+type WorkflowSummarySection = [heading: string, lines: string[]];
+
+const hasWorkflowSummaryLines = (section: WorkflowSummarySection): boolean => {
+  return section[1].length > 0;
+};
+
 const formatWorkflowReviewSummary = (trimmedText: string): string | null => {
   if (
     !trimmedText.includes('**Plan**') ||
@@ -1522,15 +1536,16 @@ const formatWorkflowReviewSummary = (trimmedText: string): string | null => {
   }
 
   const sections = parseWorkflowSections(trimmedText, workflowSummarySectionHeading);
-  const outputSections: Array<[string, string[]]> = [
+  const outputSections: WorkflowSummarySection[] = [
     ['Plan', reviewPlanLine(sections.get('Plan') ?? [])],
     ['Summary', reviewSummaryLines(sections.get('Summary') ?? [])],
     ['Issues', formatReviewIssues(sections.get('Issues') ?? [])],
     ['Final Verdict', trimBlankLines(sections.get('Final Verdict') ?? [])],
     ['Next', nextSectionLines(sections.get('Next') ?? [])],
-  ].filter(([, lines]) => lines.length > 0);
+  ];
 
   return outputSections
+    .filter(hasWorkflowSummaryLines)
     .flatMap(([heading, lines], index) => [...(index > 0 ? [''] : []), `**${heading}**`, ...lines])
     .join('\n')
     .trimEnd();
@@ -1565,15 +1580,16 @@ const formatWorkflowSharedSummary = (trimmedText: string): string | null => {
 
   const sections = parseWorkflowSections(trimmedText, workflowSummarySectionHeading);
   const validationLines = trimBlankLines(sections.get('Validation') ?? []).map(compactWorkflowValidationLine);
-  const outputSections: Array<[string, string[]]> = [
+  const outputSections: WorkflowSummarySection[] = [
     ['Plan', trimBlankLines(sections.get('Plan') ?? [])],
     ['Summary', boundedSectionLines(sections.get('Summary') ?? [], TERMINAL_FILE_DETAIL_LIMIT + 1)],
     ['Key Details', formatSharedKeyDetails(sections.get('Key Details') ?? [])],
     ['Validation', validationLines],
     ['Next', nextSectionLines(sections.get('Next') ?? [])],
-  ].filter(([, lines]) => lines.length > 0);
+  ];
 
   return outputSections
+    .filter(hasWorkflowSummaryLines)
     .flatMap(([heading, lines], index) => [...(index > 0 ? [''] : []), `**${heading}**`, ...lines])
     .join('\n')
     .trimEnd();
@@ -2554,33 +2570,26 @@ const parseScopeCleanupDecision = (stdout: string): ScopeCleanupDecision | undef
 export const codexOutputContainsStop = (stdout: string, stderr: string): boolean =>
   codexOutputStopReason(stdout, stderr) !== undefined;
 
-const PROMPT_REASONING_OVERRIDES: Record<string, ReasoningEffort> = {
-  [rel('.ai', 'prompts', 'plan-validator.md')]: HIGH_REASONING,
-  [rel('.ai', 'prompts', 'execute-plan.md')]: HIGH_REASONING,
-  [rel('.ai', 'prompts', 'review-changes.md')]: REVIEW_REASONING,
-  [SCOPE_CLEANUP_PROMPT_PATH]: REVIEW_REASONING,
+export const codexExecutionConfig = (promptPath: string): CodexExecutionConfig => {
+  const config = PROMPT_CODEX_EXECUTION_OVERRIDES[promptPath];
+  if (!config) {
+    throw new Error(`workflow runner codex config missing for prompt: ${promptPath}`);
+  }
+  return config;
 };
 
-const reasoningForPrompt = (promptPath: string): ReasoningEffort =>
-  PROMPT_REASONING_OVERRIDES[promptPath] ?? DEFAULT_REASONING;
-
-const codexExecutionConfig = (promptPath: string) => ({
-  model: CODEX_MODEL,
-  reasoning: reasoningForPrompt(promptPath),
-});
-
 const promptRoutes: Record<string, string> = {
-  'draft|plan-validator': rel('.ai', 'prompts', 'plan-validator.md'),
-  'draft|fix-plan': rel('.ai', 'prompts', 'fix-plan.md'),
-  'approved|execute-plan': rel('.ai', 'prompts', 'execute-plan.md'),
-  'active|execute-plan': rel('.ai', 'prompts', 'execute-plan.md'),
-  'blocked|execute-plan': rel('.ai', 'prompts', 'unblock-plan.md'),
-  'blocked|unblock-plan': rel('.ai', 'prompts', 'unblock-plan.md'),
-  'review|review-plan': rel('.ai', 'prompts', 'review-changes.md'),
-  'deployment-validation|commit-summary': rel('.ai', 'prompts', 'commit-summary.md'),
-  'deployment-validation|unblock-plan': rel('.ai', 'prompts', 'unblock-plan.md'),
-  'reopening|reopen-plan': rel('.ai', 'prompts', 'reopen-plan.md'),
-  'completed|commit-summary': rel('.ai', 'prompts', 'commit-summary.md'),
+  'draft|plan-validator': PLAN_VALIDATOR_PROMPT_PATH,
+  'draft|fix-plan': FIX_PLAN_PROMPT_PATH,
+  'approved|execute-plan': EXECUTE_PLAN_PROMPT_PATH,
+  'active|execute-plan': EXECUTE_PLAN_PROMPT_PATH,
+  'blocked|execute-plan': UNBLOCK_PLAN_PROMPT_PATH,
+  'blocked|unblock-plan': UNBLOCK_PLAN_PROMPT_PATH,
+  'review|review-plan': REVIEW_CHANGES_PROMPT_PATH,
+  'deployment-validation|commit-summary': COMMIT_SUMMARY_PROMPT_PATH,
+  'deployment-validation|unblock-plan': UNBLOCK_PLAN_PROMPT_PATH,
+  'reopening|reopen-plan': REOPEN_PLAN_PROMPT_PATH,
+  'completed|commit-summary': COMMIT_SUMMARY_PROMPT_PATH,
 };
 
 const promptActionLabels: Record<string, string> = {
@@ -3552,7 +3561,7 @@ const writeWorkflowContextSnapshot = async ({
       recursive: true,
     });
     await writeFile(workflowContextSnapshotAbsolutePath(rootDir, plan.planName), snapshot, 'utf8');
-    return { snapshotPath };
+    return { ok: true, snapshotPath };
   } catch (error) {
     return {
       ok: false,
@@ -4265,15 +4274,16 @@ const runScopeCleanupForPaths = async ({
     diff,
     mode,
   });
+  const executionConfig = codexExecutionConfig(SCOPE_CLEANUP_PROMPT_PATH);
   const result = await processRunner({
     command: CODEX_WORK_COMMAND,
     args: [
       'exec',
       '--json',
       '--model',
-      CODEX_MODEL,
+      executionConfig.model,
       '-c',
-      `model_reasoning_effort="${reasoningForPrompt(SCOPE_CLEANUP_PROMPT_PATH)}"`,
+      `model_reasoning_effort="${executionConfig.reasoning}"`,
       cleanupPrompt,
     ],
     cwd: rootDir,
@@ -4864,9 +4874,6 @@ export const runWorkflowRunner = async (
       logger.error(`WARNING: ${warning}`);
     }
   };
-  const isPathologicalStageWarning = (warning: string): boolean =>
-    warning.startsWith('Latest stage total input tokens are ') ||
-    warning.startsWith('Latest stage uncached input tokens are ');
   const currentInterruptSignal = (): NodeJS.Signals | undefined => {
     const explicitSignal = options.interruptSignal?.();
     if (explicitSignal) {
@@ -4981,23 +4988,24 @@ export const runWorkflowRunner = async (
     return failure(finalReason, completedIterations);
   };
 
-  let parsed = await parsePlan({ planName: planArgument, rootDir });
-  if (!parsed.ok) {
-    return await finishFailure(parsed.reason);
+  const initialParsedPlan = await parsePlan({ planName: planArgument, rootDir });
+  if (!initialParsedPlan.ok) {
+    return await finishFailure(initialParsedPlan.reason);
   }
-  tokenUsageTotals = await readTokenUsageTotals(rootDir, parsed.planName);
+  let parsedPlan: ParsedPlan = initialParsedPlan;
+  tokenUsageTotals = await readTokenUsageTotals(rootDir, parsedPlan.planName);
   const syncWorkflowSnapshot = async (
     plan: ParsedPlan,
   ): Promise<WorkflowContextSnapshotResult | Failure> => {
     const snapshotResult = await writeWorkflowContextSnapshot({ rootDir, plan });
-    if ('ok' in snapshotResult && snapshotResult.ok === false) {
+    if (!snapshotResult.ok) {
       return snapshotResult;
     }
     return snapshotResult;
   };
 
   while (true) {
-    const route = routeFor(parsed.status, parsed.nextAction);
+    const route = routeFor(parsedPlan.status, parsedPlan.nextAction);
     if (!route.executable) {
       return await finishFailure(route.reason);
     }
@@ -5013,13 +5021,13 @@ export const runWorkflowRunner = async (
       const failureMetadata = classifyFailureForLog(reason);
       const failureDebugResult = await appendFailureDebugLedger(
         rootDir,
-        parsed.planName,
+        parsedPlan.planName,
         createWorkflowFailureDebugRecord({
           timestamp: logTimestamp,
           iteration: nextIteration,
-          planPath: parsed.planPath,
-          status: parsed.status,
-          nextAction: parsed.nextAction,
+          planPath: parsedPlan.planPath,
+          status: parsedPlan.status,
+          nextAction: parsedPlan.nextAction,
           promptPath: route.promptPath,
           result: 'not-launched',
           exitCode: undefined,
@@ -5034,13 +5042,13 @@ export const runWorkflowRunner = async (
       }
       const logResult = await appendLog(
         rootDir,
-        parsed.planName,
+        parsedPlan.planName,
         logFields({
           timestamp: logTimestamp,
           iteration: nextIteration,
-          planPath: parsed.planPath,
-          status: parsed.status,
-          nextAction: parsed.nextAction,
+          planPath: parsedPlan.planPath,
+          status: parsedPlan.status,
+          nextAction: parsedPlan.nextAction,
           promptPath: route.promptPath,
           model: executionConfig.model,
           reasoning: executionConfig.reasoning,
@@ -5058,7 +5066,7 @@ export const runWorkflowRunner = async (
       if (!logResult.ok) {
         return await finishFailure(logResult.reason);
       }
-      markWorkflowLogCreated(parsed.planName);
+      markWorkflowLogCreated(parsedPlan.planName);
       return await finishFailure(reason);
     }
 
@@ -5088,7 +5096,7 @@ export const runWorkflowRunner = async (
     if (route.promptPath === rel('.ai', 'prompts', 'execute-plan.md')) {
       const ownershipPaths = await parseWorkflowFileOwnershipPaths(
         rootDir,
-        parsed.content,
+        parsedPlan.content,
         options.isIgnored,
       );
       if (!ownershipPaths.ok) {
@@ -5098,7 +5106,7 @@ export const runWorkflowRunner = async (
       }
       const acquired = await acquireWorkflowFileOwnershipForPaths({
         rootDir,
-        planPath: parsed.planPath,
+        planPath: parsedPlan.planPath,
         paths: ownershipPaths.paths,
         heldLockPaths: heldWorkflowFileLockPaths,
         now: timestamp,
@@ -5109,7 +5117,7 @@ export const runWorkflowRunner = async (
     }
     if (route.promptPath === rel('.ai', 'prompts', 'review-changes.md')) {
       const parsedPaths = await parseReviewStagingPaths({
-        content: parsed.content,
+        content: parsedPlan.content,
         rootDir,
         isIgnored: options.isIgnored ?? ((relativePath) => defaultIsIgnored(rootDir, relativePath)),
       });
@@ -5119,13 +5127,13 @@ export const runWorkflowRunner = async (
         const failureMetadata = classifyFailureForLog(parsedPaths.reason);
         const failureDebugResult = await appendFailureDebugLedger(
           rootDir,
-          parsed.planName,
+          parsedPlan.planName,
           createWorkflowFailureDebugRecord({
             timestamp: logTimestamp,
             iteration: nextIteration,
-            planPath: parsed.planPath,
-            status: parsed.status,
-            nextAction: parsed.nextAction,
+            planPath: parsedPlan.planPath,
+            status: parsedPlan.status,
+            nextAction: parsedPlan.nextAction,
             promptPath: route.promptPath,
             result: 'not-launched',
             exitCode: undefined,
@@ -5140,13 +5148,13 @@ export const runWorkflowRunner = async (
         }
         const logResult = await appendLog(
           rootDir,
-          parsed.planName,
+          parsedPlan.planName,
           logFields({
             timestamp: logTimestamp,
             iteration: nextIteration,
-            planPath: parsed.planPath,
-            status: parsed.status,
-            nextAction: parsed.nextAction,
+            planPath: parsedPlan.planPath,
+            status: parsedPlan.status,
+            nextAction: parsedPlan.nextAction,
             promptPath: route.promptPath,
             model: executionConfig.model,
             reasoning: executionConfig.reasoning,
@@ -5164,12 +5172,12 @@ export const runWorkflowRunner = async (
         if (!logResult.ok) {
           return await finishFailure(logResult.reason);
         }
-        markWorkflowLogCreated(parsed.planName);
+        markWorkflowLogCreated(parsedPlan.planName);
         return await finishFailure(parsedPaths.reason);
       }
       const acquired = await acquireWorkflowFileOwnershipForPaths({
         rootDir,
-        planPath: parsed.planPath,
+        planPath: parsedPlan.planPath,
         paths: parsedPaths.paths,
         heldLockPaths: heldWorkflowFileLockPaths,
         now: timestamp,
@@ -5186,13 +5194,13 @@ export const runWorkflowRunner = async (
         const failureMetadata = classifyFailureForLog(stopReason);
         const failureDebugResult = await appendFailureDebugLedger(
           rootDir,
-          parsed.planName,
+          parsedPlan.planName,
           createWorkflowFailureDebugRecord({
             timestamp: logTimestamp,
             iteration: nextIteration,
-            planPath: parsed.planPath,
-            status: parsed.status,
-            nextAction: parsed.nextAction,
+            planPath: parsedPlan.planPath,
+            status: parsedPlan.status,
+            nextAction: parsedPlan.nextAction,
             promptPath: route.promptPath,
             result: staged.staging ? 'staging-failed' : 'not-launched',
             exitCode: undefined,
@@ -5209,13 +5217,13 @@ export const runWorkflowRunner = async (
         }
         const logResult = await appendLog(
           rootDir,
-          parsed.planName,
+          parsedPlan.planName,
           logFields({
             timestamp: logTimestamp,
             iteration: nextIteration,
-            planPath: parsed.planPath,
-            status: parsed.status,
-            nextAction: parsed.nextAction,
+            planPath: parsedPlan.planPath,
+            status: parsedPlan.status,
+            nextAction: parsedPlan.nextAction,
             promptPath: route.promptPath,
             model: executionConfig.model,
             reasoning: executionConfig.reasoning,
@@ -5234,13 +5242,13 @@ export const runWorkflowRunner = async (
         if (!logResult.ok) {
           return await finishFailure(logResult.reason);
         }
-        markWorkflowLogCreated(parsed.planName);
+        markWorkflowLogCreated(parsedPlan.planName);
         return await finishFailure(stopReason);
       }
       await runScopeCleanupForPaths({
         rootDir,
-        planPath: parsed.planPath,
-        planContent: parsed.content,
+        planPath: parsedPlan.planPath,
+        planContent: parsedPlan.content,
         paths: staged.paths,
         processRunner,
         mode: 'review',
@@ -5249,14 +5257,14 @@ export const runWorkflowRunner = async (
       reviewStagingPaths = staged.paths;
     }
     if (route.promptPath === rel('.ai', 'prompts', 'commit-summary.md')) {
-      const parsedPaths = await parseCommitSummaryPaths(rootDir, parsed.content, options.isIgnored);
+      const parsedPaths = await parseCommitSummaryPaths(rootDir, parsedPlan.content, options.isIgnored);
       if (!parsedPaths.ok) {
         return await finishFailure(`commit summary file scope invalid: ${parsedPaths.reason}`);
       }
       commitSummaryPaths = parsedPaths.paths;
       const acquired = await acquireWorkflowFileOwnershipForPaths({
         rootDir,
-        planPath: parsed.planPath,
+        planPath: parsedPlan.planPath,
         paths: commitSummaryPaths,
         heldLockPaths: heldWorkflowFileLockPaths,
         now: timestamp,
@@ -5271,28 +5279,28 @@ export const runWorkflowRunner = async (
       formatWorkflowProgressLine({
         iteration: iterations,
         maxIterations: MAX_ITERATIONS,
-        status: parsed.status,
-        nextAction: parsed.nextAction,
+        status: parsedPlan.status,
+        nextAction: parsedPlan.nextAction,
         promptPath: route.promptPath,
         reasoning: executionConfig.reasoning,
         color: colorOutput,
       }),
     );
-    const contextSnapshot = await syncWorkflowSnapshot(parsed);
-    if ('ok' in contextSnapshot && contextSnapshot.ok === false) {
+    const contextSnapshot = await syncWorkflowSnapshot(parsedPlan);
+    if (!contextSnapshot.ok) {
       return await finishFailure(contextSnapshot.reason);
     }
     const generatedPrompt = generateWorkflowPrompt({
       promptPath: route.promptPath,
-      planPath: parsed.planPath,
+      planPath: parsedPlan.planPath,
       promptContent: prompt.content,
-      planContent: parsed.content,
+      planContent: parsedPlan.content,
       contextSnapshotPath: contextSnapshot.snapshotPath,
       reviewStagingPaths,
       commitSummaryPaths,
       unblockNote,
     });
-    const editedSummaryPaths = await parseEditedFileSummaryPaths(rootDir, parsed.content);
+    const editedSummaryPaths = await parseEditedFileSummaryPaths(rootDir, parsedPlan.content);
     const editedFileSnapshot = await readEditedFileSnapshot(rootDir, editedSummaryPaths);
     const waitNotice = createWorkflowWaitNotice({
       outputStream,
@@ -5362,7 +5370,6 @@ export const runWorkflowRunner = async (
     }
     liveOutput?.flush();
 
-    let latestIterationThresholdWarnings: string[] = [];
     let stopReason: string | undefined;
     const interruptSignal =
       currentInterruptSignal() ??
@@ -5386,17 +5393,16 @@ export const runWorkflowRunner = async (
       const logTimestamp = timestamp();
       const tokenUsage = parseCodexTokenUsage(result.stdout);
       const thresholdWarnings = collectWorkflowThresholdWarnings({
-        planByteSize: Buffer.byteLength((endingPlan ?? parsed).content, 'utf8'),
+        planByteSize: Buffer.byteLength((endingPlan ?? parsedPlan).content, 'utf8'),
         latestTokenUsage: {
           stageInputTokens: tokenUsage.inputTokens,
-          stageCachedInputTokens: tokenUsage.cachedInputTokens,
           stageUncachedInputTokens: tokenUsage.uncachedInputTokens,
           stageOutputTokens: tokenUsage.outputTokens,
           stageReasoningOutputTokens: tokenUsage.reasoningOutputTokens,
           stageTotalTokens: tokenUsage.totalTokens,
         },
       });
-      latestIterationThresholdWarnings = thresholdWarnings;
+      emitWorkflowThresholdWarnings(thresholdWarnings);
       const failureMetadata = iterationStopReason
         ? classifyFailureForLog(iterationStopReason)
         : undefined;
@@ -5405,13 +5411,13 @@ export const runWorkflowRunner = async (
       if (iterationStopReason && failureMetadata) {
         const failureDebugResult = await appendFailureDebugLedger(
           rootDir,
-          parsed.planName,
+          parsedPlan.planName,
           createWorkflowFailureDebugRecord({
             timestamp: logTimestamp,
             iteration: iterations,
-            planPath: parsed.planPath,
-            status: parsed.status,
-            nextAction: parsed.nextAction,
+            planPath: parsedPlan.planPath,
+            status: parsedPlan.status,
+            nextAction: parsedPlan.nextAction,
             promptPath: route.promptPath,
             result: result.launched ? 'launched' : 'launch-failed',
             exitCode: result.launched ? result.exitCode : undefined,
@@ -5431,13 +5437,13 @@ export const runWorkflowRunner = async (
 
       const logResult = await appendLog(
         rootDir,
-        parsed.planName,
+        parsedPlan.planName,
         logFields({
           timestamp: logTimestamp,
           iteration: iterations,
-          planPath: parsed.planPath,
-          status: parsed.status,
-          nextAction: parsed.nextAction,
+          planPath: parsedPlan.planPath,
+          status: parsedPlan.status,
+          nextAction: parsedPlan.nextAction,
           promptPath: route.promptPath,
           model: executionConfig.model,
           reasoning: executionConfig.reasoning,
@@ -5455,7 +5461,7 @@ export const runWorkflowRunner = async (
         }),
       );
       if (logResult.ok) {
-        markWorkflowLogCreated(parsed.planName);
+        markWorkflowLogCreated(parsedPlan.planName);
       }
       if (!logResult.ok || !result.launched) {
         return logResult;
@@ -5467,12 +5473,12 @@ export const runWorkflowRunner = async (
         : iterationStopReason
           ? 'failed'
           : 'success';
-      const ledgerResultValue = await appendTokenUsageLedger(rootDir, parsed.planName, {
+      const ledgerResultValue = await appendTokenUsageLedger(rootDir, parsedPlan.planName, {
         timestamp: timestamp(),
         iteration: iterations,
-        planPath: parsed.planPath,
-        startingStatus: parsed.status,
-        startingNextAction: parsed.nextAction,
+        planPath: parsedPlan.planPath,
+        startingStatus: parsedPlan.status,
+        startingNextAction: parsedPlan.nextAction,
         promptPath: route.promptPath,
         endingStatus: endingPlan?.status,
         endingNextAction: endingPlan?.nextAction,
@@ -5493,7 +5499,7 @@ export const runWorkflowRunner = async (
         ...tokenUsageTotals,
       });
       if (ledgerResultValue.ok) {
-        markTokenUsageLogCreated(parsed.planName);
+        markTokenUsageLogCreated(parsedPlan.planName);
       }
       return ledgerResultValue;
     };
@@ -5505,8 +5511,8 @@ export const runWorkflowRunner = async (
       if (!logResult.ok) {
         return await finishFailure(logResult.reason);
       }
-      const snapshotResult = await syncWorkflowSnapshot(parsed);
-      if ('ok' in snapshotResult && snapshotResult.ok === false) {
+      const snapshotResult = await syncWorkflowSnapshot(parsedPlan);
+      if (!snapshotResult.ok) {
         return await finishFailure(snapshotResult.reason);
       }
       return await finishFailure(
@@ -5527,8 +5533,8 @@ export const runWorkflowRunner = async (
         if (!logResult.ok) {
           return await finishFailure(logResult.reason);
         }
-        const snapshotResult = await syncWorkflowSnapshot(parsed);
-        if ('ok' in snapshotResult && snapshotResult.ok === false) {
+        const snapshotResult = await syncWorkflowSnapshot(parsedPlan);
+        if (!snapshotResult.ok) {
           return await finishFailure(snapshotResult.reason);
         }
         return await finishFailure(cleanCheck.reason);
@@ -5537,15 +5543,15 @@ export const runWorkflowRunner = async (
       if (!logResult.ok) {
         return await finishFailure(logResult.reason);
       }
-      const snapshotResult = await syncWorkflowSnapshot(parsed);
-      if ('ok' in snapshotResult && snapshotResult.ok === false) {
+      const snapshotResult = await syncWorkflowSnapshot(parsedPlan);
+      if (!snapshotResult.ok) {
         return await finishFailure(snapshotResult.reason);
       }
       const reason = 'completed + commit-summary finished';
       return await finishSuccess(reason, iterations);
     }
 
-    const previousContent = parsed.content;
+    const previousContent = parsedPlan.content;
     const updated = await parsePlan({ planName: planArgument, rootDir });
     if (!updated.ok) {
       const cleanup = await cleanupReviewStagingPaths(reviewStagingPaths);
@@ -5554,8 +5560,8 @@ export const runWorkflowRunner = async (
       if (!logResult.ok) {
         return await finishFailure(logResult.reason);
       }
-      const snapshotResult = await syncWorkflowSnapshot(parsed);
-      if ('ok' in snapshotResult && snapshotResult.ok === false) {
+      const snapshotResult = await syncWorkflowSnapshot(parsedPlan);
+      if (!snapshotResult.ok) {
         return await finishFailure(snapshotResult.reason);
       }
       return await finishFailure(reason);
@@ -5569,14 +5575,14 @@ export const runWorkflowRunner = async (
       if (!logResult.ok) {
         return await finishFailure(logResult.reason);
       }
-      const snapshotResult = await syncWorkflowSnapshot(parsed);
-      if ('ok' in snapshotResult && snapshotResult.ok === false) {
+      const snapshotResult = await syncWorkflowSnapshot(parsedPlan);
+      if (!snapshotResult.ok) {
         return await finishFailure(snapshotResult.reason);
       }
       return await finishFailure(reason);
     }
 
-    const transition = transitionAllowed(route.promptPath, parsed, updated);
+    const transition = transitionAllowed(route.promptPath, parsedPlan, updated);
     if (!transition.ok) {
       const cleanup = await cleanupReviewStagingPaths(reviewStagingPaths);
       const reason = cleanup.ok ? transition.reason : `${transition.reason}; ${cleanup.reason}`;
@@ -5585,7 +5591,7 @@ export const runWorkflowRunner = async (
         return await finishFailure(logResult.reason);
       }
       const snapshotResult = await syncWorkflowSnapshot(updated);
-      if ('ok' in snapshotResult && snapshotResult.ok === false) {
+      if (!snapshotResult.ok) {
         return await finishFailure(snapshotResult.reason);
       }
       return await finishFailure(reason);
@@ -5603,7 +5609,7 @@ export const runWorkflowRunner = async (
           return await finishFailure(logResult.reason);
         }
         const snapshotResult = await syncWorkflowSnapshot(updated);
-        if ('ok' in snapshotResult && snapshotResult.ok === false) {
+        if (!snapshotResult.ok) {
           return await finishFailure(snapshotResult.reason);
         }
         return await finishFailure(cleanup.reason);
@@ -5615,7 +5621,7 @@ export const runWorkflowRunner = async (
       return await finishFailure(logResult.reason);
     }
     const snapshotResult = await syncWorkflowSnapshot(updated);
-    if ('ok' in snapshotResult && snapshotResult.ok === false) {
+    if (!snapshotResult.ok) {
       return await finishFailure(snapshotResult.reason);
     }
 
@@ -5648,14 +5654,7 @@ export const runWorkflowRunner = async (
       return await finishBlocked(reason, detail, updated.planPath);
     }
 
-    if (latestIterationThresholdWarnings.some(isPathologicalStageWarning)) {
-      const reason =
-        'stopped after pathological token stage; rerun the workflow runner for a fresh workflow runner invocation';
-      logger.log(`- Fresh handoff: ${reason}`);
-      return await finishSuccess(reason, iterations);
-    }
-
-    parsed = updated;
+    parsedPlan = updated;
   }
 };
 
