@@ -6,6 +6,12 @@
 !/README.md
 
 # Allowlisted source directories
+!/changelogs/
+!/changelogs/index.changelog.md
+!/changelogs/security.changelog.md
+!/instructions/
+!/instructions/index.instructions.md
+!/instructions/security.instructions.md
 !/prompts/
 !/prompts/**
 !/scripts/
@@ -17,8 +23,6 @@
 
 # Dynamic/local-only workflow data
 /artifacts/
-/changelogs/
-/instructions/
 /logs/
 /plans/
 /specs/

@@ -655,12 +655,12 @@ test("fix-review prompt requires concise corrective plan updates", async () => {
 test("review-changes prompt loads testing instructions before validation", async () => {
   const prompt = await readWorkflowPrompt("review-changes.md");
 
-  assert.match(prompt, /\.ai\/instructions\/testing\.instructions\.md/);
+  assert.match(prompt, /\.ai\/instructions\/testing\.md/);
   assert.match(prompt, /before running, skipping, or classifying validation/i);
 });
 
 test("testing instructions require command-level escalation for local E2E in Codex sandbox", async () => {
-  const instructions = await readInstruction("testing.instructions.md");
+  const instructions = await readInstruction("testing.md");
 
   assert.match(instructions, /Codex sandbox/i);
   assert.match(instructions, /Node\/Playwright local network/i);
@@ -1642,6 +1642,7 @@ test("codex live output formatter renders recognized vitest file runs as structu
     formatCodexJsonlEventForTerminal(
       codexCommandStartedLine(
         "wc -l .codex/AGENTS.md .ai/prompts/review-changes.md .ai/artifacts/market-research-competitor-discovery/state/context.md .ai/instructions/index.instructions.md .ai/instructions/workflow-state.instructions.md .ai/specs/market-research-competitor-discovery.spec.md .ai/instructions/architecture.instructions.md .ai/instructions/web.instructions.md .ai/instructions/backend.instructions.md .ai/instructions/testing.instructions.md .ai/plans/market-research-competitor-discovery.md",
+        "wc -l .codex/AGENTS.md .ai/prompts/review-changes.md .ai/artifacts/market-research-competitor-discovery/state/context.md .ai/instructions/index.md .ai/instructions/workflow-state.md .ai/specs/market-research-competitor-discovery.spec.md .ai/instructions/architecture.md .ai/instructions/web.md .ai/instructions/backend.md .ai/instructions/testing.md .ai/plans/market-research-competitor-discovery.md",
       ),
       { color: false },
     ),
@@ -2132,7 +2133,7 @@ test("codex live output formatter groups consecutive read summaries", () => {
   formatter.stdout(
     [
       codexCommandOutputLine("content\n", "cat .codex/AGENTS.md"),
-      codexCommandOutputLine("content\n", "cat .ai/instructions/index.instructions.md"),
+      codexCommandOutputLine("content\n", "cat .ai/instructions/index.md"),
       codexAgentMessageLine("Loaded"),
     ].join("\n") + "\n",
   );
@@ -2142,7 +2143,7 @@ test("codex live output formatter groups consecutive read summaries", () => {
     stdout,
     [
       "Read .codex/AGENTS.md",
-      "Read .ai/instructions/index.instructions.md",
+      "Read .ai/instructions/index.md",
       "",
       "[agent]",
       "Loaded",
@@ -2313,8 +2314,8 @@ test("generates manual workflow prompts for every prompt action", () => {
     assert.match(prompt, /Active Context Packet:/);
     assert.match(prompt, new RegExp(`- ${promptPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
     assert.match(prompt, /- \.ai\/artifacts\/workflow-runner\/state\/context\.md/);
-    assert.match(prompt, /- \.ai\/instructions\/index\.instructions\.md/);
-    assert.match(prompt, /- \.ai\/instructions\/workflow-state\.instructions\.md/);
+    assert.match(prompt, /- \.ai\/instructions\/index\.md/);
+    assert.match(prompt, /- \.ai\/instructions\/workflow-state\.md/);
     assert.match(prompt, new RegExp(`${action}:\\n\\.ai/plans/workflow-runner\\.md`));
     if (promptPath === ".ai/prompts/unblock-plan.md") {
       assert.match(prompt, /Unblock evidence note:\n\(none provided\)/);
@@ -2407,8 +2408,8 @@ test("workflow prompt injects active context packet with current prompt, plan, s
   assert.match(prompt, /\.ai\/prompts\/review-changes\.md/);
   assert.match(prompt, /\.ai\/artifacts\/workflow-runner\/state\/context\.md/);
   assert.doesNotMatch(activeContextPacket, /\n- \.ai\/plans\/workflow-runner\.md/);
-  assert.match(prompt, /\.ai\/instructions\/index\.instructions\.md/);
-  assert.match(prompt, /\.ai\/instructions\/workflow-state\.instructions\.md/);
+  assert.match(prompt, /\.ai\/instructions\/index\.md/);
+  assert.match(prompt, /\.ai\/instructions\/workflow-state\.md/);
   assert.match(prompt, /\.ai\/specs\/dashboard-home\.spec\.md/);
   assert.match(prompt, /Open event artifacts only when the snapshot references them and specific evidence is needed/i);
   assert.match(prompt, /Do not broadly load `\.ai\/artifacts\/\*\*`/i);
