@@ -12,6 +12,14 @@ const isFiniteNumber = (value: unknown): value is number =>
 
 const formatKilobytes = (bytes: number): string => `${(bytes / 1024).toFixed(1)} KB`;
 
+export const exceedsWorkflowTokenThresholds = (
+  latestTokenUsage?: WorkflowThresholdTokenUsage,
+): boolean =>
+  (isFiniteNumber(latestTokenUsage?.stageInputTokens) &&
+    latestTokenUsage.stageInputTokens > WORKFLOW_CONTEXT_STAGE_INPUT_WARNING_TOKENS) ||
+  (isFiniteNumber(latestTokenUsage?.stageUncachedInputTokens) &&
+    latestTokenUsage.stageUncachedInputTokens > WORKFLOW_CONTEXT_STAGE_UNCACHED_WARNING_TOKENS);
+
 export const collectWorkflowThresholdWarnings = ({
   planByteSize,
   latestTokenUsage,
@@ -33,7 +41,7 @@ export const collectWorkflowThresholdWarnings = ({
     latestTokenUsage.stageInputTokens > WORKFLOW_CONTEXT_STAGE_INPUT_WARNING_TOKENS
   ) {
     warnings.push(
-      `Stage input tokens were ${latestTokenUsage.stageInputTokens.toLocaleString('en-US')} (> 2,000,000). Review .ai/artifacts/<plan-name>/logs/token-usage.jsonl before the next stage.`,
+      `Advisory only: stage input tokens were ${latestTokenUsage.stageInputTokens.toLocaleString('en-US')} (> 2,000,000). If the next stage is execute-plan, the runner will add stricter snapshot-first guidance.`,
     );
   }
 
@@ -42,7 +50,7 @@ export const collectWorkflowThresholdWarnings = ({
     latestTokenUsage.stageUncachedInputTokens > WORKFLOW_CONTEXT_STAGE_UNCACHED_WARNING_TOKENS
   ) {
     warnings.push(
-      `Stage uncached input tokens were ${latestTokenUsage.stageUncachedInputTokens.toLocaleString('en-US')} (> 100,000). For the next stage, use the snapshot first and open only specific event files.`,
+      `Advisory only: stage uncached input tokens were ${latestTokenUsage.stageUncachedInputTokens.toLocaleString('en-US')} (> 100,000). If the next stage is execute-plan, the runner will keep it snapshot-first with exact-file fallback.`,
     );
   }
 

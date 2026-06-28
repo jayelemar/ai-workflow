@@ -18,7 +18,10 @@ import {
   type ContextUsageLogFields,
 } from './workflow-runner/token-usage.ts';
 export { analyzeTokenUsageLedger } from './workflow-runner/token-ledger.ts';
-import { collectWorkflowThresholdWarnings } from './workflow-runner/token-warnings.ts';
+import {
+  collectWorkflowThresholdWarnings,
+  exceedsWorkflowTokenThresholds,
+} from './workflow-runner/token-warnings.ts';
 import { validateThinPlanContract } from './workflow-runner/thin-plan.ts';
 type CodexProfile = 'codex-work' | 'codex-personal' | 'codex-adam' | 'codex-work6598';
 type CodexModel = 'gpt-5.5' | 'gpt-5.4' | 'gpt-5.4-mini' | 'gpt-5.3-codex-spark';
@@ -260,6 +263,11 @@ type WorkflowContextSnapshotTokenUsage = {
   stageReasoningOutputTokens?: number | null;
   stageTotalTokens?: number | null;
   totalTokens?: number | null;
+};
+
+type ExecuteTokenGuardrail = {
+  stageInputTokens?: number | null;
+  stageUncachedInputTokens?: number | null;
 };
 
 type WorkflowContextSnapshotResult = {
@@ -3294,6 +3302,7 @@ export const generateWorkflowPrompt = ({
   reviewStagingPaths = [],
   commitSummaryPaths = [],
   unblockNote,
+  executeTokenGuardrail,
 }: {
   promptPath: string;
   planPath: string;
@@ -3303,6 +3312,7 @@ export const generateWorkflowPrompt = ({
   reviewStagingPaths?: string[];
   commitSummaryPaths?: string[];
   unblockNote?: string;
+  executeTokenGuardrail?: ExecuteTokenGuardrail;
 }): string => {
   const actionLabel = promptActionLabels[promptPath];
   if (!actionLabel) {
@@ -3352,6 +3362,17 @@ Unblock evidence note:
 ${unblockNote?.trim() ? unblockNote.trim() : '(none provided)'}
 `
       : '';
+  const executeGuardrail =
+    promptPath === rel('.ai', 'prompts', 'execute-plan.md') && executeTokenGuardrail
+      ? `
+Execute token guardrail:
+The previous stage exceeded token thresholds.
+- Use the snapshot as the default source for this run.
+- Open the full plan or event artifacts only when exact detail is required for the current task.
+- Do not broadly load \`.ai/artifacts/**\` or full historical plan sections.
+- If fallback context is needed, open only the exact plan section or exact event file needed for the current fix.
+`
+      : '';
   const subAgentGuidance = [
     rel('.ai', 'prompts', 'plan-validator.md'),
     rel('.ai', 'prompts', 'fix-plan.md'),
@@ -3375,6 +3396,7 @@ Do not read superpower skills from ${SHARED_SKILL_ROOT}; that root contains sepa
 Apply the superpowers advisory guidance for analysis and edge-case checks.${subAgentGuidance}
 
 ${activeContextPacket({ promptPath, planPath, planContent, contextSnapshotPath })}
+${executeGuardrail}
 
 ${actionLabel}:
 ${planPath}${reviewBoundary}${commitBoundary}${unblockEvidence}
@@ -3538,6 +3560,30 @@ const readLatestTokenUsage = async (
     return undefined;
   }
   return undefined;
+};
+
+const readExecuteTokenGuardrail = async ({
+  rootDir,
+  planName,
+  promptPath,
+}: {
+  rootDir: string;
+  planName: string;
+  promptPath: string;
+}): Promise<ExecuteTokenGuardrail | undefined> => {
+  if (promptPath !== EXECUTE_PLAN_PROMPT_PATH) {
+    return undefined;
+  }
+
+  const latestTokenUsage = await readLatestTokenUsage(rootDir, planName);
+  if (!exceedsWorkflowTokenThresholds(latestTokenUsage)) {
+    return undefined;
+  }
+
+  return {
+    stageInputTokens: latestTokenUsage?.stageInputTokens,
+    stageUncachedInputTokens: latestTokenUsage?.stageUncachedInputTokens,
+  };
 };
 
 const writeWorkflowContextSnapshot = async ({
@@ -5290,6 +5336,11 @@ export const runWorkflowRunner = async (
     if (!contextSnapshot.ok) {
       return await finishFailure(contextSnapshot.reason);
     }
+    const executeTokenGuardrail = await readExecuteTokenGuardrail({
+      rootDir,
+      planName: parsedPlan.planName,
+      promptPath: route.promptPath,
+    });
     const generatedPrompt = generateWorkflowPrompt({
       promptPath: route.promptPath,
       planPath: parsedPlan.planPath,
@@ -5299,6 +5350,7 @@ export const runWorkflowRunner = async (
       reviewStagingPaths,
       commitSummaryPaths,
       unblockNote,
+      executeTokenGuardrail,
     });
     const editedSummaryPaths = await parseEditedFileSummaryPaths(rootDir, parsedPlan.content);
     const editedFileSnapshot = await readEditedFileSnapshot(rootDir, editedSummaryPaths);

@@ -21,6 +21,7 @@ When resuming `active` + `execute-plan` after review feedback, use `## Latest Re
 Read the full plan only when exact plan edits are required or the snapshot is insufficient.
 Do not load `## Review History` by default; read the full plan only when exact plan edits or missing detail cannot be derived from the snapshot.
 Do not load full historical sections unless the snapshot is insufficient.
+If the runner provides an `Execute token guardrail` note for this run, treat it as mandatory context-loading discipline: stay snapshot-first, avoid broad artifact/history reads, and fall back only to the exact plan section or exact event file needed for the current fix.
 
 Load:
 
