@@ -12,7 +12,7 @@ Use it when the task is to refactor an existing page, component, module, service
 Read:
 
 * `.codex/AGENTS.md`
-* directly relevant `.ai/instructions/*`
+* directly relevant `.ai/instructions/**/*.md`
 
 before proceeding.
 
@@ -47,7 +47,7 @@ Do NOT:
 * rewrite unrelated code
 * move code across app/package boundaries without evidence and justification
 * introduce abstractions for one-off logic
-* update `.ai/instructions/*` unless reusable architecture or validation patterns changed
+* update `.ai/instructions/**/*.md` unless reusable architecture or validation patterns changed
 
 If the target is broad or ambiguous:
 

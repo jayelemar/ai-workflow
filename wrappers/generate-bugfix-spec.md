@@ -15,7 +15,7 @@ Strict Constraints:
 
 Source Material:
 - You may inspect the codebase to confirm current behavior, affected files, routes, tests, logs, and reproduction facts.
-- You may inspect `.ai/instructions/*` when relevant.
+- You may inspect `.ai/instructions/**/*.md` when relevant.
 - Exclude `.ai/artifacts` from broad searches unless reading current-plan runner evidence.
 - Do not infer desired behavior from the codebase.
 - Expected behavior must come from the user-provided details below.

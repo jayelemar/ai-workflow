@@ -2605,7 +2605,7 @@ const orderedInstructionPaths = [
   rel('.ai', 'instructions', 'ui.md'),
   rel('.ai', 'instructions', 'i18n.md'),
   rel('.ai', 'instructions', 'auth.md'),
-  rel('.ai', 'instructions', 'testing.md'),
+  rel('.ai', 'instructions', 'shared', 'testing.md'),
 ] as const;
 
 const planSectionLines = (content: string, heading: string): string[] => {
@@ -3086,7 +3086,7 @@ const selectInstructionPaths = (planContent: string): string[] => {
       /(^|\/)(jest|vitest|playwright)\.config\./i.test(filePath) ||
       /(^|\/)package\.json$/i.test(filePath)
     ) {
-      selected.add(rel('.ai', 'instructions', 'testing.md'));
+      selected.add(rel('.ai', 'instructions', 'shared', 'testing.md'));
     }
   }
 
@@ -3117,7 +3117,7 @@ const activeContextPacket = ({
     contextSnapshotPath,
     rel('.ai', 'instructions', 'index.md'),
     ...(stateMachinePromptPaths.has(promptPath)
-      ? [rel('.ai', 'instructions', 'workflow-state.md')]
+      ? [rel('.ai', 'instructions', 'shared', 'workflow-state.md')]
       : []),
     ...extractSpecPaths(planContent),
     ...selectInstructionPaths(planContent),
@@ -3127,7 +3127,7 @@ const activeContextPacket = ({
 Load exactly these warm context files:
 ${warmPaths.map((warmPath) => `- ${warmPath}`).join('\n')}
 
-Use the Active Context Packet and index-selected instruction files only. Do not broadly load \`.ai/instructions/*\`.
+Use the Active Context Packet and index-selected instruction files only. Do not broadly load \`.ai/instructions/**\`.
 
 Artifact loading rule:
 - Use ${contextSnapshotPath} first.

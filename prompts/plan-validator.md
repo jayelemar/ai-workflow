@@ -22,7 +22,7 @@ Ensure the plan is:
 Read:
 
 * `.codex/AGENTS.md`
-* `.ai/instructions/workflow-state.md`
+* `.ai/instructions/shared/workflow-state.md`
 * the plan file
 * `.ai/specs/<feature>.spec.md` (if exists)
 * relevant codebase files named by the spec or plan when contract, shape, rendering, or file-scope questions must be resolved from existing implementation evidence

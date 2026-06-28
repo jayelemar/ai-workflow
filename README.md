@@ -3,14 +3,17 @@
 This directory is a standalone Git repository for reusable AI workflow source files.
 
 Tracked workflow source:
+- `AGENTS.md`
 - `prompts/`
 - `scripts/`
 - `templates/`
 - `wrappers/`
-- `instructions/security.md`
-- `instructions/testing.md`
+- `instructions/shared/security.md`
+- `instructions/shared/testing.md`
+- `instructions/shared/workflow-state.md`
 - `changelogs/security.changelog.md`
 - `changelogs/testing.changelog.md`
+- `changelogs/workflow-state.changelog.md`
 
 Local-only directories that are intentionally excluded:
 - `artifacts/`
@@ -20,11 +23,12 @@ Local-only directories that are intentionally excluded:
 Local-only instruction files that remain excluded by default:
 - `instructions/index.md`
 - `instructions/architecture.md`
-- `instructions/workflow-state.md`
 - other project-specific instruction files
 - project-specific changelog files
 
 The parent repository continues to ignore `.ai/`, so this nested repository can be versioned independently without changing the main repository's tracking behavior.
+
+Shared behavioral rules live in `.ai/AGENTS.md`. Keep `.codex/AGENTS.md` as the project entrypoint that bootstraps the shared file and adds only minimal local overrides when needed.
 
 Remote setup is intentionally out of scope for this local initialization. Add a remote later from inside `.ai` when the target GitHub repository is ready.
 

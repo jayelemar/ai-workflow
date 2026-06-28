@@ -13,10 +13,12 @@ Create or update:
 
 Shared baseline exceptions:
 
-* `.ai/instructions/security.md`
-* `.ai/instructions/testing.md`
+* `.ai/instructions/shared/security.md`
+* `.ai/instructions/shared/testing.md`
+* `.ai/instructions/shared/workflow-state.md`
 * `.ai/changelogs/security.changelog.md`
 * `.ai/changelogs/testing.changelog.md`
+* `.ai/changelogs/workflow-state.changelog.md`
 
 Do NOT modify:
 
@@ -130,7 +132,7 @@ Rules:
 * patterns MUST be reusable (not one-off)
 * naming MUST reflect actual structure
 * do NOT create files based only on these examples
-* keep shared baseline files portable; do not add repository-specific paths or commands to `security.md` or `testing.md`
+* keep shared baseline files portable; do not add repository-specific paths or commands to `shared/security.md`, `shared/testing.md`, or `shared/workflow-state.md`
 
 If an example is not supported by the codebase:
 
