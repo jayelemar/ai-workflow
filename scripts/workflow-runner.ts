@@ -2586,6 +2586,34 @@ export const codexExecutionConfig = (promptPath: string): CodexExecutionConfig =
   return config;
 };
 
+const codexExecArgs = ({
+  executionConfig,
+  promptPath,
+  prompt,
+  rootDir,
+}: {
+  executionConfig: CodexExecutionConfig;
+  promptPath: string;
+  prompt: string;
+  rootDir: string;
+}): string[] => {
+  const args = [
+    'exec',
+    '--json',
+    '--model',
+    executionConfig.model,
+    '-c',
+    `model_reasoning_effort="${executionConfig.reasoning}"`,
+  ];
+
+  if (promptPath === COMMIT_SUMMARY_PROMPT_PATH) {
+    args.push('--add-dir', path.join(rootDir, '.git'));
+  }
+
+  args.push(prompt);
+  return args;
+};
+
 const promptRoutes: Record<string, string> = {
   'draft|plan-validator': PLAN_VALIDATOR_PROMPT_PATH,
   'draft|fix-plan': FIX_PLAN_PROMPT_PATH,
@@ -4323,15 +4351,12 @@ const runScopeCleanupForPaths = async ({
   const executionConfig = codexExecutionConfig(SCOPE_CLEANUP_PROMPT_PATH);
   const result = await processRunner({
     command: CODEX_WORK_COMMAND,
-    args: [
-      'exec',
-      '--json',
-      '--model',
-      executionConfig.model,
-      '-c',
-      `model_reasoning_effort="${executionConfig.reasoning}"`,
-      cleanupPrompt,
-    ],
+    args: codexExecArgs({
+      executionConfig,
+      promptPath: SCOPE_CLEANUP_PROMPT_PATH,
+      prompt: cleanupPrompt,
+      rootDir,
+    }),
     cwd: rootDir,
     input: '',
     promptPath: SCOPE_CLEANUP_PROMPT_PATH,
@@ -5381,15 +5406,12 @@ export const runWorkflowRunner = async (
     waitNotice.start();
     const result = await processRunner({
       command: CODEX_WORK_COMMAND,
-      args: [
-        'exec',
-        '--json',
-        '--model',
-        executionConfig.model,
-        '-c',
-        `model_reasoning_effort="${executionConfig.reasoning}"`,
-        generatedPrompt,
-      ],
+      args: codexExecArgs({
+        executionConfig,
+        promptPath: route.promptPath,
+        prompt: generatedPrompt,
+        rootDir,
+      }),
       cwd: rootDir,
       input: '',
       promptPath: route.promptPath,

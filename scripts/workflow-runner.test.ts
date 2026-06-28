@@ -4258,13 +4258,49 @@ test(`${CODEX_EXEC_LABEL} uses prompt-tier model and reasoning policy`, async ()
       /git diff --staged --name-status -- \.ai\/scripts\/workflow-runner\.test\.ts \.ai\/scripts\/workflow-runner\.ts/,
     );
     assert.match(codexCalls[1].args[6], /^Use \.ai\/prompts\/review-changes\.md/);
-    assert.match(codexCalls[2].args[6], /^Use \.ai\/prompts\/commit-summary\.md/);
+    assert.equal(codexCalls[2].args.includes("--add-dir"), true);
+    assert.equal(codexCalls[2].args.includes(join(workspace.root, ".git")), true);
+    assert.match(codexCalls[2].args.at(-1) ?? "", /^Use \.ai\/prompts\/commit-summary\.md/);
 
     const log = await readFile(join(workspace.root, ".ai", "artifacts", "workflow-runner", "logs", "runner.log"), "utf8");
     assert.match(log, /model: gpt-5\.5/);
     assert.match(log, /model: gpt-5\.3-codex-spark/);
     assert.match(log, /reasoning: xhigh/);
     assert.match(log, /reasoning: medium/);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test(`${CODEX_EXEC_LABEL} grants commit-summary explicit write access to .git`, async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(workspace.root, "workflow-runner", planWith("review", "review-plan"));
+    const calls: Parameters<ProcessRunner>[0][] = [];
+    const result = await runWorkflowRunner({
+      planName: planArg("workflow-runner"),
+      rootDir: workspace.root,
+      processRunner: runnerReturning(
+        { launched: true, stdout: "ok", stderr: "", exitCode: 0 },
+        (call) => {
+          calls.push(call);
+          if (call.command === CODEX_COMMAND && call.promptPath === ".ai/prompts/review-changes.md") {
+            writeFileSync(
+              join(workspace.root, ".ai", "plans", "workflow-runner.md"),
+              planWith("completed", "commit-summary"),
+            );
+          }
+        },
+      ),
+    });
+
+    assert.equal(result.success, true);
+    const commitSummaryCall = calls.find(
+      (call) => call.command === CODEX_COMMAND && call.promptPath === ".ai/prompts/commit-summary.md",
+    );
+    assert.ok(commitSummaryCall);
+    assert.equal(commitSummaryCall.args.includes("--add-dir"), true);
+    assert.equal(commitSummaryCall.args.includes(join(workspace.root, ".git")), true);
   } finally {
     await workspace.cleanup();
   }

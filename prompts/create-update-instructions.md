@@ -39,6 +39,7 @@ When updating existing instruction content, also read:
 
 * the matching existing `.ai/instructions/*.md` files selected by `.ai/instructions/index.md`
 * the matching existing `.ai/changelogs/*.changelog.md` files
+* shared baseline instruction files named by `.ai/instructions/index.md`, including `.ai/instructions/shared/security.md` when routed for the task
 
 Rules:
 
@@ -153,6 +154,7 @@ Rules:
 * naming MUST reflect actual structure
 * do NOT create files based only on these examples
 * keep shared baseline files portable; do not add repository-specific paths or commands to `shared/security.md`, `shared/testing.md`, or `shared/workflow-state.md`
+* keep `.ai/instructions/index.md` aligned with shared baseline files that must always load or be explicitly routed, including `shared/security.md` when the repository wants a security baseline in normal instruction selection
 
 If an example is not supported by the codebase:
 
