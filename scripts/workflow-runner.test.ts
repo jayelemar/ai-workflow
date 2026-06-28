@@ -533,7 +533,7 @@ test("execute-plan prompt defers validation failures that only come from out-of-
 test("execute-plan prompt loads testing instructions before validation", async () => {
   const prompt = await readWorkflowPrompt("execute-plan.md");
 
-  assert.match(prompt, /\.ai\/instructions\/testing\.instructions\.md/);
+  assert.match(prompt, /\.ai\/instructions\/testing\.md/);
   assert.match(prompt, /before running, skipping, or classifying validation/i);
 });
 
@@ -1641,7 +1641,6 @@ test("codex live output formatter renders recognized vitest file runs as structu
   assert.equal(
     formatCodexJsonlEventForTerminal(
       codexCommandStartedLine(
-        "wc -l .codex/AGENTS.md .ai/prompts/review-changes.md .ai/artifacts/market-research-competitor-discovery/state/context.md .ai/instructions/index.instructions.md .ai/instructions/workflow-state.instructions.md .ai/specs/market-research-competitor-discovery.spec.md .ai/instructions/architecture.instructions.md .ai/instructions/web.instructions.md .ai/instructions/backend.instructions.md .ai/instructions/testing.instructions.md .ai/plans/market-research-competitor-discovery.md",
         "wc -l .codex/AGENTS.md .ai/prompts/review-changes.md .ai/artifacts/market-research-competitor-discovery/state/context.md .ai/instructions/index.md .ai/instructions/workflow-state.md .ai/specs/market-research-competitor-discovery.spec.md .ai/instructions/architecture.md .ai/instructions/web.md .ai/instructions/backend.md .ai/instructions/testing.md .ai/plans/market-research-competitor-discovery.md",
       ),
       { color: false },
@@ -2688,10 +2687,10 @@ test("workflow prompt selects area instructions from plan-owned paths", () => {
     }),
   });
 
-  assert.match(prompt, /\.ai\/instructions\/web\.instructions\.md/);
-  assert.match(prompt, /\.ai\/instructions\/supabase\.instructions\.md/);
-  assert.match(prompt, /\.ai\/instructions\/testing\.instructions\.md/);
-  assert.match(prompt, /\.ai\/instructions\/architecture\.instructions\.md/);
+  assert.match(prompt, /\.ai\/instructions\/web\.md/);
+  assert.match(prompt, /\.ai\/instructions\/supabase\.md/);
+  assert.match(prompt, /\.ai\/instructions\/testing\.md/);
+  assert.match(prompt, /\.ai\/instructions\/architecture\.md/);
 });
 
 test("review workflow prompt includes plan-scoped staged diff commands for plan-owned paths", () => {

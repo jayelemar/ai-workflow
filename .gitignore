@@ -7,11 +7,11 @@
 
 # Allowlisted source directories
 !/changelogs/
-!/changelogs/index.changelog.md
 !/changelogs/security.changelog.md
+!/changelogs/testing.changelog.md
 !/instructions/
-!/instructions/index.instructions.md
-!/instructions/security.instructions.md
+!/instructions/security.md
+!/instructions/testing.md
 !/prompts/
 !/prompts/**
 !/scripts/

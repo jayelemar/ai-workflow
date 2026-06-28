@@ -8,8 +8,15 @@ Create or update repository-specific AI instruction files based on the actual co
 
 Create or update:
 
-* `.ai/instructions/*.instructions.md`
-* `.ai/changelogs/*.changelog.md`
+* project-local `.ai/instructions/*.md`
+* project-local `.ai/changelogs/*.changelog.md`
+
+Shared baseline exceptions:
+
+* `.ai/instructions/security.md`
+* `.ai/instructions/testing.md`
+* `.ai/changelogs/security.changelog.md`
+* `.ai/changelogs/testing.changelog.md`
 
 Do NOT modify:
 
@@ -82,9 +89,10 @@ If uncertain:
 Always create:
 
 ```txt
-.ai/instructions/architecture.instructions.md
-.ai/instructions/testing.instructions.md
+.ai/instructions/architecture.md
 ```
+
+Do not create a repo-specific `testing.md` when the shared baseline file already exists. Keep repo-specific validation commands in local area files instead.
 
 ---
 
@@ -98,22 +106,22 @@ Examples:
 
 Frontend:
 
-* ui.instructions.md
-* forms.instructions.md
-* api-client.instructions.md
-* state-management.instructions.md
-* routing.instructions.md
-* styling.instructions.md
-* auth.instructions.md
+* ui.md
+* forms.md
+* api-client.md
+* state-management.md
+* routing.md
+* styling.md
+* auth.md
 
 Backend:
 
-* api.instructions.md
-* database.instructions.md
-* migrations.instructions.md
-* auth.instructions.md
-* queues.instructions.md
-* validation.instructions.md
+* api.md
+* database.md
+* migrations.md
+* auth.md
+* queues.md
+* validation.md
 
 Rules:
 
@@ -122,6 +130,7 @@ Rules:
 * patterns MUST be reusable (not one-off)
 * naming MUST reflect actual structure
 * do NOT create files based only on these examples
+* keep shared baseline files portable; do not add repository-specific paths or commands to `security.md` or `testing.md`
 
 If an example is not supported by the codebase:
 

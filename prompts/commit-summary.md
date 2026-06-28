@@ -21,7 +21,7 @@ It MUST NOT push. Auto-push is out of scope for this prompt.
 Read:
 
 * `.codex/AGENTS.md`
-* `.ai/instructions/workflow-state.instructions.md`
+* `.ai/instructions/workflow-state.md`
 * runner-owned context snapshot `.ai/artifacts/<plan-name>/state/context.md` as the primary current-state source
 * the full plan file only when exact plan edits are required or the snapshot is insufficient
 * `.ai/specs/<feature>.spec.md` (if exists)

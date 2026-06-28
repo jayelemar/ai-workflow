@@ -13,7 +13,7 @@ It does NOT perform validation.
 Read:
 
 * `.codex/AGENTS.md`
-* `.ai/instructions/workflow-state.instructions.md`
+* `.ai/instructions/workflow-state.md`
 * the plan file
 * the latest validation findings
 * `.ai/specs/<feature>.spec.md` (if exists)

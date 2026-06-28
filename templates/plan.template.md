@@ -155,7 +155,7 @@ Rules:
 
 ## Workflow State Rules
 
-See `.ai/instructions/workflow-state.instructions.md`.
+See `.ai/instructions/workflow-state.md`.
 
 Rules:
 

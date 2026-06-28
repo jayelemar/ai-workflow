@@ -19,7 +19,7 @@ Strict Constraints:
 
 Required Behavior:
 - Read `.codex/AGENTS.md`.
-- Read `.ai/instructions/workflow-state.instructions.md`.
+- Read `.ai/instructions/workflow-state.md`.
 - Read relevant `.ai/instructions/*`.
 - Read `.ai/templates/plan.template.md`.
 - Read the spec file.

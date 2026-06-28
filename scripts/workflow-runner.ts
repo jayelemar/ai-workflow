@@ -2597,15 +2597,15 @@ const promptActionLabels: Record<string, string> = {
 const stateMachinePromptPaths = new Set(Object.keys(promptActionLabels));
 
 const orderedInstructionPaths = [
-  rel('.ai', 'instructions', 'architecture.instructions.md'),
-  rel('.ai', 'instructions', 'web.instructions.md'),
-  rel('.ai', 'instructions', 'admin.instructions.md'),
-  rel('.ai', 'instructions', 'backend.instructions.md'),
-  rel('.ai', 'instructions', 'supabase.instructions.md'),
-  rel('.ai', 'instructions', 'ui.instructions.md'),
-  rel('.ai', 'instructions', 'i18n.instructions.md'),
-  rel('.ai', 'instructions', 'auth.instructions.md'),
-  rel('.ai', 'instructions', 'testing.instructions.md'),
+  rel('.ai', 'instructions', 'architecture.md'),
+  rel('.ai', 'instructions', 'web.md'),
+  rel('.ai', 'instructions', 'admin.md'),
+  rel('.ai', 'instructions', 'backend.md'),
+  rel('.ai', 'instructions', 'supabase.md'),
+  rel('.ai', 'instructions', 'ui.md'),
+  rel('.ai', 'instructions', 'i18n.md'),
+  rel('.ai', 'instructions', 'auth.md'),
+  rel('.ai', 'instructions', 'testing.md'),
 ] as const;
 
 const planSectionLines = (content: string, heading: string): string[] => {
@@ -3047,19 +3047,19 @@ const selectInstructionPaths = (planContent: string): string[] => {
 
   for (const filePath of planOwnedPaths) {
     if (filePath.startsWith('apps/web/')) {
-      selected.add(rel('.ai', 'instructions', 'web.instructions.md'));
+      selected.add(rel('.ai', 'instructions', 'web.md'));
       packageOwners.add('apps/web');
     }
     if (filePath.startsWith('apps/admin/')) {
-      selected.add(rel('.ai', 'instructions', 'admin.instructions.md'));
+      selected.add(rel('.ai', 'instructions', 'admin.md'));
       packageOwners.add('apps/admin');
     }
     if (filePath.startsWith('apps/backend/')) {
-      selected.add(rel('.ai', 'instructions', 'backend.instructions.md'));
+      selected.add(rel('.ai', 'instructions', 'backend.md'));
       packageOwners.add('apps/backend');
     }
     if (filePath.startsWith('supabase/') || filePath.startsWith('packages/supabase/')) {
-      selected.add(rel('.ai', 'instructions', 'supabase.instructions.md'));
+      selected.add(rel('.ai', 'instructions', 'supabase.md'));
       packageOwners.add(filePath.startsWith('supabase/') ? 'supabase' : 'packages/supabase');
     }
     if (
@@ -3067,7 +3067,7 @@ const selectInstructionPaths = (planContent: string): string[] => {
       filePath.includes('/components/ui/') ||
       /\bshadcn\b/i.test(filePath)
     ) {
-      selected.add(rel('.ai', 'instructions', 'ui.instructions.md'));
+      selected.add(rel('.ai', 'instructions', 'ui.md'));
     }
     if (
       filePath.startsWith('apps/web/src/messages/') ||
@@ -3075,10 +3075,10 @@ const selectInstructionPaths = (planContent: string): string[] => {
       filePath.startsWith('apps/admin/src/locales/') ||
       filePath.startsWith('apps/admin/src/i18n/')
     ) {
-      selected.add(rel('.ai', 'instructions', 'i18n.instructions.md'));
+      selected.add(rel('.ai', 'instructions', 'i18n.md'));
     }
     if (/(^|\/)(auth|session|sessions|role|roles|guard|guards)(\/|\.|-)/i.test(filePath)) {
-      selected.add(rel('.ai', 'instructions', 'auth.instructions.md'));
+      selected.add(rel('.ai', 'instructions', 'auth.md'));
     }
     if (
       /(^|\/)(test|tests|e2e)\//i.test(filePath) ||
@@ -3086,15 +3086,15 @@ const selectInstructionPaths = (planContent: string): string[] => {
       /(^|\/)(jest|vitest|playwright)\.config\./i.test(filePath) ||
       /(^|\/)package\.json$/i.test(filePath)
     ) {
-      selected.add(rel('.ai', 'instructions', 'testing.instructions.md'));
+      selected.add(rel('.ai', 'instructions', 'testing.md'));
     }
   }
 
   if (/\bshadcn\b/i.test(planContent)) {
-    selected.add(rel('.ai', 'instructions', 'ui.instructions.md'));
+    selected.add(rel('.ai', 'instructions', 'ui.md'));
   }
   if (packageOwners.size > 1 || (planOwnedPaths.length > 0 && selected.size === 0)) {
-    selected.add(rel('.ai', 'instructions', 'architecture.instructions.md'));
+    selected.add(rel('.ai', 'instructions', 'architecture.md'));
   }
 
   return orderedInstructionPaths.filter((instructionPath) => selected.has(instructionPath));
@@ -3115,9 +3115,9 @@ const activeContextPacket = ({
     rel('.codex', 'AGENTS.md'),
     promptPath,
     contextSnapshotPath,
-    rel('.ai', 'instructions', 'index.instructions.md'),
+    rel('.ai', 'instructions', 'index.md'),
     ...(stateMachinePromptPaths.has(promptPath)
-      ? [rel('.ai', 'instructions', 'workflow-state.instructions.md')]
+      ? [rel('.ai', 'instructions', 'workflow-state.md')]
       : []),
     ...extractSpecPaths(planContent),
     ...selectInstructionPaths(planContent),

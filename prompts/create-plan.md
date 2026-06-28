@@ -9,7 +9,7 @@ This prompt creates a structured implementation plan only.
 Read:
 
 - `.codex/AGENTS.md`
-- `.ai/instructions/workflow-state.instructions.md`
+- `.ai/instructions/workflow-state.md`
 - relevant `.ai/instructions/*`
 - the spec file
 

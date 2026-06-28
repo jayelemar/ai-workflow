@@ -2,18 +2,27 @@
 
 This directory is a standalone Git repository for reusable AI workflow source files.
 
-Tracked directories:
+Tracked workflow source:
 - `prompts/`
 - `scripts/`
 - `templates/`
 - `wrappers/`
+- `instructions/security.md`
+- `instructions/testing.md`
+- `changelogs/security.changelog.md`
+- `changelogs/testing.changelog.md`
 
 Local-only directories that are intentionally excluded:
 - `artifacts/`
-- `changelogs/`
-- `instructions/`
 - `plans/`
 - `specs/`
+
+Local-only instruction files that remain excluded by default:
+- `instructions/index.md`
+- `instructions/architecture.md`
+- `instructions/workflow-state.md`
+- other project-specific instruction files
+- project-specific changelog files
 
 The parent repository continues to ignore `.ai/`, so this nested repository can be versioned independently without changing the main repository's tracking behavior.
 

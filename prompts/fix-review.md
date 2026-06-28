@@ -15,7 +15,7 @@ It prepares the plan for the next execution cycle.
 Read:
 
 * `.codex/AGENTS.md`
-* `.ai/instructions/workflow-state.instructions.md`
+* `.ai/instructions/workflow-state.md`
 * the plan file
 * the latest review findings
 * `.ai/specs/<feature>.spec.md` (if exists)
