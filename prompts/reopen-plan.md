@@ -15,12 +15,12 @@ It does NOT generate a commit summary.
 Read:
 
 * `.codex/AGENTS.md`
-* `.ai/instructions/workflow-state.instructions.md`
+* `.ai/instructions/shared/workflow-state.md`
 * `.ai/specs/<feature>.spec.md` (if exists)
-* Active Context Packet instruction files selected from `.ai/instructions/index.instructions.md`
+* Active Context Packet instruction files selected from `.ai/instructions/index.md`
 * the plan file
 
-Use the runner-provided Active Context Packet and index-selected instruction files only. Do not broadly load `.ai/instructions/*`.
+Use the runner-provided Active Context Packet and index-selected instruction files only. Do not broadly load `.ai/instructions/**`.
 
 Load:
 

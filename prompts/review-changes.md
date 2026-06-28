@@ -9,14 +9,14 @@ This prompt defines review-specific behavior only.
 Read:
 
 * `.codex/AGENTS.md`
-* `.ai/instructions/workflow-state.instructions.md`
-* `.ai/instructions/testing.instructions.md` before running, skipping, or classifying validation
+* `.ai/instructions/shared/workflow-state.md`
+* `.ai/instructions/shared/testing.md` before running, skipping, or classifying validation
 * `.ai/specs/<feature>.spec.md` (if exists)
 * runner-owned context snapshot `.ai/artifacts/<plan-name>/state/context.md` as the primary current-state source
-* Active Context Packet instruction files selected from `.ai/instructions/index.instructions.md`
+* Active Context Packet instruction files selected from `.ai/instructions/index.md`
 * the full plan file only when exact plan edits are required or the snapshot is insufficient
 
-Use the runner-provided Active Context Packet and index-selected instruction files only. Do not broadly load `.ai/instructions/*`.
+Use the runner-provided Active Context Packet and index-selected instruction files only. Do not broadly load `.ai/instructions/**`.
 Read the full plan only when exact plan edits are required or the snapshot is insufficient.
 Do not load full historical sections unless the snapshot is insufficient.
 
@@ -223,7 +223,7 @@ Check:
 Validate against:
 
 * `.codex/AGENTS.md`
-* Active Context Packet instruction files selected from `.ai/instructions/index.instructions.md`
+* Active Context Packet instruction files selected from `.ai/instructions/index.md`
 
 ---
 

@@ -8,8 +8,17 @@ Create or update repository-specific AI instruction files based on the actual co
 
 Create or update:
 
-* `.ai/instructions/*.instructions.md`
-* `.ai/changelogs/*.changelog.md`
+* project-local `.ai/instructions/*.md`
+* project-local `.ai/changelogs/*.changelog.md`
+
+Shared baseline exceptions:
+
+* `.ai/instructions/shared/security.md`
+* `.ai/instructions/shared/testing.md`
+* `.ai/instructions/shared/workflow-state.md`
+* `.ai/changelogs/security.changelog.md`
+* `.ai/changelogs/testing.changelog.md`
+* `.ai/changelogs/workflow-state.changelog.md`
 
 Do NOT modify:
 
@@ -24,6 +33,18 @@ Do NOT modify:
 Read:
 
 * `.codex/AGENTS.md`
+* `.ai/instructions/index.md`
+
+When updating existing instruction content, also read:
+
+* the matching existing `.ai/instructions/*.md` files selected by `.ai/instructions/index.md`
+* the matching existing `.ai/changelogs/*.changelog.md` files
+
+Rules:
+
+* treat `.ai/instructions/index.md` as the repository instruction routing entrypoint
+* use the index to discover existing repo-specific area files before deciding what to create, update, or skip
+* do not assume a missing area just because it is not mentioned in `.codex/AGENTS.md`
 
 ---
 
@@ -82,9 +103,10 @@ If uncertain:
 Always create:
 
 ```txt
-.ai/instructions/architecture.instructions.md
-.ai/instructions/testing.instructions.md
+.ai/instructions/architecture.md
 ```
+
+Do not create a repo-specific `testing.md` when the shared baseline file already exists. Keep repo-specific validation commands in local area files instead.
 
 ---
 
@@ -98,22 +120,22 @@ Examples:
 
 Frontend:
 
-* ui.instructions.md
-* forms.instructions.md
-* api-client.instructions.md
-* state-management.instructions.md
-* routing.instructions.md
-* styling.instructions.md
-* auth.instructions.md
+* ui.md
+* forms.md
+* api-client.md
+* state-management.md
+* routing.md
+* styling.md
+* auth.md
 
 Backend:
 
-* api.instructions.md
-* database.instructions.md
-* migrations.instructions.md
-* auth.instructions.md
-* queues.instructions.md
-* validation.instructions.md
+* api.md
+* database.md
+* migrations.md
+* auth.md
+* queues.md
+* validation.md
 
 Rules:
 
@@ -122,6 +144,7 @@ Rules:
 * patterns MUST be reusable (not one-off)
 * naming MUST reflect actual structure
 * do NOT create files based only on these examples
+* keep shared baseline files portable; do not add repository-specific paths or commands to `shared/security.md`, `shared/testing.md`, or `shared/workflow-state.md`
 
 If an example is not supported by the codebase:
 
@@ -198,6 +221,7 @@ If overlap:
 
 Update rules:
 
+* inspect the existing instruction file and matching changelog before editing
 * preserve valid content
 * modify only incorrect or missing parts
 * avoid full rewrites
