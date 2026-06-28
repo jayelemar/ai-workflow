@@ -206,7 +206,7 @@ Before any write to a non-test file:
 1. prepare the exact patch for the current step
 2. present a human-readable approval preview first, using contextual code snippets that show the change in place
 3. identify the current plan step and the exact non-test files affected
-4. if needed for exactness, include the raw patch only as optional reference material after the readable preview
+4. show a compact edited-file summary for the current step as a full-line clickable file link whose label is in the form `MOD path/to/file.tsx (+A -D)` or `NEW path/to/file.tsx (+A -D)` before the code preview
 5. STOP and wait for explicit operator approval
 
 Rules:
@@ -214,21 +214,21 @@ Rules:
 * do not write the non-test file before approval
 * approval applies only to the current plan step
 * do not treat prior approval as permission for later steps
-* if the patch changes after approval, show the new readable preview and updated optional raw patch reference, then wait again
+* if the patch changes after approval, show the new linked file summary and readable preview, then wait again
 * if test-only edits are needed to support the preview, those may be written before approval
 * draft-preflight plan/spec edits are outside this approval gate when they follow the preflight rules above
-* lead with the file path and a short change map before showing code
+* lead with the linked edited-file summary, then the file path and a short change map before showing code
+* use the same linked summary style for code files, test files, plan files, context snapshots, and artifact files touched in the current run
+* format each summary line as a clickable markdown file link whose entire label is the summary text, for example `[MOD src/file.tsx (+12 -3)](/abs/path/src/file.tsx)`
+* use `MOD`, `NEW`, or `DEL` in the summary label as appropriate for the file state in the current step
 * prefer fenced code blocks using the real file language such as `tsx`, `ts`, `js`, `jsx`, `sql`, `css`, or `md`
 * show surrounding code so the operator can see where the change lands in the file, similar to an in-place editor view
 * use short inline markers such as `// new`, `// changed`, or `/* new */` only where they help pinpoint the exact edited lines
 * it is acceptable to collapse unrelated unchanged sections with concise placeholders such as `...rest of code`
-* avoid leading with raw diff output when a contextual code snippet can communicate the change more clearly
-* any optional raw patch reference must be clearly labeled as ignorable support material, not the primary review surface
+* do not include raw diff output or patch text unless the operator explicitly asks to see it
 
-When waiting for approval, the primary review surface must be the contextual
-code preview. If a raw patch is included for precision, place it after the
-readable preview under a clearly ignorable label such as `Raw Patch (Optional
-Reference)`.
+When waiting for approval, the primary review surface must be the linked
+edited-file summary plus the contextual code preview.
 
 ---
 
