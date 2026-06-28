@@ -262,6 +262,29 @@ Common stages:
 - `reopening + reopen-plan`
 - `completed + commit-summary`
 
+Default stage routing:
+
+| Stage | Model | Reasoning |
+| --- | --- | --- |
+| `plan-validator` | `gpt-5.4` | `high` |
+| `fix-plan` | `gpt-5.4` | `medium` |
+| `execute-plan` | `gpt-5.5` | `high` |
+| `unblock-plan` | `gpt-5.4` | `medium` |
+| `review-changes` | `gpt-5.5` | `xhigh` |
+| `reopen-plan` | `gpt-5.4` | `medium` |
+| `commit-summary` | `gpt-5.3-codex-spark` | `medium` |
+| `scope-cleanup` | `gpt-5.5` | `xhigh` |
+
+Notes:
+
+- `review-changes` remains the main correctness gate, so it keeps the
+  highest-quality model and reasoning tier.
+- `commit-summary` uses `gpt-5.3-codex-spark` because it is the cheapest
+  low-risk stage: formatting the final commit subject and user-facing summary,
+  not validating implementation correctness.
+- `scope-cleanup` is not a visible workflow state, but the runner uses it
+  before review and commit-summary cleanup decisions, so it has its own routing.
+
 The runner writes a hot-path context snapshot for each plan:
 
 ```text
@@ -270,6 +293,12 @@ The runner writes a hot-path context snapshot for each plan:
 
 Prompts should use that snapshot as the primary current-state source. The full
 plan remains the source of truth for exact history and edits.
+
+When a prior stage spikes above the token thresholds, the runner applies
+stronger snapshot-first guidance only to the next `execute-plan` stage. That
+guidance still allows exact plan or event-file fallback when the snapshot is
+insufficient. `review-changes` stays more permissive so review quality is not
+reduced by over-aggressive token restrictions.
 
 Snapshot sections are intentionally compact and stage-aligned. Expect:
 
@@ -317,6 +346,14 @@ Runner-owned runtime files are written under the plan artifact root:
 .ai/artifacts/<plan-name>/logs/failure.jsonl
 .ai/artifacts/<plan-name>/state/context.md
 ```
+
+Token usage warnings are advisory only. They help surface oversized stages, but
+they do not stop an otherwise successful workflow stage from continuing.
+
+If a spike happened before an `execute-plan` run, the runner can use the latest
+`token-usage.jsonl` entry to add stricter snapshot-first guidance to that next
+execute stage. This is prompt guidance, not a hard block, and it does not apply
+the same way to `review-changes`.
 
 When the runner warns that a plan is too large, move bulky workflow detail into
 event artifacts and keep only bounded summaries plus exact `Evidence:` paths in

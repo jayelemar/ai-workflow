@@ -101,7 +101,7 @@ const workflowEventSections = [
     label: 'Deployment Validation',
     kind: 'deployment-validation',
   },
-] as const satisfies readonly Array<{
+] as const satisfies ReadonlyArray<{
   section: string;
   label: string;
   kind: WorkflowEventKind;

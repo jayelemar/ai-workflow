@@ -19,6 +19,7 @@ Read:
 Use the runner-provided Active Context Packet and index-selected instruction files only. Do not broadly load `.ai/instructions/**`.
 Read the full plan only when exact plan edits are required or the snapshot is insufficient.
 Do not load full historical sections unless the snapshot is insufficient.
+Review remains quality-first even after a prior token spike: use the snapshot first, but keep fallback access to the full plan or exact event files whenever needed for correctness.
 
 Load:
 

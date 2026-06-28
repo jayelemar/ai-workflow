@@ -8,6 +8,7 @@ import { Writable } from "node:stream";
 import test from "node:test";
 
 import {
+  codexExecutionConfig,
   codexOutputContainsStop,
   codexOutputStopReason,
   codexWorkEnvironment,
@@ -2416,6 +2417,38 @@ test("workflow prompt injects active context packet with current prompt, plan, s
   assert.match(prompt, /Plan-scoped diff boundary:/);
 });
 
+test("execute workflow prompt adds stricter token guardrails after a prior token spike", () => {
+  const prompt = generateWorkflowPrompt({
+    promptPath: ".ai/prompts/execute-plan.md",
+    planPath: ".ai/plans/workflow-runner.md",
+    promptContent: "EXECUTE PLAN PROMPT",
+    executeTokenGuardrail: {
+      stageInputTokens: 2_100_000,
+      stageUncachedInputTokens: 150_000,
+    },
+  });
+
+  assert.match(prompt, /Execute token guardrail:/);
+  assert.match(prompt, /The previous stage exceeded token thresholds/i);
+  assert.match(prompt, /Use the snapshot as the default source/i);
+  assert.match(prompt, /Open the full plan or event artifacts only when exact detail is required/i);
+  assert.match(prompt, /Do not broadly load `\.ai\/artifacts\/\*\*` or full historical plan sections/i);
+});
+
+test("review workflow prompt does not add stricter execute token guardrails after a prior token spike", () => {
+  const prompt = generateWorkflowPrompt({
+    promptPath: ".ai/prompts/review-changes.md",
+    planPath: ".ai/plans/workflow-runner.md",
+    promptContent: "REVIEW CHANGES PROMPT",
+    executeTokenGuardrail: {
+      stageInputTokens: 2_100_000,
+      stageUncachedInputTokens: 150_000,
+    },
+  });
+
+  assert.doesNotMatch(prompt, /Execute token guardrail:/);
+});
+
 test("workflow prompt includes ai-workflow instructions for .ai-owned plan files", () => {
   const prompt = generateWorkflowPrompt({
     promptPath: ".ai/prompts/review-changes.md",
@@ -3511,17 +3544,18 @@ test("routes only spec-defined executable pairs and sends blocked plans through 
   const workspace = await setupWorkspace();
   try {
     const cases = [
-      ["draft-validator", "draft", "plan-validator", ".ai/prompts/plan-validator.md", "high"],
-      ["draft-fix", "draft", "fix-plan", ".ai/prompts/fix-plan.md", "medium"],
-      ["approved-execute", "approved", "execute-plan", ".ai/prompts/execute-plan.md", "high"],
-      ["active-execute", "active", "execute-plan", ".ai/prompts/execute-plan.md", "high"],
-      ["blocked-unblock", "blocked", "unblock-plan", ".ai/prompts/unblock-plan.md", "medium"],
-      ["blocked-legacy", "blocked", "execute-plan", ".ai/prompts/unblock-plan.md", "medium"],
+      ["draft-validator", "draft", "plan-validator", ".ai/prompts/plan-validator.md", "gpt-5.4", "high"],
+      ["draft-fix", "draft", "fix-plan", ".ai/prompts/fix-plan.md", "gpt-5.4", "medium"],
+      ["approved-execute", "approved", "execute-plan", ".ai/prompts/execute-plan.md", "gpt-5.5", "high"],
+      ["active-execute", "active", "execute-plan", ".ai/prompts/execute-plan.md", "gpt-5.5", "high"],
+      ["blocked-unblock", "blocked", "unblock-plan", ".ai/prompts/unblock-plan.md", "gpt-5.4", "medium"],
+      ["blocked-legacy", "blocked", "execute-plan", ".ai/prompts/unblock-plan.md", "gpt-5.4", "medium"],
       [
         "deployment-validation-commit",
         "deployment-validation",
         "commit-summary",
         ".ai/prompts/commit-summary.md",
+        "gpt-5.3-codex-spark",
         "medium",
       ],
       [
@@ -3529,15 +3563,17 @@ test("routes only spec-defined executable pairs and sends blocked plans through 
         "deployment-validation",
         "unblock-plan",
         ".ai/prompts/unblock-plan.md",
+        "gpt-5.4",
         "medium",
       ],
-      ["review-review", "review", "review-plan", ".ai/prompts/review-changes.md", "xhigh"],
-      ["reopen-reopen", "reopening", "reopen-plan", ".ai/prompts/reopen-plan.md", "medium"],
-      ["completed-commit", "completed", "commit-summary", ".ai/prompts/commit-summary.md", "medium"],
+      ["review-review", "review", "review-plan", ".ai/prompts/review-changes.md", "gpt-5.5", "xhigh"],
+      ["reopen-reopen", "reopening", "reopen-plan", ".ai/prompts/reopen-plan.md", "gpt-5.4", "medium"],
+      ["completed-commit", "completed", "commit-summary", ".ai/prompts/commit-summary.md", "gpt-5.3-codex-spark", "medium"],
     ] as const;
     const launchedPrompts: string[] = [];
+    const launchedModels: string[] = [];
     const launchedReasoning: string[] = [];
-    for (const [name, status, nextAction, promptPath, reasoning] of cases) {
+    for (const [name, status, nextAction, promptPath, model, reasoning] of cases) {
       await writePlan(workspace.root, name, planWith(status, nextAction));
       const launchedBefore = launchedPrompts.length;
       const result = await runWorkflowRunner({
@@ -3548,6 +3584,7 @@ test("routes only spec-defined executable pairs and sends blocked plans through 
           (call) => {
             if (call.command === CODEX_COMMAND && call.promptPath !== ".ai/prompts/scope-cleanup.md") {
               launchedPrompts.push(call.promptPath);
+              launchedModels.push(call.args[3] ?? "");
               launchedReasoning.push(call.args[5] ?? "");
             }
             if (promptPath === ".ai/prompts/unblock-plan.md") {
@@ -3596,6 +3633,7 @@ test("routes only spec-defined executable pairs and sends blocked plans through 
         ),
       });
       assert.equal(launchedPrompts[launchedBefore], promptPath);
+      assert.equal(launchedModels[launchedBefore], model);
       assert.equal(launchedReasoning[launchedBefore], `model_reasoning_effort="${reasoning}"`);
       assert.equal(typeof result.reason, "string");
     }
@@ -4150,7 +4188,18 @@ test("reopen-plan prompts include selected prompt content and continue to execut
   }
 });
 
-test(`${CODEX_EXEC_LABEL} uses prompt-tier reasoning policy`, async () => {
+test("codex execution config requires an explicit prompt mapping", () => {
+  assert.deepEqual(codexExecutionConfig(".ai/prompts/commit-summary.md"), {
+    model: "gpt-5.3-codex-spark",
+    reasoning: "medium",
+  });
+  assert.throws(
+    () => codexExecutionConfig(".ai/prompts/unknown.md"),
+    /workflow runner codex config missing for prompt: \.ai\/prompts\/unknown\.md/,
+  );
+});
+
+test(`${CODEX_EXEC_LABEL} uses prompt-tier model and reasoning policy`, async () => {
   const workspace = await setupWorkspace();
   try {
     await writePlan(workspace.root, "workflow-runner", planWith("review", "review-plan"));
@@ -4195,7 +4244,7 @@ test(`${CODEX_EXEC_LABEL} uses prompt-tier reasoning policy`, async () => {
       "exec",
       "--json",
       "--model",
-      "gpt-5.5",
+      "gpt-5.3-codex-spark",
       "-c",
       'model_reasoning_effort="medium"',
     ]);
@@ -4209,12 +4258,49 @@ test(`${CODEX_EXEC_LABEL} uses prompt-tier reasoning policy`, async () => {
       /git diff --staged --name-status -- \.ai\/scripts\/workflow-runner\.test\.ts \.ai\/scripts\/workflow-runner\.ts/,
     );
     assert.match(codexCalls[1].args[6], /^Use \.ai\/prompts\/review-changes\.md/);
-    assert.match(codexCalls[2].args[6], /^Use \.ai\/prompts\/commit-summary\.md/);
+    assert.equal(codexCalls[2].args.includes("--add-dir"), true);
+    assert.equal(codexCalls[2].args.includes(join(workspace.root, ".git")), true);
+    assert.match(codexCalls[2].args.at(-1) ?? "", /^Use \.ai\/prompts\/commit-summary\.md/);
 
     const log = await readFile(join(workspace.root, ".ai", "artifacts", "workflow-runner", "logs", "runner.log"), "utf8");
     assert.match(log, /model: gpt-5\.5/);
+    assert.match(log, /model: gpt-5\.3-codex-spark/);
     assert.match(log, /reasoning: xhigh/);
     assert.match(log, /reasoning: medium/);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test(`${CODEX_EXEC_LABEL} grants commit-summary explicit write access to .git`, async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(workspace.root, "workflow-runner", planWith("review", "review-plan"));
+    const calls: Parameters<ProcessRunner>[0][] = [];
+    const result = await runWorkflowRunner({
+      planName: planArg("workflow-runner"),
+      rootDir: workspace.root,
+      processRunner: runnerReturning(
+        { launched: true, stdout: "ok", stderr: "", exitCode: 0 },
+        (call) => {
+          calls.push(call);
+          if (call.command === CODEX_COMMAND && call.promptPath === ".ai/prompts/review-changes.md") {
+            writeFileSync(
+              join(workspace.root, ".ai", "plans", "workflow-runner.md"),
+              planWith("completed", "commit-summary"),
+            );
+          }
+        },
+      ),
+    });
+
+    assert.equal(result.success, true);
+    const commitSummaryCall = calls.find(
+      (call) => call.command === CODEX_COMMAND && call.promptPath === ".ai/prompts/commit-summary.md",
+    );
+    assert.ok(commitSummaryCall);
+    assert.equal(commitSummaryCall.args.includes("--add-dir"), true);
+    assert.equal(commitSummaryCall.args.includes(join(workspace.root, ".git")), true);
   } finally {
     await workspace.cleanup();
   }
@@ -4281,7 +4367,7 @@ test("successful workflow stages append token usage ledger entries and report th
       startingStatus: "completed",
       startingNextAction: "commit-summary",
       promptPath: ".ai/prompts/commit-summary.md",
-      model: "gpt-5.5",
+      model: "gpt-5.3-codex-spark",
       reasoning: "medium",
       result: "success",
       signal: null,
@@ -4398,7 +4484,7 @@ test("workflow runner writes the context snapshot before launching a workflow pr
   }
 });
 
-test("high token stages keep token usage details without threshold warnings", async () => {
+test("high token stages log advisory threshold warnings while keeping token usage details", async () => {
   const workspace = await setupWorkspace();
   try {
     await writePlan(
@@ -4425,10 +4511,9 @@ test("high token stages keep token usage details without threshold warnings", as
     });
 
     assert.equal(result.success, true);
-    assert.equal(output.lines.some((line) => /pathological/i.test(line)), false);
-    assert.equal(output.lines.some((line) => /100 KB/i.test(line)), false);
-    assert.equal(output.lines.some((line) => /2,000,000/i.test(line)), false);
-    assert.equal(output.lines.some((line) => /100,000/i.test(line)), false);
+    assert.equal(output.lines.some((line) => /WARNING: Plan file is/i.test(line)), true);
+    assert.equal(output.lines.some((line) => /2,000,000/i.test(line)), true);
+    assert.equal(output.lines.some((line) => /100,000/i.test(line)), true);
 
     const snapshot = await readFile(
       join(workspace.root, workflowContextSnapshotRelativePath("workflow-runner")),
@@ -4445,6 +4530,101 @@ test("high token stages keep token usage details without threshold warnings", as
       "utf8",
     );
     assert.doesNotMatch(log, /thresholdWarnings:/);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("high-token prior stages add stricter guardrail guidance only to the next execute prompt", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(workspace.root, "workflow-runner", planWith("active", "execute-plan"));
+    mkdirSync(join(workspace.root, ".ai", "artifacts", "workflow-runner", "logs"), { recursive: true });
+    writeFileSync(
+      join(workspace.root, ".ai", "artifacts", "workflow-runner", "logs", "token-usage.jsonl"),
+      `${JSON.stringify({
+        timestamp: "2026-06-29T00:00:00.000Z",
+        iteration: 3,
+        promptPath: ".ai/prompts/review-changes.md",
+        stageInputTokens: 2_100_000,
+        stageCachedInputTokens: 1_950_000,
+        stageUncachedInputTokens: 150_000,
+        stageOutputTokens: 800,
+        stageTotalTokens: 2_100_800,
+        totalTokens: 2_100_800,
+      })}\n`,
+      "utf8",
+    );
+
+    const calls: Parameters<ProcessRunner>[0][] = [];
+    await runWorkflowRunner({
+      planName: planArg("workflow-runner"),
+      rootDir: workspace.root,
+      processRunner: runnerReturning(
+        { launched: true, stdout: "ok", stderr: "", exitCode: 0 },
+        (call) => {
+          calls.push(call);
+          if (call.promptPath === ".ai/prompts/execute-plan.md") {
+            writeFileSync(
+              join(workspace.root, ".ai", "plans", "workflow-runner.md"),
+              planWith("blocked", "unblock-plan"),
+            );
+          }
+        },
+      ),
+    });
+
+    const executeCall = calls.find((call) => call.promptPath === ".ai/prompts/execute-plan.md");
+    assert.ok(executeCall);
+    assert.match(executeCall.args[6], /Execute token guardrail:/);
+    assert.match(executeCall.args[6], /previous stage exceeded token thresholds/i);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("high-token prior stages do not add stricter execute guardrail guidance to review prompts", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(workspace.root, "workflow-runner", planWith("review", "review-plan"));
+    mkdirSync(join(workspace.root, ".ai", "artifacts", "workflow-runner", "logs"), { recursive: true });
+    writeFileSync(
+      join(workspace.root, ".ai", "artifacts", "workflow-runner", "logs", "token-usage.jsonl"),
+      `${JSON.stringify({
+        timestamp: "2026-06-29T00:00:00.000Z",
+        iteration: 3,
+        promptPath: ".ai/prompts/execute-plan.md",
+        stageInputTokens: 2_100_000,
+        stageCachedInputTokens: 1_950_000,
+        stageUncachedInputTokens: 150_000,
+        stageOutputTokens: 800,
+        stageTotalTokens: 2_100_800,
+        totalTokens: 2_100_800,
+      })}\n`,
+      "utf8",
+    );
+
+    const calls: Parameters<ProcessRunner>[0][] = [];
+    await runWorkflowRunner({
+      planName: planArg("workflow-runner"),
+      rootDir: workspace.root,
+      processRunner: runnerReturning(
+        { launched: true, stdout: "ok", stderr: "", exitCode: 0 },
+        (call) => {
+          calls.push(call);
+          if (call.promptPath === ".ai/prompts/review-changes.md") {
+            writeFileSync(
+              join(workspace.root, ".ai", "plans", "workflow-runner.md"),
+              planWith("completed", "commit-summary"),
+            );
+          }
+        },
+      ),
+    });
+
+    const reviewCall = calls.find((call) => call.promptPath === ".ai/prompts/review-changes.md");
+    assert.ok(reviewCall);
+    assert.doesNotMatch(reviewCall.args[6], /Execute token guardrail:/);
   } finally {
     await workspace.cleanup();
   }
@@ -4573,7 +4753,7 @@ test("token usage ledger accumulates totals across multiple workflow stages", as
   }
 });
 
-test("workflow runner stops after a pathological nonterminal stage to force a fresh handoff", async () => {
+test("workflow runner continues after a pathological nonterminal stage because token spikes are logging-only", async () => {
   const workspace = await setupWorkspace();
   try {
     await writePlan(workspace.root, "workflow-runner", planWith("active", "execute-plan"));
@@ -4588,18 +4768,32 @@ test("workflow runner stops after a pathological nonterminal stage to force a fr
           return { launched: true, stdout: "", stderr: "", exitCode: 0 };
         }
         codexCalls += 1;
-        await writePlan(
-          workspace.root,
-          "workflow-runner",
-          planWith("active", "execute-plan", "\n## Latest Execution Summary\n\n* Finished one chunk.\n"),
-        );
+        if (codexCalls === 1) {
+          await writePlan(
+            workspace.root,
+            "workflow-runner",
+            planWith("active", "execute-plan", "\n## Latest Execution Summary\n\n* Finished one chunk.\n"),
+          );
+          return {
+            launched: true,
+            stdout: turnCompletedUsageDetailLine({
+              inputTokens: 2_100_000,
+              cachedInputTokens: 1_950_000,
+              outputTokens: 100,
+              reasoningOutputTokens: 20,
+            }),
+            stderr: "",
+            exitCode: 0,
+          };
+        }
+        await writePlan(workspace.root, "workflow-runner", planWith("blocked", "unblock-plan"));
         return {
           launched: true,
           stdout: turnCompletedUsageDetailLine({
-            inputTokens: 2_100_000,
-            cachedInputTokens: 1_950_000,
-            outputTokens: 100,
-            reasoningOutputTokens: 20,
+            inputTokens: 100,
+            cachedInputTokens: 20,
+            outputTokens: 30,
+            reasoningOutputTokens: 10,
           }),
           stderr: "",
           exitCode: 0,
@@ -4607,11 +4801,18 @@ test("workflow runner stops after a pathological nonterminal stage to force a fr
       },
     });
 
-    assert.equal(result.success, true);
-    assert.equal(result.iterations, 1);
-    assert.equal(codexCalls, 1);
-    assert.match(result.reason, /fresh workflow runner invocation/i);
-    assert.equal(output.lines.some((line) => /fresh workflow runner invocation/i.test(line)), true);
+    assert.equal(result.success, false);
+    assert.equal(result.iterations, 2);
+    assert.equal(codexCalls, 2);
+    assert.match(result.reason, /plan blocked after execute-plan/i);
+    assert.equal(output.lines.some((line) => /2,000,000/i.test(line)), true);
+    assert.equal(output.lines.some((line) => /100,000/i.test(line)), true);
+    assert.equal(output.lines.some((line) => /fresh workflow runner invocation/i.test(line)), false);
+
+    const ledger = await readTokenUsageLedger(workspace.root, "workflow-runner");
+    assert.equal(ledger.length, 2);
+    assert.equal(ledger[0]?.stageInputTokens, 2_100_000);
+    assert.equal(ledger[1]?.stageInputTokens, 100);
   } finally {
     await workspace.cleanup();
   }
