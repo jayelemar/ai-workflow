@@ -1,8 +1,13 @@
 # AI Workflow Wrappers
 
-These files are reusable operator templates for calling the core workflow prompts.
+These files are reusable operator templates for calling the core workflow
+prompts.
 
-Core prompts in `.ai/prompts/` define workflow behavior. Wrappers define the text to paste when starting a spec or plan task.
+Core prompts in `.ai/prompts/` define workflow behavior. Wrappers define the
+text to paste when starting a spec or plan task.
+
+For cloning, installation, publishing, runner setup, and troubleshooting, use
+`.ai/README.md`. This file focuses only on day-to-day wrapper usage.
 
 ## Recommended Flow
 
@@ -47,6 +52,7 @@ pnpm exec tsx .ai/scripts/workflow-runner.ts --compact .ai/plans/<plan-name>.md
 
 ## Rules
 
+- Install and publish the workflow using the setup steps in `.ai/README.md`.
 - Manual prompting is supported for spec generation and plan creation.
 - After a plan exists, the workflow runner remains the default path for
   `execute-plan`, `review-changes`, `unblock-plan`, `reopen-plan`, and
