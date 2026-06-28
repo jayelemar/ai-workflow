@@ -28,6 +28,13 @@ pnpm exec tsx .ai/scripts/workflow-runner.ts --compact .ai/plans/<plan-name>.md
 
 ## Rules
 
+- Manual prompting is supported for spec generation and plan creation.
+- After a plan exists, the workflow runner is the intended path for
+  `execute-plan`, `review-changes`, `unblock-plan`, `reopen-plan`, and
+  `commit-summary`.
+- If you manually invoke a post-plan workflow prompt anyway, you must supply the
+  current plan, spec, snapshot, and routed instruction files yourself because
+  those prompts are runner-oriented.
 - Keep desired behavior explicit.
 - Use codebase inspection only for current observed behavior and implementation facts.
 - Do not write "based on context" for goals, expected behavior, or known decisions.

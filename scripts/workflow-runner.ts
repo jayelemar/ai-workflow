@@ -2597,6 +2597,7 @@ const promptActionLabels: Record<string, string> = {
 const stateMachinePromptPaths = new Set(Object.keys(promptActionLabels));
 
 const orderedInstructionPaths = [
+  rel('.ai', 'instructions', 'ai-workflow.md'),
   rel('.ai', 'instructions', 'architecture.md'),
   rel('.ai', 'instructions', 'web.md'),
   rel('.ai', 'instructions', 'admin.md'),
@@ -3046,6 +3047,9 @@ const selectInstructionPaths = (planContent: string): string[] => {
   const packageOwners = new Set<string>();
 
   for (const filePath of planOwnedPaths) {
+    if (filePath.startsWith('.ai/')) {
+      selected.add(rel('.ai', 'instructions', 'ai-workflow.md'));
+    }
     if (filePath.startsWith('apps/web/')) {
       selected.add(rel('.ai', 'instructions', 'web.md'));
       packageOwners.add('apps/web');

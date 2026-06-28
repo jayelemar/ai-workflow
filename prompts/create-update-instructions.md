@@ -33,6 +33,18 @@ Do NOT modify:
 Read:
 
 * `.codex/AGENTS.md`
+* `.ai/instructions/index.md`
+
+When updating existing instruction content, also read:
+
+* the matching existing `.ai/instructions/*.md` files selected by `.ai/instructions/index.md`
+* the matching existing `.ai/changelogs/*.changelog.md` files
+
+Rules:
+
+* treat `.ai/instructions/index.md` as the repository instruction routing entrypoint
+* use the index to discover existing repo-specific area files before deciding what to create, update, or skip
+* do not assume a missing area just because it is not mentioned in `.codex/AGENTS.md`
 
 ---
 
@@ -209,6 +221,7 @@ If overlap:
 
 Update rules:
 
+* inspect the existing instruction file and matching changelog before editing
 * preserve valid content
 * modify only incorrect or missing parts
 * avoid full rewrites

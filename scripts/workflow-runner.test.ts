@@ -2416,6 +2416,27 @@ test("workflow prompt injects active context packet with current prompt, plan, s
   assert.match(prompt, /Plan-scoped diff boundary:/);
 });
 
+test("workflow prompt includes ai-workflow instructions for .ai-owned plan files", () => {
+  const prompt = generateWorkflowPrompt({
+    promptPath: ".ai/prompts/review-changes.md",
+    planPath: ".ai/plans/workflow-runner.md",
+    promptContent: "REVIEW CHANGES PROMPT",
+    planContent: planWithFileScope(
+      "review",
+      "review-plan",
+      { modified: [".ai/prompts/create-plan.md", ".ai/scripts/workflow-runner.ts"] },
+      "## Spec\n\n* .ai/specs/workflow-runner.spec.md\n",
+    ),
+    reviewStagingPaths: [".ai/prompts/create-plan.md", ".ai/scripts/workflow-runner.ts"],
+  });
+
+  const activeContextPacket =
+    prompt.match(/Active Context Packet:[\s\S]*?Use the Active Context Packet and index-selected instruction files only\./)?.[0] ??
+    prompt;
+
+  assert.match(activeContextPacket, /\.ai\/instructions\/ai-workflow\.md/);
+});
+
 test("workflow context snapshot keeps current state and latest unresolved history only", () => {
   const snapshot = generateWorkflowContextSnapshot({
     planName: "workflow-runner",
