@@ -23,7 +23,7 @@ import {
   exceedsWorkflowTokenThresholds,
 } from './workflow-runner/token-warnings.ts';
 import { validateThinPlanContract } from './workflow-runner/thin-plan.ts';
-type CodexProfile = 'codex-work' | 'codex-personal' | 'codex-adam' | 'codex-work6598';
+type CodexProfile = string;
 type CodexModel = 'gpt-5.5' | 'gpt-5.4' | 'gpt-5.4-mini' | 'gpt-5.3-codex-spark';
 type ReasoningEffort = 'medium' | 'high' | 'xhigh';
 type CodexExecutionConfig = {
@@ -32,6 +32,7 @@ type CodexExecutionConfig = {
 };
 
 export const WORKFLOW_RUNNER_CODEX_PROFILE: CodexProfile = 'codex-work' as const;
+const CODEX_PROFILE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 
 const PLAN_VALIDATOR_PROMPT_PATH = '.ai/prompts/plan-validator.md';
 const FIX_PLAN_PROMPT_PATH = '.ai/prompts/fix-plan.md';
@@ -73,10 +74,7 @@ const VALID_NEXT_ACTIONS = [
   'commit-summary',
 ] as const;
 const MAX_ITERATIONS = 100;
-const CODEX_WORK_COMMAND = WORKFLOW_RUNNER_CODEX_PROFILE;
 const CODEX_BINARY_COMMAND = 'codex';
-const CODEX_HOME_DIRECTORY = `.${WORKFLOW_RUNNER_CODEX_PROFILE}`;
-const CODEX_EXEC_LABEL = `${CODEX_WORK_COMMAND} exec`;
 const CODEX_WORK_NODE_VERSION = 'v20.20.2';
 const SUPERPOWER_SKILL_ROOT = path.join(homedir(), '.agents', 'skills');
 const SHARED_SKILL_ROOT = path.join(homedir(), '.codex-shared', 'skills');
@@ -105,6 +103,7 @@ type NextAction = (typeof VALID_NEXT_ACTIONS)[number];
 
 export type ProcessCall = {
   command: string;
+  binaryCommand?: string;
   args: string[];
   cwd: string;
   input: string;
@@ -159,6 +158,7 @@ type ParsedPlan = {
   content: string;
   status: Status;
   nextAction: NextAction;
+  warnings: string[];
 };
 
 type Failure = {
@@ -187,6 +187,7 @@ export type RunnerResult = {
 type RunWorkflowOptions = {
   planName?: string;
   argv?: string[];
+  codexProfile?: string;
   rootDir?: string;
   processRunner?: ProcessRunner;
   console?: ConsoleLike;
@@ -237,6 +238,12 @@ type WorkflowFileLockMetadata = {
   pid: number;
   createdAt: string;
   path: string;
+};
+
+type WorkflowRunnerCodexRuntime = {
+  profile: CodexProfile;
+  command: string;
+  execLabel: string;
 };
 
 export type { CodexTokenUsage, ContextUsageLogFields } from './workflow-runner/token-usage.ts';
@@ -400,15 +407,30 @@ const prependPath = (pathValue: string, entry: string): string => {
   return [entry, pathValue].filter(Boolean).join(path.delimiter);
 };
 
+const isValidCodexProfile = (value: string): boolean => CODEX_PROFILE_PATTERN.test(value);
+
+const workflowRunnerCodexHomeDirectory = (codexProfile: CodexProfile): string => `.${codexProfile}`;
+
+const workflowRunnerCodexExecLabel = (codexProfile: CodexProfile): string => `${codexProfile} exec`;
+
+const createWorkflowRunnerCodexRuntime = (
+  codexProfile: CodexProfile,
+): WorkflowRunnerCodexRuntime => ({
+  profile: codexProfile,
+  command: codexProfile,
+  execLabel: workflowRunnerCodexExecLabel(codexProfile),
+});
+
 export const codexWorkEnvironment = (
   baseEnv: NodeJS.ProcessEnv = process.env,
+  codexProfile: CodexProfile = WORKFLOW_RUNNER_CODEX_PROFILE,
 ): NodeJS.ProcessEnv => {
   const home = baseEnv.HOME ?? homedir();
   const nodeBinPath = path.join(home, '.nvm', 'versions', 'node', CODEX_WORK_NODE_VERSION, 'bin');
 
   return {
     ...baseEnv,
-    CODEX_HOME: path.join(home, CODEX_HOME_DIRECTORY),
+    CODEX_HOME: path.join(home, workflowRunnerCodexHomeDirectory(codexProfile)),
     PATH: prependPath(baseEnv.PATH ?? '', nodeBinPath),
   };
 };
@@ -1517,7 +1539,10 @@ const nextSectionLines = (lines: string[]): string[] => {
   if (explicitNextValues.status) {
     explicitLines.push(`Status: \`${explicitNextValues.status}\``);
   }
-  if (explicitNextValues.nextAction) {
+  if (
+    explicitNextValues.nextAction &&
+    !shouldSuppressTerminalNextAction(explicitNextValues.status, explicitNextValues.nextAction)
+  ) {
     explicitLines.push(`Next Action: \`${explicitNextValues.nextAction}\``);
   }
   if (explicitLines.length > 0) {
@@ -1530,10 +1555,15 @@ const nextSectionLines = (lines: string[]): string[] => {
     return [];
   }
   const nextAction = workflowNextActionForStatus(status);
-  return nextAction
+  return nextAction && !shouldSuppressTerminalNextAction(status, nextAction)
     ? [`Status: \`${status}\``, `Next Action: \`${nextAction}\``]
     : [`Status: \`${status}\``];
 };
+
+const shouldSuppressTerminalNextAction = (
+  status: string | undefined,
+  nextAction: string | undefined,
+): boolean => status === 'completed' && nextAction === 'commit-summary';
 
 const workflowNextActionForStatus = (status: string): NextAction | null => {
   switch (status) {
@@ -1831,6 +1861,7 @@ export const formatWorkflowProgressLine = ({
   status,
   nextAction,
   promptPath,
+  model,
   reasoning,
   color = false,
 }: {
@@ -1839,6 +1870,7 @@ export const formatWorkflowProgressLine = ({
   status: string;
   nextAction: string;
   promptPath: string;
+  model: CodexModel;
   reasoning: ReasoningEffort;
   color?: boolean;
 }): string => {
@@ -1850,7 +1882,7 @@ export const formatWorkflowProgressLine = ({
   const formattedProgressPrefix = color
     ? `${stage.colorCode}${progressPrefix}${ANSI_RESET}`
     : progressPrefix;
-  return `${formattedProgressPrefix}\n${status} -> ${nextAction} | reasoning: ${reasoning}`;
+  return `${formattedProgressPrefix}\n${status} -> ${nextAction}\nmodel: ${model} | reasoning: ${reasoning}`;
 };
 
 export const WORKFLOW_WAIT_NOTICE_INTERVAL_MS = 120_000;
@@ -2288,13 +2320,14 @@ const codexRecentCommandRecords = (stdout: string): WorkflowFailureDebugCommandR
 };
 
 const failureStopExcerpt = (stopReason: string): string | undefined => {
-  if (!stopReason.startsWith(`${CODEX_EXEC_LABEL} output contained STOP`)) {
+  const match = /^(?<label>[A-Za-z0-9][A-Za-z0-9_-]* exec) output contained STOP:?\s*/.exec(
+    stopReason,
+  );
+  if (!match) {
     return undefined;
   }
 
-  const excerpt =
-    stopReason.replace(new RegExp(`^${CODEX_EXEC_LABEL} output contained STOP:?\\s*`), '') ||
-    'STOP';
+  const excerpt = stopReason.slice(match[0].length).trim() || 'STOP';
   return boundedInlineExcerpt(excerpt);
 };
 
@@ -2453,31 +2486,45 @@ const plainStopExcerpt = (text: string): string | undefined => {
   return stripStopDirectivePrefix(stopLine) ?? boundedInlineExcerpt(stopLine);
 };
 
-const formatStopReason = (excerpt?: string): string =>
-  `${CODEX_EXEC_LABEL} output contained STOP${excerpt ? `: ${excerpt}` : ''}`;
+const formatStopReason = (
+  excerpt?: string,
+  codexExecLabel = workflowRunnerCodexExecLabel(WORKFLOW_RUNNER_CODEX_PROFILE),
+): string => `${codexExecLabel} output contained STOP${excerpt ? `: ${excerpt}` : ''}`;
+
+const REVIEW_ENTRY_STAGED_WORK_REASON_PREFIX =
+  'review blocked before review-plan because staged files already exist; finish pending staged work or another review first';
 
 const classifyFailureForLog = (reason: string): FailureMetadataLogFields => {
-  if (reason.startsWith(`${CODEX_EXEC_LABEL} output contained STOP`)) {
+  const stopMatch = /^(?<label>[A-Za-z0-9][A-Za-z0-9_-]* exec) output contained STOP:?\s*/.exec(
+    reason,
+  );
+  if (stopMatch) {
     return {
       failureKind: 'codex-stop',
-      failureReason:
-        reason.replace(new RegExp(`^${CODEX_EXEC_LABEL} output contained STOP:?\\s*`), '') ||
-        'STOP',
+      failureReason: reason.slice(stopMatch[0].length).trim() || 'STOP',
       nextSuggestedAction: 'unblock-plan with evidence',
     };
   }
-  if (reason.startsWith(`could not launch ${CODEX_EXEC_LABEL}`)) {
+  if (/^could not launch [A-Za-z0-9][A-Za-z0-9_-]* exec(?::|$)/.test(reason)) {
     return {
       failureKind: 'codex-launch',
       failureReason: reason,
       nextSuggestedAction: 'fix Codex launch environment, then rerun workflow-runner',
     };
   }
-  if (reason.startsWith(`${CODEX_EXEC_LABEL} exited with code`)) {
+  if (/^[A-Za-z0-9][A-Za-z0-9_-]* exec exited with code\b/.test(reason)) {
     return {
       failureKind: 'codex-exit',
       failureReason: reason,
       nextSuggestedAction: 'inspect workflow log, fix runtime failure, then rerun workflow-runner',
+    };
+  }
+  if (reason.startsWith(REVIEW_ENTRY_STAGED_WORK_REASON_PREFIX)) {
+    return {
+      failureKind: 'review-entry-staged-work',
+      failureReason: reason,
+      nextSuggestedAction:
+        'finish or unstage existing staged work before starting review-plan, then rerun workflow-runner',
     };
   }
   if (
@@ -2537,9 +2584,13 @@ const classifyFailureForLog = (reason: string): FailureMetadataLogFields => {
   };
 };
 
-export const codexOutputStopReason = (stdout: string, stderr: string): string | undefined => {
+export const codexOutputStopReason = (
+  stdout: string,
+  stderr: string,
+  codexExecLabel = workflowRunnerCodexExecLabel(WORKFLOW_RUNNER_CODEX_PROFILE),
+): string | undefined => {
   if (stderr.includes('STOP')) {
-    return formatStopReason(plainStopExcerpt(stderr));
+    return formatStopReason(plainStopExcerpt(stderr), codexExecLabel);
   }
 
   const agentMessages = codexAgentMessageTexts(stdout);
@@ -2550,7 +2601,7 @@ export const codexOutputStopReason = (stdout: string, stderr: string): string | 
           .split(/\r?\n/)
           .map(stripStopDirectivePrefix)
           .find((value): value is string => typeof value === 'string');
-        return formatStopReason(excerpt);
+        return formatStopReason(excerpt, codexExecLabel);
       }
     }
     return undefined;
@@ -2574,7 +2625,7 @@ export const codexOutputStopReason = (stdout: string, stderr: string): string | 
     return undefined;
   }
   if (stdout.includes('STOP')) {
-    return formatStopReason(plainStopExcerpt(stdout));
+    return formatStopReason(plainStopExcerpt(stdout), codexExecLabel);
   }
   return undefined;
 };
@@ -3323,6 +3374,7 @@ export const parsePlan = async ({
     content,
     status: rawStatus,
     nextAction: rawNextAction,
+    warnings: thinPlan.warnings,
   };
 };
 
@@ -3718,18 +3770,17 @@ const appendTokenUsageLedger = async (
 
 const defaultProcessRunner: ProcessRunner = (call) =>
   new Promise((resolve) => {
-    const executable =
-      call.command === CODEX_WORK_COMMAND
-        ? {
-            command: CODEX_BINARY_COMMAND,
-            args: call.args,
-            env: call.env ?? codexWorkEnvironment(),
-          }
-        : {
-            command: call.command,
-            args: call.args,
-            env: call.env ?? process.env,
-          };
+    const executable = call.binaryCommand
+      ? {
+          command: call.binaryCommand,
+          args: call.args,
+          env: call.env ?? process.env,
+        }
+      : {
+          command: call.command,
+          args: call.args,
+          env: call.env ?? process.env,
+        };
 
     const child = spawn(executable.command, executable.args, {
       cwd: call.cwd,
@@ -4156,6 +4207,60 @@ const defaultIsIgnored = async (rootDir: string, relativePath: string): Promise<
   return result.launched && result.exitCode === 0;
 };
 
+const formatPreReviewStagedWorkReason = (output: string): string => {
+  const stagedEntries = output
+    .split(/\r?\n/)
+    .map((line) => line.trimEnd())
+    .filter((line) => /^(?:[ACDMRTUXB]|\?\?|!!)[0-9]*\t.+/.test(line))
+    .map((line) => line.replace(/\t/g, '  '));
+  return stagedEntries.length > 0
+    ? `${REVIEW_ENTRY_STAGED_WORK_REASON_PREFIX}:\n\n${stagedEntries.join(';\n')}`
+    : REVIEW_ENTRY_STAGED_WORK_REASON_PREFIX;
+};
+
+const checkForPreReviewStagedWork = async (
+  rootDir: string,
+  processRunner: ProcessRunner,
+): Promise<{ ok: true } | Failure> => {
+  const result = await processRunner({
+    command: 'git',
+    args: ['diff', '--staged', '--name-status', '--'],
+    cwd: rootDir,
+    input: '',
+    promptPath: 'git-pre-review-staged-check',
+  }).catch(
+    (error): ProcessResult => ({
+      launched: false,
+      stdout: '',
+      stderr: '',
+      error: String(error),
+    }),
+  );
+
+  if (!result.launched) {
+    return {
+      ok: false,
+      reason: `could not launch review preflight staged file check: ${result.error}`,
+    };
+  }
+
+  if (result.exitCode !== 0) {
+    const details = [result.stderr.trim(), result.stdout.trim()].filter(Boolean).join('\n');
+    return {
+      ok: false,
+      reason: `review preflight staged file check exited with code ${result.exitCode}${details ? `: ${details}` : ''}`,
+    };
+  }
+
+  const stagedOutput = [result.stdout.trim(), result.stderr.trim()].filter(Boolean).join('\n');
+  const reason = formatPreReviewStagedWorkReason(stagedOutput);
+  if (reason !== REVIEW_ENTRY_STAGED_WORK_REASON_PREFIX) {
+    return { ok: false, reason };
+  }
+
+  return { ok: true };
+};
+
 const runReviewStagingForPaths = async (
   rootDir: string,
   paths: string[],
@@ -4347,6 +4452,7 @@ ${diff}
 `;
 
 const runScopeCleanupForPaths = async ({
+  codexRuntime,
   rootDir,
   planPath,
   planContent,
@@ -4354,6 +4460,7 @@ const runScopeCleanupForPaths = async ({
   processRunner,
   mode,
 }: {
+  codexRuntime: WorkflowRunnerCodexRuntime;
   rootDir: string;
   planPath: string;
   planContent: string;
@@ -4386,7 +4493,8 @@ const runScopeCleanupForPaths = async ({
   });
   const executionConfig = codexExecutionConfig(SCOPE_CLEANUP_PROMPT_PATH);
   const result = await processRunner({
-    command: CODEX_WORK_COMMAND,
+    command: codexRuntime.command,
+    binaryCommand: CODEX_BINARY_COMMAND,
     args: codexExecArgs({
       executionConfig,
       promptPath: SCOPE_CLEANUP_PROMPT_PATH,
@@ -4396,7 +4504,7 @@ const runScopeCleanupForPaths = async ({
     cwd: rootDir,
     input: '',
     promptPath: SCOPE_CLEANUP_PROMPT_PATH,
-    env: codexWorkEnvironment(),
+    env: codexWorkEnvironment(process.env, codexRuntime.profile),
   }).catch(
     (): ProcessResult => ({
       launched: false,
@@ -4948,6 +5056,15 @@ export const runWorkflowRunner = async (
   }
   const planArgument = options.planName ?? cliArgs.planArgument;
   const compactOutput = options.compactOutput ?? cliArgs.compactOutput;
+  const codexProfile =
+    options.codexProfile ?? cliArgs.codexProfile ?? WORKFLOW_RUNNER_CODEX_PROFILE;
+  if (!isValidCodexProfile(codexProfile)) {
+    const reason = `invalid --profile value: ${codexProfile}`;
+    logger.error(`FAILED: ${reason}`);
+    logger.error(`- Worked for ${formatWorkflowElapsedTime(0)}`);
+    return failure(reason);
+  }
+  const codexRuntime = createWorkflowRunnerCodexRuntime(codexProfile);
   const unblockNote = options.unblockNote ?? cliArgs.unblockNote;
   const processRunner = options.processRunner ?? defaultProcessRunner;
   const now = options.now ?? Date.now;
@@ -5099,6 +5216,7 @@ export const runWorkflowRunner = async (
   if (!initialParsedPlan.ok) {
     return await finishFailure(initialParsedPlan.reason);
   }
+  emitWorkflowThresholdWarnings(initialParsedPlan.warnings);
   let parsedPlan: ParsedPlan = initialParsedPlan;
   tokenUsageTotals = await readTokenUsageTotals(rootDir, parsedPlan.planName);
   const syncWorkflowSnapshot = async (
@@ -5195,6 +5313,7 @@ export const runWorkflowRunner = async (
           status: parsedPlan.status,
           nextAction: parsedPlan.nextAction,
           promptPath: route.promptPath,
+          model: executionConfig.model,
           reasoning: executionConfig.reasoning,
           color: colorOutput,
         }),
@@ -5242,6 +5361,62 @@ export const runWorkflowRunner = async (
       }
     }
     if (route.promptPath === rel('.ai', 'prompts', 'review-changes.md')) {
+      const preExistingStagedWork = await checkForPreReviewStagedWork(rootDir, processRunner);
+      if (!preExistingStagedWork.ok) {
+        logWorkflowProgress();
+        const durationMs = Math.max(0, now() - attemptStartedAt);
+        const logTimestamp = timestamp();
+        const failureMetadata = classifyFailureForLog(preExistingStagedWork.reason);
+        const failureDebugResult = await appendFailureDebugLedger(
+          rootDir,
+          parsedPlan.planName,
+          createWorkflowFailureDebugRecord({
+            timestamp: logTimestamp,
+            iteration: nextIteration,
+            planPath: parsedPlan.planPath,
+            status: parsedPlan.status,
+            nextAction: parsedPlan.nextAction,
+            promptPath: route.promptPath,
+            result: 'not-launched',
+            exitCode: undefined,
+            stopReason: preExistingStagedWork.reason,
+            failureMetadata,
+            stdout: '',
+            stderr: '',
+          }),
+        );
+        if (!failureDebugResult.ok) {
+          return await finishFailure(failureDebugResult.reason);
+        }
+        const logResult = await appendLog(
+          rootDir,
+          parsedPlan.planName,
+          logFields({
+            timestamp: logTimestamp,
+            iteration: nextIteration,
+            planPath: parsedPlan.planPath,
+            status: parsedPlan.status,
+            nextAction: parsedPlan.nextAction,
+            promptPath: route.promptPath,
+            model: executionConfig.model,
+            reasoning: executionConfig.reasoning,
+            contextUsage: unavailableContextUsage,
+            result: 'not-launched',
+            exitCode: undefined,
+            durationMs,
+            stopReason: preExistingStagedWork.reason,
+            failureDebugPath: failureDebugResult.pointer,
+            stdout: '',
+            stderr: '',
+            staging: undefined,
+          }),
+        );
+        if (!logResult.ok) {
+          return await finishFailure(logResult.reason);
+        }
+        markWorkflowLogCreated(parsedPlan.planName);
+        return await finishFailure(preExistingStagedWork.reason);
+      }
       const parsedPaths = await parseReviewStagingPaths({
         content: parsedPlan.content,
         rootDir,
@@ -5378,6 +5553,7 @@ export const runWorkflowRunner = async (
         return await finishFailure(stopReason);
       }
       await runScopeCleanupForPaths({
+        codexRuntime,
         rootDir,
         planPath: parsedPlan.planPath,
         planContent: parsedPlan.content,
@@ -5459,7 +5635,8 @@ export const runWorkflowRunner = async (
       : undefined;
     waitNotice.start();
     const result = await processRunner({
-      command: CODEX_WORK_COMMAND,
+      command: codexRuntime.command,
+      binaryCommand: CODEX_BINARY_COMMAND,
       args: codexExecArgs({
         executionConfig,
         promptPath: route.promptPath,
@@ -5469,7 +5646,7 @@ export const runWorkflowRunner = async (
       cwd: rootDir,
       input: '',
       promptPath: route.promptPath,
-      env: codexWorkEnvironment(),
+      env: codexWorkEnvironment(process.env, codexRuntime.profile),
       abortSignal: options.abortSignal,
       onStdout: liveOutput?.stdout,
       onStderr: liveOutput?.stderr,
@@ -5505,13 +5682,13 @@ export const runWorkflowRunner = async (
         ? result.exitSignal
         : undefined);
     if (!result.launched) {
-      stopReason = `could not launch ${CODEX_EXEC_LABEL}: ${result.error}`;
+      stopReason = `could not launch ${codexRuntime.execLabel}: ${result.error}`;
     } else if (interruptSignal) {
-      stopReason = `${CODEX_EXEC_LABEL} interrupted by ${interruptSignal}`;
+      stopReason = `${codexRuntime.execLabel} interrupted by ${interruptSignal}`;
     } else if (result.exitCode !== 0) {
-      stopReason = `${CODEX_EXEC_LABEL} exited with code ${result.exitCode}`;
+      stopReason = `${codexRuntime.execLabel} exited with code ${result.exitCode}`;
     } else {
-      stopReason = codexOutputStopReason(result.stdout, result.stderr);
+      stopReason = codexOutputStopReason(result.stdout, result.stderr, codexRuntime.execLabel);
     }
 
     const appendIterationLog = async (
@@ -5694,6 +5871,7 @@ export const runWorkflowRunner = async (
       }
       return await finishFailure(reason);
     }
+    emitWorkflowThresholdWarnings(updated.warnings);
     if (updated.content === previousContent) {
       const cleanup = await cleanupReviewStagingPaths(reviewStagingPaths);
       const reason = cleanup.ok

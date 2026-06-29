@@ -10,6 +10,7 @@ export type ParsedRunnerCliArgs =
       ok: true;
       planArgument: string;
       compactOutput: boolean;
+      codexProfile?: string;
       unblockNote?: string;
     }
   | Failure;
@@ -18,6 +19,7 @@ const rel = (...segments: string[]) => segments.join('/');
 
 export const parseRunnerCliArgs = (argv: string[] = []): ParsedRunnerCliArgs => {
   let compactOutput = false;
+  let codexProfile: string | undefined;
   let unblockNote: string | undefined;
   let planArgument = '';
 
@@ -39,6 +41,15 @@ export const parseRunnerCliArgs = (argv: string[] = []): ParsedRunnerCliArgs => 
       index += 1;
       continue;
     }
+    if (arg === '--profile') {
+      const profile = argv[index + 1];
+      if (!profile || profile.startsWith('--')) {
+        return { ok: false, reason: '--profile requires a value' };
+      }
+      codexProfile = profile;
+      index += 1;
+      continue;
+    }
     if (arg.startsWith('--')) {
       return { ok: false, reason: `unknown workflow runner flag: ${arg}` };
     }
@@ -52,6 +63,7 @@ export const parseRunnerCliArgs = (argv: string[] = []): ParsedRunnerCliArgs => 
     ok: true,
     planArgument,
     compactOutput,
+    codexProfile,
     unblockNote,
   };
 };

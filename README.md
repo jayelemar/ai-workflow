@@ -240,6 +240,12 @@ Quiet terminal mode:
 pnpm exec tsx .ai/scripts/workflow-runner.ts --compact .ai/plans/<plan-name>.md
 ```
 
+One-off Codex profile override:
+
+```bash
+pnpm exec tsx .ai/scripts/workflow-runner.ts --profile codex-personal .ai/plans/<plan-name>.md
+```
+
 Runner expectations:
 
 - the plan path must be exactly `.ai/plans/<plan-name>.md`
@@ -417,6 +423,9 @@ pnpm exec tsx .ai/scripts/workflow-runner.ts .ai/plans/<plan-name>.md
 
 # Run the default workflow path with compact terminal output
 pnpm exec tsx .ai/scripts/workflow-runner.ts --compact .ai/plans/<plan-name>.md
+
+# Run the default workflow path with a one-off Codex profile override
+pnpm exec tsx .ai/scripts/workflow-runner.ts --profile codex-personal .ai/plans/<plan-name>.md
 
 # List local workflow files, including ignored ones
 rg --files -uu .ai
