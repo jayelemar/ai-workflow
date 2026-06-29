@@ -5056,7 +5056,8 @@ export const runWorkflowRunner = async (
   }
   const planArgument = options.planName ?? cliArgs.planArgument;
   const compactOutput = options.compactOutput ?? cliArgs.compactOutput;
-  const codexProfile = options.codexProfile ?? cliArgs.codexProfile ?? WORKFLOW_RUNNER_CODEX_PROFILE;
+  const codexProfile =
+    options.codexProfile ?? cliArgs.codexProfile ?? WORKFLOW_RUNNER_CODEX_PROFILE;
   if (!isValidCodexProfile(codexProfile)) {
     const reason = `invalid --profile value: ${codexProfile}`;
     logger.error(`FAILED: ${reason}`);
