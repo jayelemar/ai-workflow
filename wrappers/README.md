@@ -24,6 +24,12 @@ Default runner path:
 pnpm exec tsx .ai/scripts/workflow-runner.ts .ai/plans/<plan-name>.md
 ```
 
+One-off Codex profile override:
+
+```bash
+pnpm exec tsx .ai/scripts/workflow-runner.ts --profile codex-personal .ai/plans/<plan-name>.md
+```
+
 Manual preview path:
 
 ```text

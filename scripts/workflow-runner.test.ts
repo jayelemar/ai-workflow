@@ -57,6 +57,9 @@ const PROMPTS = {
 const CODEX_COMMAND = WORKFLOW_RUNNER_CODEX_PROFILE;
 const CODEX_EXEC_LABEL = `${CODEX_COMMAND} exec`;
 const CODEX_HOME_SUFFIX = `/.${CODEX_COMMAND}`;
+const OVERRIDE_CODEX_PROFILE = "codex-personal";
+const OVERRIDE_CODEX_EXEC_LABEL = `${OVERRIDE_CODEX_PROFILE} exec`;
+const OVERRIDE_CODEX_HOME_SUFFIX = `/.${OVERRIDE_CODEX_PROFILE}`;
 
 const planWith = (status: string, nextAction: string, extra = "") => `# Plan
 
@@ -922,6 +925,14 @@ test(`${CODEX_COMMAND} environment matches the local ${CODEX_COMMAND} function a
       PATH: "/home/tester/.nvm/versions/node/v20.20.2/bin:/usr/bin",
     }).PATH,
     "/home/tester/.nvm/versions/node/v20.20.2/bin:/usr/bin",
+  );
+  assert.deepEqual(
+    codexWorkEnvironment({ HOME: "/home/tester", PATH: "/usr/bin" }, OVERRIDE_CODEX_PROFILE),
+    {
+      HOME: "/home/tester",
+      PATH: "/home/tester/.nvm/versions/node/v20.20.2/bin:/usr/bin",
+      CODEX_HOME: `/home/tester${OVERRIDE_CODEX_HOME_SUFFIX}`,
+    },
   );
 });
 
@@ -4349,6 +4360,48 @@ test(`${CODEX_EXEC_LABEL} prompt contains selected prompt content and exact plan
   }
 });
 
+test(`${OVERRIDE_CODEX_EXEC_LABEL} override applies to launched codex commands and CODEX_HOME`, async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(workspace.root, "workflow-runner", planWith("active", "execute-plan"));
+    const calls: Parameters<ProcessRunner>[0][] = [];
+    const result = await runWorkflowRunner({
+      argv: ["--profile", OVERRIDE_CODEX_PROFILE, ".ai/plans/workflow-runner.md"],
+      rootDir: workspace.root,
+      processRunner: runnerReturning(
+        { launched: true, stdout: "ok", stderr: "", exitCode: 0 },
+        (call) => {
+          calls.push(call);
+          if (call.promptPath === ".ai/prompts/execute-plan.md") {
+            writeFileSync(
+              join(workspace.root, ".ai", "plans", "workflow-runner.md"),
+              planWith("review", "review-plan"),
+            );
+          }
+        },
+      ),
+    });
+    assert.equal(result.success, false);
+    assert.deepEqual(
+      calls
+        .filter((call) => call.command === OVERRIDE_CODEX_PROFILE)
+        .map((call) => call.promptPath),
+      [
+        ".ai/prompts/execute-plan.md",
+        ".ai/prompts/scope-cleanup.md",
+        ".ai/prompts/review-changes.md",
+      ],
+    );
+    assert.equal(calls[0].command, OVERRIDE_CODEX_PROFILE);
+    assert.match(
+      calls[0].env?.CODEX_HOME ?? "",
+      new RegExp(`${OVERRIDE_CODEX_HOME_SUFFIX.replace("/", "\\/")}$`),
+    );
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
 test("reopen-plan prompts include selected prompt content and continue to execute-plan", async () => {
   const workspace = await setupWorkspace();
   try {
@@ -5612,6 +5665,22 @@ test(`compact CLI validation failures stop before ${CODEX_EXEC_LABEL}`, async ()
     });
     assert.equal(missingUnblockNote.success, false);
     assert.match(missingUnblockNote.reason, /--unblock-note requires a value/);
+
+    const missingCodexProfile = await runWorkflowRunner({
+      argv: ["--compact", ".ai/plans/workflow-runner.md", "--profile"],
+      rootDir: workspace.root,
+      processRunner,
+    });
+    assert.equal(missingCodexProfile.success, false);
+    assert.match(missingCodexProfile.reason, /--profile requires a value/);
+
+    const invalidCodexProfile = await runWorkflowRunner({
+      argv: ["--compact", "--profile", "../codex-personal", ".ai/plans/workflow-runner.md"],
+      rootDir: workspace.root,
+      processRunner,
+    });
+    assert.equal(invalidCodexProfile.success, false);
+    assert.match(invalidCodexProfile.reason, /invalid --profile value/);
 
     assert.equal(processCalls.length, 0);
   } finally {
