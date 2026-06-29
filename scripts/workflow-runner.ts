@@ -5177,6 +5177,25 @@ export const runWorkflowRunner = async (
     let reviewCleanup: ReviewCleanupProcess | undefined;
     let reviewStagingPaths: string[] | undefined;
     let commitSummaryPaths: string[] | undefined;
+    let progressLogged = false;
+    const logWorkflowProgress = () => {
+      if (progressLogged) {
+        return;
+      }
+      iterations = nextIteration;
+      logger.log(
+        formatWorkflowProgressLine({
+          iteration: iterations,
+          maxIterations: MAX_ITERATIONS,
+          status: parsedPlan.status,
+          nextAction: parsedPlan.nextAction,
+          promptPath: route.promptPath,
+          reasoning: executionConfig.reasoning,
+          color: colorOutput,
+        }),
+      );
+      progressLogged = true;
+    };
     const cleanupReviewStagingPaths = async (
       paths: string[] | undefined,
     ): Promise<{ ok: true } | Failure> => {
@@ -5287,6 +5306,12 @@ export const runWorkflowRunner = async (
       if (!acquired.ok) {
         return await finishFailure(acquired.reason);
       }
+      logWorkflowProgress();
+      logger.log(
+        `Staging ${parsedPaths.paths.length} plan-owned ${
+          parsedPaths.paths.length === 1 ? 'file' : 'files'
+        } for review...`,
+      );
       const staged = await runReviewStagingForPaths(rootDir, parsedPaths.paths, processRunner);
       if (!staged.ok) {
         const cleanup = await cleanupReviewStagingPaths(parsedPaths.paths);
@@ -5380,18 +5405,7 @@ export const runWorkflowRunner = async (
       }
     }
 
-    iterations = nextIteration;
-    logger.log(
-      formatWorkflowProgressLine({
-        iteration: iterations,
-        maxIterations: MAX_ITERATIONS,
-        status: parsedPlan.status,
-        nextAction: parsedPlan.nextAction,
-        promptPath: route.promptPath,
-        reasoning: executionConfig.reasoning,
-        color: colorOutput,
-      }),
-    );
+    logWorkflowProgress();
     const contextSnapshot = await syncWorkflowSnapshot(parsedPlan);
     if (!contextSnapshot.ok) {
       return await finishFailure(contextSnapshot.reason);

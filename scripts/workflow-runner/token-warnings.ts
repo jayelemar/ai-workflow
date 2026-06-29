@@ -37,20 +37,13 @@ export const collectWorkflowThresholdWarnings = ({
   }
 
   if (
-    isFiniteNumber(latestTokenUsage?.stageInputTokens) &&
-    latestTokenUsage.stageInputTokens > WORKFLOW_CONTEXT_STAGE_INPUT_WARNING_TOKENS
+    (isFiniteNumber(latestTokenUsage?.stageInputTokens) &&
+      latestTokenUsage.stageInputTokens > WORKFLOW_CONTEXT_STAGE_INPUT_WARNING_TOKENS) ||
+    (isFiniteNumber(latestTokenUsage?.stageUncachedInputTokens) &&
+      latestTokenUsage.stageUncachedInputTokens > WORKFLOW_CONTEXT_STAGE_UNCACHED_WARNING_TOKENS)
   ) {
     warnings.push(
-      `Advisory only: stage input tokens were ${latestTokenUsage.stageInputTokens.toLocaleString('en-US')} (> 2,000,000). If the next stage is execute-plan, the runner will add stricter snapshot-first guidance.`,
-    );
-  }
-
-  if (
-    isFiniteNumber(latestTokenUsage?.stageUncachedInputTokens) &&
-    latestTokenUsage.stageUncachedInputTokens > WORKFLOW_CONTEXT_STAGE_UNCACHED_WARNING_TOKENS
-  ) {
-    warnings.push(
-      `Advisory only: stage uncached input tokens were ${latestTokenUsage.stageUncachedInputTokens.toLocaleString('en-US')} (> 100,000). If the next stage is execute-plan, the runner will keep it snapshot-first with exact-file fallback.`,
+      'Stage token usage is high; next execute-plan will use snapshot-first guidance.',
     );
   }
 
