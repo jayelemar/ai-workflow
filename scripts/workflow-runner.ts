@@ -1517,7 +1517,10 @@ const nextSectionLines = (lines: string[]): string[] => {
   if (explicitNextValues.status) {
     explicitLines.push(`Status: \`${explicitNextValues.status}\``);
   }
-  if (explicitNextValues.nextAction) {
+  if (
+    explicitNextValues.nextAction &&
+    !shouldSuppressTerminalNextAction(explicitNextValues.status, explicitNextValues.nextAction)
+  ) {
     explicitLines.push(`Next Action: \`${explicitNextValues.nextAction}\``);
   }
   if (explicitLines.length > 0) {
@@ -1530,10 +1533,15 @@ const nextSectionLines = (lines: string[]): string[] => {
     return [];
   }
   const nextAction = workflowNextActionForStatus(status);
-  return nextAction
+  return nextAction && !shouldSuppressTerminalNextAction(status, nextAction)
     ? [`Status: \`${status}\``, `Next Action: \`${nextAction}\``]
     : [`Status: \`${status}\``];
 };
+
+const shouldSuppressTerminalNextAction = (
+  status: string | undefined,
+  nextAction: string | undefined,
+): boolean => status === 'completed' && nextAction === 'commit-summary';
 
 const workflowNextActionForStatus = (status: string): NextAction | null => {
   switch (status) {
@@ -2456,6 +2464,9 @@ const plainStopExcerpt = (text: string): string | undefined => {
 const formatStopReason = (excerpt?: string): string =>
   `${CODEX_EXEC_LABEL} output contained STOP${excerpt ? `: ${excerpt}` : ''}`;
 
+const REVIEW_ENTRY_STAGED_WORK_REASON_PREFIX =
+  'review blocked before review-plan because staged files already exist; finish pending staged work or another review first';
+
 const classifyFailureForLog = (reason: string): FailureMetadataLogFields => {
   if (reason.startsWith(`${CODEX_EXEC_LABEL} output contained STOP`)) {
     return {
@@ -2478,6 +2489,14 @@ const classifyFailureForLog = (reason: string): FailureMetadataLogFields => {
       failureKind: 'codex-exit',
       failureReason: reason,
       nextSuggestedAction: 'inspect workflow log, fix runtime failure, then rerun workflow-runner',
+    };
+  }
+  if (reason.startsWith(REVIEW_ENTRY_STAGED_WORK_REASON_PREFIX)) {
+    return {
+      failureKind: 'review-entry-staged-work',
+      failureReason: reason,
+      nextSuggestedAction:
+        'finish or unstage existing staged work before starting review-plan, then rerun workflow-runner',
     };
   }
   if (
@@ -4156,6 +4175,59 @@ const defaultIsIgnored = async (rootDir: string, relativePath: string): Promise<
   return result.launched && result.exitCode === 0;
 };
 
+const formatPreReviewStagedWorkReason = (output: string): string => {
+  const stagedEntries = output
+    .split(/\r?\n/)
+    .map((line) => line.trimEnd())
+    .filter((line) => /^(?:[ACDMRTUXB]|\?\?|!!)[0-9]*\t.+/.test(line));
+  return stagedEntries.length > 0
+    ? `${REVIEW_ENTRY_STAGED_WORK_REASON_PREFIX}: ${stagedEntries.join('; ')}`
+    : REVIEW_ENTRY_STAGED_WORK_REASON_PREFIX;
+};
+
+const checkForPreReviewStagedWork = async (
+  rootDir: string,
+  processRunner: ProcessRunner,
+): Promise<{ ok: true } | Failure> => {
+  const result = await processRunner({
+    command: 'git',
+    args: ['diff', '--staged', '--name-status', '--'],
+    cwd: rootDir,
+    input: '',
+    promptPath: 'git-pre-review-staged-check',
+  }).catch(
+    (error): ProcessResult => ({
+      launched: false,
+      stdout: '',
+      stderr: '',
+      error: String(error),
+    }),
+  );
+
+  if (!result.launched) {
+    return {
+      ok: false,
+      reason: `could not launch review preflight staged file check: ${result.error}`,
+    };
+  }
+
+  if (result.exitCode !== 0) {
+    const details = [result.stderr.trim(), result.stdout.trim()].filter(Boolean).join('\n');
+    return {
+      ok: false,
+      reason: `review preflight staged file check exited with code ${result.exitCode}${details ? `: ${details}` : ''}`,
+    };
+  }
+
+  const stagedOutput = [result.stdout.trim(), result.stderr.trim()].filter(Boolean).join('\n');
+  const reason = formatPreReviewStagedWorkReason(stagedOutput);
+  if (reason !== REVIEW_ENTRY_STAGED_WORK_REASON_PREFIX) {
+    return { ok: false, reason };
+  }
+
+  return { ok: true };
+};
+
 const runReviewStagingForPaths = async (
   rootDir: string,
   paths: string[],
@@ -5242,6 +5314,62 @@ export const runWorkflowRunner = async (
       }
     }
     if (route.promptPath === rel('.ai', 'prompts', 'review-changes.md')) {
+      const preExistingStagedWork = await checkForPreReviewStagedWork(rootDir, processRunner);
+      if (!preExistingStagedWork.ok) {
+        logWorkflowProgress();
+        const durationMs = Math.max(0, now() - attemptStartedAt);
+        const logTimestamp = timestamp();
+        const failureMetadata = classifyFailureForLog(preExistingStagedWork.reason);
+        const failureDebugResult = await appendFailureDebugLedger(
+          rootDir,
+          parsedPlan.planName,
+          createWorkflowFailureDebugRecord({
+            timestamp: logTimestamp,
+            iteration: nextIteration,
+            planPath: parsedPlan.planPath,
+            status: parsedPlan.status,
+            nextAction: parsedPlan.nextAction,
+            promptPath: route.promptPath,
+            result: 'not-launched',
+            exitCode: undefined,
+            stopReason: preExistingStagedWork.reason,
+            failureMetadata,
+            stdout: '',
+            stderr: '',
+          }),
+        );
+        if (!failureDebugResult.ok) {
+          return await finishFailure(failureDebugResult.reason);
+        }
+        const logResult = await appendLog(
+          rootDir,
+          parsedPlan.planName,
+          logFields({
+            timestamp: logTimestamp,
+            iteration: nextIteration,
+            planPath: parsedPlan.planPath,
+            status: parsedPlan.status,
+            nextAction: parsedPlan.nextAction,
+            promptPath: route.promptPath,
+            model: executionConfig.model,
+            reasoning: executionConfig.reasoning,
+            contextUsage: unavailableContextUsage,
+            result: 'not-launched',
+            exitCode: undefined,
+            durationMs,
+            stopReason: preExistingStagedWork.reason,
+            failureDebugPath: failureDebugResult.pointer,
+            stdout: '',
+            stderr: '',
+            staging: undefined,
+          }),
+        );
+        if (!logResult.ok) {
+          return await finishFailure(logResult.reason);
+        }
+        markWorkflowLogCreated(parsedPlan.planName);
+        return await finishFailure(preExistingStagedWork.reason);
+      }
       const parsedPaths = await parseReviewStagingPaths({
         content: parsedPlan.content,
         rootDir,

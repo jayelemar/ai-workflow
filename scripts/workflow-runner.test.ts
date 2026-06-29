@@ -1116,6 +1116,77 @@ test("codex live output formatter condenses shared non-review summaries without 
   );
 });
 
+test("codex live output formatter hides completed commit-summary next action in the Next block", () => {
+  const workflowSummary = [
+    "**Plan**",
+    "`.ai/plans/workflow-runner.md`",
+    "",
+    "**Summary**",
+    "* COMPLETED",
+    "* Finished the plan.",
+    "",
+    "**Key Details**",
+    "* Detail retained.",
+    "",
+    "**Next**",
+    "Status: `completed`",
+    "Next Action: `commit-summary`",
+  ].join("\n");
+
+  assert.equal(
+    formatCodexJsonlEventForTerminal(codexAgentMessageLine(workflowSummary), { color: false }),
+    [
+      "[agent]",
+      "**Plan**",
+      "`.ai/plans/workflow-runner.md`",
+      "",
+      "**Summary**",
+      "* COMPLETED",
+      "* Finished the plan.",
+      "",
+      "**Key Details**",
+      "* Detail retained.",
+      "",
+      "**Next**",
+      "Status: `completed`",
+      "",
+      "",
+    ].join("\n"),
+  );
+});
+
+test("codex live output formatter keeps next action for non-completed summaries", () => {
+  const workflowSummary = [
+    "**Plan**",
+    "`.ai/plans/workflow-runner.md`",
+    "",
+    "**Summary**",
+    "* REVIEW READY",
+    "",
+    "**Next**",
+    "Status: `review`",
+    "Next Action: `review-plan`",
+  ].join("\n");
+
+  assert.equal(
+    formatCodexJsonlEventForTerminal(codexAgentMessageLine(workflowSummary), { color: false }),
+    [
+      "[agent]",
+      "**Plan**",
+      "`.ai/plans/workflow-runner.md`",
+      "",
+      "**Summary**",
+      "* REVIEW READY",
+      "",
+      "**Next**",
+      "Status: `review`",
+      "Next Action: `review-plan`",
+      "",
+      "",
+    ].join("\n"),
+  );
+});
+
 test("codex live output formatter normalizes multiline next fields", () => {
   const workflowSummary = [
     "**Plan**",
@@ -1353,7 +1424,6 @@ test("codex live output formatter preserves commit-summary subject and user bull
       "",
       "**Next**",
       "Status: `completed`",
-      "Next Action: `commit-summary`",
       "",
       "",
     ].join("\n"),
@@ -3834,6 +3904,7 @@ test("review safe path routes to completed commit-summary and succeeds after pla
     assert.deepEqual(
       calls.filter((call) => call.command === "git").map((call) => call.args.slice(0, 4)),
       [
+        ["diff", "--staged", "--name-status", "--"],
         ["add", "--all", "--", "src/file.ts"],
         ["diff", "--cached", "--unified=0", "--"],
         ["status", "--short", "--", "src/file.ts"],
@@ -3984,7 +4055,7 @@ test("workflow runner succeeds after review defers final browser validation to m
     );
     assert.deepEqual(
       calls.filter((call) => call.command === "git").map((call) => call.args[0]),
-      ["add", "diff", "status"],
+      ["diff", "add", "diff", "status"],
     );
     const consoleOutput = output.lines.join("\n");
     assert.match(consoleOutput, /SUCCESS/);
@@ -4188,11 +4259,12 @@ test(`${CODEX_EXEC_LABEL} prompt contains selected prompt content and exact plan
       ),
     });
     assert.equal(result.success, false);
-    assert.equal(calls.length, 6);
+    assert.equal(calls.length, 7);
     assert.deepEqual(
       calls.map((call) => [call.command, call.args[0], call.promptPath]),
       [
         [CODEX_COMMAND, "exec", ".ai/prompts/execute-plan.md"],
+        ["git", "diff", "git-pre-review-staged-check"],
         ["git", "add", "git-staging"],
         ["git", "diff", "git-scope-cleanup-diff"],
         [CODEX_COMMAND, "exec", ".ai/prompts/scope-cleanup.md"],
@@ -6438,17 +6510,18 @@ test(`review staging git add runs before review ${CODEX_COMMAND}, unstages plan-
     assert.match(failed.reason, /review staging git add exited with code 1/);
     assert.match(failed.reason, /fatal/);
     assert.deepEqual(calls.map((call) => [call.command, call.args[0]]), [
+      ["git", "diff"],
       ["git", "add"],
       ["git", "restore"],
     ]);
-    assert.deepEqual(calls[0].args, [
+    assert.deepEqual(calls[1].args, [
       "add",
       "--all",
       "--",
       ".ai/scripts/workflow-runner.test.ts",
       ".ai/scripts/workflow-runner.ts",
     ]);
-    assert.deepEqual(calls[1].args, [
+    assert.deepEqual(calls[2].args, [
       "restore",
       "--staged",
       "--",
@@ -6464,6 +6537,112 @@ test(`review staging git add runs before review ${CODEX_COMMAND}, unstages plan-
       reason: /failureReason: review staging git add exited with code 1: fatal/,
       nextSuggestedAction: /nextSuggestedAction: fix review staging paths or git error, then rerun workflow-runner/,
     });
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("review-plan stops before staging or prompt execution when any staged files already exist", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(workspace.root, "review-guard", planWith("review", "review-plan"));
+    const calls: Parameters<ProcessRunner>[0][] = [];
+    const output = collectConsole();
+    const failed = await runWorkflowRunner({
+      planName: planArg("review-guard"),
+      rootDir: workspace.root,
+      console: output.console,
+      processRunner: async (call) => {
+        calls.push(call);
+        if (
+          call.command === "git" &&
+          call.args[0] === "diff" &&
+          call.args[1] === "--staged" &&
+          call.args[2] === "--name-status"
+        ) {
+          return {
+            launched: true,
+            stdout: ["M\tother-plan.ts", "A\tsrc/leftover.ts"].join("\n"),
+            stderr: "",
+            exitCode: 0,
+          };
+        }
+        return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+      },
+    });
+
+    assert.equal(failed.success, false);
+    assert.match(
+      failed.reason,
+      /review blocked before review-plan because staged files already exist; finish pending staged work or another review first/,
+    );
+    assert.match(failed.reason, /other-plan\.ts/);
+    assert.match(failed.reason, /src\/leftover\.ts/);
+    assert.deepEqual(
+      calls.map((call) => [call.command, call.args[0] ?? "", call.promptPath]),
+      [["git", "diff", "git-pre-review-staged-check"]],
+    );
+    assert.equal(
+      output.lines.some((line) => /staged files already exist/i.test(line) && /other-plan\.ts/.test(line)),
+      true,
+    );
+
+    const log = await readFile(
+      join(workspace.root, ".ai", "artifacts", "review-guard", "logs", "runner.log"),
+      "utf8",
+    );
+    assertFailureMetadata(log, {
+      kind: "review-entry-staged-work",
+      reason:
+        /failureReason: review blocked before review-plan because staged files already exist; finish pending staged work or another review first: M\tother-plan\.ts; A\tsrc\/leftover\.ts/,
+      nextSuggestedAction:
+        /nextSuggestedAction: finish or unstage existing staged work before starting review-plan, then rerun workflow-runner/,
+    });
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("review-plan stages plan-owned files normally when the repo has no pre-existing staged work", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(workspace.root, "review-clean-entry", planWith("review", "review-plan"));
+    const calls: Parameters<ProcessRunner>[0][] = [];
+    const result = await runWorkflowRunner({
+      planName: planArg("review-clean-entry"),
+      rootDir: workspace.root,
+      processRunner: async (call) => {
+        calls.push(call);
+        if (
+          call.command === "git" &&
+          call.args[0] === "diff" &&
+          call.args[1] === "--staged" &&
+          call.args[2] === "--name-status"
+        ) {
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
+        if (call.command === "git") {
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
+        if (call.promptPath === ".ai/prompts/review-changes.md") {
+          await writePlan(workspace.root, "review-clean-entry", planWith("completed", "commit-summary"));
+        }
+        return { launched: true, stdout: "summary", stderr: "", exitCode: 0 };
+      },
+    });
+
+    assert.equal(result.success, true);
+    assert.deepEqual(
+      calls.map((call) => [call.command, call.args[0] ?? "", call.promptPath]),
+      [
+        ["git", "diff", "git-pre-review-staged-check"],
+        ["git", "add", "git-staging"],
+        ["git", "diff", "git-scope-cleanup-diff"],
+        [CODEX_COMMAND, "exec", ".ai/prompts/review-changes.md"],
+        [CODEX_COMMAND, "exec", ".ai/prompts/commit-summary.md"],
+        ["git", "status", "git-commit-summary-clean-check"],
+      ],
+    );
   } finally {
     await workspace.cleanup();
   }
@@ -6542,6 +6721,7 @@ test("review staging auto-unstages unrelated hunks before review prompt runs", a
     assert.deepEqual(
       calls.map((call) => [call.command, call.args[0] ?? "", call.promptPath]),
       [
+        ["git", "diff", "git-pre-review-staged-check"],
         ["git", "add", "git-staging"],
         ["git", "diff", "git-scope-cleanup-diff"],
         [CODEX_COMMAND, "exec", ".ai/prompts/scope-cleanup.md"],
@@ -6551,7 +6731,7 @@ test("review staging auto-unstages unrelated hunks before review prompt runs", a
         ["git", "status", "git-commit-summary-clean-check"],
       ],
     );
-    assert.equal(calls[3].input.includes('const unrelated = "remove";'), true);
+    assert.equal(calls[4].input.includes('const unrelated = "remove";'), true);
   } finally {
     await workspace.cleanup();
   }
@@ -6577,12 +6757,13 @@ test(`review ${CODEX_COMMAND} failure after staging unstages plan-owned files be
     assert.equal(failed.success, false);
     assert.match(failed.reason, /output contained STOP: review requires manual fix/);
     assert.deepEqual(calls.map((call) => [call.command, call.args[0] ?? ""]), [
+      ["git", "diff"],
       ["git", "add"],
       ["git", "diff"],
       [CODEX_COMMAND, "exec"],
       ["git", "restore"],
     ]);
-    assert.deepEqual(calls[3].args, [
+    assert.deepEqual(calls[4].args, [
       "restore",
       "--staged",
       "--",
@@ -6706,13 +6887,14 @@ test(`review returning to active unstages plan-owned files before resuming execu
     assert.equal(result.success, false);
     assert.match(result.reason, /plan blocked after execute-plan/);
     assert.deepEqual(calls.map((call) => [call.command, call.args[0] ?? "", call.promptPath]), [
+      ["git", "diff", "git-pre-review-staged-check"],
       ["git", "add", "git-staging"],
       ["git", "diff", "git-scope-cleanup-diff"],
       [CODEX_COMMAND, "exec", ".ai/prompts/review-changes.md"],
       ["git", "restore", "git-review-unstage"],
       [CODEX_COMMAND, "exec", ".ai/prompts/execute-plan.md"],
     ]);
-    assert.deepEqual(calls[3].args, [
+    assert.deepEqual(calls[4].args, [
       "restore",
       "--staged",
       "--",
