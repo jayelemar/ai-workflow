@@ -1840,6 +1840,7 @@ export const formatWorkflowProgressLine = ({
   status,
   nextAction,
   promptPath,
+  model,
   reasoning,
   color = false,
 }: {
@@ -1848,6 +1849,7 @@ export const formatWorkflowProgressLine = ({
   status: string;
   nextAction: string;
   promptPath: string;
+  model: CodexModel;
   reasoning: ReasoningEffort;
   color?: boolean;
 }): string => {
@@ -1859,7 +1861,7 @@ export const formatWorkflowProgressLine = ({
   const formattedProgressPrefix = color
     ? `${stage.colorCode}${progressPrefix}${ANSI_RESET}`
     : progressPrefix;
-  return `${formattedProgressPrefix}\n${status} -> ${nextAction} | reasoning: ${reasoning}`;
+  return `${formattedProgressPrefix}\n${status} -> ${nextAction}\nmodel: ${model} | reasoning: ${reasoning}`;
 };
 
 export const WORKFLOW_WAIT_NOTICE_INTERVAL_MS = 120_000;
@@ -5270,6 +5272,7 @@ export const runWorkflowRunner = async (
           status: parsedPlan.status,
           nextAction: parsedPlan.nextAction,
           promptPath: route.promptPath,
+          model: executionConfig.model,
           reasoning: executionConfig.reasoning,
           color: colorOutput,
         }),

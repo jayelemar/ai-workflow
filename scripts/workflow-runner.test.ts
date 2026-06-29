@@ -2001,10 +2001,11 @@ test("workflow progress formatter adds readable stage labels with optional color
       status: "active",
       nextAction: "execute-plan",
       promptPath: ".ai/prompts/execute-plan.md",
+      model: "gpt-5.5",
       reasoning: "high",
       color: false,
     }),
-    "[1/100] STAGE EXECUTE\nactive -> execute-plan | reasoning: high",
+    "[1/100] STAGE EXECUTE\nactive -> execute-plan\nmodel: gpt-5.5 | reasoning: high",
   );
 
   assert.equal(
@@ -2014,10 +2015,11 @@ test("workflow progress formatter adds readable stage labels with optional color
       status: "review",
       nextAction: "review-plan",
       promptPath: ".ai/prompts/review-changes.md",
+      model: "gpt-5.5",
       reasoning: "xhigh",
       color: true,
     }),
-    "\u001b[37;45m[2/100] STAGE REVIEW\u001b[0m\nreview -> review-plan | reasoning: xhigh",
+    "\u001b[37;45m[2/100] STAGE REVIEW\u001b[0m\nreview -> review-plan\nmodel: gpt-5.5 | reasoning: xhigh",
   );
 });
 
@@ -5550,7 +5552,10 @@ test("compact CLI mode parses the plan argument and reports the workflow log pat
     assert.equal(result.success, true);
     assert.equal(streamedStdout, "");
     assert.equal(streamedStderr, "");
-    assert.match(lines.join("\n"), /\[1\/100\] STAGE SUMMARY\ncompleted -> commit-summary \| reasoning: medium/);
+    assert.match(
+      lines.join("\n"),
+      /\[1\/100\] STAGE SUMMARY\ncompleted -> commit-summary\nmodel: gpt-5\.3-codex-spark \| reasoning: medium/,
+    );
     assert.equal(lines.includes("SUCCESS"), true);
     assert.equal(lines.includes("- Workflow log: .ai/artifacts/workflow-runner/logs/runner.log"), true);
 
@@ -6988,7 +6993,10 @@ test("console output reports concise progress and final outcomes", async () => {
       now: () => nowMs,
     });
     assert.equal(result.success, true);
-    assert.match(output.lines.join("\n"), /\[1\/100\] STAGE SUMMARY\ncompleted -> commit-summary \| reasoning: medium/);
+    assert.match(
+      output.lines.join("\n"),
+      /\[1\/100\] STAGE SUMMARY\ncompleted -> commit-summary\nmodel: gpt-5\.3-codex-spark \| reasoning: medium/,
+    );
     assert.match(output.lines.join("\n"), /SUCCESS/);
     assert.match(output.lines.join("\n"), /- Worked for 21m 55s/);
   } finally {
