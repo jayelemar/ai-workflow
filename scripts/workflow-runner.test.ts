@@ -1116,6 +1116,55 @@ test("codex live output formatter condenses shared non-review summaries without 
   );
 });
 
+test("codex live output formatter normalizes multiline next fields", () => {
+  const workflowSummary = [
+    "**Plan**",
+    "[.ai/plans/market-research-initial-competitor-search-observability.md](/home/jetermulo/projects/futr-wsl/Gondoor/.ai/plans/market-research-initial-competitor-search-observability.md)",
+    "",
+    "**Summary**",
+    "* PLAN UPDATED",
+    "* stage result: `PLAN UPDATED`; state set to `draft + plan-validator`",
+    "* narrowed regeneration validation scope back to the existing code/spec contract",
+    "",
+    "**Key Details**",
+    "* issue addressed: removed invented `attempt` / `maxAttempts` requirements",
+    "* affected sections: `## Next Action`, `### Preparation`, `### Implementation`, `### Validation`",
+    "* changes made: rewrote the search-service implementation task",
+    "",
+    "**Next**",
+    "Status:",
+    "draft",
+    "",
+    "Next Action:",
+    "plan-validator",
+  ].join("\n");
+
+  assert.equal(
+    formatCodexJsonlEventForTerminal(codexAgentMessageLine(workflowSummary), { color: false }),
+    [
+      "[agent]",
+      "**Plan**",
+      "[.ai/plans/market-research-initial-competitor-search-observability.md](/home/jetermulo/projects/futr-wsl/Gondoor/.ai/plans/market-research-initial-competitor-search-observability.md)",
+      "",
+      "**Summary**",
+      "* PLAN UPDATED",
+      "* stage result: `PLAN UPDATED`; state set to `draft + plan-validator`",
+      "* narrowed regeneration validation scope back to the existing code/spec contract",
+      "",
+      "**Key Details**",
+      "* issue addressed: removed invented `attempt` / `maxAttempts` requirements",
+      "* affected sections: `## Next Action`, `### Preparation`, `### Implementation`, `### Validation`",
+      "* changes made: rewrote the search-service implementation task",
+      "",
+      "**Next**",
+      "Status: `draft`",
+      "Next Action: `plan-validator`",
+      "",
+      "",
+    ].join("\n"),
+  );
+});
+
 test("codex live output formatter condenses review summaries", () => {
   const reviewSummary = [
     "**Plan**",

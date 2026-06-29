@@ -31,7 +31,7 @@ type CodexExecutionConfig = {
   reasoning: ReasoningEffort;
 };
 
-export const WORKFLOW_RUNNER_CODEX_PROFILE: CodexProfile = 'codex-adam' as const;
+export const WORKFLOW_RUNNER_CODEX_PROFILE: CodexProfile = 'codex-work6598' as const;
 const PLAN_VALIDATOR_PROMPT_PATH = '.ai/prompts/plan-validator.md';
 const FIX_PLAN_PROMPT_PATH = '.ai/prompts/fix-plan.md';
 const EXECUTE_PLAN_PROMPT_PATH = '.ai/prompts/execute-plan.md';
@@ -1465,8 +1465,12 @@ const formatReviewIssues = (lines: string[]): string[] => {
       /^[-*]\s*(Critical|Warning|Suggestion|Issue)\s*:\s*(.+)$/i,
     );
     if (prefixedSeverityMatch) {
-      const explicitSeverity = prefixedSeverityMatch[1].replace(/^\w/, (char) => char.toUpperCase());
-      formattedLines.push(...formatReviewIssueBullet(explicitSeverity, `* ${prefixedSeverityMatch[2]}`));
+      const explicitSeverity = prefixedSeverityMatch[1].replace(/^\w/, (char) =>
+        char.toUpperCase(),
+      );
+      formattedLines.push(
+        ...formatReviewIssueBullet(explicitSeverity, `* ${prefixedSeverityMatch[2]}`),
+      );
       continue;
     }
     if (/^[-*]\s+/.test(trimmed)) {
@@ -1487,9 +1491,34 @@ const reviewPlanLine = (lines: string[]): string[] => {
 
 const nextSectionLines = (lines: string[]): string[] => {
   const trimmedLines = trimBlankLines(lines).filter((line) => line.trim().length > 0);
-  const explicitLines = trimmedLines.filter((line) =>
-    /^(Status|Next Action):\s*/i.test(line.trim()),
-  );
+  const explicitNextValues: {
+    status?: string;
+    nextAction?: string;
+  } = {};
+
+  for (let index = 0; index < trimmedLines.length; index += 1) {
+    const labelMatch = trimmedLines[index].trim().match(/^(Status|Next Action):\s*(.*)$/i);
+    if (!labelMatch) {
+      continue;
+    }
+
+    const field = labelMatch[1].toLowerCase() === 'status' ? 'status' : 'nextAction';
+    const inlineValue = labelMatch[2].trim();
+    const nextValue = inlineValue.length > 0 ? inlineValue : trimmedLines[index + 1]?.trim();
+    if (!nextValue || /^(Status|Next Action):\s*/i.test(nextValue)) {
+      continue;
+    }
+
+    explicitNextValues[field] = nextValue.replace(/^[-*]\s+/, '').replace(/^`+|`+$/g, '');
+  }
+
+  const explicitLines: string[] = [];
+  if (explicitNextValues.status) {
+    explicitLines.push(`Status: \`${explicitNextValues.status}\``);
+  }
+  if (explicitNextValues.nextAction) {
+    explicitLines.push(`Next Action: \`${explicitNextValues.nextAction}\``);
+  }
   if (explicitLines.length > 0) {
     return explicitLines;
   }
@@ -1587,7 +1616,9 @@ const formatWorkflowSharedSummary = (trimmedText: string): string | null => {
   }
 
   const sections = parseWorkflowSections(trimmedText, workflowSummarySectionHeading);
-  const validationLines = trimBlankLines(sections.get('Validation') ?? []).map(compactWorkflowValidationLine);
+  const validationLines = trimBlankLines(sections.get('Validation') ?? []).map(
+    compactWorkflowValidationLine,
+  );
   const outputSections: WorkflowSummarySection[] = [
     ['Plan', trimBlankLines(sections.get('Plan') ?? [])],
     ['Summary', boundedSectionLines(sections.get('Summary') ?? [], TERMINAL_FILE_DETAIL_LIMIT + 1)],
@@ -5328,7 +5359,11 @@ export const runWorkflowRunner = async (
       reviewStagingPaths = staged.paths;
     }
     if (route.promptPath === rel('.ai', 'prompts', 'commit-summary.md')) {
-      const parsedPaths = await parseCommitSummaryPaths(rootDir, parsedPlan.content, options.isIgnored);
+      const parsedPaths = await parseCommitSummaryPaths(
+        rootDir,
+        parsedPlan.content,
+        options.isIgnored,
+      );
       if (!parsedPaths.ok) {
         return await finishFailure(`commit summary file scope invalid: ${parsedPaths.reason}`);
       }
