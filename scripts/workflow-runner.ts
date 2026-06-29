@@ -159,6 +159,7 @@ type ParsedPlan = {
   content: string;
   status: Status;
   nextAction: NextAction;
+  warnings: string[];
 };
 
 type Failure = {
@@ -3342,6 +3343,7 @@ export const parsePlan = async ({
     content,
     status: rawStatus,
     nextAction: rawNextAction,
+    warnings: thinPlan.warnings,
   };
 };
 
@@ -5171,6 +5173,7 @@ export const runWorkflowRunner = async (
   if (!initialParsedPlan.ok) {
     return await finishFailure(initialParsedPlan.reason);
   }
+  emitWorkflowThresholdWarnings(initialParsedPlan.warnings);
   let parsedPlan: ParsedPlan = initialParsedPlan;
   tokenUsageTotals = await readTokenUsageTotals(rootDir, parsedPlan.planName);
   const syncWorkflowSnapshot = async (
@@ -5822,6 +5825,7 @@ export const runWorkflowRunner = async (
       }
       return await finishFailure(reason);
     }
+    emitWorkflowThresholdWarnings(updated.warnings);
     if (updated.content === previousContent) {
       const cleanup = await cleanupReviewStagingPaths(reviewStagingPaths);
       const reason = cleanup.ok

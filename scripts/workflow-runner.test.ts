@@ -3400,8 +3400,71 @@ ${aggregateEntries}
       planName: planArg("oversized-thin-history"),
       rootDir: workspace.root,
     });
-    assert.equal(oversizedHistory.ok, false);
-    assert.match(oversizedHistory.ok ? "" : oversizedHistory.reason, /workflow history exceeds 4 KB/);
+    assert.equal(oversizedHistory.ok, true);
+    assert.match(
+      oversizedHistory.ok ? oversizedHistory.warnings.join("\n") : "",
+      /workflow history is .* > 4 KB/,
+    );
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("oversized aggregate thin-plan history warns without blocking the workflow", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    for (let version = 1; version <= 18; version += 1) {
+      await writeWorkflowEventArtifact({
+        root: workspace.root,
+        planName: "oversized-thin-history",
+        kind: "validation",
+        version,
+      });
+    }
+    const aggregateEntries = Array.from({ length: 18 }, (_, index) => {
+      const version = index + 1;
+      return `### Validation v${version}
+
+* Summary: ${"x".repeat(120)}
+* Result: APPROVED
+* Evidence: .ai/artifacts/oversized-thin-history/events/validation-v${version}.md`;
+    }).join("\n\n");
+    await writePlan(
+      workspace.root,
+      "oversized-thin-history",
+      planWith(
+        "completed",
+        "commit-summary",
+        `## Validation History
+
+${aggregateEntries}
+`,
+      ),
+    );
+    const output = collectConsole();
+
+    const result = await runWorkflowRunner({
+      planName: planArg("oversized-thin-history"),
+      rootDir: workspace.root,
+      console: output.console,
+      processRunner: runnerReturning({
+        launched: true,
+        stdout: turnCompletedUsageDetailLine({
+          inputTokens: 100,
+          cachedInputTokens: 50,
+          outputTokens: 40,
+          reasoningOutputTokens: 10,
+        }),
+        stderr: "",
+        exitCode: 0,
+      }),
+    });
+
+    assert.equal(result.success, true);
+    assert.equal(
+      output.lines.some((line) => /WARNING: Thin-plan workflow history is .* > 4 KB/i.test(line)),
+      true,
+    );
   } finally {
     await workspace.cleanup();
   }

@@ -7,6 +7,11 @@ type Failure = {
   reason: string;
 };
 
+type Success = {
+  ok: true;
+  warnings: string[];
+};
+
 type WorkflowEventKind =
   | 'execution'
   | 'validation'
@@ -25,6 +30,7 @@ const THIN_PLAN_STATE_EVENT_FIELDS = ['Result', 'Decision', 'Status'] as const;
 const THIN_PLAN_FORBIDDEN_NARRATIVE_SECTIONS = ['## Review Required Fixes'];
 
 const rel = (...segments: string[]) => segments.join('/');
+const formatKilobytes = (bytes: number): string => `${(bytes / 1024).toFixed(1)} KB`;
 
 const normalizeInlineCodeValue = (value: string): string => value.trim().replace(/^`+|`+$/g, '');
 
@@ -227,11 +233,13 @@ export const validateThinPlanContract = async ({
   rootDir: string;
   planName: string;
   content: string;
-}): Promise<{ ok: true } | Failure> => {
+}): Promise<Success | Failure> => {
   const contentRules = planSectionLines(content, '## Workflow Content Rules');
   if (!contentRules.some((line) => normalizeInlineCodeValue(line) === THIN_PLAN_CONTRACT)) {
     return { ok: false, reason: `plan is missing ${THIN_PLAN_CONTRACT}` };
   }
+
+  const warnings: string[] = [];
 
   for (const section of THIN_PLAN_FORBIDDEN_NARRATIVE_SECTIONS) {
     if (content.split(/\r?\n/).some((line) => line.trim() === section)) {
@@ -319,8 +327,10 @@ export const validateThinPlanContract = async ({
   }
 
   if (workflowHistoryBytes > THIN_PLAN_HISTORY_MAX_BYTES) {
-    return { ok: false, reason: `thin-plan workflow history exceeds 4 KB` };
+    warnings.push(
+      `Thin-plan workflow history is ${formatKilobytes(workflowHistoryBytes)} > 4 KB; keep only current inline history and leave details in .ai/artifacts/<plan-name>/events/.`,
+    );
   }
 
-  return { ok: true };
+  return { ok: true, warnings };
 };
