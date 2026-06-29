@@ -2967,6 +2967,27 @@ test("parsePlan requires the repo-relative .ai/plans markdown path", async () =>
   }
 });
 
+test("parsePlan accepts markdown code-wrapped workflow metadata values", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(
+      workspace.root,
+      "workflow-runner",
+      planWith("`draft`", "`plan-validator`").replace("thin-plan-v1", "`thin-plan-v1`"),
+    );
+    const parsed = await parsePlan({
+      planName: planArg("workflow-runner"),
+      rootDir: workspace.root,
+    });
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.ok && parsed.status, "draft");
+    assert.equal(parsed.ok && parsed.nextAction, "plan-validator");
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
 test("parsePlan requires thin-plan-v1 before a workflow plan is runnable", async () => {
   const workspace = await setupWorkspace();
   try {

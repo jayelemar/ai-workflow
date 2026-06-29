@@ -31,7 +31,7 @@ type CodexExecutionConfig = {
   reasoning: ReasoningEffort;
 };
 
-export const WORKFLOW_RUNNER_CODEX_PROFILE: CodexProfile = 'codex-adam' as const;
+export const WORKFLOW_RUNNER_CODEX_PROFILE: CodexProfile = 'codex-work' as const;
 
 const PLAN_VALIDATOR_PROMPT_PATH = '.ai/prompts/plan-validator.md';
 const FIX_PLAN_PROMPT_PATH = '.ai/prompts/fix-plan.md';
@@ -3254,6 +3254,8 @@ const extractSectionValue = (content: string, heading: string): string | null =>
   return '';
 };
 
+const normalizeWorkflowStateValue = (value: string): string => value.replace(/^`+|`+$/g, '');
+
 const isStatus = (value: string): value is Status => VALID_STATUSES.includes(value as Status);
 const isNextAction = (value: string): value is NextAction =>
   VALID_NEXT_ACTIONS.includes(value as NextAction);
@@ -3280,10 +3282,11 @@ export const parsePlan = async ({
     return { ok: false, reason: `plan file cannot be read: ${planPath}: ${String(error)}` };
   }
 
-  const rawStatus = extractSectionValue(content, '## Status');
-  if (rawStatus === null) {
+  const extractedStatus = extractSectionValue(content, '## Status');
+  if (extractedStatus === null) {
     return { ok: false, reason: 'plan is missing ## Status' };
   }
+  const rawStatus = normalizeWorkflowStateValue(extractedStatus);
   if (rawStatus.length === 0) {
     return { ok: false, reason: 'plan status value is empty' };
   }
@@ -3291,10 +3294,11 @@ export const parsePlan = async ({
     return { ok: false, reason: `unknown status value: ${rawStatus}` };
   }
 
-  const rawNextAction = extractSectionValue(content, '## Next Action');
-  if (rawNextAction === null) {
+  const extractedNextAction = extractSectionValue(content, '## Next Action');
+  if (extractedNextAction === null) {
     return { ok: false, reason: 'plan is missing ## Next Action' };
   }
+  const rawNextAction = normalizeWorkflowStateValue(extractedNextAction);
   if (rawNextAction.length === 0) {
     return { ok: false, reason: 'plan next action value is empty' };
   }

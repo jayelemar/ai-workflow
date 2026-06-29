@@ -26,6 +26,8 @@ const THIN_PLAN_FORBIDDEN_NARRATIVE_SECTIONS = ['## Review Required Fixes'];
 
 const rel = (...segments: string[]) => segments.join('/');
 
+const normalizeInlineCodeValue = (value: string): string => value.trim().replace(/^`+|`+$/g, '');
+
 const planSectionLines = (content: string, heading: string): string[] => {
   const lines = content.split(/\r?\n/);
   const start = lines.findIndex((line) => line.trim() === heading);
@@ -227,7 +229,7 @@ export const validateThinPlanContract = async ({
   content: string;
 }): Promise<{ ok: true } | Failure> => {
   const contentRules = planSectionLines(content, '## Workflow Content Rules');
-  if (!contentRules.some((line) => line.trim() === THIN_PLAN_CONTRACT)) {
+  if (!contentRules.some((line) => normalizeInlineCodeValue(line) === THIN_PLAN_CONTRACT)) {
     return { ok: false, reason: `plan is missing ${THIN_PLAN_CONTRACT}` };
   }
 
