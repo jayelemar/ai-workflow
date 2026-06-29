@@ -6642,16 +6642,19 @@ test("review-plan stops before staging or prompt execution when any staged files
     assert.equal(failed.success, false);
     assert.match(
       failed.reason,
-      /review blocked before review-plan because staged files already exist; finish pending staged work or another review first/,
+      /review blocked before review-plan because staged files already exist; finish pending staged work or another review first:\n\nM  other-plan\.ts;\nA  src\/leftover\.ts/,
     );
-    assert.match(failed.reason, /other-plan\.ts/);
-    assert.match(failed.reason, /src\/leftover\.ts/);
+    assert.doesNotMatch(failed.reason, /other-plan\.ts; A\tsrc\/leftover\.ts/);
     assert.deepEqual(
       calls.map((call) => [call.command, call.args[0] ?? "", call.promptPath]),
       [["git", "diff", "git-pre-review-staged-check"]],
     );
     assert.equal(
-      output.lines.some((line) => /staged files already exist/i.test(line) && /other-plan\.ts/.test(line)),
+      output.lines.some((line) =>
+        /staged files already exist; finish pending staged work or another review first:\n\nM  other-plan\.ts;\nA  src\/leftover\.ts/.test(
+          line,
+        ),
+      ),
       true,
     );
 
@@ -6662,7 +6665,7 @@ test("review-plan stops before staging or prompt execution when any staged files
     assertFailureMetadata(log, {
       kind: "review-entry-staged-work",
       reason:
-        /failureReason: review blocked before review-plan because staged files already exist; finish pending staged work or another review first: M\tother-plan\.ts; A\tsrc\/leftover\.ts/,
+        /failureReason: review blocked before review-plan because staged files already exist; finish pending staged work or another review first:\n\nM  other-plan\.ts;\nA  src\/leftover\.ts/,
       nextSuggestedAction:
         /nextSuggestedAction: finish or unstage existing staged work before starting review-plan, then rerun workflow-runner/,
     });

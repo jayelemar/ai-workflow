@@ -4183,9 +4183,10 @@ const formatPreReviewStagedWorkReason = (output: string): string => {
   const stagedEntries = output
     .split(/\r?\n/)
     .map((line) => line.trimEnd())
-    .filter((line) => /^(?:[ACDMRTUXB]|\?\?|!!)[0-9]*\t.+/.test(line));
+    .filter((line) => /^(?:[ACDMRTUXB]|\?\?|!!)[0-9]*\t.+/.test(line))
+    .map((line) => line.replace(/\t/g, '  '));
   return stagedEntries.length > 0
-    ? `${REVIEW_ENTRY_STAGED_WORK_REASON_PREFIX}: ${stagedEntries.join('; ')}`
+    ? `${REVIEW_ENTRY_STAGED_WORK_REASON_PREFIX}:\n\n${stagedEntries.join(';\n')}`
     : REVIEW_ENTRY_STAGED_WORK_REASON_PREFIX;
 };
 
