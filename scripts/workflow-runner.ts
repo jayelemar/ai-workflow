@@ -32,6 +32,7 @@ type CodexExecutionConfig = {
 };
 
 export const WORKFLOW_RUNNER_CODEX_PROFILE: CodexProfile = 'codex-adam' as const;
+
 const PLAN_VALIDATOR_PROMPT_PATH = '.ai/prompts/plan-validator.md';
 const FIX_PLAN_PROMPT_PATH = '.ai/prompts/fix-plan.md';
 const EXECUTE_PLAN_PROMPT_PATH = '.ai/prompts/execute-plan.md';
@@ -1465,8 +1466,12 @@ const formatReviewIssues = (lines: string[]): string[] => {
       /^[-*]\s*(Critical|Warning|Suggestion|Issue)\s*:\s*(.+)$/i,
     );
     if (prefixedSeverityMatch) {
-      const explicitSeverity = prefixedSeverityMatch[1].replace(/^\w/, (char) => char.toUpperCase());
-      formattedLines.push(...formatReviewIssueBullet(explicitSeverity, `* ${prefixedSeverityMatch[2]}`));
+      const explicitSeverity = prefixedSeverityMatch[1].replace(/^\w/, (char) =>
+        char.toUpperCase(),
+      );
+      formattedLines.push(
+        ...formatReviewIssueBullet(explicitSeverity, `* ${prefixedSeverityMatch[2]}`),
+      );
       continue;
     }
     if (/^[-*]\s+/.test(trimmed)) {
@@ -1487,9 +1492,34 @@ const reviewPlanLine = (lines: string[]): string[] => {
 
 const nextSectionLines = (lines: string[]): string[] => {
   const trimmedLines = trimBlankLines(lines).filter((line) => line.trim().length > 0);
-  const explicitLines = trimmedLines.filter((line) =>
-    /^(Status|Next Action):\s*/i.test(line.trim()),
-  );
+  const explicitNextValues: {
+    status?: string;
+    nextAction?: string;
+  } = {};
+
+  for (let index = 0; index < trimmedLines.length; index += 1) {
+    const labelMatch = trimmedLines[index].trim().match(/^(Status|Next Action):\s*(.*)$/i);
+    if (!labelMatch) {
+      continue;
+    }
+
+    const field = labelMatch[1].toLowerCase() === 'status' ? 'status' : 'nextAction';
+    const inlineValue = labelMatch[2].trim();
+    const nextValue = inlineValue.length > 0 ? inlineValue : trimmedLines[index + 1]?.trim();
+    if (!nextValue || /^(Status|Next Action):\s*/i.test(nextValue)) {
+      continue;
+    }
+
+    explicitNextValues[field] = nextValue.replace(/^[-*]\s+/, '').replace(/^`+|`+$/g, '');
+  }
+
+  const explicitLines: string[] = [];
+  if (explicitNextValues.status) {
+    explicitLines.push(`Status: \`${explicitNextValues.status}\``);
+  }
+  if (explicitNextValues.nextAction) {
+    explicitLines.push(`Next Action: \`${explicitNextValues.nextAction}\``);
+  }
   if (explicitLines.length > 0) {
     return explicitLines;
   }
@@ -1587,7 +1617,9 @@ const formatWorkflowSharedSummary = (trimmedText: string): string | null => {
   }
 
   const sections = parseWorkflowSections(trimmedText, workflowSummarySectionHeading);
-  const validationLines = trimBlankLines(sections.get('Validation') ?? []).map(compactWorkflowValidationLine);
+  const validationLines = trimBlankLines(sections.get('Validation') ?? []).map(
+    compactWorkflowValidationLine,
+  );
   const outputSections: WorkflowSummarySection[] = [
     ['Plan', trimBlankLines(sections.get('Plan') ?? [])],
     ['Summary', boundedSectionLines(sections.get('Summary') ?? [], TERMINAL_FILE_DETAIL_LIMIT + 1)],
@@ -5146,6 +5178,25 @@ export const runWorkflowRunner = async (
     let reviewCleanup: ReviewCleanupProcess | undefined;
     let reviewStagingPaths: string[] | undefined;
     let commitSummaryPaths: string[] | undefined;
+    let progressLogged = false;
+    const logWorkflowProgress = () => {
+      if (progressLogged) {
+        return;
+      }
+      iterations = nextIteration;
+      logger.log(
+        formatWorkflowProgressLine({
+          iteration: iterations,
+          maxIterations: MAX_ITERATIONS,
+          status: parsedPlan.status,
+          nextAction: parsedPlan.nextAction,
+          promptPath: route.promptPath,
+          reasoning: executionConfig.reasoning,
+          color: colorOutput,
+        }),
+      );
+      progressLogged = true;
+    };
     const cleanupReviewStagingPaths = async (
       paths: string[] | undefined,
     ): Promise<{ ok: true } | Failure> => {
@@ -5256,6 +5307,12 @@ export const runWorkflowRunner = async (
       if (!acquired.ok) {
         return await finishFailure(acquired.reason);
       }
+      logWorkflowProgress();
+      logger.log(
+        `Staging ${parsedPaths.paths.length} plan-owned ${
+          parsedPaths.paths.length === 1 ? 'file' : 'files'
+        } for review...`,
+      );
       const staged = await runReviewStagingForPaths(rootDir, parsedPaths.paths, processRunner);
       if (!staged.ok) {
         const cleanup = await cleanupReviewStagingPaths(parsedPaths.paths);
@@ -5328,7 +5385,11 @@ export const runWorkflowRunner = async (
       reviewStagingPaths = staged.paths;
     }
     if (route.promptPath === rel('.ai', 'prompts', 'commit-summary.md')) {
-      const parsedPaths = await parseCommitSummaryPaths(rootDir, parsedPlan.content, options.isIgnored);
+      const parsedPaths = await parseCommitSummaryPaths(
+        rootDir,
+        parsedPlan.content,
+        options.isIgnored,
+      );
       if (!parsedPaths.ok) {
         return await finishFailure(`commit summary file scope invalid: ${parsedPaths.reason}`);
       }
@@ -5345,18 +5406,7 @@ export const runWorkflowRunner = async (
       }
     }
 
-    iterations = nextIteration;
-    logger.log(
-      formatWorkflowProgressLine({
-        iteration: iterations,
-        maxIterations: MAX_ITERATIONS,
-        status: parsedPlan.status,
-        nextAction: parsedPlan.nextAction,
-        promptPath: route.promptPath,
-        reasoning: executionConfig.reasoning,
-        color: colorOutput,
-      }),
-    );
+    logWorkflowProgress();
     const contextSnapshot = await syncWorkflowSnapshot(parsedPlan);
     if (!contextSnapshot.ok) {
       return await finishFailure(contextSnapshot.reason);

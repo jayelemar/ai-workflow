@@ -1116,6 +1116,55 @@ test("codex live output formatter condenses shared non-review summaries without 
   );
 });
 
+test("codex live output formatter normalizes multiline next fields", () => {
+  const workflowSummary = [
+    "**Plan**",
+    "[.ai/plans/market-research-initial-competitor-search-observability.md](/home/jetermulo/projects/futr-wsl/Gondoor/.ai/plans/market-research-initial-competitor-search-observability.md)",
+    "",
+    "**Summary**",
+    "* PLAN UPDATED",
+    "* stage result: `PLAN UPDATED`; state set to `draft + plan-validator`",
+    "* narrowed regeneration validation scope back to the existing code/spec contract",
+    "",
+    "**Key Details**",
+    "* issue addressed: removed invented `attempt` / `maxAttempts` requirements",
+    "* affected sections: `## Next Action`, `### Preparation`, `### Implementation`, `### Validation`",
+    "* changes made: rewrote the search-service implementation task",
+    "",
+    "**Next**",
+    "Status:",
+    "draft",
+    "",
+    "Next Action:",
+    "plan-validator",
+  ].join("\n");
+
+  assert.equal(
+    formatCodexJsonlEventForTerminal(codexAgentMessageLine(workflowSummary), { color: false }),
+    [
+      "[agent]",
+      "**Plan**",
+      "[.ai/plans/market-research-initial-competitor-search-observability.md](/home/jetermulo/projects/futr-wsl/Gondoor/.ai/plans/market-research-initial-competitor-search-observability.md)",
+      "",
+      "**Summary**",
+      "* PLAN UPDATED",
+      "* stage result: `PLAN UPDATED`; state set to `draft + plan-validator`",
+      "* narrowed regeneration validation scope back to the existing code/spec contract",
+      "",
+      "**Key Details**",
+      "* issue addressed: removed invented `attempt` / `maxAttempts` requirements",
+      "* affected sections: `## Next Action`, `### Preparation`, `### Implementation`, `### Validation`",
+      "* changes made: rewrote the search-service implementation task",
+      "",
+      "**Next**",
+      "Status: `draft`",
+      "Next Action: `plan-validator`",
+      "",
+      "",
+    ].join("\n"),
+  );
+});
+
 test("codex live output formatter condenses review summaries", () => {
   const reviewSummary = [
     "**Plan**",
@@ -4484,7 +4533,7 @@ test("workflow runner writes the context snapshot before launching a workflow pr
   }
 });
 
-test("high token stages log advisory threshold warnings while keeping token usage details", async () => {
+test("high token stages log one short advisory warning while keeping token usage details", async () => {
   const workspace = await setupWorkspace();
   try {
     await writePlan(
@@ -4512,8 +4561,10 @@ test("high token stages log advisory threshold warnings while keeping token usag
 
     assert.equal(result.success, true);
     assert.equal(output.lines.some((line) => /WARNING: Plan file is/i.test(line)), true);
-    assert.equal(output.lines.some((line) => /2,000,000/i.test(line)), true);
-    assert.equal(output.lines.some((line) => /100,000/i.test(line)), true);
+    const tokenWarnings = output.lines.filter((line) => /WARNING: Stage token usage is high/i.test(line));
+    assert.equal(tokenWarnings.length, 1);
+    assert.doesNotMatch(tokenWarnings[0], />/);
+    assert.doesNotMatch(tokenWarnings[0], /100,000|2,000,000/);
 
     const snapshot = await readFile(
       join(workspace.root, workflowContextSnapshotRelativePath("workflow-runner")),
@@ -4805,8 +4856,9 @@ test("workflow runner continues after a pathological nonterminal stage because t
     assert.equal(result.iterations, 2);
     assert.equal(codexCalls, 2);
     assert.match(result.reason, /plan blocked after execute-plan/i);
-    assert.equal(output.lines.some((line) => /2,000,000/i.test(line)), true);
-    assert.equal(output.lines.some((line) => /100,000/i.test(line)), true);
+    const tokenWarnings = output.lines.filter((line) => /WARNING: Stage token usage is high/i.test(line));
+    assert.equal(tokenWarnings.length, 1);
+    assert.doesNotMatch(tokenWarnings[0], /100,000|2,000,000/);
     assert.equal(output.lines.some((line) => /fresh workflow runner invocation/i.test(line)), false);
 
     const ledger = await readTokenUsageLedger(workspace.root, "workflow-runner");
@@ -6341,12 +6393,18 @@ test(`review staging git add runs before review ${CODEX_COMMAND}, unstages plan-
   try {
     await writePlan(workspace.root, "workflow-runner", planWith("review", "review-plan"));
     const calls: Parameters<ProcessRunner>[0][] = [];
+    const output = collectConsole();
     const failed = await runWorkflowRunner({
       planName: planArg("workflow-runner"),
       rootDir: workspace.root,
+      console: output.console,
       processRunner: async (call) => {
         calls.push(call);
         if (call.command === "git" && call.args[0] === "add") {
+          assert.equal(
+            output.lines.some((line) => /Staging 2 plan-owned files for review/i.test(line)),
+            true,
+          );
           return { launched: true, stdout: "", stderr: "fatal", exitCode: 1 };
         }
         if (call.command === "git" && call.args[0] === "restore") {
