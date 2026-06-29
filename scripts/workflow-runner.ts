@@ -31,7 +31,8 @@ type CodexExecutionConfig = {
   reasoning: ReasoningEffort;
 };
 
-export const WORKFLOW_RUNNER_CODEX_PROFILE: CodexProfile = 'codex-work6598' as const;
+export const WORKFLOW_RUNNER_CODEX_PROFILE: CodexProfile = 'codex-adam' as const;
+
 const PLAN_VALIDATOR_PROMPT_PATH = '.ai/prompts/plan-validator.md';
 const FIX_PLAN_PROMPT_PATH = '.ai/prompts/fix-plan.md';
 const EXECUTE_PLAN_PROMPT_PATH = '.ai/prompts/execute-plan.md';
