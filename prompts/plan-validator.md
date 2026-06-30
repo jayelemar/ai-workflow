@@ -25,6 +25,7 @@ Read:
 * `.ai/instructions/shared/workflow-state.md`
 * the plan file
 * the repo-relative `*.spec.md` path(s) listed under the plan's `## Spec` section (if any)
+* the `.ai/artifacts/<plan-name>/product-flow.md` file listed under `## User Flow Artifact` when the plan is user-facing
 * relevant codebase files named by the spec or plan when contract, shape, rendering, or file-scope questions must be resolved from existing implementation evidence
 
 ---
@@ -221,6 +222,43 @@ Ensure the plan includes:
 If missing:
 
 → mark as WARNING or CRITICAL
+
+---
+
+## User Flow Artifact Validation (MANDATORY)
+
+Read the plan's `## User Flow Artifact` and `## Flow-to-File Mapping` sections.
+
+User-facing work means a feature, bugfix, or change that affects a customer, admin, or operator screen, route, workflow, visible state, or user-triggered API behavior.
+
+For user-facing plans:
+
+* `## User Flow Artifact` MUST point to `.ai/artifacts/<plan-name>/product-flow.md`
+* the product-flow artifact MUST exist
+* the artifact MUST contain Goal, Actors, Entry Points, User Flows, Mermaid Diagram, States, Failures, Acceptance Scenarios, and Open Decisions
+* the plan MUST include `## Flow-to-File Mapping`
+* every user action from the artifact's User Flows and Acceptance Scenarios MUST appear in `## Flow-to-File Mapping`
+* each user action MUST include implementation coverage for applicable UI route/component, API route, backend service/module, and database/storage effect paths
+* each user action MUST include validation coverage in tests or an explicit validation command
+* a `None: <concrete reason>` entry is allowed only for implementation categories that genuinely do not apply to that action
+
+If a user-facing flow step lacks implementation coverage or validation coverage:
+
+→ mark as CRITICAL
+
+If a user-facing plan records `N/A` in `## User Flow Artifact` or `## Flow-to-File Mapping`:
+
+→ mark as CRITICAL
+
+For non-user-facing plans:
+
+* `## User Flow Artifact` MUST write `N/A: <concrete reason>`
+* `## Flow-to-File Mapping` MUST write the same `N/A: <concrete reason>`
+* the concrete reason MUST explain why the change does not affect a screen, route, workflow, visible state, or user-triggered API behavior
+
+If the non-user-facing reason is missing, vague, or contradicted by the spec or plan:
+
+→ mark as CRITICAL
 
 ---
 

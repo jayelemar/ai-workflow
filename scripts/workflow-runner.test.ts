@@ -410,9 +410,85 @@ const GIT_SHOW_SED_COMMAND =
   "git show :apps/backend/src/documents/document-content-generator.service.ts | nl -ba | sed -n '340,435p'";
 
 const readWorkflowPrompt = (name: string) => readFile(join(process.cwd(), ".ai", "prompts", name), "utf8");
+const readWorkflowWrapper = (name: string) => readFile(join(process.cwd(), ".ai", "wrappers", name), "utf8");
 const readInstruction = (name: string) =>
   readFile(join(process.cwd(), ".ai", "instructions", name), "utf8");
 const readPlanTemplate = () => readFile(join(process.cwd(), ".ai", "templates", "plan.template.md"), "utf8");
+
+test("generate-user-flow prompt defines the product-flow artifact contract", async () => {
+  const prompt = await readWorkflowPrompt("generate-user-flow.md");
+  const wrapper = await readWorkflowWrapper("generate-user-flow.md");
+
+  assert.match(prompt, /\.ai\/artifacts\/<plan-name>\/product-flow\.md/);
+  assert.match(prompt, /approved spec/i);
+  assert.match(prompt, /codebase inspection/i);
+  assert.match(prompt, /must not invent desired behavior beyond the spec/i);
+  assert.match(prompt, /Markdown \+ Mermaid only/i);
+  for (const section of [
+    "Goal",
+    "Actors",
+    "Entry Points",
+    "User Flows",
+    "Mermaid Diagram",
+    "States",
+    "Failures",
+    "Acceptance Scenarios",
+    "Open Decisions",
+  ]) {
+    assert.match(prompt, new RegExp(`## ${section}`));
+  }
+  assert.match(wrapper, /Use: \.ai\/prompts\/generate-user-flow\.md/);
+  assert.match(wrapper, /Spec file:/);
+  assert.match(wrapper, /Output artifact:/);
+});
+
+test("create-plan prompt requires user-facing flow artifact or concrete non-user-facing N/A", async () => {
+  const prompt = await readWorkflowPrompt("create-plan.md");
+
+  assert.match(prompt, /user-facing/i);
+  assert.match(prompt, /\.ai\/artifacts\/<plan-name>\/product-flow\.md/);
+  assert.match(prompt, /read the user-flow artifact before planning/i);
+  assert.match(prompt, /For non-user-facing work/i);
+  assert.match(prompt, /write exactly `N\/A:/);
+  assert.match(prompt, /concrete reason/i);
+});
+
+test("plan template requires user flow artifact and flow-to-file mapping sections", async () => {
+  const template = await readPlanTemplate();
+
+  assert.match(template, /## User Flow Artifact/);
+  assert.match(template, /## Flow-to-File Mapping/);
+  assert.match(template, /\.ai\/artifacts\/<plan-name>\/product-flow\.md/);
+  assert.match(template, /N\/A: <concrete reason>/);
+  assert.match(template, /Each user action/i);
+  assert.match(template, /UI route\/component/i);
+  assert.match(template, /API route/i);
+  assert.match(template, /backend service\/module/i);
+  assert.match(template, /database\/storage effect/i);
+  assert.match(template, /tests/i);
+});
+
+test("plan-validator prompt fails user-facing flow steps without implementation and validation coverage", async () => {
+  const prompt = await readWorkflowPrompt("plan-validator.md");
+
+  assert.match(prompt, /User Flow Artifact/i);
+  assert.match(prompt, /Flow-to-File Mapping/i);
+  assert.match(prompt, /user-facing/i);
+  assert.match(prompt, /each user action/i);
+  assert.match(prompt, /implementation coverage/i);
+  assert.match(prompt, /validation coverage/i);
+  assert.match(prompt, /mark as CRITICAL/i);
+});
+
+test("workflow docs expose spec to user-flow artifact to plan to runner flow", async () => {
+  const readme = await readFile(join(process.cwd(), ".ai", "README.md"), "utf8");
+  const wrappersReadme = await readWorkflowWrapper("README.md");
+
+  assert.match(readme, /spec -> user-flow artifact -> plan -> runner/i);
+  assert.match(wrappersReadme, /spec -> user-flow artifact -> plan -> runner/i);
+  assert.match(readme, /\.ai\/wrappers\/generate-user-flow\.md/);
+  assert.match(wrappersReadme, /\.ai\/wrappers\/generate-user-flow\.md/);
+});
 
 test("plan-validator prompt classifies spec-origin findings as minor repairs or major decisions", async () => {
   const prompt = await readWorkflowPrompt("plan-validator.md");

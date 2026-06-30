@@ -13,6 +13,8 @@ const REQUIRED_SOURCE_PATHS = [
   ".ai/changelogs",
   ".ai/wrappers",
   ".ai/prompts",
+  ".ai/prompts/generate-user-flow.md",
+  ".ai/wrappers/generate-user-flow.md",
   ".ai/templates",
   ".ai/scripts",
   ".ai/scripts/workflow-runner.ts",

@@ -187,6 +187,8 @@ Notes:
 Main workflow artifacts:
 
 - spec: the behavior contract
+- user-flow artifact: the user-facing flow contract generated from the approved
+  spec plus codebase inspection
 - plan: the execution contract
 - prompt: the stage-specific workflow controller
 - runner: the post-plan state-machine driver
@@ -195,6 +197,8 @@ Main workflow artifacts:
 Default locations:
 
 - ordinary feature and bug specs: `.ai/specs/<name>.spec.md`
+- user-flow artifacts for user-facing work:
+  `.ai/artifacts/<name>/product-flow.md`
 - plans: `.ai/plans/<name>.md`
 - prompts: `.ai/prompts/*.md`
 - runner: `.ai/scripts/workflow-runner.ts`
@@ -205,12 +209,19 @@ when a workflow companion spec belongs elsewhere, such as
 
 ## Standard Workflow
 
+Canonical lifecycle:
+
+```text
+spec -> user-flow artifact -> plan -> runner
+```
+
 Normal end-to-end flow:
 
 1. Create a spec.
-2. Create a plan.
-3. Choose a post-plan path.
-4. Let plan `Status` and `Next Action` drive every later stage.
+2. Create a user-flow artifact for user-facing work.
+3. Create a plan.
+4. Choose a post-plan path.
+5. Let plan `Status` and `Next Action` drive every later stage.
 
 ### Create A Spec
 
@@ -221,6 +232,27 @@ Use the wrapper that matches the work:
 
 Ordinary specs should live in `.ai/specs/`. If a workflow companion spec needs
 to live elsewhere, keep the plan `## Spec` entry repo-relative.
+
+### Create A User-Flow Artifact
+
+For user-facing work, use:
+
+```text
+.ai/wrappers/generate-user-flow.md
+```
+
+The generated artifact should live at:
+
+```text
+.ai/artifacts/<plan-name>/product-flow.md
+```
+
+User-facing work means a feature, bugfix, or change that affects a customer,
+admin, or operator screen, route, workflow, visible state, or user-triggered API
+behavior.
+
+For non-user-facing work, skip this stage. The plan must record
+`N/A: <concrete reason>` in `## User Flow Artifact` and `## Flow-to-File Mapping`.
 
 ### Create A Plan
 

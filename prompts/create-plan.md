@@ -12,6 +12,7 @@ Read:
 - `.ai/instructions/shared/workflow-state.md`
 - relevant `.ai/instructions/**/*.md`
 - the spec file
+- the user-flow artifact for user-facing work
 
 Load:
 
@@ -47,6 +48,7 @@ Rules:
 - Spec is the single source of truth
 - DO NOT redefine behavior
 - DO NOT introduce behavior outside the spec
+- User-flow artifacts describe how spec behavior moves through the existing product surface; they do not add behavior beyond the spec
 
 ---
 
@@ -67,6 +69,36 @@ If any behavior is:
 → STOP  
 → list missing or unclear spec definitions  
 → do NOT generate plan
+
+---
+
+## User-Flow Artifact Check (MANDATORY)
+
+Before planning, derive the plan name from the spec file and classify whether the work is user-facing.
+
+User-facing work means a feature, bugfix, or change that affects a customer, admin, or operator screen, route, workflow, visible state, or user-triggered API behavior.
+
+If the work is user-facing:
+
+- read the user-flow artifact before planning
+- required path: `.ai/artifacts/<plan-name>/product-flow.md`
+- verify the artifact exists
+- verify it was generated from the approved spec plus codebase inspection
+- verify it does not invent desired behavior beyond the spec
+- use it to create `## Flow-to-File Mapping`
+
+If the work is user-facing and the artifact is missing, incomplete, or inconsistent with the spec:
+
+→ STOP  
+→ state the missing or invalid artifact problem  
+→ do NOT generate plan
+
+For non-user-facing work:
+
+- no flow artifact is required
+- in `## User Flow Artifact`, write exactly `N/A: <concrete reason>`
+- the reason must explain why the change does not affect a screen, route, workflow, visible state, or user-triggered API behavior
+- this is the only allowed `N/A` value in generated plans
 
 ---
 
@@ -92,6 +124,15 @@ Each phase MUST include:
 
 ---
 
+### User Flow Artifact
+
+Must include:
+
+- `.ai/artifacts/<plan-name>/product-flow.md` for user-facing work
+- `N/A: <concrete reason>` for non-user-facing work
+
+---
+
 ## Phase-to-File Mapping (MANDATORY)
 
 Each task MUST reference specific files where applicable.
@@ -109,6 +150,36 @@ GOOD:
 
 BAD:
 - Update API logic
+
+---
+
+## Flow-to-File Mapping (MANDATORY)
+
+For user-facing work, map every user action from the user-flow artifact to applicable implementation and validation paths.
+
+Each user action MUST include:
+
+- UI route/component
+- API route
+- backend service/module
+- database/storage effect
+- tests
+
+Rules:
+
+- Use concrete repo-relative paths where applicable.
+- If a category is not applicable to a user action, write `None: <concrete reason>`.
+- The tests entry must identify validation coverage for the action.
+- Every user action in `## User Flows` and `## Acceptance Scenarios` of the flow artifact must appear in this mapping.
+- The mapping must not include actions that do not appear in the flow artifact.
+
+For non-user-facing work, write exactly the same `N/A: <concrete reason>` used in `## User Flow Artifact`.
+
+If any user action cannot be mapped to implementation or validation coverage:
+
+→ STOP  
+→ state the missing mapping  
+→ do NOT generate plan
 
 ---
 
@@ -202,6 +273,8 @@ Before completing:
 - verify all template sections exist
 - verify `## Status` is present
 - verify all Phases are complete
+- verify User Flow Artifact is present and valid
+- verify Flow-to-File Mapping covers every user action for user-facing work
 - verify Files section is complete
 - verify Phase ↔ Files mapping is consistent
 

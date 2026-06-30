@@ -79,6 +79,19 @@ Rules:
 
 ---
 
+## User Flow Artifact
+
+.ai/artifacts/<plan-name>/product-flow.md
+
+Rules:
+
+* User-facing plans MUST list `.ai/artifacts/<plan-name>/product-flow.md`.
+* Non-user-facing plans MUST write exactly `N/A: <concrete reason>`.
+* The concrete reason MUST explain why the change does not affect a screen, route, workflow, visible state, or user-triggered API behavior.
+* This is the only section where `N/A` is allowed in generated plans.
+
+---
+
 ## Phases
 
 ### Preparation
@@ -108,6 +121,27 @@ Rules:
   1.
   2.
 * Expected Outcome:
+
+---
+
+## Flow-to-File Mapping
+
+### User Action: <action name from product-flow.md>
+
+* UI route/component: <repo-relative path, or None: concrete reason>
+* API route: <repo-relative path, or None: concrete reason>
+* backend service/module: <repo-relative path, or None: concrete reason>
+* database/storage effect: <repo-relative path, or None: concrete reason>
+* tests: <repo-relative test path or validation command>
+
+Rules:
+
+* User-facing plans MUST include one `### User Action:` entry for each user action in `.ai/artifacts/<plan-name>/product-flow.md`.
+* Each user action MUST map to applicable UI route/component, API route, backend service/module, database/storage effect, and tests.
+* Use concrete repo-relative paths where applicable.
+* If a category is not applicable to a user action, write `None: <concrete reason>`.
+* Tests MUST identify validation coverage for every user action.
+* Non-user-facing plans MUST write exactly `N/A: <concrete reason>` in this section.
 
 ---
 

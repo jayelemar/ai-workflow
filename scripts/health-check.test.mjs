@@ -23,6 +23,8 @@ const createWorkspace = async ({ includeAi = true } = {}) => {
     await writeFile(join(root, ".ai", "README.md"), "# README\n");
     await writeFile(join(root, ".ai", "AGENTS.md"), "# AGENTS\n");
     await writeFile(join(root, ".ai", ".gitignore"), "*\n");
+    await writeFile(join(root, ".ai", "prompts", "generate-user-flow.md"), "# Generate User Flow\n");
+    await writeFile(join(root, ".ai", "wrappers", "generate-user-flow.md"), "# Generate User Flow Wrapper\n");
     await writeFile(join(root, ".ai", "scripts", "workflow-runner.ts"), "export {};\n");
     await writeFile(join(root, ".ai", "scripts", "workflow-runner.test.ts"), "export {};\n");
   }
@@ -149,4 +151,29 @@ test("command failures report the failed step and command", async () => {
     /pnpm exec prettier --check \.ai\/instructions \.ai\/changelogs \.ai\/wrappers \.ai\/prompts \.ai\/templates \.ai\/README\.md/,
   );
   assert.match(stderr.join("\n"), /format failed/);
+});
+
+test("missing user-flow workflow source file fails clearly", async () => {
+  const calls = [];
+  const workspace = await createWorkspace();
+  const stdout = [];
+  const stderr = [];
+
+  try {
+    await rm(join(workspace.root, ".ai", "prompts", "generate-user-flow.md"), { force: true });
+
+    const result = await runHealthCheck({
+      cwd: workspace.root,
+      runner: successfulRunner(calls),
+      stdout: (message) => stdout.push(message),
+      stderr: (message) => stderr.push(message),
+    });
+
+    assert.equal(result.ok, false);
+    assert.match(stderr.join("\n"), /required source path exists: \.ai\/prompts\/generate-user-flow\.md/);
+    assert.match(stderr.join("\n"), /Missing required path: \.ai\/prompts\/generate-user-flow\.md/);
+    assert.equal(calls.some((call) => call.command === "pnpm"), false);
+  } finally {
+    await workspace.cleanup();
+  }
 });
