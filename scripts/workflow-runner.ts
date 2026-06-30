@@ -1304,88 +1304,15 @@ const summarizeFailedTestCommand = (command: string): FailedTestCommandSummary |
   return null;
 };
 
-const failedTestNameFromOutput = (text: string): string | undefined => {
-  const failureLine = text
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .find((line) => line.startsWith('● '));
-  if (!failureLine) {
-    return undefined;
-  }
-  const parts = failureLine
-    .split('›')
-    .map((part) => part.trim())
-    .filter(Boolean);
-  return parts.at(-1)?.replace(/^●\s*/, '');
-};
-
-const failedTestAssertionLines = (text: string): string[] => {
-  const lines = text.split(/\r?\n/).map((line) => line.trim());
-  const assertionStart = lines.findIndex(
-    (line) =>
-      line.startsWith('expect(') || line.startsWith('Error:') || line.startsWith('AssertionError'),
-  );
-  if (assertionStart < 0) {
-    return [];
-  }
-
-  const assertionLines: string[] = [];
-  for (const line of lines.slice(assertionStart)) {
-    if (!line) {
-      continue;
-    }
-    if (/^(Test Suites:|Tests:|Snapshots:|Time:|Ran all test suites)/.test(line)) {
-      break;
-    }
-    assertionLines.push(line);
-    if (assertionLines.length === 4) {
-      break;
-    }
-  }
-  return assertionLines;
-};
-
-const formatFailedTestCommandTerminalBlock = (command: string, text: string): string | null => {
-  const summary = summarizeFailedTestCommand(command);
-  if (!summary) {
-    return null;
-  }
-
-  const fileLines = formatTerminalFileDetails(summary.files).split('\n');
-  const testName = summary.testName ?? failedTestNameFromOutput(text);
-  const testNameLine = testName ? [`- ${testName}`] : [];
-  const assertionLines = failedTestAssertionLines(text);
-  const body = [
-    ...fileLines,
-    ...testNameLine,
-    '',
-    ...assertionLines,
-    '',
-    'command output omitted from workflow log',
-  ];
-
-  return `\n${body.join('\n')}\n`;
-};
-
 const formatFailedCommandTerminalBlock = (text: string): string => {
   const stats = terminalOutputStats(text);
   if (!stats) {
     return '';
   }
 
-  let output = stats.output.slice(0, TERMINAL_FAILED_COMMAND_OUTPUT_CHAR_LIMIT);
-  let truncated = stats.output.length > TERMINAL_FAILED_COMMAND_OUTPUT_CHAR_LIMIT;
-  const lines = output.split(/\r?\n/);
-  if (lines.length > TERMINAL_FAILED_COMMAND_OUTPUT_LINE_LIMIT) {
-    output = lines.slice(0, TERMINAL_FAILED_COMMAND_OUTPUT_LINE_LIMIT).join('\n');
-    truncated = true;
-  }
-
-  const body = output
-    .split(/\r?\n/)
-    .map((line) => `  ${line}`)
-    .join('\n');
-  return `\n${body}\n  ${truncated ? '... output truncated in terminal; ' : ''}command output omitted from workflow log\n`;
+  const byteCount = Buffer.byteLength(stats.output, 'utf8');
+  const lineCount = stats.output.split(/\r?\n/).length;
+  return `\n  output: ${byteCount} bytes, ${lineCount} lines omitted\n  command output omitted from workflow log\n`;
 };
 
 const trimBlankLines = (lines: string[]): string[] => {
@@ -1694,10 +1621,7 @@ const formatCommandTerminalOutput = (
   if (!stats) {
     return '';
   }
-  return (
-    formatFailedTestCommandTerminalBlock(command, stats.output) ??
-    formatFailedCommandTerminalBlock(stats.output)
-  );
+  return formatFailedCommandTerminalBlock(stats.output);
 };
 
 const formatTerminalEventBlock = (body: string): string => (body ? `${body.trimEnd()}\n\n` : '');

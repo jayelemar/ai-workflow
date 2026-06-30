@@ -1479,7 +1479,7 @@ test("codex live output formatter colorizes hybrid labels when color is enabled"
       }),
       { color: true },
     ),
-    "\u001b[31m[failed]\u001b[0m pnpm test (exit 7)\n  failed\n  command output omitted from workflow log\n\n",
+    "\u001b[31m[failed]\u001b[0m pnpm test (exit 7)\n  output: 6 bytes, 1 lines omitted\n  command output omitted from workflow log\n\n",
   );
   assert.equal(
     formatCodexJsonlEventForTerminal(codexAgentMessageLine("Done"), { color: true }),
@@ -1912,7 +1912,7 @@ test("codex live output formatter summarizes git show search and line-range pipe
   );
 });
 
-test("codex live output formatter shows a bounded excerpt for failed command output", () => {
+test("codex live output formatter shows only output metadata for failed command output", () => {
   const output = Array.from({ length: 12 }, (_, index) => `line ${index + 1}`).join("\n");
 
   assert.equal(
@@ -1931,18 +1931,15 @@ test("codex live output formatter shows a bounded excerpt for failed command out
     ),
     [
       "[failed] pnpm test (exit 1)",
-      "  line 1",
-      "  line 2",
-      "  line 3",
-      "  line 4",
-      "  ... output truncated in terminal; command output omitted from workflow log",
+      `  output: ${Buffer.byteLength(output, "utf8")} bytes, 12 lines omitted`,
+      "  command output omitted from workflow log",
       "",
       "",
     ].join("\n"),
   );
 });
 
-test("codex live output formatter summarizes failed Jest test output", () => {
+test("codex live output formatter keeps failed Jest test output metadata-only", () => {
   const output = [
     "FAIL test/onboarding/document-content-generator.service.spec.ts (10.998 s)",
     "  ● DocumentContentGeneratorService › widens unmapped suffixless Austin Market Research competitor queries to matching registration country",
@@ -1971,14 +1968,8 @@ test("codex live output formatter summarizes failed Jest test output", () => {
     ),
     [
       "[failed] jest test (exit 1)",
-      "- test/onboarding/document-content-generator.service.spec.ts",
-      "- widens unmapped suffixless",
-      "",
-      "expect(received).toBeGreaterThan(expected)",
-      "Expected: > 0",
-      "Received:   -1",
-      "",
-      "command output omitted from workflow log",
+      `  output: ${Buffer.byteLength(output, "utf8")} bytes, 9 lines omitted`,
+      "  command output omitted from workflow log",
       "",
       "",
     ].join("\n"),
@@ -2000,7 +1991,7 @@ test("codex live output formatter treats unknown command exits as failed but kee
         },
       }),
     ),
-    "[failed] pnpm test (exit unknown)\n  no exit\n  command output omitted from workflow log\n\n",
+    "[failed] pnpm test (exit unknown)\n  output: 7 bytes, 1 lines omitted\n  command output omitted from workflow log\n\n",
   );
 });
 
@@ -2211,7 +2202,7 @@ test("codex live output formatter suppresses successful plan section read comman
     ),
     [
       "[failed] plan section read (exit 1)",
-      "  missing section",
+      "  output: 15 bytes, 1 lines omitted",
       "  command output omitted from workflow log",
       "",
       "",
