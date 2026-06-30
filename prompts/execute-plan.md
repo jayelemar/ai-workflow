@@ -27,9 +27,7 @@ Load:
 
 * `.ai/prompts/superpowers.md`
 
-Use superpower skills:
-
-* analyze
+Apply the superpowers advisory guidance for analysis and edge-case checks.
 
 ---
 
@@ -180,15 +178,16 @@ If any plan step:
 
 From plan:
 
-* Created files
-* Modified files
-* Deleted files
+* `## Ownership Scope`
 
 Rules:
 
-* paths MUST be explicit
-* if a file section has no files, it MUST contain exactly `* None`
-* no directories or vague references
+* entries MUST be repo-relative exact files or directory globs ending in `/**`
+* no vague references
+* ownership is file-level only; do not use hunk/chunk ownership
+* generated or shared files are owned as whole files until committed or released
+
+The runner refreshes `.ai/artifacts/<plan-name>/state/file-ownership.json` before execution from `## Ownership Scope`, releases, and git state. Treat runner-reported artifact conflicts as authoritative.
 
 If unclear:
 
@@ -466,7 +465,7 @@ Update the plan with:
 * validation results
 * deviations (if any)
 
-Reconcile `## Files (MANDATORY)` after implementation to the actual created, modified, and deleted plan-owned paths before moving to `Status = review`.
+Reconcile `## Files (MANDATORY)` after implementation to the actual created, modified, and deleted plan-owned paths before moving to `Status = review`. `## Files (MANDATORY)` is the changed-file inventory for review and commit, not the ownership authority.
 
 Keep `Execution Log` and `Validation History` entries concise: `Summary`, one state field, and `Evidence` only, with each entry under 512 bytes.
 Detailed validation evidence belongs in `.ai/artifacts/<plan-name>/events/validation-vX.md`, with only the summary/result/evidence path kept inline under `## Validation History`.

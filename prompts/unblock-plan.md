@@ -1,6 +1,6 @@
 # Unblock Plan (State-Machine Driven)
 
-This prompt resolves a blocked execution state or advances deployment validation when blocker-resolution or deployment evidence is available.
+This prompt resolves a blocked execution state when blocker-resolution evidence is available.
 
 It does NOT implement fixes.
 
@@ -26,9 +26,7 @@ Load:
 
 * `.ai/prompts/superpowers.md`
 
-Use superpower skills:
-
-* analyze
+Apply the superpowers advisory guidance for analysis and edge-case checks.
 
 ---
 
@@ -69,10 +67,10 @@ If a blocker describes implementation work that can be performed by continuing `
 
 If a blocker is `Type: plan dependency`:
 
-* require evidence that the owner plan reached `completed + commit-summary`, that the owner plan is stable at `deployment-validation + unblock-plan` with a recorded commit in its deployment-validation artifact, OR that the owner plan released the shared file ownership
+* require evidence that the owner plan reached `completed + commit-summary` with no uncommitted changes for the shared file OR that the owner plan released the shared file ownership
 * evidence MUST identify the owner plan and the shared file path
+* the runner-owned `.ai/artifacts/<owner-plan>/state/file-ownership.json` conflict check is authoritative for whether a completed owner plan is still dirty
 * do not unblock from a `plan dependency` using only an assumption that the owner plan is inactive
-* a `deployment-validation + unblock-plan` owner plan with a recorded commit in its deployment-validation artifact is stable dependency evidence because dependent plans can build on that local commit while push, deploy, and final validation remain pending
 * if the evidence proves the dependency is resolved, mark the blocker resolved and allow the normal `blocked -> active` transition
 * if the evidence is missing or incomplete, keep the plan blocked with `Next Action = unblock-plan`
 
@@ -84,30 +82,14 @@ For released shared file ownership, valid evidence MUST include a `## File Owner
 * `Status: transferred`
 * concrete validation or review evidence
 
-When unblocking from a transferred release, add the released file to its own `## Files (MANDATORY)` path list before transitioning to `active + execute-plan`. After the transition, this plan owns the transferred file.
-
-If Status is `deployment-validation`, use deployment-validation evidence from:
-
-* push evidence
-* deployment evidence
-* final validation evidence
-* the runner-provided `Unblock evidence note`
-* documented validation evidence already appended to the plan
-
-Deployment-validation evidence MUST identify what happened and the concrete source, such as the branch pushed, deployment URL, deployment status, route checked, external system checked, expected result, actual result, and date/time or clearly current run context.
-
-If no concrete new deployment-validation evidence is available:
-
--> output `STOP`
--> state blocking reason (`deployment-validation evidence is required`)
--> do not update the plan
--> MUST NOT return success without changing the plan
+When unblocking from a transferred release, add the released file to this plan's `## Ownership Scope` and to `## Files (MANDATORY)` if it already has changed content for this plan. After the transition, this plan owns the transferred file.
 
 After classifying blockers, if any remaining execution blocker requires user clarification, product decision, external service access, auth state, runtime setup, or manual browser validation and no concrete resolution evidence is available:
 
 -> output `STOP`
 -> state blocking reason (`blocker resolution evidence is required`)
 -> do not transition the plan
+-> MUST NOT return success without changing the plan
 
 ---
 
@@ -120,11 +102,10 @@ Read:
 Expected:
 
 * blocked
-* deployment-validation
 
-IF Status is neither `blocked` nor `deployment-validation`:
+IF Status is not `blocked`:
 
--> STOP (`plan must be blocked or in deployment-validation before unblocking`)
+-> STOP (`plan must be blocked before unblocking`)
 
 ---
 
@@ -137,13 +118,9 @@ Expected:
 * unblock-plan
 * execute-plan (legacy blocked plans only)
 
-IF Status is `blocked` and Next Action is neither `unblock-plan` nor `execute-plan`:
+IF Next Action is neither `unblock-plan` nor `execute-plan`:
 
 -> STOP (`unexpected next action for unblocking`)
-
-IF Status is `deployment-validation` and Next Action is not `unblock-plan`:
-
--> STOP (`unexpected next action for deployment validation`)
 
 ---
 
@@ -159,8 +136,6 @@ Do NOT:
 * mark the plan reviewed or completed
 * generate a commit summary
 * perform implementation work
-
-For `deployment-validation`, analyze ONLY push, deploy, and final validation evidence. Do not implement fixes, perform review, create commits, push automatically, or generate the final completion summary.
 
 ---
 
@@ -179,55 +154,6 @@ If any unresolved execution blocker remains:
 -> output `STOP`
 -> keep Status blocked
 -> keep or set Next Action unblock-plan
-
----
-
-## Deployment Validation Updates
-
-Apply this section ONLY when the plan starts as:
-
-## Status
-
-deployment-validation
-
-## Next Action
-
-unblock-plan
-
-If push or deploy evidence is present but final validation evidence is missing:
-
-* update the latest deployment-validation artifact with `Push Status` and `Deployment Status` from the supplied evidence
-* keep `Status: pending`
-* keep:
-
-## Status
-
-deployment-validation
-
-## Next Action
-
-unblock-plan
-
-If final validation evidence passes:
-
-* update the latest deployment-validation artifact with final validation evidence, expected result, actual result, `Push Status`, and `Deployment Status`
-* set `Status: passed`
-* transition to `completed + commit-summary`
-
-If final validation evidence fails:
-
-* update the latest deployment-validation artifact with the failure evidence and failed expected vs actual behavior
-* set `Status: failed`
-* transition to `reopening + reopen-plan`
-
-Rules:
-
-* Preserve the recorded commit in the deployment-validation artifact.
-* Do not remove prior deployment-validation entries.
-* Deployment Validation plan entries may contain only `Summary`, `Status`, and `Evidence`.
-* Append or update the latest deployment-validation entry with traceable evidence.
-* If concrete new push or deploy evidence is incomplete but still traceable, keep `deployment-validation + unblock-plan`.
-* If evidence is incomplete because no concrete new deployment-validation evidence is available, output `STOP` with reason `deployment-validation evidence is required`.
 
 ---
 
@@ -267,7 +193,7 @@ Rules:
 * MUST NOT overwrite previous unblock entries
 * Unblock versions MUST be sequential
 * Unblock History entries may contain only `Summary`, `Decision`, and `Evidence`
-* Put resolved blocker lists, remaining blocker lists, deployment evidence, and detailed unblock reasoning in the unblock artifact
+* Put resolved blocker lists, remaining blocker lists, and detailed unblock reasoning in the unblock artifact
 * MUST NOT duplicate the `## Unblock History` heading when it already exists
 * MUST create `## Unblock History` only if the section is missing
 
@@ -283,7 +209,7 @@ Use this shared terminal-facing contract for non-review stages.
 
 **Summary**
 
-* ACTIVE | STILL BLOCKED | DEPLOYMENT VALIDATION PENDING | READY TO REOPEN
+* ACTIVE | STILL BLOCKED
 * stage result/state line first
 * at most 2-3 short high-signal bullets
 
@@ -299,19 +225,8 @@ Status:
 
 * active
 * blocked
-* deployment-validation
-* completed
-* reopening
 
 Next Action:
 
 * execute-plan
 * unblock-plan
-* commit-summary
-* reopen-plan
-
-commit-summary
-
-or:
-
-reopen-plan

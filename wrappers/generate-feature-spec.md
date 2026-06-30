@@ -7,8 +7,7 @@ Feature: <feature name>
 Load:
 .ai/prompts/superpowers.md
 
-Use superpower skills:
-analyze
+Apply the superpowers advisory guidance for analysis and edge-case checks.
 
 Objective:
 Create a specification file only.

@@ -17,9 +17,7 @@ Load:
 
 - `.ai/prompts/superpowers.md`
 
-Use superpower skills:
-
-- analyze
+Apply the superpowers advisory guidance for analysis and edge-case checks.
 
 ---
 
@@ -122,7 +120,7 @@ Must include:
 - Modified files
 - Deleted files
 
-This section is the planning-time expected ownership boundary. It should list the expected created, modified, and deleted file paths inferred from the request, spec, and codebase. It is reconciled after implementation by `execute-plan`.
+This section is the review and commit changed-file inventory. It should list the expected created, modified, and deleted file paths inferred from the request, spec, and codebase. It is reconciled after implementation by `execute-plan` from actual git changes.
 
 Rules:
 
@@ -145,6 +143,24 @@ Rules:
 If mismatch exists:
 
 → regenerate the plan
+
+---
+
+## Ownership Scope (MANDATORY)
+
+Add a concise `## Ownership Scope` section before `## Files (MANDATORY)`.
+
+This section is the planning-time file ownership boundary. Prefer broad, stable entries that describe which files this plan may own:
+
+- exact repo-relative files, for example `packages/supabase/src/generated.ts`
+- directory globs ending in `/**`, for example `apps/admin/src/features/admin-ugc-templates/**`
+
+Rules:
+
+- MUST use repo-relative exact files or directory globs ending in `/**`
+- MUST NOT use vague ownership like "service layer" or "related files"
+- MUST NOT use hunk/chunk ownership
+- Generated or shared files are owned as whole files until committed or released
 
 ---
 

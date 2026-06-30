@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import type { Writable } from 'node:stream';
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { homedir } from 'node:os';
@@ -59,7 +59,6 @@ const VALID_STATUSES = [
   'approved',
   'active',
   'review',
-  'deployment-validation',
   'reopening',
   'completed',
   'blocked',
@@ -239,12 +238,35 @@ type ScopeCleanupDecision = {
   action: 'keep' | 'unstage';
   patch?: string;
 };
+type StagedDiffHunk = {
+  filePath: string;
+  header: string;
+  text: string;
+  changedText: string;
+  hash: string;
+};
 
 type WorkflowFileLockMetadata = {
   planPath: string;
   pid: number;
   createdAt: string;
   path: string;
+};
+type FileOwnershipArtifact = {
+  planPath: string;
+  status: Status;
+  nextAction: NextAction;
+  owns: string[];
+  released: string[];
+  resolvedFiles: string[];
+  changedFiles: string[];
+  headSha: string;
+  updatedAt: string;
+};
+type FileOwnershipPreflight = {
+  hasOwnershipScope: boolean;
+  artifact?: FileOwnershipArtifact;
+  reviewStagingPaths?: string[];
 };
 
 type WorkflowRunnerCodexRuntime = {
@@ -1505,7 +1527,6 @@ const workflowNextActionForStatus = (status: string): NextAction | null => {
       return 'execute-plan';
     case 'review':
       return 'review-plan';
-    case 'deployment-validation':
     case 'blocked':
       return 'unblock-plan';
     case 'reopening':
@@ -2468,6 +2489,14 @@ const classifyFailureForLog = (reason: string): FailureMetadataLogFields => {
       nextSuggestedAction: 'fix review staging paths or git error, then rerun workflow-runner',
     };
   }
+  if (reason.startsWith('review hunk ownership incomplete')) {
+    return {
+      failureKind: 'review-hunk-ownership',
+      failureReason: reason,
+      nextSuggestedAction:
+        'update ## Hunk Ownership for shared-file hunks, then rerun workflow-runner',
+    };
+  }
   if (
     reason.startsWith('review cleanup git restore') ||
     reason.startsWith('could not launch review cleanup git restore')
@@ -2636,8 +2665,6 @@ const promptRoutes: Record<string, string> = {
   'blocked|execute-plan': UNBLOCK_PLAN_PROMPT_PATH,
   'blocked|unblock-plan': UNBLOCK_PLAN_PROMPT_PATH,
   'review|review-plan': REVIEW_CHANGES_PROMPT_PATH,
-  'deployment-validation|commit-summary': COMMIT_SUMMARY_PROMPT_PATH,
-  'deployment-validation|unblock-plan': UNBLOCK_PLAN_PROMPT_PATH,
   'reopening|reopen-plan': REOPEN_PLAN_PROMPT_PATH,
   'completed|commit-summary': COMMIT_SUMMARY_PROMPT_PATH,
 };
@@ -3884,36 +3911,6 @@ const blockedReasonSummary = (detail: string): { category: string; detail: strin
   };
 };
 
-const extractLatestDeploymentValidationField = (
-  content: string,
-  fieldName: string,
-): string | undefined => {
-  const lines = sectionLines(content, '## Deployment Validation');
-  if (lines === null) {
-    return undefined;
-  }
-
-  const pattern = new RegExp(`^\\*\\s*${fieldName}:\\s*(.+)$`, 'i');
-  let latest: string | undefined;
-  for (const line of lines) {
-    const match = line.trim().match(pattern);
-    if (match) {
-      latest = boundedInlineExcerpt(match[1]);
-    }
-  }
-  return latest;
-};
-
-const deploymentValidationDetail = (content: string): { commit?: string; detail: string } => {
-  const pendingValidation = extractLatestDeploymentValidationField(content, 'Pending Validation');
-  const reason = extractLatestDeploymentValidationField(content, 'Reason');
-  const commit = extractLatestDeploymentValidationField(content, 'Commit');
-  return {
-    commit,
-    detail: pendingValidation ?? reason ?? 'Deployment or external validation is pending',
-  };
-};
-
 const targetSubheadings = new Set(['### Created files', '### Modified files', '### Deleted files']);
 const noReviewStagingPathPlaceholders = new Set([
   'none',
@@ -4315,13 +4312,17 @@ const readCachedDiffForPaths = async (
   rootDir: string,
   paths: string[],
   processRunner: ProcessRunner,
+  options: {
+    unified?: number;
+    promptPath?: string;
+  } = {},
 ): Promise<string | undefined> => {
   const result = await processRunner({
     command: 'git',
-    args: ['diff', '--cached', '--unified=0', '--', ...paths],
+    args: ['diff', '--cached', `--unified=${options.unified ?? 0}`, '--', ...paths],
     cwd: rootDir,
     input: '',
-    promptPath: 'git-scope-cleanup-diff',
+    promptPath: options.promptPath ?? 'git-scope-cleanup-diff',
   }).catch(
     (): ProcessResult => ({
       launched: false,
@@ -4337,6 +4338,194 @@ const readCachedDiffForPaths = async (
 
   const diff = result.stdout.trim();
   return diff.length > 0 ? diff : undefined;
+};
+
+const diffGitHeaderPattern = /^diff --git a\/(.+) b\/(.+)$/;
+const diffHunkHeaderPattern = /^@@\s+.+\s+@@/;
+const hunkMarkerPattern = /`([^`\n]+)`/g;
+
+const extractStagedDiffHunks = (diff: string, scopedPaths: Set<string>): StagedDiffHunk[] => {
+  const hunks: StagedDiffHunk[] = [];
+  let currentFile: string | undefined;
+  let currentHeader: string | undefined;
+  let currentLines: string[] = [];
+
+  const flush = () => {
+    if (!currentFile || !currentHeader || !scopedPaths.has(currentFile)) {
+      currentLines = [];
+      return;
+    }
+    const text = [currentHeader, ...currentLines].join('\n');
+    const changedText = currentLines
+      .filter((line) => line.startsWith('+') || line.startsWith('-'))
+      .join('\n');
+    hunks.push({
+      filePath: currentFile,
+      header: currentHeader,
+      text,
+      changedText,
+      hash: createHash('sha256').update(text).digest('hex').slice(0, 12),
+    });
+    currentLines = [];
+  };
+
+  for (const line of diff.split(/\r?\n/)) {
+    const fileMatch = line.match(diffGitHeaderPattern);
+    if (fileMatch) {
+      flush();
+      currentFile = fileMatch[2];
+      currentHeader = undefined;
+      continue;
+    }
+    if (!currentFile || !scopedPaths.has(currentFile)) {
+      continue;
+    }
+    if (
+      line.startsWith('+++ ') ||
+      line.startsWith('--- ') ||
+      line.startsWith('index ') ||
+      line.startsWith('new file mode ') ||
+      line.startsWith('deleted file mode ')
+    ) {
+      continue;
+    }
+
+    if (diffHunkHeaderPattern.test(line)) {
+      flush();
+      currentHeader = line;
+      currentLines = [];
+      continue;
+    }
+
+    if (!currentHeader) {
+      continue;
+    }
+    currentLines.push(line);
+  }
+  flush();
+
+  return hunks;
+};
+
+const normalizedOwnershipText = (value: string): string =>
+  value
+    .toLowerCase()
+    .replace(/[`*_]/g, (match) => (match === '_' ? '_' : ' '))
+    .replace(/\s+/g, ' ');
+
+const hunkOwnershipTextForFile = (planContent: string, filePath: string): string | undefined => {
+  const lines = sectionLines(planContent, '## Hunk Ownership');
+  if (lines === null) {
+    return undefined;
+  }
+
+  const matchingSectionLines: string[] = [];
+  let sawFileSubsection = false;
+  let active = false;
+  for (const line of lines) {
+    const headingMatch = line.trim().match(/^###\s+(.+)$/);
+    if (headingMatch) {
+      sawFileSubsection = true;
+      active = headingMatch[1].trim() === filePath;
+      continue;
+    }
+    if (active) {
+      matchingSectionLines.push(line);
+    }
+  }
+
+  if (matchingSectionLines.length > 0) {
+    return matchingSectionLines.join('\n');
+  }
+  return sawFileSubsection ? '' : lines.join('\n');
+};
+
+const hunkOwnershipFilePaths = (planContent: string): string[] => {
+  const lines = sectionLines(planContent, '## Hunk Ownership');
+  if (lines === null) {
+    return [];
+  }
+  return lines
+    .map((line) => line.trim().match(/^###\s+(.+)$/)?.[1]?.trim())
+    .filter((value): value is string => Boolean(value));
+};
+
+const hunkOwnershipMarkers = (ownershipText: string): string[] => {
+  const markers: string[] = [];
+  for (const match of ownershipText.matchAll(hunkMarkerPattern)) {
+    const marker = match[1].trim();
+    if (marker.length > 0) {
+      markers.push(marker);
+    }
+  }
+  return uniquePaths(markers);
+};
+
+const stagedHunkCoveredByOwnership = (hunk: StagedDiffHunk, ownershipText: string): boolean => {
+  const haystack = normalizedOwnershipText(ownershipText);
+  if (haystack.includes(normalizedOwnershipText(hunk.header))) {
+    return true;
+  }
+  if (haystack.includes(normalizedOwnershipText(`hunk:${hunk.hash}`))) {
+    return true;
+  }
+
+  const normalizedHunkText = normalizedOwnershipText(hunk.changedText);
+  for (const marker of hunkOwnershipMarkers(ownershipText)) {
+    if (normalizedHunkText.includes(normalizedOwnershipText(marker))) {
+      return true;
+    }
+  }
+  return false;
+};
+
+const verifySharedFileHunkOwnership = async ({
+  rootDir,
+  planContent,
+  paths,
+  processRunner,
+}: {
+  rootDir: string;
+  planContent: string;
+  paths: string[];
+  processRunner: ProcessRunner;
+}): Promise<{ ok: true } | Failure> => {
+  const sharedPaths = new Set(hunkOwnershipFilePaths(planContent).filter((filePath) => paths.includes(filePath)));
+  if (sharedPaths.size === 0) {
+    return { ok: true };
+  }
+
+  const diff = await readCachedDiffForPaths(rootDir, [...sharedPaths], processRunner, {
+    unified: 12,
+    promptPath: 'git-review-hunk-ownership-diff',
+  });
+  if (!diff) {
+    return { ok: true };
+  }
+
+  const hunks = extractStagedDiffHunks(diff, sharedPaths);
+  const missingByPath = new Map<string, string[]>();
+  for (const hunk of hunks) {
+    const ownershipText = hunkOwnershipTextForFile(planContent, hunk.filePath);
+    if (ownershipText && stagedHunkCoveredByOwnership(hunk, ownershipText)) {
+      continue;
+    }
+    const missing = missingByPath.get(hunk.filePath) ?? [];
+    missing.push(`${hunk.header} (hunk:${hunk.hash})`);
+    missingByPath.set(hunk.filePath, missing);
+  }
+
+  if (missingByPath.size === 0) {
+    return { ok: true };
+  }
+
+  const details = [...missingByPath.entries()]
+    .map(([filePath, missing]) => `${filePath}: ${missing.slice(0, 8).join(', ')}`)
+    .join('; ');
+  return {
+    ok: false,
+    reason: `review hunk ownership incomplete: add ## Hunk Ownership entries for shared-file hunks before review: ${details}`,
+  };
 };
 
 export const generateScopeCleanupPrompt = ({
@@ -4533,6 +4722,440 @@ const verifyCommitSummaryPathsClean = async (
 };
 
 const uniquePaths = (paths: string[]): string[] => [...new Set(paths)];
+
+const fileOwnershipArtifactRelativePath = (planName: string): string =>
+  rel('.ai', 'artifacts', planName, 'state', 'file-ownership.json');
+
+const fileOwnershipArtifactAbsolutePath = (rootDir: string, planName: string): string =>
+  path.join(rootDir, fileOwnershipArtifactRelativePath(planName));
+
+const parseGitStatusChangedFiles = (output: string): string[] => {
+  const paths: string[] = [];
+  for (const rawLine of output.split(/\r?\n/)) {
+    const line = rawLine.trimEnd();
+    if (line.length < 4) {
+      continue;
+    }
+    let filePath = line.slice(3).trim();
+    const renameTarget = filePath.match(/\s+->\s+(.+)$/)?.[1];
+    if (renameTarget) {
+      filePath = renameTarget;
+    }
+    if (filePath.length > 0) {
+      paths.push(filePath);
+    }
+  }
+  return uniquePaths(paths);
+};
+
+const readGitChangedFiles = async (
+  rootDir: string,
+  processRunner: ProcessRunner,
+): Promise<{ ok: true; paths: string[] } | Failure> => {
+  const result = await processRunner({
+    command: 'git',
+    args: ['status', '--short', '--untracked-files=all', '--'],
+    cwd: rootDir,
+    input: '',
+    promptPath: 'git-file-ownership-status',
+  }).catch(
+    (error): ProcessResult => ({
+      launched: false,
+      stdout: '',
+      stderr: '',
+      error: String(error),
+    }),
+  );
+
+  if (!result.launched) {
+    return { ok: false, reason: `could not launch file ownership git status: ${result.error}` };
+  }
+  if (result.exitCode !== 0) {
+    const details = [result.stderr.trim(), result.stdout.trim()].filter(Boolean).join('\n');
+    return {
+      ok: false,
+      reason: `file ownership git status exited with code ${result.exitCode}${details ? `: ${details}` : ''}`,
+    };
+  }
+  return { ok: true, paths: parseGitStatusChangedFiles(result.stdout) };
+};
+
+const readGitHeadSha = async (
+  rootDir: string,
+  processRunner: ProcessRunner,
+): Promise<{ ok: true; sha: string } | Failure> => {
+  const result = await processRunner({
+    command: 'git',
+    args: ['rev-parse', 'HEAD'],
+    cwd: rootDir,
+    input: '',
+    promptPath: 'git-file-ownership-head',
+  }).catch(
+    (error): ProcessResult => ({
+      launched: false,
+      stdout: '',
+      stderr: '',
+      error: String(error),
+    }),
+  );
+
+  if (!result.launched) {
+    return { ok: false, reason: `could not launch file ownership head check: ${result.error}` };
+  }
+  if (result.exitCode !== 0) {
+    const details = [result.stderr.trim(), result.stdout.trim()].filter(Boolean).join('\n');
+    return {
+      ok: false,
+      reason: `file ownership head check exited with code ${result.exitCode}${details ? `: ${details}` : ''}`,
+    };
+  }
+  return { ok: true, sha: result.stdout.trim() };
+};
+
+const parseOwnershipScopeEntries = async (
+  content: string,
+  rootDir: string,
+): Promise<{ ok: true; entries: string[]; present: boolean } | Failure> => {
+  const lines = sectionLines(content, '## Ownership Scope');
+  if (lines === null) {
+    return { ok: true, entries: [], present: false };
+  }
+
+  const entries: string[] = [];
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.length === 0) {
+      continue;
+    }
+    const bulletValue = parseReviewStagingBulletValue(trimmed);
+    if (bulletValue === null) {
+      continue;
+    }
+    const value = bulletValue.trim();
+    if (isNoReviewStagingPathPlaceholder(value)) {
+      continue;
+    }
+    if (path.isAbsolute(value)) {
+      return { ok: false, reason: `ownership scope path is absolute: ${value}` };
+    }
+    if (value.includes('..')) {
+      return { ok: false, reason: `ownership scope path contains ..: ${value}` };
+    }
+    if (value.includes('*') && !value.endsWith('/**')) {
+      return { ok: false, reason: `ownership scope path has unsupported glob: ${value}` };
+    }
+    if (value.endsWith('/**')) {
+      const prefix = value.slice(0, -3);
+      if (prefix.length === 0) {
+        return { ok: false, reason: `ownership scope path is empty: ${value}` };
+      }
+      entries.push(value);
+      continue;
+    }
+    const validated = await validateConcretePlanFilePath({
+      value,
+      rootDir,
+      reasonPrefix: 'ownership scope path',
+    });
+    if (!validated.ok) {
+      return validated;
+    }
+    entries.push(validated.path);
+  }
+
+  if (entries.length === 0) {
+    return { ok: false, reason: 'plan has no concrete ownership scope entries' };
+  }
+
+  return { ok: true, entries: uniquePaths(entries), present: true };
+};
+
+const resolveOwnershipScopeEntries = (
+  entries: string[],
+  changedFiles: string[],
+  releasedFiles: string[] = [],
+): string[] => {
+  const released = new Set(releasedFiles);
+  const resolved: string[] = [];
+  for (const entry of entries) {
+    if (entry.endsWith('/**')) {
+      const prefix = entry.slice(0, -3);
+      for (const changedFile of changedFiles) {
+        if (changedFile === prefix || changedFile.startsWith(`${prefix}/`)) {
+          resolved.push(changedFile);
+        }
+      }
+      continue;
+    }
+    resolved.push(entry);
+  }
+  return uniquePaths(resolved).filter((filePath) => !released.has(filePath));
+};
+
+const filterChangedOwnershipFiles = (
+  resolvedFiles: string[],
+  changedFiles: string[],
+  releasedFiles: string[] = [],
+): string[] => {
+  const resolved = new Set(resolvedFiles);
+  const released = new Set(releasedFiles);
+  return uniquePaths(changedFiles).filter((filePath) => resolved.has(filePath) && !released.has(filePath));
+};
+
+const asStringArray = (value: unknown): string[] | undefined =>
+  Array.isArray(value) && value.every((item) => typeof item === 'string')
+    ? (value as string[])
+    : undefined;
+
+const parseFileOwnershipArtifact = (
+  raw: string,
+  artifactPath: string,
+): FileOwnershipArtifact | Failure => {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { ok: false, reason: `file ownership artifact is malformed: ${artifactPath}` };
+  }
+
+  const record = asRecord(parsed);
+  const planPath = record?.planPath;
+  const status = record?.status;
+  const nextAction = record?.nextAction;
+  const owns = asStringArray(record?.owns);
+  const released = asStringArray(record?.released);
+  const resolvedFiles = asStringArray(record?.resolvedFiles);
+  const changedFiles = asStringArray(record?.changedFiles);
+  const headSha = record?.headSha;
+  const updatedAt = record?.updatedAt;
+  if (
+    typeof planPath !== 'string' ||
+    typeof status !== 'string' ||
+    !isStatus(status) ||
+    typeof nextAction !== 'string' ||
+    !isNextAction(nextAction) ||
+    !owns ||
+    !released ||
+    !resolvedFiles ||
+    !changedFiles ||
+    typeof headSha !== 'string' ||
+    typeof updatedAt !== 'string'
+  ) {
+    return { ok: false, reason: `file ownership artifact is malformed: ${artifactPath}` };
+  }
+
+  return {
+    planPath,
+    status,
+    nextAction,
+    owns,
+    released,
+    resolvedFiles,
+    changedFiles,
+    headSha,
+    updatedAt,
+  };
+};
+
+const refreshCurrentFileOwnershipArtifact = async ({
+  rootDir,
+  plan,
+  processRunner,
+  timestamp,
+}: {
+  rootDir: string;
+  plan: ParsedPlan;
+  processRunner: ProcessRunner;
+  timestamp: () => string;
+}): Promise<
+  | { ok: true; present: false; changedFiles: string[] }
+  | { ok: true; present: true; artifact: FileOwnershipArtifact; changedFiles: string[] }
+  | Failure
+> => {
+  const ownershipScope = await parseOwnershipScopeEntries(plan.content, rootDir);
+  if (!ownershipScope.ok) {
+    return ownershipScope;
+  }
+  if (!ownershipScope.present) {
+    return { ok: true, present: false, changedFiles: [] };
+  }
+
+  const changedFiles = await readGitChangedFiles(rootDir, processRunner);
+  if (!changedFiles.ok) {
+    return changedFiles;
+  }
+
+  const headSha = await readGitHeadSha(rootDir, processRunner);
+  if (!headSha.ok) {
+    return headSha;
+  }
+  const released = await parseTransferredFileOwnershipReleasePaths(plan.content, rootDir);
+  if (!released.ok) {
+    return released;
+  }
+  const resolvedFiles = resolveOwnershipScopeEntries(
+    ownershipScope.entries,
+    changedFiles.paths,
+    released.paths,
+  );
+  const artifact: FileOwnershipArtifact = {
+    planPath: plan.planPath,
+    status: plan.status,
+    nextAction: plan.nextAction,
+    owns: ownershipScope.entries,
+    released: released.paths,
+    resolvedFiles,
+    changedFiles: filterChangedOwnershipFiles(resolvedFiles, changedFiles.paths, released.paths),
+    headSha: headSha.sha,
+    updatedAt: timestamp(),
+  };
+  const artifactPath = fileOwnershipArtifactAbsolutePath(rootDir, plan.planName);
+  await mkdir(path.dirname(artifactPath), { recursive: true });
+  await writeFile(artifactPath, `${JSON.stringify(artifact, null, 2)}\n`, 'utf8');
+
+  return { ok: true, present: true, artifact, changedFiles: changedFiles.paths };
+};
+
+const blockingOwnershipStatuses = new Set<Status>(['active', 'review', 'blocked', 'reopening']);
+
+const readOtherFileOwnershipArtifacts = async (
+  rootDir: string,
+  currentPlanPath: string,
+): Promise<{ ok: true; artifacts: FileOwnershipArtifact[] } | Failure> => {
+  const artifactsRoot = path.join(rootDir, '.ai', 'artifacts');
+  let entries: string[];
+  try {
+    entries = await readdir(artifactsRoot);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') {
+      return { ok: true, artifacts: [] };
+    }
+    return { ok: false, reason: `file ownership artifacts cannot be listed: ${String(error)}` };
+  }
+
+  const artifacts: FileOwnershipArtifact[] = [];
+  for (const entry of entries) {
+    const artifactPath = path.join(artifactsRoot, entry, 'state', 'file-ownership.json');
+    let raw: string;
+    try {
+      raw = await readFile(artifactPath, 'utf8');
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === 'ENOENT' || code === 'EISDIR') {
+        continue;
+      }
+      return { ok: false, reason: `file ownership artifact cannot be read: ${artifactPath}: ${String(error)}` };
+    }
+    const parsed = parseFileOwnershipArtifact(raw, artifactPath);
+    if (!('planPath' in parsed)) {
+      return parsed;
+    }
+    if (parsed.planPath !== currentPlanPath) {
+      artifacts.push(parsed);
+    }
+  }
+
+  return { ok: true, artifacts };
+};
+
+const effectiveArtifactResolvedFiles = (
+  artifact: FileOwnershipArtifact,
+  changedFiles: string[],
+): string[] =>
+  uniquePaths([
+    ...artifact.resolvedFiles,
+    ...resolveOwnershipScopeEntries(artifact.owns, changedFiles, artifact.released),
+  ]).filter((filePath) => !artifact.released.includes(filePath));
+
+const detectFileOwnershipArtifactConflict = async ({
+  rootDir,
+  current,
+  changedFiles,
+}: {
+  rootDir: string;
+  current: FileOwnershipArtifact;
+  changedFiles: string[];
+}): Promise<{ ok: true } | Failure> => {
+  const otherArtifacts = await readOtherFileOwnershipArtifacts(rootDir, current.planPath);
+  if (!otherArtifacts.ok) {
+    return otherArtifacts;
+  }
+
+  const currentFiles = new Set(current.resolvedFiles);
+  const dirtyFiles = new Set(changedFiles);
+  for (const other of otherArtifacts.artifacts) {
+    const otherFiles = effectiveArtifactResolvedFiles(other, changedFiles);
+    const conflictingFiles =
+      other.status === 'completed' && other.nextAction === 'commit-summary'
+        ? otherFiles.filter((filePath) => currentFiles.has(filePath) && dirtyFiles.has(filePath))
+        : blockingOwnershipStatuses.has(other.status)
+          ? otherFiles.filter((filePath) => currentFiles.has(filePath))
+          : [];
+    if (conflictingFiles.length === 0) {
+      continue;
+    }
+    return {
+      ok: false,
+      reason: `workflow file ownership conflict: ${conflictingFiles[0]} is already owned by ${other.planPath}`,
+    };
+  }
+
+  return { ok: true };
+};
+
+const refreshAndCheckFileOwnershipArtifact = async ({
+  rootDir,
+  plan,
+  processRunner,
+  timestamp,
+  isIgnored,
+}: {
+  rootDir: string;
+  plan: ParsedPlan;
+  processRunner: ProcessRunner;
+  timestamp: () => string;
+  isIgnored?: (relativePath: string) => Promise<boolean>;
+}): Promise<FileOwnershipPreflight | Failure> => {
+  const refreshed = await refreshCurrentFileOwnershipArtifact({
+    rootDir,
+    plan,
+    processRunner,
+    timestamp,
+  });
+  if (!refreshed.ok) {
+    return refreshed;
+  }
+  if (!refreshed.present) {
+    return { hasOwnershipScope: false };
+  }
+
+  const conflict = await detectFileOwnershipArtifactConflict({
+    rootDir,
+    current: refreshed.artifact,
+    changedFiles: refreshed.changedFiles,
+  });
+  if (!conflict.ok) {
+    return conflict;
+  }
+
+  const ignored = isIgnored ?? ((relativePath: string) => defaultIsIgnored(rootDir, relativePath));
+  const reviewStagingPaths: string[] = [];
+  for (const changedFile of refreshed.artifact.changedFiles) {
+    if (changedFile.startsWith('.ai/')) {
+      continue;
+    }
+    if (!(await ignored(changedFile))) {
+      reviewStagingPaths.push(changedFile);
+    }
+  }
+
+  return {
+    hasOwnershipScope: true,
+    artifact: refreshed.artifact,
+    reviewStagingPaths,
+  };
+};
 
 const parseWorkflowFileOwnershipPaths = async (
   rootDir: string,
@@ -4924,20 +5547,6 @@ const transitionAllowed = (
     }
   }
   if (promptPath === rel('.ai', 'prompts', 'unblock-plan.md')) {
-    if (previous.status === 'deployment-validation') {
-      const allowedPending =
-        next.status === 'deployment-validation' && next.nextAction === 'unblock-plan';
-      const allowedCompleted = next.status === 'completed' && next.nextAction === 'commit-summary';
-      const allowedReopening = next.status === 'reopening' && next.nextAction === 'reopen-plan';
-      if (!allowedPending && !allowedCompleted && !allowedReopening) {
-        return {
-          ok: false,
-          reason: `deployment-validation unblock-plan may only hand off to deployment-validation + unblock-plan, completed + commit-summary, or reopening + reopen-plan, got ${next.status} + ${next.nextAction}`,
-        };
-      }
-      return { ok: true };
-    }
-
     const allowedActive = next.status === 'active' && next.nextAction === 'execute-plan';
     const allowedBlocked =
       next.status === 'blocked' &&
@@ -4946,19 +5555,6 @@ const transitionAllowed = (
       return {
         ok: false,
         reason: `unblock-plan may only hand off to active + execute-plan or remain blocked, got ${next.status} + ${next.nextAction}`,
-      };
-    }
-  }
-  if (
-    promptPath === rel('.ai', 'prompts', 'commit-summary.md') &&
-    previous.status === 'deployment-validation'
-  ) {
-    const allowedPending =
-      next.status === 'deployment-validation' && next.nextAction === 'unblock-plan';
-    if (!allowedPending) {
-      return {
-        ok: false,
-        reason: `deployment-validation commit-summary may only hand off to deployment-validation + unblock-plan, got ${next.status} + ${next.nextAction}`,
       };
     }
   }
@@ -5114,39 +5710,6 @@ export const runWorkflowRunner = async (
     logger.error(elapsedLine());
     return failure(finalReason, completedIterations);
   };
-  const finishDeploymentValidation = async (
-    reason: string,
-    content: string,
-    planPath: string,
-    completedIterations = iterations,
-  ): Promise<RunnerResult> => {
-    const releaseFailure = await releaseHeldWorkflowFileLocks();
-    const finalReason = releaseFailure ? `${reason}; ${releaseFailure}` : reason;
-    const summary = deploymentValidationDetail(content);
-    logger.error('DEPLOYMENT VALIDATION');
-    logger.error('- Reason: DEPLOYMENT VALIDATION');
-    logger.error(`-> ${summary.detail}`);
-    if (summary.commit) {
-      logger.error(`-> Commit: ${summary.commit}`);
-    }
-    logger.error('-> Next: Run Codex CLI with this:');
-    logger.error('`use unblock-plan.md`');
-    logger.error('`evidence: ...`');
-    logger.error(`\`${planPath}\``);
-    logger.error('');
-    if (workflowLogPath) {
-      logger.error(`- Workflow log: ${workflowLogPath}`);
-    }
-    if (tokenUsageLogPath) {
-      logger.error(`- Token usage ledger: ${tokenUsageLogPath}`);
-    }
-    if (releaseFailure) {
-      logger.error(`FAILED: ${releaseFailure}`);
-    }
-    logger.error(elapsedLine());
-    return failure(finalReason, completedIterations);
-  };
-
   const initialParsedPlan = await parsePlan({ planName: planArgument, rootDir });
   if (!initialParsedPlan.ok) {
     return await finishFailure(initialParsedPlan.reason);
@@ -5235,6 +5798,7 @@ export const runWorkflowRunner = async (
     let reviewCleanup: ReviewCleanupProcess | undefined;
     let reviewStagingPaths: string[] | undefined;
     let commitSummaryPaths: string[] | undefined;
+    let fileOwnershipPreflight: FileOwnershipPreflight | undefined;
     let progressLogged = false;
     const logWorkflowProgress = () => {
       if (progressLogged) {
@@ -5271,18 +5835,32 @@ export const runWorkflowRunner = async (
       if (!cleanup.ok) {
         return { ok: false, reason: cleanup.reason };
       }
-      return { ok: true };
-    };
-    if (route.promptPath === rel('.ai', 'prompts', 'execute-plan.md')) {
-      const ownershipPaths = await parseWorkflowFileOwnershipPaths(
+        return { ok: true };
+      };
+    if (
+      route.promptPath === rel('.ai', 'prompts', 'execute-plan.md') ||
+      route.promptPath === rel('.ai', 'prompts', 'review-changes.md') ||
+      route.promptPath === rel('.ai', 'prompts', 'commit-summary.md')
+    ) {
+      const preflight = await refreshAndCheckFileOwnershipArtifact({
         rootDir,
-        parsedPlan.content,
-        options.isIgnored,
-      );
+        plan: parsedPlan,
+        processRunner,
+        timestamp,
+        isIgnored: options.isIgnored,
+      });
+      if ('ok' in preflight && !preflight.ok) {
+        return await finishFailure(`workflow file ownership scope invalid: ${preflight.reason}`);
+      }
+      fileOwnershipPreflight = preflight;
+    }
+    if (route.promptPath === rel('.ai', 'prompts', 'execute-plan.md')) {
+      const ownershipPaths =
+        fileOwnershipPreflight?.hasOwnershipScope && fileOwnershipPreflight.artifact
+          ? { ok: true as const, paths: fileOwnershipPreflight.artifact.resolvedFiles }
+          : await parseWorkflowFileOwnershipPaths(rootDir, parsedPlan.content, options.isIgnored);
       if (!ownershipPaths.ok) {
-        return await finishFailure(
-          `workflow file ownership scope invalid: ${ownershipPaths.reason}`,
-        );
+        return await finishFailure(`workflow file ownership scope invalid: ${ownershipPaths.reason}`);
       }
       const acquired = await acquireWorkflowFileOwnershipForPaths({
         rootDir,
@@ -5352,11 +5930,20 @@ export const runWorkflowRunner = async (
         markWorkflowLogCreated(parsedPlan.planName);
         return await finishFailure(preExistingStagedWork.reason);
       }
-      const parsedPaths = await parseReviewStagingPaths({
-        content: parsedPlan.content,
-        rootDir,
-        isIgnored: options.isIgnored ?? ((relativePath) => defaultIsIgnored(rootDir, relativePath)),
-      });
+      const parsedPaths =
+        fileOwnershipPreflight?.hasOwnershipScope && fileOwnershipPreflight.reviewStagingPaths
+          ? fileOwnershipPreflight.reviewStagingPaths.length > 0
+            ? { ok: true as const, paths: fileOwnershipPreflight.reviewStagingPaths }
+            : {
+                ok: false as const,
+                reason: 'plan has no changed ownership files to stage for review',
+              }
+          : await parseReviewStagingPaths({
+              content: parsedPlan.content,
+              rootDir,
+              isIgnored:
+                options.isIgnored ?? ((relativePath) => defaultIsIgnored(rootDir, relativePath)),
+            });
       if (!parsedPaths.ok) {
         const durationMs = Math.max(0, now() - attemptStartedAt);
         const logTimestamp = timestamp();
@@ -5748,24 +6335,7 @@ export const runWorkflowRunner = async (
       updated: ParsedPlan,
     ):
       | { kind: 'blocked'; reason: string; detail: string; planPath: string }
-      | { kind: 'deployment-validation'; reason: string; content: string; planPath: string }
       | undefined => {
-      if (
-        updated.status === 'deployment-validation' &&
-        updated.nextAction === 'unblock-plan' &&
-        (route.promptPath === rel('.ai', 'prompts', 'commit-summary.md') ||
-          route.promptPath === rel('.ai', 'prompts', 'unblock-plan.md'))
-      ) {
-        const detail = deploymentValidationDetail(updated.content);
-        const reason = `deployment validation pending: ${detail.detail}`;
-        return {
-          kind: 'deployment-validation',
-          reason,
-          content: updated.content,
-          planPath: updated.planPath,
-        };
-      }
-
       if (
         route.promptPath === rel('.ai', 'prompts', 'execute-plan.md') &&
         updated.status === 'blocked'
@@ -5790,9 +6360,6 @@ export const runWorkflowRunner = async (
     const finishNonterminalRouteOutcome = async (
       outcome: NonNullable<ReturnType<typeof nonterminalRouteOutcome>>,
     ): Promise<RunnerResult> => {
-      if (outcome.kind === 'deployment-validation') {
-        return await finishDeploymentValidation(outcome.reason, outcome.content, outcome.planPath);
-      }
       return await finishBlocked(outcome.reason, outcome.detail, outcome.planPath);
     };
 

@@ -4,9 +4,7 @@ This prompt stages completed plan implementation files, then generates the final
 
 It does NOT modify code.
 
-For `completed + commit-summary`, it DOES create exactly one local git commit from runner-injected plan-owned paths, unless final deployment validation has already passed and the plan needs only a final summary using the recorded commit.
-
-For `deployment-validation + commit-summary`, it DOES create exactly one local git commit and update the plan with deployment-validation metadata.
+For `completed + commit-summary`, it DOES create exactly one local git commit from runner-injected plan-owned paths.
 
 It does NOT perform validation or review.
 
@@ -52,9 +50,8 @@ Read:
 Expected:
 
 * completed
-* deployment-validation
 
-IF Status is neither `completed` nor `deployment-validation`:
+IF Status is not `completed`:
 
 → STOP (`plan is not ready for commit summary`)
 
@@ -68,15 +65,11 @@ Expected:
 
 commit-summary
 
-IF Next Action != commit-summary:
+IF Next Action is not `commit-summary`:
 
 → STOP (`unexpected next action for commit summary`)
 
-If Status is `completed`, use the completed commit rules below.
-
-If Status is `deployment-validation`, use the deployment-validation commit rules below.
-
-If Status is `completed` and the latest `## Deployment Validation` entry has `Status: passed`, read its evidence artifact for the recorded commit metadata. Do not create a second commit when no plan-owned changes remain. Produce the final completion summary using the recorded commit from the artifact.
+Use the completed commit rules below.
 
 ---
 
@@ -164,7 +157,7 @@ Do NOT use:
 
 Before outputting the commit message and summary:
 
-Commit-summary relies on the existing `## Files (MANDATORY)` list. It must not repair `## Files (MANDATORY)` as a late-stage metadata fix; if the list is wrong, route the plan back through review or execution.
+Commit-summary relies on the existing `## Files (MANDATORY)` changed-file inventory and the runner-refreshed file ownership artifact. It must not repair `## Files (MANDATORY)` as a late-stage metadata fix; if the list is wrong, route the plan back through review or execution.
 
 1. Use the runner-injected `Plan-scoped commit boundary` when present.
 2. Stage only the listed non-ignored plan-owned implementation paths.
@@ -214,8 +207,6 @@ completed
 
 commit-summary
 
-and the latest `## Deployment Validation` entry is not `Status: passed` with a recorded commit in its evidence artifact.
-
 Required behavior:
 
 1. Stage only plan-owned paths from the runner-injected path list.
@@ -232,83 +223,8 @@ git commit -m "<generated message>" -- <plan-owned paths>
 Rules:
 
 * Do not update the plan.
-* Do not create a deployment-validation entry.
 * Do not create more than one commit.
 * Do not stage or commit `.ai/` files.
-
----
-
-## Deployment Validation Commit Rules
-
-Apply this section ONLY when the plan starts as:
-
-## Status
-
-deployment-validation
-
-## Next Action
-
-commit-summary
-
-Required behavior:
-
-1. Stage only plan-owned paths from the runner-injected path list.
-2. Create exactly one local git commit from those staged changes.
-3. MUST NOT push.
-4. If `git commit` fails, output `STOP`, state the git failure, and do not record a commit hash.
-5. After the commit succeeds, read the commit SHA and current branch.
-6. Create `.ai/artifacts/<plan-name>/events/deployment-validation-vX.md` with `# Deployment Validation vX`, `## Summary`, and `## Evidence`.
-   The artifact must include the commit SHA, branch, commit timestamp, push status, deployment status, reason deployed validation is required, and specific pending validation.
-7. Update the plan with:
-
-## Deployment Validation
-
-### Deployment Validation vX
-
-* Summary:
-* Evidence: .ai/artifacts/<plan-name>/events/deployment-validation-vX.md
-* Status: pending
-
-8. Transition the plan to:
-
-## Status
-
-deployment-validation
-
-## Next Action
-
-unblock-plan
-
-Rules:
-
-* Preserve previous execution, review, validation, and blocker history.
-* Append the next sequential `### Deployment Validation vX` entry if the section already exists.
-* Deployment Validation entries may contain only `Summary`, `Status`, and `Evidence`.
-* Do not overwrite an existing deployment-validation artifact unless it belongs to the same current run and the previous `git commit` failed before a hash was recorded.
-* The output must include the created commit SHA, branch, pending push/deploy status, and pending validation.
-
----
-
-## Final Deployment Validation Summary Rules
-
-Apply this section ONLY when the plan starts as:
-
-## Status
-
-completed
-
-## Next Action
-
-commit-summary
-
-and the latest `## Deployment Validation` entry has `Status: passed` with a recorded commit in its evidence artifact.
-
-Rules:
-
-* Read the evidence artifact and use the recorded commit for the final completion summary.
-* If no plan-owned changes remain, do not create a second commit.
-* Do not push.
-* Do not alter the recorded deployment-validation evidence.
 
 ---
 
@@ -328,7 +244,7 @@ Rules:
 
 **Summary**
 
-* COMMIT CREATED | DEPLOYMENT VALIDATION READY
+* COMMIT CREATED
 * stage result/state line first
 * at most 2-3 short high-signal bullets
 
@@ -344,7 +260,6 @@ Rules:
 Status:
 
 * completed
-* deployment-validation
 
 Next Action:
 

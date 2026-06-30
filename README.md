@@ -351,7 +351,6 @@ Supported event kinds:
 - `review`
 - `unblock`
 - `reopen`
-- `deployment-validation`
 
 Each event artifact must include:
 

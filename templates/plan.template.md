@@ -18,7 +18,7 @@ Rules:
 * Keep workflow history entries under 512 bytes.
 * Keep aggregate workflow history under 4 KB.
 * Plan workflow entries may contain only `Summary`, exactly one of `Result`, `Decision`, or `Status`, and `Evidence`.
-* Put detailed issue lists, fixes, validation output, blocker notes, reopen notes, and deployment metadata in event artifacts.
+* Put detailed issue lists, fixes, validation output, blocker notes, and reopen notes in event artifacts.
 * Do not paste artifact bodies or narrative workflow sections into the plan.
 
 ---
@@ -108,6 +108,12 @@ Rules:
   1.
   2.
 * Expected Outcome:
+
+---
+
+## Ownership Scope
+
+* <exact file path or directory glob ending in /**>
 
 ---
 

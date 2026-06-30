@@ -25,11 +25,7 @@ Load:
 
 * `.ai/prompts/superpowers.md`
 
-Use superpower skills:
-
-* analyze
-* edge-cases
-* compare
+Apply the superpowers advisory guidance for analysis and edge-case checks.
 
 ---
 
@@ -47,7 +43,7 @@ If not provided:
 
 ## Diff Source (MANDATORY)
 
-Review MUST be performed using only the current plan's `## Files (MANDATORY)` paths.
+Review MUST be performed using only the runner-injected staged paths for the current plan. For plans with `## Ownership Scope`, the runner stages actual changed files resolved from `.ai/artifacts/<plan-name>/state/file-ownership.json`; otherwise it uses the legacy `## Files (MANDATORY)` paths.
 
 Use the path-scoped staged diff command injected by `workflow-runner.ts`:
 
@@ -63,13 +59,13 @@ If the path-scoped staged diff is empty:
 
 → STOP (`no staged changes to review`)
 
-If staged implementation paths do not match `## Files (MANDATORY)`:
+If staged implementation paths do not match the expected changed-file inventory in `## Files (MANDATORY)`:
 
 * classify the finding as a `file-list mismatch`
 * do not repair the file list during review
 * set `Status = active`
 * set `Next Action = execute-plan`
-* record the exact missing or extra path correction needed for execution to reconcile the plan-owned boundary
+* record the exact missing or extra path correction needed for execution to reconcile the changed-file inventory
 
 ---
 
@@ -116,39 +112,7 @@ Ignore staged files outside the current plan path list.
 Do not unstage, reset, modify, or otherwise alter unrelated files outside the current plan path list.
 The runner may auto-unstage clearly unrelated staged hunks before review; review the remaining path-scoped staged diff only.
 
-### Optional Hunk Ownership
-
-Plans MAY include a `## Hunk Ownership` section when multiple active plans intentionally share one or more staged file paths.
-
-If `## Hunk Ownership` is absent:
-
-* enforce the isolation rules above exactly
-* if unrelated hunks remain inside the path-scoped diff after runner cleanup, do not approve the review
-* classify the issue as `missing hunk ownership` with the remediation label `missing ## Hunk Ownership section` when multiple plan-relevant workflows intentionally share a staged file path
-* classify the issue as `non plan-scoped changes` when the unrelated hunks should be removed instead of documented
-* record the exact file and hunk/topic summaries that need removal or explicit ownership
-* set `Status = active`
-* set `Next Action = execute-plan`
-* do not output STOP only because the plan is missing a `## Hunk Ownership` section
-
-If `## Hunk Ownership` is present:
-
-* use it only for files explicitly listed in that section
-* classify every staged hunk in each listed shared file as `owned`, `excluded`, or `ambiguous`
-* review only `owned` hunks against the current spec and plan
-* ignore `excluded` hunks only when they are explicitly described in the plan and do not overlap current-plan behavior
-* do not treat ignored `excluded` hunks as reviewed, approved, validated, or safe to merge
-* include the ignored `excluded` hunks in the final output under warnings or scope notes
-
-If any staged hunk in a shared file is not explicitly covered by `## Hunk Ownership`:
-
-→ STOP (`ambiguous hunk ownership`)
-
-If an `excluded` hunk overlaps current-plan behavior, is required for current-plan validation, or changes behavior that the current spec owns:
-
-→ STOP (`non plan-scoped changes detected`)
-
-If unrelated changes remain after runner cleanup inside the path-scoped diff and cannot be resolved by removing hunks or adding explicit hunk ownership:
+If unrelated changes remain after runner cleanup inside the path-scoped diff:
 
 → STOP (`non plan-scoped changes detected`)
 
@@ -367,7 +331,7 @@ Create `## Review History` only if the section is missing.
 Before updating the plan, create `.ai/artifacts/<plan-name>/events/review-vX.md` with `# Review vX`, `## Summary`, and `## Evidence`.
 Put optional warnings, suggestions, and the specific deferred validation in the review artifact.
 
-3. do not add or update `## Deployment Validation` for this path. `commit-summary` records the local commit metadata. The operator performs the deferred validation manually after commit/deploy and reopens the plan if that check finds a required fix.
+3. do not create any extra plan section or event artifact for this path. `commit-summary` records the local commit metadata. The operator performs the deferred validation manually after commit/deploy and reopens the plan if that check finds a required fix.
 
 ---
 

@@ -1,5 +1,5 @@
-Version: 1.7
-Last Updated: 2026-06-28
+Version: 1.8
+Last Updated: 2026-06-30
 
 # Workflow State Instructions
 
@@ -31,7 +31,6 @@ Allowed Status Values:
 * approved
 * active
 * review
-* deployment-validation
 * reopening
 * completed
 * blocked
@@ -67,15 +66,6 @@ blocked
 review
 → active
 
-deployment-validation
-→ deployment-validation
-
-deployment-validation
-→ completed
-
-deployment-validation
-→ reopening
-
 review
 → completed
 
@@ -103,12 +93,6 @@ blocked
 
 review
 → review-plan
-
-deployment-validation
-→ commit-summary
-
-deployment-validation
-→ unblock-plan
 
 reopening
 → reopen-plan
@@ -202,32 +186,6 @@ Status = completed
 Next Action = commit-summary
 
 Record a deferred validation note in Review History. The operator handles that validation manually after commit/deploy. If the manual check finds a required fix, reopen the plan through `completed → reopening → active`.
-
----
-
-Deployment Validation Loop (legacy/resume only)
-
-New safe reviews SHOULD NOT transition to `deployment-validation`. Existing plans already in `deployment-validation` may continue through this loop.
-
-Commit created for deployed/external validation:
-
-Status = deployment-validation
-Next Action = unblock-plan
-
-Push/deploy evidence recorded but final validation is still pending:
-
-Status = deployment-validation
-Next Action = unblock-plan
-
-Final deployment validation passed:
-
-Status = completed
-Next Action = commit-summary
-
-Final deployment validation failed:
-
-Status = reopening
-Next Action = reopen-plan
 
 ---
 

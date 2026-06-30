@@ -30,9 +30,7 @@ Load:
 
 * `.ai/prompts/superpowers.md`
 
-Use superpower skills:
-
-* analyze
+Apply the superpowers advisory guidance for analysis and edge-case checks.
 
 Do not broadly load `.ai/instructions/**` beyond the routed files required for
 the current preflight or execution work.
@@ -230,8 +228,9 @@ code preview.
 
 ## Out-of-Scope File Gate (MANDATORY)
 
-Use the plan's `## Files (MANDATORY)` section as the non-test ownership
-boundary.
+Use the plan's `## Ownership Scope` section as the non-test ownership
+boundary. `## Files (MANDATORY)` is the changed-file inventory and may be
+reconciled after implementation.
 
 If the current step requires a non-test file outside that boundary:
 

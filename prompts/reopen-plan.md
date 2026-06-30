@@ -26,10 +26,7 @@ Load:
 
 * `.ai/prompts/superpowers.md`
 
-Use superpower skills:
-
-* analyze
-* edge-cases
+Apply the superpowers advisory guidance for analysis and edge-case checks.
 
 ---
 

@@ -17,8 +17,7 @@ type WorkflowEventKind =
   | 'validation'
   | 'review'
   | 'unblock'
-  | 'reopen'
-  | 'deployment-validation';
+  | 'reopen';
 
 const THIN_PLAN_CONTRACT = 'thin-plan-v1';
 const THIN_PLAN_ENTRY_MAX_BYTES = 512;
@@ -104,11 +103,6 @@ const workflowEventSections = [
   { section: '## Review History', label: 'Review', kind: 'review' },
   { section: '## Unblock History', label: 'Unblock', kind: 'unblock' },
   { section: '## Reopen History', label: 'Reopen', kind: 'reopen' },
-  {
-    section: '## Deployment Validation',
-    label: 'Deployment Validation',
-    kind: 'deployment-validation',
-  },
 ] as const satisfies ReadonlyArray<{
   section: string;
   label: string;
