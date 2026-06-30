@@ -123,7 +123,13 @@ Plans MAY include a `## Hunk Ownership` section when multiple active plans inten
 If `## Hunk Ownership` is absent:
 
 * enforce the isolation rules above exactly
-* any unrelated hunk inside the path-scoped diff is a STOP condition
+* if unrelated hunks remain inside the path-scoped diff after runner cleanup, do not approve the review
+* classify the issue as `missing hunk ownership` with the remediation label `missing ## Hunk Ownership section` when multiple plan-relevant workflows intentionally share a staged file path
+* classify the issue as `non plan-scoped changes` when the unrelated hunks should be removed instead of documented
+* record the exact file and hunk/topic summaries that need removal or explicit ownership
+* set `Status = active`
+* set `Next Action = execute-plan`
+* do not output STOP only because the plan is missing a `## Hunk Ownership` section
 
 If `## Hunk Ownership` is present:
 
@@ -142,7 +148,7 @@ If an `excluded` hunk overlaps current-plan behavior, is required for current-pl
 
 → STOP (`non plan-scoped changes detected`)
 
-If unrelated changes remain after runner cleanup inside the path-scoped diff:
+If unrelated changes remain after runner cleanup inside the path-scoped diff and cannot be resolved by removing hunks or adding explicit hunk ownership:
 
 → STOP (`non plan-scoped changes detected`)
 

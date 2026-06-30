@@ -724,7 +724,10 @@ test("review-changes prompt expects runner pre-review cleanup for clearly unrela
 
   assert.match(prompt, /runner may auto-unstage clearly unrelated staged hunks before review/i);
   assert.match(prompt, /review the remaining path-scoped staged diff only/i);
-  assert.match(prompt, /if unrelated changes remain after runner cleanup/i);
+  assert.match(prompt, /missing ## Hunk Ownership section/i);
+  assert.match(prompt, /Status = active/);
+  assert.match(prompt, /Next Action = execute-plan/);
+  assert.doesNotMatch(prompt, /any unrelated hunk inside the path-scoped diff is a STOP condition/i);
 });
 
 test("commit-summary prompt creates one local deployment-validation commit and forbids auto-push", async () => {
