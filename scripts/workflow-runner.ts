@@ -5809,7 +5809,78 @@ export const runWorkflowRunner = async (
       return ledgerResultValue;
     };
 
+    const nonterminalRouteOutcome = (
+      updated: ParsedPlan,
+    ):
+      | { kind: 'blocked'; reason: string; detail: string; planPath: string }
+      | { kind: 'deployment-validation'; reason: string; content: string; planPath: string }
+      | undefined => {
+      if (
+        updated.status === 'deployment-validation' &&
+        updated.nextAction === 'unblock-plan' &&
+        (route.promptPath === rel('.ai', 'prompts', 'commit-summary.md') ||
+          route.promptPath === rel('.ai', 'prompts', 'unblock-plan.md'))
+      ) {
+        const detail = deploymentValidationDetail(updated.content);
+        const reason = `deployment validation pending: ${detail.detail}`;
+        return {
+          kind: 'deployment-validation',
+          reason,
+          content: updated.content,
+          planPath: updated.planPath,
+        };
+      }
+
+      if (
+        route.promptPath === rel('.ai', 'prompts', 'execute-plan.md') &&
+        updated.status === 'blocked'
+      ) {
+        const detail = blockedPlanDetail(updated.content);
+        const reason = `plan blocked after execute-plan: ${detail}`;
+        return { kind: 'blocked', reason, detail, planPath: updated.planPath };
+      }
+
+      if (
+        route.promptPath === rel('.ai', 'prompts', 'unblock-plan.md') &&
+        updated.status === 'blocked'
+      ) {
+        const detail = blockedPlanDetail(updated.content);
+        const reason = `plan remains blocked after unblock-plan: ${detail}`;
+        return { kind: 'blocked', reason, detail, planPath: updated.planPath };
+      }
+
+      return undefined;
+    };
+
+    const finishNonterminalRouteOutcome = async (
+      outcome: NonNullable<ReturnType<typeof nonterminalRouteOutcome>>,
+    ): Promise<RunnerResult> => {
+      if (outcome.kind === 'deployment-validation') {
+        return await finishDeploymentValidation(outcome.reason, outcome.content, outcome.planPath);
+      }
+      return await finishBlocked(outcome.reason, outcome.detail, outcome.planPath);
+    };
+
     if (stopReason) {
+      const updated = await parsePlan({ planName: planArgument, rootDir });
+      if (updated.ok) {
+        emitWorkflowThresholdWarnings(updated.warnings);
+        const transition = transitionAllowed(route.promptPath, parsedPlan, updated);
+        if (transition.ok) {
+          const nonterminalOutcome = nonterminalRouteOutcome(updated);
+          if (nonterminalOutcome) {
+            const logResult = await appendIterationLog(undefined, updated);
+            if (!logResult.ok) {
+              return await finishFailure(logResult.reason);
+            }
+            const snapshotResult = await syncWorkflowSnapshot(updated);
+            if (!snapshotResult.ok) {
+              return await finishFailure(snapshotResult.reason);
+            }
+            return await finishNonterminalRouteOutcome(nonterminalOutcome);
+          }
+        }
+      }
       const cleanup = await cleanupReviewStagingPaths(reviewStagingPaths);
       const finalStopReason = cleanup.ok ? stopReason : `${stopReason}; ${cleanup.reason}`;
       const logResult = await appendIterationLog(finalStopReason);
@@ -5872,6 +5943,20 @@ export const runWorkflowRunner = async (
       return await finishFailure(reason);
     }
     emitWorkflowThresholdWarnings(updated.warnings);
+
+    const nonterminalOutcome = nonterminalRouteOutcome(updated);
+    if (nonterminalOutcome) {
+      const logResult = await appendIterationLog(undefined, updated);
+      if (!logResult.ok) {
+        return await finishFailure(logResult.reason);
+      }
+      const snapshotResult = await syncWorkflowSnapshot(updated);
+      if (!snapshotResult.ok) {
+        return await finishFailure(snapshotResult.reason);
+      }
+      return await finishNonterminalRouteOutcome(nonterminalOutcome);
+    }
+
     if (updated.content === previousContent) {
       const cleanup = await cleanupReviewStagingPaths(reviewStagingPaths);
       const reason = cleanup.ok
@@ -5929,35 +6014,6 @@ export const runWorkflowRunner = async (
     const snapshotResult = await syncWorkflowSnapshot(updated);
     if (!snapshotResult.ok) {
       return await finishFailure(snapshotResult.reason);
-    }
-
-    if (
-      updated.status === 'deployment-validation' &&
-      updated.nextAction === 'unblock-plan' &&
-      (route.promptPath === rel('.ai', 'prompts', 'commit-summary.md') ||
-        route.promptPath === rel('.ai', 'prompts', 'unblock-plan.md'))
-    ) {
-      const detail = deploymentValidationDetail(updated.content);
-      const reason = `deployment validation pending: ${detail.detail}`;
-      return await finishDeploymentValidation(reason, updated.content, updated.planPath);
-    }
-
-    if (
-      route.promptPath === rel('.ai', 'prompts', 'execute-plan.md') &&
-      updated.status === 'blocked'
-    ) {
-      const detail = blockedPlanDetail(updated.content);
-      const reason = `plan blocked after execute-plan: ${detail}`;
-      return await finishBlocked(reason, detail, updated.planPath);
-    }
-
-    if (
-      route.promptPath === rel('.ai', 'prompts', 'unblock-plan.md') &&
-      updated.status === 'blocked'
-    ) {
-      const detail = blockedPlanDetail(updated.content);
-      const reason = `plan remains blocked after unblock-plan: ${detail}`;
-      return await finishBlocked(reason, detail, updated.planPath);
     }
 
     parsedPlan = updated;

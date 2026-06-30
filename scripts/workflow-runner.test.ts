@@ -5803,6 +5803,43 @@ test(`${CODEX_COMMAND} launch failures, nonzero exits, STOP output, and empty ca
   }
 });
 
+test("unblock-plan STOP that keeps the plan blocked reports a blocked outcome", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(
+      workspace.root,
+      "still-blocked",
+      planWith(
+        "blocked",
+        "unblock-plan",
+        "\n## Blockers\n\n### Blocker 1\n\n* Type: runtime setup\n* Description: Docker unavailable\n* Required Action: Start Docker.\n",
+      ),
+    );
+    const { lines, console } = collectConsole();
+    const result = await runWorkflowRunner({
+      planName: planArg("still-blocked"),
+      rootDir: workspace.root,
+      console,
+      processRunner: runnerReturning({
+        launched: true,
+        stdout: codexAgentMessageLine(
+          "STOP\nBlocking reason: `blocker resolution evidence is required`\n\n**Summary**\n- STILL BLOCKED",
+        ),
+        stderr: "",
+        exitCode: 0,
+      }),
+    });
+
+    assert.equal(result.success, false);
+    assert.match(result.reason, /plan remains blocked after unblock-plan/);
+    assert.doesNotMatch(result.reason, /output contained STOP/);
+    assert.equal(lines.includes("BLOCKED"), true);
+    assert.equal(lines.some((line) => line.startsWith("FAILED:")), false);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
 test("STOP failures write bounded debug sidecars while keeping the main log compact", async () => {
   const workspace = await setupWorkspace();
   try {
