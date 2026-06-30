@@ -8,6 +8,11 @@ type Failure = {
 export type ParsedRunnerCliArgs =
   | {
       ok: true;
+      help: true;
+    }
+  | {
+      ok: true;
+      help?: false;
       planArgument: string;
       compactOutput: boolean;
       codexProfile?: string;
@@ -25,6 +30,12 @@ export const parseRunnerCliArgs = (argv: string[] = []): ParsedRunnerCliArgs => 
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
+    if (arg === '--help' || arg === '-h') {
+      if (argv.length !== 1) {
+        return { ok: false, reason: `${arg} cannot be combined with other workflow runner arguments` };
+      }
+      return { ok: true, help: true };
+    }
     if (arg === '--compact') {
       if (index !== 0 || planArgument) {
         return { ok: false, reason: '--compact must appear before the plan argument' };
@@ -61,6 +72,7 @@ export const parseRunnerCliArgs = (argv: string[] = []): ParsedRunnerCliArgs => 
 
   return {
     ok: true,
+    help: false,
     planArgument,
     compactOutput,
     codexProfile,

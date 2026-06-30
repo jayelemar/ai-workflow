@@ -5688,6 +5688,38 @@ test(`compact CLI validation failures stop before ${CODEX_EXEC_LABEL}`, async ()
   }
 });
 
+test("workflow runner --help prints usage without launching Codex", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    const processCalls: Parameters<ProcessRunner>[0][] = [];
+    const processRunner: ProcessRunner = async (call) => {
+      processCalls.push(call);
+      return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+    };
+    const output: string[] = [];
+    const errors: string[] = [];
+
+    const result = await runWorkflowRunner({
+      argv: ["--help"],
+      rootDir: workspace.root,
+      processRunner,
+      console: {
+        log: (message) => output.push(message),
+        error: (message) => errors.push(message),
+      },
+    });
+
+    assert.equal(result.success, true);
+    assert.equal(result.exitCode, 0);
+    assert.match(output.join("\n"), /Usage: pnpm exec tsx \.ai\/scripts\/workflow-runner\.ts/);
+    assert.match(output.join("\n"), /--compact/);
+    assert.deepEqual(errors, []);
+    assert.equal(processCalls.length, 0);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
 test("compact CLI failure output includes the stop reason and workflow log path", async () => {
   const workspace = await setupWorkspace();
   try {

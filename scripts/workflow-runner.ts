@@ -85,6 +85,13 @@ const STOP_REASON_EXCERPT_CHAR_LIMIT = 240;
 const ANSI_RESET = '\u001b[0m';
 const ANSI_SEQUENCE_PATTERN =
   /\u001b(?:\[([0-?]*[ -/]*)([@-~])|\][^\u0007]*(?:\u0007|\u001b\\)|[@-_])/g;
+const WORKFLOW_RUNNER_USAGE = `Usage: pnpm exec tsx .ai/scripts/workflow-runner.ts [options] .ai/plans/<plan-name>.md
+
+Options:
+  --compact              Reduce terminal output; keep command details in logs
+  --profile <name>       Use a Codex profile override
+  --unblock-note <text>  Add operator context for unblock-plan
+  -h, --help             Show this help message`;
 
 const terminalLabelStyles = {
   commandStarted: '\u001b[34m',
@@ -5053,6 +5060,10 @@ export const runWorkflowRunner = async (
     logger.error(`FAILED: ${cliArgs.reason}`);
     logger.error(`- Worked for ${formatWorkflowElapsedTime(0)}`);
     return failure(cliArgs.reason);
+  }
+  if (cliArgs.help) {
+    logger.log(WORKFLOW_RUNNER_USAGE);
+    return success('workflow runner help', 0);
   }
   const planArgument = options.planName ?? cliArgs.planArgument;
   const compactOutput = options.compactOutput ?? cliArgs.compactOutput;

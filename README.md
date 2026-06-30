@@ -98,6 +98,29 @@ pnpm exec tsx .ai/scripts/workflow-runner.ts --help
 If `pnpm exec tsx ...` resolves and the runner entry responds, the workflow is
 installed correctly.
 
+## Health Check
+
+Run this from the parent repository root when you want to verify the private
+`.ai` workflow source and local-only boundaries:
+
+```bash
+node .ai/scripts/health-check.mjs
+node .ai/scripts/health-check.mjs --runner-tests
+node .ai/scripts/health-check.mjs --full
+```
+
+The default check confirms that the parent repository contains `.ai/`, that the
+parent Git ignore rules keep `.ai/` and local workflow data ignored, that the
+required workflow source paths exist, and that the reusable workflow source
+formats cleanly. It also verifies that the workflow runner entry responds to
+`--help`.
+
+`--runner-tests` adds the local workflow runner test command.
+`--full` is an alias for the default check plus runner tests.
+
+This is a private/local workflow-source health check. It intentionally does not
+run the parent application test suite or every project validation command.
+
 ## Installation Model
 
 The workflow assumes two repositories:
