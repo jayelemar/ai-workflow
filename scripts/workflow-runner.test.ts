@@ -757,6 +757,20 @@ test("review-changes prompt loads testing instructions before validation", async
   assert.match(prompt, /before running, skipping, or classifying validation/i);
 });
 
+test("review-changes prompt validates user-facing diffs against product-flow artifacts", async () => {
+  const prompt = await readWorkflowPrompt("review-changes.md");
+
+  assert.match(prompt, /\.ai\/artifacts\/<plan-name>\/product-flow\.md/);
+  assert.match(prompt, /user-facing/i);
+  assert.match(prompt, /Flow-to-File Mapping/i);
+  assert.match(prompt, /each user action/i);
+  assert.match(prompt, /visible state/i);
+  assert.match(prompt, /failure branch/i);
+  assert.match(prompt, /validation coverage/i);
+  assert.match(prompt, /Spec remains authoritative/i);
+  assert.match(prompt, /mark as CRITICAL/i);
+});
+
 test("testing instructions require command-level escalation for local E2E in Codex sandbox", async () => {
   const instructions = await readInstruction("shared/testing.md");
 

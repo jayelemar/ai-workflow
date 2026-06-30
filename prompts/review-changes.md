@@ -12,6 +12,7 @@ Read:
 * `.ai/instructions/shared/workflow-state.md`
 * `.ai/instructions/shared/testing.md` before running, skipping, or classifying validation
 * the repo-relative `*.spec.md` path(s) listed under the plan's `## Spec` section (if any)
+* the `.ai/artifacts/<plan-name>/product-flow.md` file listed under `## User Flow Artifact` when the plan is user-facing
 * runner-owned context snapshot `.ai/artifacts/<plan-name>/state/context.md` as the primary current-state source
 * Active Context Packet instruction files selected from `.ai/instructions/index.md`
 * the full plan file only when exact plan edits are required or the snapshot is insufficient
@@ -147,8 +148,11 @@ If review validates a release entry itself, confirm that `Released To`, `Status:
 ## Source of Truth Priority
 
 1. Spec (if exists)
-2. Path-scoped staged diff
-3. Plan (reference only)
+2. User-flow artifact for user-facing plans
+3. Path-scoped staged diff
+4. Plan (reference only)
+
+Spec remains authoritative. If the user-flow artifact conflicts with the spec, treat the spec as correct and mark the flow, plan, or implementation mismatch as a review issue.
 
 ---
 
@@ -160,6 +164,7 @@ Analyze:
 * impacted modules
 * shared logic
 * dependencies
+* user actions, visible states, failure branches, and acceptance scenarios from `.ai/artifacts/<plan-name>/product-flow.md` for user-facing plans
 
 ---
 
@@ -176,6 +181,32 @@ If spec exists:
 If mismatch:
 
 → mark as CRITICAL
+
+---
+
+### 1a. User-Flow Coverage (MANDATORY FOR USER-FACING PLANS)
+
+For user-facing plans, read `.ai/artifacts/<plan-name>/product-flow.md` and compare it with the staged diff, validation evidence, and the plan's `## Flow-to-File Mapping`.
+
+Check:
+
+* each user action in the flow artifact is implemented by the staged diff or already covered by unchanged existing code referenced by the mapping
+* every visible state in the flow artifact is represented in the implemented UI, API response, service behavior, or documented unchanged path
+* every failure branch in the flow artifact is handled or explicitly deferred by spec-approved scope
+* acceptance scenarios from the flow artifact have validation coverage through tests, focused checks, or an explicit deferred validation note when local proof is unavailable
+* `## Flow-to-File Mapping` accurately points each user action to applicable UI route/component, API route, backend service/module, database/storage effect, and tests
+
+If a user-facing flow step lacks implementation coverage or validation coverage:
+
+→ mark as CRITICAL
+
+If the staged diff implements behavior not present in the spec or product-flow artifact:
+
+→ mark as CRITICAL
+
+If the product-flow artifact conflicts with the spec:
+
+→ mark as CRITICAL and state that the spec remains authoritative
 
 ---
 
