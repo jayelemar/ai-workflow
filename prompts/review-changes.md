@@ -158,6 +158,16 @@ Spec remains authoritative. If the user-flow artifact conflicts with the spec, t
 
 ## Review Scope
 
+### Task Savepoint Mode
+
+If the runner injects `Task savepoint current task`:
+
+* review ONLY the staged diff for that task ID and task name
+* verify the current task's validation evidence before approving it
+* do not review or approve future `[task:...]` items
+* if review fails, do not commit; set or keep `Status = active` and `Next Action = execute-plan`
+* if review passes, route only the current task to `completed + commit-summary`
+
 Analyze:
 
 * changed files

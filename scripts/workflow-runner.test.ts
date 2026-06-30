@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
@@ -34,6 +34,7 @@ import {
   workflowContextSnapshotRelativePath,
   workflowFileLockPath,
   writeProcessInput,
+  parsePlanTasks,
   type ProcessRunner,
 } from "./workflow-runner.ts";
 
@@ -127,6 +128,26 @@ ${(files.deleted?.length ? files.deleted : ["None"]).map((file) => `* ${file}`).
 
 ${extra}
 `;
+
+const planWithTaskSavepoints = (status: string, nextAction: string, extra = "") =>
+  planWithFileScope(
+    status,
+    nextAction,
+    {
+      modified: ["src/task-work.ts"],
+    },
+    `## Phases
+
+### Implementation
+
+* Objective: Complete task-savepoint work.
+* Tasks:
+  1. [task:01-backend-endpoints] Add backend endpoints
+  2. [task:02-web-surface] Add web surface
+* Expected Outcome: Task savepoints complete.
+
+${extra}`,
+  );
 
 const ownershipReleaseSection = (file: string, releasedTo = ".ai/plans/dependent-plan.md") => `## File Ownership Releases
 
@@ -466,6 +487,35 @@ test("plan template requires user flow artifact and flow-to-file mapping section
   assert.match(template, /backend service\/module/i);
   assert.match(template, /database\/storage effect/i);
   assert.match(template, /tests/i);
+});
+
+test("plan creation and template require task IDs for multi-step task savepoints", async () => {
+  const prompt = await readWorkflowPrompt("create-plan.md");
+  const template = await readPlanTemplate();
+  const validator = await readWorkflowPrompt("plan-validator.md");
+
+  for (const content of [prompt, template, validator]) {
+    assert.match(content, /\[task:(?:NN|01)-readable-words\]/);
+    assert.match(content, /Multi-step plans/i);
+    assert.match(content, /task savepoints/i);
+  }
+  assert.match(template, /\.ai\/artifacts\/<plan-name>\/tasks\//);
+  assert.match(template, /\.ai\/artifacts\/<plan-name>\/state\/current-task\.md/);
+});
+
+test("workflow prompts define task savepoint execution, review, commit, and aggregate rules", async () => {
+  const executePrompt = await readWorkflowPrompt("execute-plan.md");
+  const reviewPrompt = await readWorkflowPrompt("review-changes.md");
+  const commitPrompt = await readWorkflowPrompt("commit-summary.md");
+
+  assert.match(executePrompt, /Task Savepoint Mode/);
+  assert.match(executePrompt, /implement ONLY that task ID/);
+  assert.match(executePrompt, /do not start the next `\[task:\.\.\.\]` item/);
+  assert.match(reviewPrompt, /review ONLY the staged diff for that task ID/);
+  assert.match(reviewPrompt, /if review fails, do not commit/i);
+  assert.match(commitPrompt, /Task savepoint aggregate summary/);
+  assert.match(commitPrompt, /do NOT create a git commit/i);
+  assert.match(commitPrompt, /Task artifact path/);
 });
 
 test("plan-validator prompt fails user-facing flow steps without implementation and validation coverage", async () => {
@@ -3049,6 +3099,42 @@ test("commit-summary workflow prompt includes plan-scoped staging commands for p
   assert.doesNotMatch(prompt, /use sub-agents/);
 });
 
+test("workflow prompt includes task savepoint current task and aggregate-only commit summary modes", () => {
+  const taskPrompt = generateWorkflowPrompt({
+    promptPath: ".ai/prompts/execute-plan.md",
+    planPath: ".ai/plans/workflow-runner.md",
+    promptContent: "EXECUTE PLAN PROMPT",
+    taskContext: {
+      task: {
+        id: "01-backend-endpoints",
+        words: "backend-endpoints",
+        name: "Add backend endpoints",
+        artifactWords: "add-backend-endpoints",
+      },
+      stage: "implementing",
+      artifactPath:
+        ".ai/artifacts/workflow-runner/tasks/01-backend-endpoints-add-backend-endpoints-v1.md",
+    },
+  });
+
+  assert.match(taskPrompt, /Task savepoint current task:/);
+  assert.match(taskPrompt, /Task ID: 01-backend-endpoints/);
+  assert.match(taskPrompt, /Task Stage: implementing/);
+  assert.match(taskPrompt, /Do not start another `\[task:\.\.\.\]` item/);
+
+  const aggregatePrompt = generateWorkflowPrompt({
+    promptPath: ".ai/prompts/commit-summary.md",
+    planPath: ".ai/plans/workflow-runner.md",
+    promptContent: "COMMIT SUMMARY PROMPT",
+    commitSummaryPaths: ["src/file.ts"],
+    taskSavepointAggregateSummary: true,
+  });
+
+  assert.match(aggregatePrompt, /Task savepoint aggregate summary:/);
+  assert.match(aggregatePrompt, /Do not create a git commit/);
+  assert.doesNotMatch(aggregatePrompt, /git commit -m "<generated message>"/);
+});
+
 test("review workflow prompt shell-quotes path-scoped diff commands", () => {
   const prompt = generateWorkflowPrompt({
     promptPath: ".ai/prompts/review-changes.md",
@@ -3152,6 +3238,25 @@ test("parsePlan requires the repo-relative .ai/plans markdown path", async () =>
   } finally {
     await workspace.cleanup();
   }
+});
+
+test("parsePlanTasks extracts stable task IDs, words, and readable names", () => {
+  const tasks = parsePlanTasks(planWithTaskSavepoints("active", "execute-plan"));
+
+  assert.deepEqual(tasks, [
+    {
+      id: "01-backend-endpoints",
+      words: "backend-endpoints",
+      name: "Add backend endpoints",
+      artifactWords: "add-backend-endpoints",
+    },
+    {
+      id: "02-web-surface",
+      words: "web-surface",
+      name: "Add web surface",
+      artifactWords: "add-web-surface",
+    },
+  ]);
 });
 
 test("parsePlan accepts markdown code-wrapped workflow metadata values", async () => {
@@ -4174,6 +4279,164 @@ test("workflow runner succeeds after review defers final browser validation to m
     assert.match(consoleOutput, /SUCCESS/);
     assert.doesNotMatch(consoleOutput, /BLOCKED/);
     assert.doesNotMatch(consoleOutput, /DEPLOYMENT VALIDATION/);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("task savepoint mode commits each reviewed task, writes artifacts, logs task context, and finishes with aggregate summary", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(workspace.root, "task-savepoints", planWithTaskSavepoints("active", "execute-plan"));
+
+    const output = collectConsole();
+    const calls: Parameters<ProcessRunner>[0][] = [];
+    let executeRuns = 0;
+    let reviewRuns = 0;
+    let taskCommitRuns = 0;
+    let aggregateRuns = 0;
+    const shas = ["abc1234", "def5678"];
+
+    const result = await runWorkflowRunner({
+      planName: planArg("task-savepoints"),
+      rootDir: workspace.root,
+      console: output.console,
+      processRunner: async (call) => {
+        calls.push(call);
+        if (call.command === "git" && call.args[0] === "rev-parse") {
+          return {
+            launched: true,
+            stdout: `${shas[Math.max(0, taskCommitRuns - 1)]}\n`,
+            stderr: "",
+            exitCode: 0,
+          };
+        }
+        if (call.command === "git") {
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
+        if (call.promptPath === ".ai/prompts/execute-plan.md") {
+          executeRuns += 1;
+          await writePlan(workspace.root, "task-savepoints", planWithTaskSavepoints("review", "review-plan"));
+        }
+        if (call.promptPath === ".ai/prompts/review-changes.md") {
+          reviewRuns += 1;
+          await writePlan(
+            workspace.root,
+            "task-savepoints",
+            planWithTaskSavepoints("completed", "commit-summary"),
+          );
+        }
+        if (call.promptPath === ".ai/prompts/commit-summary.md") {
+          const prompt = call.args.at(-1) ?? "";
+          if (prompt.includes("Task savepoint aggregate summary")) {
+            aggregateRuns += 1;
+          } else {
+            taskCommitRuns += 1;
+          }
+        }
+        return { launched: true, stdout: "ok", stderr: "", exitCode: 0 };
+      },
+    });
+
+    assert.equal(result.success, true);
+    assert.equal(executeRuns, 2);
+    assert.equal(reviewRuns, 2);
+    assert.equal(taskCommitRuns, 2);
+    assert.equal(aggregateRuns, 1);
+
+    const consoleOutput = output.lines.join("\n");
+    assert.match(consoleOutput, /TASK 01-backend-endpoints \| implementing \| Add backend endpoints/);
+    assert.match(consoleOutput, /TASK 01-backend-endpoints \| reviewing \| staged 1 file/);
+    assert.match(consoleOutput, /TASK 01-backend-endpoints \| commit-message \| generating commit/);
+    assert.match(consoleOutput, /TASK 01-backend-endpoints \| committed \| abc1234/);
+    assert.match(consoleOutput, /TASK 02-web-surface \| committed \| def5678/);
+
+    const currentTask = await readFile(
+      join(workspace.root, ".ai", "artifacts", "task-savepoints", "state", "current-task.md"),
+      "utf8",
+    );
+    assert.match(currentTask, /Task ID: 02-web-surface/);
+    assert.match(currentTask, /Stage: committed/);
+    assert.match(currentTask, /Commit SHA: def5678/);
+
+    const taskFiles = await readdir(join(workspace.root, ".ai", "artifacts", "task-savepoints", "tasks"));
+    assert.deepEqual(taskFiles.sort(), [
+      "01-backend-endpoints-add-backend-endpoints-v1.md",
+      "02-web-surface-add-web-surface-v1.md",
+    ]);
+    const firstArtifact = await readFile(
+      join(
+        workspace.root,
+        ".ai",
+        "artifacts",
+        "task-savepoints",
+        "tasks",
+        "01-backend-endpoints-add-backend-endpoints-v1.md",
+      ),
+      "utf8",
+    );
+    assert.match(firstArtifact, /## Commit SHA\s+abc1234/);
+    assert.match(firstArtifact, /## Next Task\s+02-web-surface/);
+
+    const log = await readFile(
+      join(workspace.root, ".ai", "artifacts", "task-savepoints", "logs", "runner.log"),
+      "utf8",
+    );
+    assert.match(log, /taskId: 01-backend-endpoints/);
+    assert.match(log, /taskStage: implementing/);
+    assert.match(log, /taskStage: reviewing/);
+    assert.match(log, /taskStage: committed/);
+    assert.match(log, /commitSha: abc1234/);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("task savepoint mode stops failed review before commit and keeps current task active", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(workspace.root, "task-review-fail", planWithTaskSavepoints("active", "execute-plan"));
+
+    const output = collectConsole();
+    const calls: Parameters<ProcessRunner>[0][] = [];
+    const result = await runWorkflowRunner({
+      planName: planArg("task-review-fail"),
+      rootDir: workspace.root,
+      console: output.console,
+      processRunner: async (call) => {
+        calls.push(call);
+        if (call.command === "git") {
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
+        if (call.promptPath === ".ai/prompts/execute-plan.md") {
+          await writePlan(workspace.root, "task-review-fail", planWithTaskSavepoints("review", "review-plan"));
+          return { launched: true, stdout: "ok", stderr: "", exitCode: 0 };
+        }
+        if (call.promptPath === ".ai/prompts/review-changes.md") {
+          return {
+            launched: true,
+            stdout: codexAgentMessageLine("STOP: review failed for current task"),
+            stderr: "",
+            exitCode: 0,
+          };
+        }
+        return { launched: true, stdout: "ok", stderr: "", exitCode: 0 };
+      },
+    });
+
+    assert.equal(result.success, false);
+    assert.match(result.reason, /review failed for current task/);
+    assert.equal(
+      calls.some((call) => call.promptPath === ".ai/prompts/commit-summary.md"),
+      false,
+    );
+    const currentTask = await readFile(
+      join(workspace.root, ".ai", "artifacts", "task-review-fail", "state", "current-task.md"),
+      "utf8",
+    );
+    assert.match(currentTask, /Task ID: 01-backend-endpoints/);
+    assert.match(currentTask, /Stage: reviewing/);
+    assert.doesNotMatch(output.lines.join("\n"), /committed/);
   } finally {
     await workspace.cleanup();
   }

@@ -122,6 +122,24 @@ Each phase MUST include:
 - Ordered tasks (step-by-step, executable)
 - Expected outcome
 
+### Task Savepoints
+
+Multi-step plans MUST enable task savepoints by giving every ordered phase task a stable task ID.
+
+Required task syntax:
+
+`1. [task:01-readable-words] Do the first task`
+
+Rules:
+
+- Use two-digit increasing numeric prefixes: `01`, `02`, `03`.
+- Use lowercase readable words separated by hyphens after the numeric prefix.
+- Keep task IDs stable after plan creation, even if task wording changes.
+- Do not reuse a task ID.
+- Single-step plans keep the existing final-commit behavior and do not require task IDs.
+- Task savepoint artifacts will be written by the runner under `.ai/artifacts/<plan-name>/tasks/`.
+- The runner will write the live task pointer at `.ai/artifacts/<plan-name>/state/current-task.md`.
+
 ---
 
 ### User Flow Artifact

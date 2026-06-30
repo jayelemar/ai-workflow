@@ -205,6 +205,17 @@ If plan contradicts codebase reality:
 
 ## Execution
 
+### Task Savepoint Mode
+
+If the runner injects `Task savepoint current task`:
+
+* implement ONLY that task ID and task name
+* validate only the current task's changed behavior plus directly affected regressions
+* do not start the next `[task:...]` item
+* keep `.ai/` artifacts out of git commits
+* when the current task is implemented and validated, set `Status = review` and `Next Action = review-plan`
+* if implementation or validation fails, keep the same task active, record the failure, and do not route to `commit-summary`
+
 ### Phase Execution Rules
 
 For each phase:

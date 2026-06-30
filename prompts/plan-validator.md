@@ -83,6 +83,26 @@ Validate:
 
 ---
 
+## Task Savepoint Validation (MANDATORY)
+
+For multi-step plans, every ordered task under `## Phases` MUST use stable task ID syntax:
+
+`1. [task:01-readable-words] Do the task`
+
+Rules:
+
+* The ID MUST match `[task:NN-readable-words]` with a two-digit numeric prefix and lowercase hyphenated words.
+* Task IDs MUST be unique within the plan.
+* Task IDs MUST stay stable when task wording changes.
+* Multi-step implementation plans use task savepoints and runner task artifacts under `.ai/artifacts/<plan-name>/tasks/`.
+* Single-step plans keep the existing final-commit behavior and do not require task IDs.
+
+If a multi-step plan has any ordered task without valid task ID syntax:
+
+→ mark as CRITICAL
+
+---
+
 ## Spec Alignment (MANDATORY)
 
 If a spec exists:

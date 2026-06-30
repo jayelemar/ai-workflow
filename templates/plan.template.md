@@ -98,8 +98,8 @@ Rules:
 
 * Objective:
 * Tasks:
-  1.
-  2.
+  1. [task:01-<task-words>] <task>
+  2. [task:02-<task-words>] <task>
 * Expected Outcome:
 
 ---
@@ -108,8 +108,8 @@ Rules:
 
 * Objective:
 * Tasks:
-  1.
-  2.
+  1. [task:03-<task-words>] <task>
+  2. [task:04-<task-words>] <task>
 * Expected Outcome:
 
 ---
@@ -118,9 +118,17 @@ Rules:
 
 * Objective:
 * Tasks:
-  1.
-  2.
+  1. [task:05-<task-words>] <task>
+  2. [task:06-<task-words>] <task>
 * Expected Outcome:
+
+Task savepoint rules:
+
+* Multi-step plans MUST give every ordered task a stable task ID using `[task:NN-readable-words]`.
+* Task IDs MUST be unique within the plan and remain stable after creation.
+* Single-step plans MAY keep the current final-commit behavior and do not require task savepoints.
+* Runtime task artifacts belong under `.ai/artifacts/<plan-name>/tasks/`.
+* The live task pointer belongs at `.ai/artifacts/<plan-name>/state/current-task.md`.
 
 ---
 

@@ -12,6 +12,13 @@ It DOES run `git add` for files related to the completed plan implementation onl
 
 It MUST NOT push. Auto-push is out of scope for this prompt.
 
+In task savepoint mode, the runner may inject either:
+
+* `Task savepoint current task` for a per-task local commit
+* `Task savepoint aggregate summary` for the final aggregate-only summary
+
+When `Task savepoint aggregate summary` is present, do NOT create a git commit. Verify no remaining plan-owned changes exist and summarize the task commits/artifacts only.
+
 ---
 
 ## Instruction Loading
@@ -106,6 +113,18 @@ feat(site-editor): add hover click marker
 fix(auth): correct token refresh handling
 
 refactor(payment): simplify invoice calculation flow
+
+### Task Savepoint Commit Body
+
+When `Task savepoint current task` is present, the commit message MUST include a body with:
+
+* Plan name
+* Task ID
+* Task words
+* Changed files
+* Validation summary
+* Review result
+* Task artifact path
 
 ---
 
@@ -208,6 +227,16 @@ completed
 commit-summary
 
 Required behavior:
+
+If `Task savepoint aggregate summary` is present:
+
+1. Do not run `git add`.
+2. Do not run `git commit`.
+3. Verify no remaining plan-owned changes exist.
+4. Summarize the task commit SHAs and artifact paths.
+5. MUST NOT push.
+
+Otherwise:
 
 1. Stage only plan-owned paths from the runner-injected path list.
 2. Generate exactly one commit message using the commit message rules.

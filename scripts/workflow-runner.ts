@@ -167,6 +167,13 @@ type ParsedPlan = {
   warnings: string[];
 };
 
+export type PlanTask = {
+  id: string;
+  words: string;
+  name: string;
+  artifactWords: string;
+};
+
 type Failure = {
   ok: false;
   reason: string;
@@ -252,6 +259,16 @@ type WorkflowFileLockMetadata = {
   createdAt: string;
   path: string;
 };
+
+type TaskStage = 'implementing' | 'validating' | 'reviewing' | 'commit-message' | 'committed';
+
+type WorkflowTaskContext = {
+  task: PlanTask;
+  stage: TaskStage;
+  artifactPath: string;
+  commitSha?: string;
+};
+
 type FileOwnershipArtifact = {
   planPath: string;
   status: Status;
@@ -2298,6 +2315,7 @@ const createWorkflowFailureDebugRecord = ({
   stderr,
   staging,
   cleanup,
+  taskContext,
 }: {
   timestamp: string;
   iteration: number;
@@ -2709,6 +2727,42 @@ const planSectionLines = (content: string, heading: string): string[] => {
     collected.push(line);
   }
   return collected;
+};
+
+const slugifyTaskWords = (value: string): string =>
+  value
+    .toLowerCase()
+    .replace(/`[^`]*`/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/-{2,}/g, '-');
+
+export const parsePlanTasks = (content: string): PlanTask[] => {
+  const tasks: PlanTask[] = [];
+  const seen = new Set<string>();
+  const taskPattern = /^\s*\d+\.\s+\[task:([0-9]{2}-[a-z0-9]+(?:-[a-z0-9]+)*)\]\s+(.+?)\s*$/;
+
+  for (const line of content.split(/\r?\n/)) {
+    const match = line.match(taskPattern);
+    if (!match) {
+      continue;
+    }
+    const id = match[1];
+    if (seen.has(id)) {
+      continue;
+    }
+    seen.add(id);
+    const name = match[2].trim();
+    const words = id.replace(/^[0-9]{2}-/, '');
+    tasks.push({
+      id,
+      words,
+      name,
+      artifactWords: slugifyTaskWords(name) || words,
+    });
+  }
+
+  return tasks;
 };
 
 const repoRelativeSpecPathPattern =
@@ -3377,6 +3431,8 @@ export const generateWorkflowPrompt = ({
   commitSummaryPaths = [],
   unblockNote,
   executeTokenGuardrail,
+  taskContext,
+  taskSavepointAggregateSummary = false,
 }: {
   promptPath: string;
   planPath: string;
@@ -3387,6 +3443,8 @@ export const generateWorkflowPrompt = ({
   commitSummaryPaths?: string[];
   unblockNote?: string;
   executeTokenGuardrail?: ExecuteTokenGuardrail;
+  taskContext?: WorkflowTaskContext;
+  taskSavepointAggregateSummary?: boolean;
 }): string => {
   const actionLabel = promptActionLabels[promptPath];
   if (!actionLabel) {
@@ -3412,7 +3470,9 @@ If unrelated changes remain after runner cleanup, output \`STOP\` with reason \`
 `
       : '';
   const commitBoundary =
-    promptPath === rel('.ai', 'prompts', 'commit-summary.md') && commitSummaryPaths.length > 0
+    promptPath === rel('.ai', 'prompts', 'commit-summary.md') &&
+    commitSummaryPaths.length > 0 &&
+    !taskSavepointAggregateSummary
       ? `
 Plan-scoped commit boundary:
 Use only these non-ignored plan-owned implementation paths:
@@ -3427,6 +3487,33 @@ git commit -m "<generated message>" -- ${shellPathspecs(commitSummaryPaths)}
 
 Do not stage .ai files. Do not stage or inspect unrelated paths as commit candidates.
 If no files are staged by the path-scoped git add, output \`STOP\` with reason \`no plan-related files to stage\`.
+`
+      : '';
+  const taskSavepointBoundary = taskContext
+    ? `
+Task savepoint current task:
+- Task ID: ${taskContext.task.id}
+- Task Words: ${taskContext.task.words}
+- Task Name: ${taskContext.task.name}
+- Task Stage: ${taskContext.stage}
+- Task Artifact: ${taskContext.artifactPath}
+
+Task savepoint rules:
+- Work only on the current task above.
+- Do not start another \`[task:...]\` item in the same run.
+- Keep \`.ai/\` artifacts out of git commits.
+- If this stage cannot complete for the current task, output \`STOP\` and keep the same current task active for remediation.
+`
+    : '';
+  const taskAggregateBoundary =
+    promptPath === rel('.ai', 'prompts', 'commit-summary.md') && taskSavepointAggregateSummary
+      ? `
+Task savepoint aggregate summary:
+All named plan tasks already have task artifacts under ${taskArtifactsRelativeDir(
+          path.posix.basename(planPath, '.md'),
+        )}.
+Do not create a git commit in this aggregate summary stage.
+Verify no remaining plan-owned changes exist, then summarize the task commits and artifacts.
 `
       : '';
   const unblockEvidence =
@@ -3472,6 +3559,8 @@ Apply the superpowers advisory guidance for analysis and edge-case checks.${subA
 ${activeContextPacket({ promptPath, planPath, planContent, contextSnapshotPath })}
 ${executeGuardrail}
 
+${taskSavepointBoundary}${taskAggregateBoundary}
+
 ${actionLabel}:
 ${planPath}${reviewBoundary}${commitBoundary}${unblockEvidence}
 
@@ -3496,6 +3585,268 @@ const appendLog = async (
     return { ok: true };
   } catch (error) {
     return { ok: false, reason: `workflow log cannot be created or appended: ${String(error)}` };
+  }
+};
+
+const taskArtifactsRelativeDir = (planName: string): string =>
+  rel('.ai', 'artifacts', planName, 'tasks');
+
+const currentTaskRelativePath = (planName: string): string =>
+  rel('.ai', 'artifacts', planName, 'state', 'current-task.md');
+
+const taskArtifactFilePrefix = (task: PlanTask): string => `${task.id}-${task.artifactWords}-v`;
+
+const existingTaskArtifactVersions = async (
+  rootDir: string,
+  planName: string,
+  task: PlanTask,
+): Promise<number[]> => {
+  const taskDir = path.join(rootDir, taskArtifactsRelativeDir(planName));
+  let entries: string[];
+  try {
+    entries = await readdir(taskDir);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') {
+      return [];
+    }
+    throw error;
+  }
+  const prefix = taskArtifactFilePrefix(task);
+  return entries
+    .map((entry) => {
+      if (!entry.startsWith(prefix) || !entry.endsWith('.md')) {
+        return undefined;
+      }
+      const version = Number(entry.slice(prefix.length, -'.md'.length));
+      return Number.isInteger(version) && version > 0 ? version : undefined;
+    })
+    .filter((version): version is number => typeof version === 'number')
+    .sort((a, b) => a - b);
+};
+
+const taskCompleted = async (
+  rootDir: string,
+  planName: string,
+  task: PlanTask,
+): Promise<boolean> => {
+  const taskDir = path.join(rootDir, taskArtifactsRelativeDir(planName));
+  let entries: string[];
+  try {
+    entries = await readdir(taskDir);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') {
+      return false;
+    }
+    throw error;
+  }
+  return entries.some((entry) => entry.startsWith(`${task.id}-`) && entry.endsWith('.md'));
+};
+
+const nextIncompleteTask = async (
+  rootDir: string,
+  planName: string,
+  tasks: PlanTask[],
+): Promise<PlanTask | undefined> => {
+  for (const task of tasks) {
+    if (!(await taskCompleted(rootDir, planName, task))) {
+      return task;
+    }
+  }
+  return undefined;
+};
+
+const nextTaskArtifactRelativePath = async (
+  rootDir: string,
+  planName: string,
+  task: PlanTask,
+): Promise<string> => {
+  const versions = await existingTaskArtifactVersions(rootDir, planName, task);
+  const nextVersion = (versions.at(-1) ?? 0) + 1;
+  return rel(taskArtifactsRelativeDir(planName), `${task.id}-${task.artifactWords}-v${nextVersion}.md`);
+};
+
+const formatTaskProgressLine = ({
+  task,
+  stage,
+  detail,
+}: {
+  task: PlanTask;
+  stage: TaskStage;
+  detail: string;
+}): string => `TASK ${task.id} | ${stage} | ${detail}`;
+
+const writeCurrentTaskPointer = async ({
+  rootDir,
+  planName,
+  planPath,
+  context,
+  timestamp,
+}: {
+  rootDir: string;
+  planName: string;
+  planPath: string;
+  context: WorkflowTaskContext;
+  timestamp: string;
+}): Promise<{ ok: true } | Failure> => {
+  const pointerPath = path.join(rootDir, currentTaskRelativePath(planName));
+  const body = `# Current Task
+
+* Plan: ${planPath}
+* Task ID: ${context.task.id}
+* Task Words: ${context.task.words}
+* Task Name: ${context.task.name}
+* Stage: ${context.stage}
+* Task Artifact: ${context.artifactPath}
+* Commit SHA: ${context.commitSha ?? '(pending)'}
+* Updated At: ${timestamp}
+`;
+  try {
+    await mkdir(path.dirname(pointerPath), { recursive: true });
+    await writeFile(pointerPath, body, 'utf8');
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, reason: `current task pointer cannot be written: ${String(error)}` };
+  }
+};
+
+const writeTaskArtifact = async ({
+  rootDir,
+  planName,
+  planPath,
+  context,
+  changedFiles,
+  validationSummary,
+  reviewResult,
+  commitMessage,
+  nextTask,
+}: {
+  rootDir: string;
+  planName: string;
+  planPath: string;
+  context: WorkflowTaskContext;
+  changedFiles: string[];
+  validationSummary: string;
+  reviewResult: string;
+  commitMessage: string;
+  nextTask?: PlanTask;
+}): Promise<{ ok: true } | Failure> => {
+  const artifactPath = path.join(rootDir, context.artifactPath);
+  const body = `# Task Savepoint: ${context.task.id}
+
+## Summary
+
+${context.task.name}
+
+## Plan
+
+${planPath}
+
+## Changed Files
+
+${changedFiles.length > 0 ? changedFiles.map((file) => `* ${file}`).join('\n') : '* None'}
+
+## Validation Evidence
+
+${validationSummary}
+
+## Review Result
+
+${reviewResult}
+
+## Commit SHA
+
+${context.commitSha ?? '(unknown)'}
+
+## Commit Message
+
+${commitMessage}
+
+## Task Artifact
+
+${context.artifactPath}
+
+## Next Task
+
+${nextTask ? nextTask.id : '(none)'}
+`;
+  try {
+    await mkdir(path.dirname(artifactPath), { recursive: true });
+    await writeFile(artifactPath, body, 'utf8');
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, reason: `task artifact cannot be written: ${String(error)}` };
+  }
+};
+
+const gitHeadShortSha = async (
+  rootDir: string,
+  processRunner: ProcessRunner,
+): Promise<{ ok: true; sha: string } | Failure> => {
+  const result = await processRunner({
+    command: 'git',
+    args: ['rev-parse', '--short', 'HEAD'],
+    cwd: rootDir,
+    input: '',
+    promptPath: 'git-task-commit-sha',
+  });
+  if (!result.launched) {
+    return { ok: false, reason: `could not launch task commit sha lookup: ${result.error}` };
+  }
+  if (result.exitCode !== 0) {
+    return {
+      ok: false,
+      reason: `task commit sha lookup exited with code ${result.exitCode}: ${boundedInlineExcerpt(
+        result.stderr || result.stdout,
+      )}`,
+    };
+  }
+  const sha = result.stdout.trim().split(/\s+/)[0] ?? '';
+  if (!sha) {
+    return { ok: false, reason: 'task commit sha lookup returned empty output' };
+  }
+  return { ok: true, sha };
+};
+
+const replaceSectionValueInPlan = (content: string, heading: string, value: string): string => {
+  const lines = content.split(/\r?\n/);
+  const headingIndex = lines.findIndex((line) => line.trim() === heading);
+  if (headingIndex === -1) {
+    return content;
+  }
+  let valueIndex = -1;
+  for (let index = headingIndex + 1; index < lines.length; index += 1) {
+    const trimmed = lines[index].trim();
+    if (trimmed.startsWith('##')) {
+      break;
+    }
+    if (trimmed.length > 0) {
+      valueIndex = index;
+      break;
+    }
+  }
+  if (valueIndex === -1) {
+    lines.splice(headingIndex + 1, 0, '', value);
+  } else {
+    lines[valueIndex] = value;
+  }
+  return lines.join('\n');
+};
+
+const reopenPlanForNextTask = async (
+  plan: ParsedPlan,
+): Promise<{ ok: true } | Failure> => {
+  const nextContent = replaceSectionValueInPlan(
+    replaceSectionValueInPlan(plan.content, '## Status', 'active'),
+    '## Next Action',
+    'execute-plan',
+  );
+  try {
+    await writeFile(plan.absolutePlanPath, nextContent, 'utf8');
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, reason: `plan cannot be reopened for next task: ${String(error)}` };
   }
 };
 
@@ -5443,6 +5794,7 @@ const logFields = ({
   stderr,
   staging,
   cleanup,
+  taskContext,
 }: {
   timestamp: string;
   iteration: number;
@@ -5463,6 +5815,7 @@ const logFields = ({
   stderr: string;
   staging?: ReviewStagingProcess;
   cleanup?: ReviewCleanupProcess;
+  taskContext?: WorkflowTaskContext;
 }): Array<[string, string | number | undefined]> => {
   const failureMetadata = stopReason ? classifyFailureForLog(stopReason) : undefined;
   const editedFilesLog = editedFiles ? formatEditedFilesForLog(editedFiles) : undefined;
@@ -5480,6 +5833,11 @@ const logFields = ({
     ['planPath', planPath],
     ['startingStatus', status],
     ['startingNextAction', nextAction],
+    ['taskId', taskContext?.task.id],
+    ['taskName', taskContext?.task.name],
+    ['taskStage', taskContext?.stage],
+    ['taskArtifact', taskContext?.artifactPath],
+    ['commitSha', taskContext?.commitSha],
     ['result', result],
     ['exitCode', exitCode],
     ['durationMs', durationMs],
@@ -5614,6 +5972,7 @@ export const runWorkflowRunner = async (
   let tokenUsageTotals = { ...zeroTokenUsageTotals };
   const heldWorkflowFileLockPaths = new Set<string>();
   const emittedWorkflowWarnings = new Set<string>();
+  let currentTaskContext: WorkflowTaskContext | undefined;
   const markWorkflowLogCreated = (planName: string) => {
     workflowLogPath = rel('.ai', 'artifacts', planName, 'logs', 'runner.log');
   };
@@ -5738,6 +6097,53 @@ export const runWorkflowRunner = async (
     }
     const nextIteration = iterations + 1;
     const executionConfig = codexExecutionConfig(route.promptPath);
+    const planTasks = parsePlanTasks(parsedPlan.content);
+    const taskSavepointMode = planTasks.length > 1;
+    const selectedTask = taskSavepointMode
+      ? await nextIncompleteTask(rootDir, parsedPlan.planName, planTasks)
+      : undefined;
+    const taskSavepointAggregateSummary =
+      taskSavepointMode &&
+      !selectedTask &&
+      route.promptPath === rel('.ai', 'prompts', 'commit-summary.md');
+    if (!selectedTask) {
+      currentTaskContext = undefined;
+    }
+    const selectedTaskArtifactPath = selectedTask
+      ? await nextTaskArtifactRelativePath(rootDir, parsedPlan.planName, selectedTask)
+      : undefined;
+    const setTaskStage = async ({
+      stage,
+      detail,
+      commitSha,
+    }: {
+      stage: TaskStage;
+      detail: string;
+      commitSha?: string;
+    }): Promise<{ ok: true } | Failure> => {
+      if (!selectedTask || !selectedTaskArtifactPath) {
+        currentTaskContext = undefined;
+        return { ok: true };
+      }
+      currentTaskContext = {
+        task: selectedTask,
+        stage,
+        artifactPath: selectedTaskArtifactPath,
+        commitSha,
+      };
+      const pointer = await writeCurrentTaskPointer({
+        rootDir,
+        planName: parsedPlan.planName,
+        planPath: parsedPlan.planPath,
+        context: currentTaskContext,
+        timestamp: timestamp(),
+      });
+      if (!pointer.ok) {
+        return pointer;
+      }
+      logger.log(formatTaskProgressLine({ task: selectedTask, stage, detail }));
+      return { ok: true };
+    };
     if (iterations >= MAX_ITERATIONS) {
       const reason = `maximum iterations ${MAX_ITERATIONS} reached`;
       const logTimestamp = timestamp();
@@ -5784,6 +6190,7 @@ export const runWorkflowRunner = async (
           stdout: '',
           stderr: '',
           staging: undefined,
+          taskContext: currentTaskContext,
         }),
       );
       if (!logResult.ok) {
@@ -5835,8 +6242,26 @@ export const runWorkflowRunner = async (
       if (!cleanup.ok) {
         return { ok: false, reason: cleanup.reason };
       }
-        return { ok: true };
-      };
+      return { ok: true };
+    };
+    if (route.promptPath === rel('.ai', 'prompts', 'execute-plan.md') && selectedTask) {
+      const taskStage = await setTaskStage({
+        stage: 'implementing',
+        detail: selectedTask.name,
+      });
+      if (!taskStage.ok) {
+        return await finishFailure(taskStage.reason);
+      }
+    }
+    if (route.promptPath === rel('.ai', 'prompts', 'commit-summary.md') && selectedTask) {
+      const taskStage = await setTaskStage({
+        stage: 'commit-message',
+        detail: 'generating commit',
+      });
+      if (!taskStage.ok) {
+        return await finishFailure(taskStage.reason);
+      }
+    }
     if (
       route.promptPath === rel('.ai', 'prompts', 'execute-plan.md') ||
       route.promptPath === rel('.ai', 'prompts', 'review-changes.md') ||
@@ -5922,6 +6347,7 @@ export const runWorkflowRunner = async (
             stdout: '',
             stderr: '',
             staging: undefined,
+            taskContext: currentTaskContext,
           }),
         );
         if (!logResult.ok) {
@@ -5990,6 +6416,7 @@ export const runWorkflowRunner = async (
             stdout: '',
             stderr: '',
             staging: undefined,
+            taskContext: currentTaskContext,
           }),
         );
         if (!logResult.ok) {
@@ -5997,6 +6424,17 @@ export const runWorkflowRunner = async (
         }
         markWorkflowLogCreated(parsedPlan.planName);
         return await finishFailure(parsedPaths.reason);
+      }
+      if (selectedTask) {
+        const taskStage = await setTaskStage({
+          stage: 'reviewing',
+          detail: `staged ${parsedPaths.paths.length} ${
+            parsedPaths.paths.length === 1 ? 'file' : 'files'
+          }`,
+        });
+        if (!taskStage.ok) {
+          return await finishFailure(taskStage.reason);
+        }
       }
       const acquired = await acquireWorkflowFileOwnershipForPaths({
         rootDir,
@@ -6039,6 +6477,7 @@ export const runWorkflowRunner = async (
             stderr: '',
             staging: staged.staging,
             cleanup: reviewCleanup,
+            taskContext: currentTaskContext,
           }),
         );
         if (!failureDebugResult.ok) {
@@ -6128,6 +6567,8 @@ export const runWorkflowRunner = async (
       commitSummaryPaths,
       unblockNote,
       executeTokenGuardrail,
+      taskContext: currentTaskContext,
+      taskSavepointAggregateSummary,
     });
     const editedSummaryPaths = await parseEditedFileSummaryPaths(rootDir, parsedPlan.content);
     const editedFileSnapshot = await readEditedFileSnapshot(rootDir, editedSummaryPaths);
@@ -6285,6 +6726,7 @@ export const runWorkflowRunner = async (
           stderr: result.stderr,
           staging,
           cleanup: reviewCleanup,
+          taskContext: currentTaskContext,
         }),
       );
       if (logResult.ok) {
@@ -6401,6 +6843,28 @@ export const runWorkflowRunner = async (
     }
 
     if (route.terminal) {
+      if (selectedTask && currentTaskContext) {
+        const shaResult = await gitHeadShortSha(rootDir, processRunner);
+        if (!shaResult.ok) {
+          const logResult = await appendIterationLog(shaResult.reason);
+          if (!logResult.ok) {
+            return await finishFailure(logResult.reason);
+          }
+          const snapshotResult = await syncWorkflowSnapshot(parsedPlan);
+          if (!snapshotResult.ok) {
+            return await finishFailure(snapshotResult.reason);
+          }
+          return await finishFailure(shaResult.reason);
+        }
+        const taskStage = await setTaskStage({
+          stage: 'committed',
+          detail: shaResult.sha,
+          commitSha: shaResult.sha,
+        });
+        if (!taskStage.ok) {
+          return await finishFailure(taskStage.reason);
+        }
+      }
       const cleanCheck = await verifyCommitSummaryPathsClean(
         rootDir,
         commitSummaryPaths ?? [],
@@ -6420,6 +6884,45 @@ export const runWorkflowRunner = async (
       const logResult = await appendIterationLog();
       if (!logResult.ok) {
         return await finishFailure(logResult.reason);
+      }
+      if (selectedTask && currentTaskContext) {
+        const nextTask = await nextIncompleteTask(
+          rootDir,
+          parsedPlan.planName,
+          planTasks.filter((task) => task.id !== selectedTask.id),
+        );
+        const artifact = await writeTaskArtifact({
+          rootDir,
+          planName: parsedPlan.planName,
+          planPath: parsedPlan.planPath,
+          context: currentTaskContext,
+          changedFiles: commitSummaryPaths ?? [],
+          validationSummary: 'See plan validation history and commit-summary stage output.',
+          reviewResult: 'Review accepted task for commit-summary.',
+          commitMessage: compactCapturedOutputForLog(result.stdout) || '(not captured)',
+          nextTask,
+        });
+        if (!artifact.ok) {
+          return await finishFailure(artifact.reason);
+        }
+        const remainingTask = await nextIncompleteTask(rootDir, parsedPlan.planName, planTasks);
+        if (remainingTask) {
+          const reopened = await reopenPlanForNextTask(parsedPlan);
+          if (!reopened.ok) {
+            return await finishFailure(reopened.reason);
+          }
+          const nextParsed = await parsePlan({ planName: planArgument, rootDir });
+          if (!nextParsed.ok) {
+            return await finishFailure(nextParsed.reason);
+          }
+          parsedPlan = nextParsed;
+          continue;
+        }
+        parsedPlan = {
+          ...parsedPlan,
+          content: await readFile(parsedPlan.absolutePlanPath, 'utf8'),
+        };
+        continue;
       }
       const snapshotResult = await syncWorkflowSnapshot(parsedPlan);
       if (!snapshotResult.ok) {
