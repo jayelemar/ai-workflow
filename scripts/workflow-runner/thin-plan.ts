@@ -10,6 +10,7 @@ type Failure = {
 type Success = {
   ok: true;
   warnings: string[];
+  contract: ThinPlanContractVersion;
 };
 
 type WorkflowEventKind =
@@ -19,7 +20,10 @@ type WorkflowEventKind =
   | 'unblock'
   | 'reopen';
 
-const THIN_PLAN_CONTRACT = 'thin-plan-v1';
+export type ThinPlanContractVersion = 'thin-plan-v1' | 'thin-plan-v2';
+
+const THIN_PLAN_V1_CONTRACT = 'thin-plan-v1';
+const THIN_PLAN_V2_CONTRACT = 'thin-plan-v2';
 const THIN_PLAN_ENTRY_MAX_BYTES = 512;
 const THIN_PLAN_HISTORY_MAX_BYTES = 4 * 1024;
 const WORKFLOW_EVENT_ARTIFACT_MAX_BYTES = 20 * 1024;
@@ -27,11 +31,36 @@ const WORKFLOW_EVENT_ARTIFACT_SUMMARY_MAX_BYTES = 1024;
 const THIN_PLAN_ALLOWED_EVENT_FIELDS = new Set(['Summary', 'Result', 'Decision', 'Status', 'Evidence']);
 const THIN_PLAN_STATE_EVENT_FIELDS = ['Result', 'Decision', 'Status'] as const;
 const THIN_PLAN_FORBIDDEN_NARRATIVE_SECTIONS = ['## Review Required Fixes'];
+const THIN_PLAN_V2_FORBIDDEN_INLINE_SECTIONS = [
+  '## Flow-to-File Mapping',
+  '## Implementation Map',
+  '## Execution Log',
+  '## Validation History',
+  '## Review History',
+  '## Unblock History',
+  '## Reopen History',
+  '## Blockers',
+  '## Ownership Scope',
+  '## File Ownership Releases',
+  '## Hunk Ownership',
+  '## Files (MANDATORY)',
+];
 
 const rel = (...segments: string[]) => segments.join('/');
 const formatKilobytes = (bytes: number): string => `${(bytes / 1024).toFixed(1)} KB`;
 
 const normalizeInlineCodeValue = (value: string): string => value.trim().replace(/^`+|`+$/g, '');
+
+export const detectThinPlanContract = (content: string): ThinPlanContractVersion | undefined => {
+  const contentRules = planSectionLines(content, '## Workflow Content Rules');
+  if (contentRules.some((line) => normalizeInlineCodeValue(line) === THIN_PLAN_V2_CONTRACT)) {
+    return THIN_PLAN_V2_CONTRACT;
+  }
+  if (contentRules.some((line) => normalizeInlineCodeValue(line) === THIN_PLAN_V1_CONTRACT)) {
+    return THIN_PLAN_V1_CONTRACT;
+  }
+  return undefined;
+};
 
 const planSectionLines = (content: string, heading: string): string[] => {
   const lines = content.split(/\r?\n/);
@@ -219,6 +248,62 @@ const validateWorkflowEventArtifact = async ({
   return { ok: true };
 };
 
+const expectedThinPlanV2Artifacts = (planName: string): Array<{ path: string; kind: 'file' | 'dir' }> => [
+  { path: rel('.ai', 'artifacts', planName, 'implementation-map.md'), kind: 'file' },
+  { path: rel('.ai', 'artifacts', planName, 'state', 'workflow.json'), kind: 'file' },
+  { path: rel('.ai', 'artifacts', planName, 'state', 'file-ownership.json'), kind: 'file' },
+  { path: rel('.ai', 'artifacts', planName, 'state', 'files.json'), kind: 'file' },
+  { path: rel('.ai', 'artifacts', planName, 'state', 'context.md'), kind: 'file' },
+  { path: rel('.ai', 'artifacts', planName, 'events'), kind: 'dir' },
+];
+
+const validateThinPlanV2Manifest = async ({
+  rootDir,
+  planName,
+  content,
+}: {
+  rootDir: string;
+  planName: string;
+  content: string;
+}): Promise<Success | Failure> => {
+  for (const section of THIN_PLAN_V2_FORBIDDEN_INLINE_SECTIONS) {
+    if (content.split(/\r?\n/).some((line) => line.trim() === section)) {
+      return {
+        ok: false,
+        reason: `thin-plan-v2 contains forbidden inline section ${section.replace(/^##\s+/, '')}`,
+      };
+    }
+  }
+
+  const artifactsBody = sectionLines(content, '## Artifacts');
+  if (artifactsBody === null) {
+    return { ok: false, reason: 'thin-plan-v2 is missing ## Artifacts' };
+  }
+  const artifactText = artifactsBody.join('\n');
+
+  for (const artifact of expectedThinPlanV2Artifacts(planName)) {
+    if (!artifactText.includes(artifact.path)) {
+      return { ok: false, reason: `thin-plan-v2 ## Artifacts is missing ${artifact.path}` };
+    }
+    const absolutePath = path.join(rootDir, artifact.path);
+    if (!existsSync(absolutePath)) {
+      return { ok: false, reason: `thin-plan-v2 artifact does not exist: ${artifact.path}` };
+    }
+    const artifactStat = await stat(absolutePath).catch(() => undefined);
+    if (!artifactStat) {
+      return { ok: false, reason: `thin-plan-v2 artifact cannot be read: ${artifact.path}` };
+    }
+    if (artifact.kind === 'file' && !artifactStat.isFile()) {
+      return { ok: false, reason: `thin-plan-v2 artifact is not a file: ${artifact.path}` };
+    }
+    if (artifact.kind === 'dir' && !artifactStat.isDirectory()) {
+      return { ok: false, reason: `thin-plan-v2 artifact is not a directory: ${artifact.path}` };
+    }
+  }
+
+  return { ok: true, warnings: [], contract: THIN_PLAN_V2_CONTRACT };
+};
+
 export const validateThinPlanContract = async ({
   rootDir,
   planName,
@@ -228,9 +313,12 @@ export const validateThinPlanContract = async ({
   planName: string;
   content: string;
 }): Promise<Success | Failure> => {
-  const contentRules = planSectionLines(content, '## Workflow Content Rules');
-  if (!contentRules.some((line) => normalizeInlineCodeValue(line) === THIN_PLAN_CONTRACT)) {
-    return { ok: false, reason: `plan is missing ${THIN_PLAN_CONTRACT}` };
+  const contract = detectThinPlanContract(content);
+  if (!contract) {
+    return { ok: false, reason: `plan is missing ${THIN_PLAN_V1_CONTRACT} or ${THIN_PLAN_V2_CONTRACT}` };
+  }
+  if (contract === THIN_PLAN_V2_CONTRACT) {
+    return await validateThinPlanV2Manifest({ rootDir, planName, content });
   }
 
   const warnings: string[] = [];
@@ -326,5 +414,5 @@ export const validateThinPlanContract = async ({
     );
   }
 
-  return { ok: true, warnings };
+  return { ok: true, warnings, contract: THIN_PLAN_V1_CONTRACT };
 };

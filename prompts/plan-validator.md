@@ -25,7 +25,7 @@ Read:
 * `.ai/instructions/shared/workflow-state.md`
 * the plan file
 * the repo-relative `*.spec.md` path(s) listed under the plan's `## Spec` section (if any)
-* the `.ai/artifacts/<plan-name>/product-flow.md` file listed under `## User Flow Artifact` when the plan is user-facing
+* `.ai/artifacts/<plan-name>/user-journey.md` when the plan is user-facing
 * relevant codebase files named by the spec or plan when contract, shape, rendering, or file-scope questions must be resolved from existing implementation evidence
 
 ---
@@ -85,7 +85,9 @@ Validate:
 
 ## Task Savepoint Validation (MANDATORY)
 
-For multi-step plans, every ordered task under `## Phases` MUST use stable task ID syntax:
+Task savepoints are valid only for independently reviewable chunks. A task
+savepoint chunk must be able to pass, be reviewed, and be committed
+independently.
 
 `1. [task:01-readable-words] Do the task`
 
@@ -94,10 +96,20 @@ Rules:
 * The ID MUST match `[task:NN-readable-words]` with a two-digit numeric prefix and lowercase hyphenated words.
 * Task IDs MUST be unique within the plan.
 * Task IDs MUST stay stable when task wording changes.
-* Multi-step implementation plans use task savepoints and runner task artifacts under `.ai/artifacts/<plan-name>/tasks/`.
-* Single-step plans keep the existing final-commit behavior and do not require task IDs.
+* Task-savepoint plans use runner task artifacts under `.ai/artifacts/<plan-name>/tasks/`.
+* Simple bugfix plans keep the existing final-commit behavior and do not require task IDs.
+* A simple bugfix SHOULD be one final-commit task even when it includes red tests, implementation, and validation commands.
+* Do not split tasks only by lifecycle phase, app layer, red tests, or validation commands.
 
-If a multi-step plan has any ordered task without valid task ID syntax:
+If a plan has multiple task-savepoint IDs but the tasks cannot pass and commit independently:
+
+→ mark as CRITICAL
+
+If a plan splits a simple bugfix into separate test, implementation, or validation task savepoints:
+
+→ mark as CRITICAL
+
+If a plan uses task savepoints and any savepoint task lacks valid task ID syntax:
 
 → mark as CRITICAL
 
@@ -245,19 +257,19 @@ If missing:
 
 ---
 
-## User Flow Artifact Validation (MANDATORY)
+## User Journey Artifact Validation (MANDATORY)
 
-Read the plan's `## User Flow Artifact` and `## Flow-to-File Mapping` sections.
+Read the plan's `## Artifacts` section plus `.ai/artifacts/<plan-name>/implementation-map.md`.
 
 User-facing work means a feature, bugfix, or change that affects a customer, admin, or operator screen, route, workflow, visible state, or user-triggered API behavior.
 
 For user-facing plans:
 
-* `## User Flow Artifact` MUST point to `.ai/artifacts/<plan-name>/product-flow.md`
-* the product-flow artifact MUST exist
+* user-facing work MUST have `.ai/artifacts/<plan-name>/user-journey.md`
+* the user-journey artifact MUST exist
 * the artifact MUST contain Goal, Actors, Entry Points, User Flows, Mermaid Diagram, States, Failures, Acceptance Scenarios, and Open Decisions
-* the plan MUST include `## Flow-to-File Mapping`
-* every user action from the artifact's User Flows and Acceptance Scenarios MUST appear in `## Flow-to-File Mapping`
+* `.ai/artifacts/<plan-name>/implementation-map.md` MUST exist
+* every user action from the artifact's User Flows and Acceptance Scenarios MUST appear in `.ai/artifacts/<plan-name>/implementation-map.md`
 * each user action MUST include implementation coverage for applicable UI route/component, API route, backend service/module, and database/storage effect paths
 * each user action MUST include validation coverage in tests or an explicit validation command
 * a `None: <concrete reason>` entry is allowed only for implementation categories that genuinely do not apply to that action
@@ -266,14 +278,13 @@ If a user-facing flow step lacks implementation coverage or validation coverage:
 
 → mark as CRITICAL
 
-If a user-facing plan records `N/A` in `## User Flow Artifact` or `## Flow-to-File Mapping`:
+If a user-facing plan records `N/A` in `.ai/artifacts/<plan-name>/implementation-map.md`:
 
 → mark as CRITICAL
 
 For non-user-facing plans:
 
-* `## User Flow Artifact` MUST write `N/A: <concrete reason>`
-* `## Flow-to-File Mapping` MUST write the same `N/A: <concrete reason>`
+* `.ai/artifacts/<plan-name>/implementation-map.md` MUST write `N/A: <concrete reason>`
 * the concrete reason MUST explain why the change does not affect a screen, route, workflow, visible state, or user-triggered API behavior
 
 If the non-user-facing reason is missing, vague, or contradicted by the spec or plan:
@@ -284,7 +295,7 @@ If the non-user-facing reason is missing, vague, or contradicted by the spec or 
 
 ## Phase Quality
 
-Each phase must:
+Each phase in the plan file's `## Phases` section must:
 
 * have a clear objective
 * map to specific files
@@ -324,21 +335,19 @@ If weak:
 
 ---
 
-## Validation History (MANDATORY)
+## Validation Artifact State (MANDATORY)
 
-Append validation results to:
-
-## Validation History
+Write validation results to `.ai/artifacts/<plan-name>/events/validation-vX.md`, then update `.ai/artifacts/<plan-name>/state/workflow.json`.
 
 Rules:
 
-* MUST append a new entry for every validation run
-* MUST NOT overwrite previous entries
+* MUST create a new event artifact for every validation run
+* MUST NOT overwrite previous event artifacts
 * Validation versions MUST be sequential
 * MUST create `.ai/artifacts/<plan-name>/events/validation-vX.md` before updating the plan
 * The validation artifact MUST contain detailed critical issues, warnings, spec repair classifications, allowed spec repairs, recommendations, and evidence
-* The plan entry MUST contain only `Summary`, `Result`, and `Evidence`
-* The plan entry MUST stay under 512 bytes
+* `workflow.json` MUST store only the latest validation summary, result, evidence pointer, compact history pointer, status, nextAction, and updatedAt
+* The plan manifest MUST NOT contain inline `## Validation History`
 
 ---
 

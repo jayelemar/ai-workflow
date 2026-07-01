@@ -187,7 +187,7 @@ Notes:
 Main workflow artifacts:
 
 - spec: the behavior contract
-- user-flow artifact: the user-facing flow contract generated from the approved
+- user-journey artifact: the user-facing flow contract generated from the approved
   spec plus codebase inspection
 - plan: the execution contract
 - prompt: the stage-specific workflow controller
@@ -197,8 +197,8 @@ Main workflow artifacts:
 Default locations:
 
 - ordinary feature and bug specs: `.ai/specs/<name>.spec.md`
-- user-flow artifacts for user-facing work:
-  `.ai/artifacts/<name>/product-flow.md`
+- user-journey artifacts for user-facing work:
+  `.ai/artifacts/<name>/user-journey.md`
 - plans: `.ai/plans/<name>.md`
 - prompts: `.ai/prompts/*.md`
 - runner: `.ai/scripts/workflow-runner.ts`
@@ -212,13 +212,13 @@ when a workflow companion spec belongs elsewhere, such as
 Canonical lifecycle:
 
 ```text
-spec -> user-flow artifact -> plan -> runner
+spec -> user-journey artifact -> plan -> runner
 ```
 
 Normal end-to-end flow:
 
 1. Create a spec.
-2. Create a user-flow artifact for user-facing work.
+2. Create a user-journey artifact for user-facing work.
 3. Create a plan.
 4. Choose a post-plan path.
 5. Let plan `Status` and `Next Action` drive every later stage.
@@ -233,9 +233,11 @@ Use the wrapper that matches the work:
 Ordinary specs should live in `.ai/specs/`. If a workflow companion spec needs
 to live elsewhere, keep the plan `## Spec` entry repo-relative.
 
-### Create A User-Flow Artifact
+### Create A User-Journey Artifact
 
-For user-facing work, use:
+For user-facing work, this artifact is required, but `create-plan` automatically
+creates or regenerates it when it is missing or invalid. To inspect the flow
+before planning, use:
 
 ```text
 .ai/wrappers/generate-user-flow.md
@@ -244,7 +246,7 @@ For user-facing work, use:
 The generated artifact should live at:
 
 ```text
-.ai/artifacts/<plan-name>/product-flow.md
+.ai/artifacts/<plan-name>/user-journey.md
 ```
 
 User-facing work means a feature, bugfix, or change that affects a customer,
@@ -252,7 +254,8 @@ admin, or operator screen, route, workflow, visible state, or user-triggered API
 behavior.
 
 For non-user-facing work, skip this stage. The plan must record
-`N/A: <concrete reason>` in `## User Flow Artifact` and `## Flow-to-File Mapping`.
+`N/A: <concrete reason>` for the user journey entry in `## Artifacts` and in
+`.ai/artifacts/<plan-name>/implementation-map.md`.
 
 ### Create A Plan
 
@@ -267,6 +270,11 @@ The generated plan should live at:
 ```text
 .ai/plans/<plan-name>.md
 ```
+
+When the work is user-facing, this wrapper first ensures
+`.ai/artifacts/<plan-name>/user-journey.md` exists and validates against the
+spec. If it is missing or stale, the wrapper applies
+`.ai/prompts/generate-user-flow.md` automatically before writing the plan.
 
 ### Choose A Post-Plan Path
 
@@ -534,8 +542,8 @@ Current priority:
 Prioritize these before runner module splitting:
 
 - improve token-warning diagnostics. If the plan is small but stage input
-  tokens are huge, identify likely stage/context/tool-output growth instead of
-  only telling users to move plan detail into event artifacts
+  tokens are huge, identify likely stage/context/tool-output growth without
+  moving the plan's implementation details out of the plan file
 - add per-turn token usage visibility when Codex exposes it, so one oversized
   turn can be found without treating the whole stage as one opaque number
 - hard-cap captured command stdout/stderr in workflow summaries. Keep concise

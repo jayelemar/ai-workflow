@@ -47,8 +47,8 @@ If not provided:
 Use the latest bug findings from one of:
 
 * the user's current request
-* the latest `## Review History` entry
-* the latest `## Blockers` entry
+* the latest review pointer and unresolved blockers in `.ai/artifacts/<plan-name>/state/workflow.json`
+* review/reopen evidence under `.ai/artifacts/<plan-name>/events/`
 * a clearly referenced issue report in the plan
 
 If no concrete findings exist:

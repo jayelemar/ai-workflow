@@ -149,6 +149,68 @@ const planWithTaskSavepoints = (status: string, nextAction: string, extra = "") 
 ${extra}`,
   );
 
+const thinPlanV2Manifest = (
+  status = "draft",
+  nextAction = "plan-validator",
+  extra = "",
+) => `# Plan: artifact-state
+
+## Workflow Content Rules
+
+thin-plan-v2
+
+## Status
+
+${status}
+
+## Next Action
+
+${nextAction}
+
+## Spec
+
+.ai/specs/artifact-state.spec.md
+
+## Artifacts
+
+* User journey: .ai/artifacts/artifact-state/user-journey.md
+* Implementation map: .ai/artifacts/artifact-state/implementation-map.md
+* Workflow state: .ai/artifacts/artifact-state/state/workflow.json
+* File ownership: .ai/artifacts/artifact-state/state/file-ownership.json
+* Files: .ai/artifacts/artifact-state/state/files.json
+* Context: .ai/artifacts/artifact-state/state/context.md
+* Events: .ai/artifacts/artifact-state/events/
+
+## Workflow State Rules
+
+Artifact state is authoritative for workflow history, blockers, ownership, and file inventory.
+
+## Phases
+
+### Preparation
+
+* Objective: Inspect current workflow state.
+* Tasks:
+  1. Inspect .ai/artifacts/artifact-state/state/workflow.json.
+* Expected outcome: Current state is understood.
+
+### Implementation
+
+* Objective: Implement artifact-backed state.
+* Tasks:
+  1. [task:01-artifact-state] Implement artifact-backed state in .ai/scripts/workflow-runner.ts.
+* Expected outcome: Artifact-backed state is implemented.
+
+### Validation
+
+* Objective: Validate workflow runner behavior.
+* Tasks:
+  1. Run workflow runner tests.
+* Expected outcome: Workflow runner tests pass.
+
+${extra}
+`;
+
 const ownershipReleaseSection = (file: string, releasedTo = ".ai/plans/dependent-plan.md") => `## File Ownership Releases
 
 ### Release v1
@@ -248,6 +310,110 @@ const writeFileOwnershipArtifact = async (
   mkdirSync(dirname(artifactPath), { recursive: true });
   await writeFile(artifactPath, JSON.stringify(artifact, null, 2), "utf8");
   return artifactPath;
+};
+
+const writeThinPlanV2Artifacts = async (
+  root: string,
+  overrides: Partial<{
+    status: string;
+    nextAction: string;
+    latestValidationResult: string;
+    latestReviewSummary: string;
+    activeBlockers: string[];
+    created: string[];
+    modified: string[];
+    deleted: string[];
+    changedFiles: string[];
+    owns: string[];
+  }> = {},
+) => {
+  const planName = "artifact-state";
+  const artifactRoot = join(root, ".ai", "artifacts", planName);
+  mkdirSync(join(artifactRoot, "state"), { recursive: true });
+  mkdirSync(join(artifactRoot, "events"), { recursive: true });
+  await writeFile(
+    join(artifactRoot, "implementation-map.md"),
+    `# Implementation Map
+
+N/A: internal workflow automation only.
+`,
+    "utf8",
+  );
+  await writeFile(join(artifactRoot, "state", "context.md"), "# Context\n\n(empty)\n", "utf8");
+  await writeFile(
+    join(artifactRoot, "state", "workflow.json"),
+    `${JSON.stringify(
+      {
+        planPath: ".ai/plans/artifact-state.md",
+        status: overrides.status ?? "review",
+        nextAction: overrides.nextAction ?? "review-plan",
+        latest: {
+          validation: {
+            version: 2,
+            result: overrides.latestValidationResult ?? "PASS",
+            summary: "Required checks passed.",
+            evidence: ".ai/artifacts/artifact-state/events/validation-v2.md",
+          },
+          review: {
+            version: 3,
+            summary: overrides.latestReviewSummary ?? "NEEDS FIX",
+            decision: "active",
+            evidence: ".ai/artifacts/artifact-state/events/review-v3.md",
+            unresolvedFindings: ["Fix the artifact state reader."],
+          },
+        },
+        history: [
+          ".ai/artifacts/artifact-state/events/validation-v2.md",
+          ".ai/artifacts/artifact-state/events/review-v3.md",
+        ],
+        unresolvedBlockers: overrides.activeBlockers ?? ["Blocker v1 | owner plan still active"],
+        updatedAt: "2026-07-01T00:00:00.000Z",
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+  const changedFiles = overrides.changedFiles ?? overrides.modified ?? ["src/artifact-state.ts"];
+  await writeFile(
+    join(artifactRoot, "state", "file-ownership.json"),
+    `${JSON.stringify(
+      {
+        planPath: ".ai/plans/artifact-state.md",
+        status: overrides.status ?? "review",
+        nextAction: overrides.nextAction ?? "review-plan",
+        owns: overrides.owns ?? changedFiles,
+        released: [],
+        resolvedFiles: overrides.owns ?? changedFiles,
+        changedFiles,
+        headSha: "abc123",
+        updatedAt: "2026-07-01T00:00:00.000Z",
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+  await writeFile(
+    join(artifactRoot, "state", "files.json"),
+    `${JSON.stringify(
+      {
+        created: overrides.created ?? [],
+        modified: overrides.modified ?? ["src/artifact-state.ts"],
+        deleted: overrides.deleted ?? [],
+        changedFiles,
+        released: [],
+        headSha: "abc123",
+        workflow: {
+          status: overrides.status ?? "review",
+          nextAction: overrides.nextAction ?? "review-plan",
+        },
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
 };
 
 const planArg = (planName: string) => `.ai/plans/${planName}.md`;
@@ -436,11 +602,11 @@ const readInstruction = (name: string) =>
   readFile(join(process.cwd(), ".ai", "instructions", name), "utf8");
 const readPlanTemplate = () => readFile(join(process.cwd(), ".ai", "templates", "plan.template.md"), "utf8");
 
-test("generate-user-flow prompt defines the product-flow artifact contract", async () => {
+test("generate-user-flow prompt defines the user-journey artifact contract", async () => {
   const prompt = await readWorkflowPrompt("generate-user-flow.md");
   const wrapper = await readWorkflowWrapper("generate-user-flow.md");
 
-  assert.match(prompt, /\.ai\/artifacts\/<plan-name>\/product-flow\.md/);
+  assert.match(prompt, /\.ai\/artifacts\/<plan-name>\/user-journey\.md/);
   assert.match(prompt, /approved spec/i);
   assert.match(prompt, /codebase inspection/i);
   assert.match(prompt, /must not invent desired behavior beyond the spec/i);
@@ -463,44 +629,72 @@ test("generate-user-flow prompt defines the product-flow artifact contract", asy
   assert.match(wrapper, /Output artifact:/);
 });
 
-test("create-plan prompt requires user-facing flow artifact or concrete non-user-facing N/A", async () => {
+test("create-plan prompt auto-preflights user-facing flow artifacts or records non-user-facing N/A", async () => {
   const prompt = await readWorkflowPrompt("create-plan.md");
 
   assert.match(prompt, /user-facing/i);
-  assert.match(prompt, /\.ai\/artifacts\/<plan-name>\/product-flow\.md/);
-  assert.match(prompt, /read the user-flow artifact before planning/i);
+  assert.match(prompt, /\.ai\/artifacts\/<plan-name>\/user-journey\.md/);
+  assert.match(prompt, /automatically create it by applying `\.ai\/prompts\/generate-user-flow\.md`/i);
+  assert.match(prompt, /automatically regenerate it by applying `\.ai\/prompts\/generate-user-flow\.md`/i);
+  assert.match(prompt, /read the user-journey artifact before planning/i);
   assert.match(prompt, /For non-user-facing work/i);
   assert.match(prompt, /write exactly `N\/A:/);
   assert.match(prompt, /concrete reason/i);
 });
 
-test("plan template requires user flow artifact and flow-to-file mapping sections", async () => {
+test("plan template requires artifact pointers for implementation map and state files", async () => {
   const template = await readPlanTemplate();
 
-  assert.match(template, /## User Flow Artifact/);
-  assert.match(template, /## Flow-to-File Mapping/);
-  assert.match(template, /\.ai\/artifacts\/<plan-name>\/product-flow\.md/);
+  assert.match(template, /thin-plan-v2/);
+  assert.match(template, /## Artifacts/);
+  assert.match(template, /\.ai\/artifacts\/<plan-name>\/user-journey\.md/);
+  assert.match(template, /\.ai\/artifacts\/<plan-name>\/implementation-map\.md/);
+  assert.match(template, /\.ai\/artifacts\/<plan-name>\/state\/workflow\.json/);
+  assert.match(template, /\.ai\/artifacts\/<plan-name>\/state\/file-ownership\.json/);
+  assert.match(template, /\.ai\/artifacts\/<plan-name>\/state\/files\.json/);
   assert.match(template, /N\/A: <concrete reason>/);
-  assert.match(template, /Each user action/i);
-  assert.match(template, /UI route\/component/i);
-  assert.match(template, /API route/i);
-  assert.match(template, /backend service\/module/i);
-  assert.match(template, /database\/storage effect/i);
+  assert.match(template, /## Phases/);
+  assert.match(template, /### Preparation/);
+  assert.match(template, /### Implementation/);
+  assert.match(template, /### Validation/);
   assert.match(template, /tests/i);
 });
 
-test("plan creation and template require task IDs for multi-step task savepoints", async () => {
+test("plan creation and validation reserve task savepoints for independently reviewable chunks", async () => {
   const prompt = await readWorkflowPrompt("create-plan.md");
   const template = await readPlanTemplate();
   const validator = await readWorkflowPrompt("plan-validator.md");
+  const workflowInstructions = await readInstruction("ai-workflow.md");
 
-  for (const content of [prompt, template, validator]) {
+  for (const content of [prompt, validator, workflowInstructions]) {
     assert.match(content, /\[task:(?:NN|01)-readable-words\]/);
-    assert.match(content, /Multi-step plans/i);
+    assert.match(content, /independently reviewable/i);
+    assert.match(content, /do not split tasks only by lifecycle\s+phase/i);
+    assert.match(content, /red tests/i);
+    assert.match(content, /validation commands/i);
+    assert.match(content, /simple bugfix/i);
     assert.match(content, /task savepoints/i);
   }
-  assert.match(template, /\.ai\/artifacts\/<plan-name>\/tasks\//);
-  assert.match(template, /\.ai\/artifacts\/<plan-name>\/state\/current-task\.md/);
+  assert.match(validator, /mark as CRITICAL/i);
+  assert.match(validator, /cannot pass and commit independently/i);
+  assert.match(template, /^## Phases$/m);
+});
+
+test("whop pro trial plan keeps simple bugfix work in one final-commit task", async (t) => {
+  const planPath = join(process.cwd(), ".ai", "plans", "whop-pro-trial-sandbox-checkout-error.md");
+  if (!existsSync(planPath)) {
+    t.skip("local ignored plan fixture is not present");
+    return;
+  }
+
+  const plan = await readFile(planPath, "utf8");
+
+  assert.doesNotMatch(plan, /\[task:\d{2}-/);
+  assert.match(plan, /staged web regression tests/i);
+  assert.match(plan, /backend regression tests/i);
+  assert.match(plan, /implementation/i);
+  assert.match(plan, /validation/i);
+  assert.match(plan, /final-commit/i);
 });
 
 test("workflow prompts define task savepoint execution, review, commit, and aggregate rules", async () => {
@@ -521,8 +715,7 @@ test("workflow prompts define task savepoint execution, review, commit, and aggr
 test("plan-validator prompt fails user-facing flow steps without implementation and validation coverage", async () => {
   const prompt = await readWorkflowPrompt("plan-validator.md");
 
-  assert.match(prompt, /User Flow Artifact/i);
-  assert.match(prompt, /Flow-to-File Mapping/i);
+  assert.match(prompt, /implementation-map\.md/i);
   assert.match(prompt, /user-facing/i);
   assert.match(prompt, /each user action/i);
   assert.match(prompt, /implementation coverage/i);
@@ -530,12 +723,12 @@ test("plan-validator prompt fails user-facing flow steps without implementation 
   assert.match(prompt, /mark as CRITICAL/i);
 });
 
-test("workflow docs expose spec to user-flow artifact to plan to runner flow", async () => {
+test("workflow docs expose spec to user-journey artifact to plan to runner flow", async () => {
   const readme = await readFile(join(process.cwd(), ".ai", "README.md"), "utf8");
   const wrappersReadme = await readWorkflowWrapper("README.md");
 
-  assert.match(readme, /spec -> user-flow artifact -> plan -> runner/i);
-  assert.match(wrappersReadme, /spec -> user-flow artifact -> plan -> runner/i);
+  assert.match(readme, /spec -> user-journey artifact -> plan -> runner/i);
+  assert.match(wrappersReadme, /spec -> user-journey artifact -> plan -> runner/i);
   assert.match(readme, /\.ai\/wrappers\/generate-user-flow\.md/);
   assert.match(wrappersReadme, /\.ai\/wrappers\/generate-user-flow\.md/);
 });
@@ -692,19 +885,19 @@ test("superpowers prompt does not require compact agent progress updates", async
   assert.doesNotMatch(prompt, /Use bullets only for multiple actionable findings, capped at 3/);
 });
 
-test("create-plan prompt defines Ownership Scope as the planning-time ownership boundary", async () => {
+test("create-plan prompt defines artifact state as the planning-time boundary", async () => {
   const prompt = await readWorkflowPrompt("create-plan.md");
 
-  assert.match(prompt, /## Ownership Scope/);
-  assert.match(prompt, /planning-time file ownership boundary/i);
-  assert.match(prompt, /directory globs ending in `\/\*\*`/i);
+  assert.match(prompt, /state\/file-ownership\.json/);
+  assert.match(prompt, /planning-time ownership boundary/i);
+  assert.match(prompt, /state\/files\.json/);
   assert.match(prompt, /changed-file inventory/i);
 });
 
-test("execute-plan prompt reconciles Files after implementation before review", async () => {
+test("execute-plan prompt reconciles files.json after implementation before review", async () => {
   const prompt = await readWorkflowPrompt("execute-plan.md");
 
-  assert.match(prompt, /reconcile `## Files \(MANDATORY\)` after implementation/i);
+  assert.match(prompt, /Reconcile `?\.ai\/artifacts\/<plan-name>\/state\/files\.json`? after implementation/i);
   assert.match(prompt, /actual created, modified, and deleted plan-owned paths/i);
   assert.match(prompt, /before moving to `Status = review`/i);
 });
@@ -712,7 +905,7 @@ test("execute-plan prompt reconciles Files after implementation before review", 
 test("review-changes prompt routes file-list mismatches back to execution", async () => {
   const prompt = await readWorkflowPrompt("review-changes.md");
 
-  assert.match(prompt, /If staged implementation paths do not match the expected changed-file inventory in `## Files \(MANDATORY\)`/);
+  assert.match(prompt, /If staged implementation paths do not match the expected changed-file inventory in `\.ai\/artifacts\/<plan-name>\/state\/files\.json`/);
   assert.match(prompt, /file-list mismatch/i);
   assert.match(prompt, /Status = active/);
   assert.match(prompt, /Next Action = execute-plan/);
@@ -721,68 +914,57 @@ test("review-changes prompt routes file-list mismatches back to execution", asyn
 test("commit-summary prompt does not repair Files metadata", async () => {
   const prompt = await readWorkflowPrompt("commit-summary.md");
 
-  assert.match(prompt, /relies on the existing `## Files \(MANDATORY\)` changed-file inventory/i);
-  assert.match(prompt, /runner-refreshed file ownership artifact/i);
-  assert.match(prompt, /must not repair `## Files \(MANDATORY\)`/i);
+  assert.match(prompt, /relies on `\.ai\/artifacts\/<plan-name>\/state\/files\.json` as the changed-file inventory/i);
+  assert.match(prompt, /state\/file-ownership\.json/);
+  assert.match(prompt, /must not repair `files\.json`/i);
   assert.match(prompt, /route the plan back through review or execution/i);
 });
 
-test("execute-plan prompt requires concise execution log and validation update wording", async () => {
+test("execute-plan prompt requires concise artifact event and validation update wording", async () => {
   const prompt = await readWorkflowPrompt("execute-plan.md");
 
-  assert.match(prompt, /Execution Log entries may contain only `Summary`, `Result`, and `Evidence`/);
-  assert.match(prompt, /Keep inline execution entries under 512 bytes/);
-  assert.match(prompt, /Do not record reasoning narration, wait-state updates, or artifact body text in the plan/);
-  assert.match(prompt, /Plan updates should state what changed, what was validated, and remaining action/);
+  assert.match(prompt, /Workflow event state may contain only compact summary, state\/result\/decision, and evidence pointer fields/);
+  assert.match(prompt, /Do not record reasoning narration, wait-state updates, or artifact body text in the plan manifest/);
+  assert.match(prompt, /Artifact state updates should state what changed, what was validated, and remaining action/);
 });
 
-test("review-changes prompt requires concise actionable Review History entries", async () => {
+test("review-changes prompt requires concise actionable review artifact state", async () => {
   const prompt = await readWorkflowPrompt("review-changes.md");
 
-  assert.match(prompt, /Review History entries may contain only `Summary`, `Decision`, and `Evidence`/);
+  assert.match(prompt, /Review state entries may contain only compact `Summary`, `Decision`, and `Evidence` pointer fields/);
   assert.match(prompt, /Put all issue bullets, file references, remediation notes, missing validations, and unresolved risks in the review artifact/);
   assert.match(prompt, /self-contained/i);
   assert.match(prompt, /must not rely on surrounding prose, earlier review versions, or shorthand like `same as above`/i);
   assert.match(prompt, /Do not use Review History for terminal-output summaries/);
 });
 
-test("plan template uses artifact-first thin-plan workflow stubs", async () => {
+test("plan template uses thin-plan-v2 artifact-first manifest", async () => {
   const template = await readPlanTemplate();
 
-  assert.match(template, /Keep workflow history entries under 512 bytes/);
-  assert.match(template, /Keep aggregate workflow history under 4 KB/);
-  assert.match(template, /may contain only `Summary`, exactly one of `Result`, `Decision`, or `Status`, and `Evidence`/);
+  assert.match(template, /thin-plan-v2/);
+  assert.match(template, /user-journey\.md/);
+  assert.match(template, /implementation-map\.md/);
+  assert.match(template, /^## Phases$/m);
+  assert.match(template, /workflow\.json/);
+  assert.match(template, /files\.json/);
+  assert.match(template, /file-ownership\.json/);
   assert.doesNotMatch(template, /\* Issues:/);
   assert.doesNotMatch(template, /\* Critical Issues:/);
   assert.doesNotMatch(template, /\* Warnings:/);
   assert.doesNotMatch(template, /\* Required Fixes:/);
 });
 
-test("plan template keeps workflow history sections as empty stubs", async () => {
+test("plan template omits inline workflow runtime sections", async () => {
   const template = await readPlanTemplate();
 
-  const validationSection = template.match(/## Validation History([\s\S]*?)## Review History/);
-  const reviewSection = template.match(/## Review History([\s\S]*?)## Reopen History/);
-  const reopenSection = template.match(/## Reopen History([\s\S]*?)## Blockers/);
-
-  assert.ok(validationSection, "expected Validation History section");
-  assert.ok(reviewSection, "expected Review History section");
-  assert.ok(reopenSection, "expected Reopen History section");
-
-  for (const [sectionName, section] of [
-    ["Validation History", validationSection[1]],
-    ["Review History", reviewSection[1]],
-    ["Reopen History", reopenSection[1]],
-  ] as const) {
-    assert.match(section, /\(empty\)/, `${sectionName} should keep the empty stub`);
-    assert.doesNotMatch(section, /^---$/m, `${sectionName} must not include section separators`);
-    assert.doesNotMatch(section, /\bRules:\b/, `${sectionName} must not include inline rules`);
-    assert.doesNotMatch(
-      section,
-      /###\s+(Validation|Review|Reopen)\s+v\d+/,
-      `${sectionName} must not include inline entry examples`,
-    );
-  }
+  assert.doesNotMatch(template, /^## Flow-to-File Mapping$/m);
+  assert.doesNotMatch(template, /^## Implementation Map$/m);
+  assert.doesNotMatch(template, /^## Execution Log$/m);
+  assert.doesNotMatch(template, /^## Validation History$/m);
+  assert.doesNotMatch(template, /^## Review History$/m);
+  assert.doesNotMatch(template, /^## Blockers$/m);
+  assert.doesNotMatch(template, /^## Ownership Scope$/m);
+  assert.doesNotMatch(template, /^## Files \(MANDATORY\)$/m);
 });
 
 test("execute-plan prompt uses snapshot remediation context before full review history", async () => {
@@ -807,12 +989,12 @@ test("review-changes prompt loads testing instructions before validation", async
   assert.match(prompt, /before running, skipping, or classifying validation/i);
 });
 
-test("review-changes prompt validates user-facing diffs against product-flow artifacts", async () => {
+test("review-changes prompt validates user-facing diffs against user-journey artifacts", async () => {
   const prompt = await readWorkflowPrompt("review-changes.md");
 
-  assert.match(prompt, /\.ai\/artifacts\/<plan-name>\/product-flow\.md/);
+  assert.match(prompt, /\.ai\/artifacts\/<plan-name>\/user-journey\.md/);
   assert.match(prompt, /user-facing/i);
-  assert.match(prompt, /Flow-to-File Mapping/i);
+  assert.match(prompt, /implementation-map\.md/i);
   assert.match(prompt, /each user action/i);
   assert.match(prompt, /visible state/i);
   assert.match(prompt, /failure branch/i);
@@ -973,8 +1155,8 @@ test("workflow prompts define transferred file ownership releases", async () => 
     assert.match(prompt, /Status: transferred/);
   }
   assert.match(executePrompt, /must not edit, stage, review, or commit the released file again/);
-  assert.match(unblockPrompt, /add the released file to this plan's `## Ownership Scope`/);
-  assert.match(unblockPrompt, /`## Files \(MANDATORY\)` if it already has changed content/);
+  assert.match(unblockPrompt, /state\/file-ownership\.json/);
+  assert.match(unblockPrompt, /state\/files\.json/);
   assert.match(reviewPrompt, /reject the review for the releasing plan/);
 });
 
@@ -3310,6 +3492,113 @@ execute-plan
   }
 });
 
+test("parsePlan accepts thin-plan-v2 manifest and reads current state from workflow.json", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writeThinPlanV2Artifacts(workspace.root, {
+      status: "review",
+      nextAction: "review-plan",
+    });
+    await writePlan(workspace.root, "artifact-state", thinPlanV2Manifest("draft", "plan-validator"));
+
+    const parsed = await parsePlan({
+      planName: planArg("artifact-state"),
+      rootDir: workspace.root,
+    });
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.ok && parsed.status, "review");
+    assert.equal(parsed.ok && parsed.nextAction, "review-plan");
+    assert.match(parsed.ok ? parsed.content : "", /## Files \(MANDATORY\)/);
+    assert.match(parsed.ok ? parsed.content : "", /## Review History/);
+    assert.match(parsed.ok ? parsed.content : "", /src\/artifact-state\.ts/);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("parsePlan rejects thin-plan-v2 when required artifacts are missing", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(workspace.root, "artifact-state", thinPlanV2Manifest());
+
+    const parsed = await parsePlan({
+      planName: planArg("artifact-state"),
+      rootDir: workspace.root,
+    });
+
+    assert.equal(parsed.ok, false);
+    assert.match(parsed.ok ? "" : parsed.reason, /thin-plan-v2 artifact does not exist.*implementation-map\.md/);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("parsePlan rejects thin-plan-v2 forbidden inline workflow sections", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writeThinPlanV2Artifacts(workspace.root);
+    await writePlan(
+      workspace.root,
+      "artifact-state",
+      thinPlanV2Manifest(
+        "draft",
+        "plan-validator",
+        `## Implementation Map
+
+### User Action: Inline mapping
+
+* UI route/component: apps/web/src/app/page.tsx
+`,
+      ),
+    );
+
+    const parsed = await parsePlan({
+      planName: planArg("artifact-state"),
+      rootDir: workspace.root,
+    });
+
+    assert.equal(parsed.ok, false);
+    assert.match(parsed.ok ? "" : parsed.reason, /thin-plan-v2 contains forbidden inline section Implementation Map/);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("workflow context snapshot reads validation, review, and blockers from thin-plan-v2 workflow state", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writeThinPlanV2Artifacts(workspace.root, {
+      status: "blocked",
+      nextAction: "unblock-plan",
+      latestValidationResult: "FAIL",
+      latestReviewSummary: "HIGH RISK",
+      activeBlockers: ["Plan dependency | .ai/plans/owner.md still owns src/artifact-state.ts"],
+    });
+    await writePlan(workspace.root, "artifact-state", thinPlanV2Manifest("draft", "plan-validator"));
+    const parsed = await parsePlan({
+      planName: planArg("artifact-state"),
+      rootDir: workspace.root,
+    });
+    assert.equal(parsed.ok, true);
+
+    const snapshot = generateWorkflowContextSnapshot({
+      planName: "artifact-state",
+      planPath: ".ai/plans/artifact-state.md",
+      planContent: parsed.ok ? parsed.content : "",
+    });
+
+    assert.match(snapshot, /\* Status: blocked/);
+    assert.match(snapshot, /\* Next Action: unblock-plan/);
+    assert.match(snapshot, /\* Result: FAIL/);
+    assert.match(snapshot, /\* Summary: HIGH RISK/);
+    assert.match(snapshot, /Fix the artifact state reader/);
+    assert.match(snapshot, /Plan dependency \| \.ai\/plans\/owner\.md still owns src\/artifact-state\.ts/);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
 test("parsePlan accepts empty thin-plan workflow history stubs", async () => {
   const workspace = await setupWorkspace();
   try {
@@ -4126,6 +4415,59 @@ test("review safe path routes to completed commit-summary and succeeds after pla
         ["add", "--all", "--", "src/file.ts"],
         ["diff", "--cached", "--unified=0", "--"],
         ["status", "--short", "--", "src/file.ts"],
+      ],
+    );
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("thin-plan-v2 review and commit-summary stage plan-owned paths from files.json", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writeThinPlanV2Artifacts(workspace.root, {
+      status: "review",
+      nextAction: "review-plan",
+      modified: ["src/artifact-state.ts"],
+      changedFiles: ["src/artifact-state.ts"],
+    });
+    await writePlan(workspace.root, "artifact-state", thinPlanV2Manifest("draft", "plan-validator"));
+    const calls: Parameters<ProcessRunner>[0][] = [];
+    const result = await runWorkflowRunner({
+      planName: planArg("artifact-state"),
+      rootDir: workspace.root,
+      processRunner: async (call) => {
+        calls.push(call);
+        if (call.command === "git" && call.args[0] === "diff") {
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
+        if (call.command === "git") {
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
+        if (call.promptPath === ".ai/prompts/review-changes.md") {
+          await writeThinPlanV2Artifacts(workspace.root, {
+            status: "completed",
+            nextAction: "commit-summary",
+            modified: ["src/artifact-state.ts"],
+            changedFiles: ["src/artifact-state.ts"],
+          });
+        }
+        return { launched: true, stdout: "summary", stderr: "", exitCode: 0 };
+      },
+    });
+
+    assert.equal(result.success, true);
+    assert.deepEqual(
+      calls.filter((call) => call.command === CODEX_COMMAND).map((call) => call.promptPath),
+      [".ai/prompts/review-changes.md", ".ai/prompts/commit-summary.md"],
+    );
+    assert.deepEqual(
+      calls.filter((call) => call.command === "git").map((call) => call.args.slice(0, 4)),
+      [
+        ["diff", "--staged", "--name-status", "--"],
+        ["add", "--all", "--", "src/artifact-state.ts"],
+        ["diff", "--cached", "--unified=0", "--"],
+        ["status", "--short", "--", "src/artifact-state.ts"],
       ],
     );
   } finally {

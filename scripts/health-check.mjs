@@ -21,7 +21,7 @@ const REQUIRED_SOURCE_PATHS = [
   ".ai/scripts/workflow-runner.test.ts",
 ];
 
-const LOCAL_ONLY_PATHS = [".ai/artifacts", ".ai/plans", ".ai/specs", ".ai/state"];
+const LOCAL_ONLY_PATHS = [".ai/artifacts", ".ai/plans", ".ai/specs"];
 
 const DEFAULT_COMMANDS = [
   {

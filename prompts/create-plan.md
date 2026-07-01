@@ -12,7 +12,7 @@ Read:
 - `.ai/instructions/shared/workflow-state.md`
 - relevant `.ai/instructions/**/*.md`
 - the spec file
-- the user-flow artifact for user-facing work
+- the user-journey artifact for user-facing work
 
 Load:
 
@@ -48,7 +48,7 @@ Rules:
 - Spec is the single source of truth
 - DO NOT redefine behavior
 - DO NOT introduce behavior outside the spec
-- User-flow artifacts describe how spec behavior moves through the existing product surface; they do not add behavior beyond the spec
+- User-journey artifacts describe how spec behavior moves through the existing product surface; they do not add behavior beyond the spec
 
 ---
 
@@ -72,7 +72,7 @@ If any behavior is:
 
 ---
 
-## User-Flow Artifact Check (MANDATORY)
+## User Journey Artifact Check (MANDATORY)
 
 Before planning, derive the plan name from the spec file and classify whether the work is user-facing.
 
@@ -80,25 +80,35 @@ User-facing work means a feature, bugfix, or change that affects a customer, adm
 
 If the work is user-facing:
 
-- read the user-flow artifact before planning
-- required path: `.ai/artifacts/<plan-name>/product-flow.md`
-- verify the artifact exists
+- required path: `.ai/artifacts/<plan-name>/user-journey.md`
+- ensure the user-journey artifact exists before planning
+- if the artifact is missing, automatically create it by applying `.ai/prompts/generate-user-flow.md` to the same spec and observed codebase paths
+- if the artifact exists but is incomplete, stale, or inconsistent with the spec, automatically regenerate it by applying `.ai/prompts/generate-user-flow.md`
+- read the user-journey artifact before planning, after any preflight create/regenerate step
 - verify it was generated from the approved spec plus codebase inspection
 - verify it does not invent desired behavior beyond the spec
-- use it to create `## Flow-to-File Mapping`
+- use it to create `.ai/artifacts/<plan-name>/implementation-map.md`
 
-If the work is user-facing and the artifact is missing, incomplete, or inconsistent with the spec:
+User-journey preflight rules:
+
+- the preflight may only create or update `.ai/artifacts/<plan-name>/user-journey.md`
+- it must follow `.ai/prompts/generate-user-flow.md`, including required sections, Markdown + Mermaid format, and spec-only desired behavior
+- it must inspect the codebase only for existing routes, components, APIs, services, state, storage effects, and tests
+- it must exclude `.ai/artifacts` from broad searches except the target artifact path
+- it must not create a plan until the artifact exists and validates
+
+If user-journey preflight cannot produce a valid artifact because the spec is incomplete, vague, ambiguous, not actually user-facing, or still inconsistent after regeneration:
 
 → STOP  
-→ state the missing or invalid artifact problem  
+→ state the concrete user-journey preflight blocker  
 → do NOT generate plan
 
 For non-user-facing work:
 
 - no flow artifact is required
-- in `## User Flow Artifact`, write exactly `N/A: <concrete reason>`
+- in `.ai/artifacts/<plan-name>/implementation-map.md`, write exactly `N/A: <concrete reason>`
 - the reason must explain why the change does not affect a screen, route, workflow, visible state, or user-triggered API behavior
-- this is the only allowed `N/A` value in generated plans
+- this is the only allowed `N/A` value in generated implementation-map artifacts
 
 ---
 
@@ -108,9 +118,11 @@ Populate the template with:
 
 ---
 
-### Phases
+### Plan Details
 
-Must include:
+Write the plan details directly in the plan manifest's `## Phases` section.
+
+`## Phases` MUST include:
 
 - Preparation
 - Implementation
@@ -124,7 +136,7 @@ Each phase MUST include:
 
 ### Task Savepoints
 
-Multi-step plans MUST enable task savepoints by giving every ordered phase task a stable task ID.
+Task savepoints are for independently reviewable chunks only.
 
 Required task syntax:
 
@@ -132,28 +144,35 @@ Required task syntax:
 
 Rules:
 
+- Default a simple bugfix to one final-commit task without task IDs, even when
+  the task includes red tests, implementation, and validation commands.
+- Use task savepoints only when every task can pass, be reviewed, and be
+  committed independently.
+- Do not split tasks only by lifecycle phase, app layer, red tests, or
+  validation commands.
 - Use two-digit increasing numeric prefixes: `01`, `02`, `03`.
 - Use lowercase readable words separated by hyphens after the numeric prefix.
 - Keep task IDs stable after plan creation, even if task wording changes.
 - Do not reuse a task ID.
-- Single-step plans keep the existing final-commit behavior and do not require task IDs.
+- Single-step and simple bugfix plans keep the existing final-commit behavior
+  and do not require task IDs.
 - Task savepoint artifacts will be written by the runner under `.ai/artifacts/<plan-name>/tasks/`.
 - The runner will write the live task pointer at `.ai/artifacts/<plan-name>/state/current-task.md`.
 
 ---
 
-### User Flow Artifact
+### Implementation Map Artifact
 
 Must include:
 
-- `.ai/artifacts/<plan-name>/product-flow.md` for user-facing work
+- one `### User Action:` entry per user-journey action for user-facing work
 - `N/A: <concrete reason>` for non-user-facing work
 
 ---
 
 ## Phase-to-File Mapping (MANDATORY)
 
-Each task MUST reference specific files where applicable.
+Each task in the plan manifest's `## Phases` section MUST reference specific files where applicable.
 
 Rules:
 
@@ -171,9 +190,11 @@ BAD:
 
 ---
 
-## Flow-to-File Mapping (MANDATORY)
+## Implementation Map Artifact (MANDATORY)
 
-For user-facing work, map every user action from the user-flow artifact to applicable implementation and validation paths.
+For user-facing work, map every user action from the user-journey artifact to applicable implementation and validation paths.
+
+Write the mapping to `.ai/artifacts/<plan-name>/implementation-map.md`, not into the plan manifest.
 
 Each user action MUST include:
 
@@ -191,7 +212,7 @@ Rules:
 - Every user action in `## User Flows` and `## Acceptance Scenarios` of the flow artifact must appear in this mapping.
 - The mapping must not include actions that do not appear in the flow artifact.
 
-For non-user-facing work, write exactly the same `N/A: <concrete reason>` used in `## User Flow Artifact`.
+For non-user-facing work, write exactly `N/A: <concrete reason>` in `implementation-map.md`.
 
 If any user action cannot be mapped to implementation or validation coverage:
 
@@ -201,15 +222,56 @@ If any user action cannot be mapped to implementation or validation coverage:
 
 ---
 
-## Files Section (MANDATORY)
+## Artifact State Files (MANDATORY)
 
-Must include:
+Write `.ai/artifacts/<plan-name>/state/files.json` with:
 
 - Created files
 - Modified files
 - Deleted files
+- `changedFiles`
+- `released`
+- `headSha`
+- workflow state
 
-This section is the review and commit changed-file inventory. It should list the expected created, modified, and deleted file paths inferred from the request, spec, and codebase. It is reconciled after implementation by `execute-plan` from actual git changes.
+This artifact is the review and commit changed-file inventory. It should list the expected created, modified, and deleted file paths inferred from the request, spec, and codebase. It is reconciled after implementation by `execute-plan` from actual git changes.
+
+Write `.ai/artifacts/<plan-name>/state/workflow.json` with:
+
+- `planPath`
+- `status`
+- `nextAction`
+- latest event pointers
+- compact history pointers
+- unresolved blockers
+- `updatedAt`
+
+Write `.ai/artifacts/<plan-name>/state/file-ownership.json` with the planning-time ownership boundary and current workflow state.
+
+It MUST be valid JSON with exactly the runner-required ownership fields:
+
+- `planPath`: string
+- `status`: allowed workflow status string
+- `nextAction`: allowed workflow next-action string
+- `owns`: string array of repo-relative exact file paths or directory globs ending in `/**`
+- `released`: string array; use `[]` during initial plan creation
+- `resolvedFiles`: string array of concrete repo-relative files expected to be changed by the plan
+- `changedFiles`: string array matching the initial expected changed-file inventory from `files.json`
+- `headSha`: current `git rev-parse HEAD` string
+- `updatedAt`: ISO timestamp string
+
+Rules:
+
+- MUST use `owns`; MUST NOT use `ownedPaths`, `owned`, `paths`, or other alias keys.
+- MUST use repo-relative exact files or directory globs ending in `/**`.
+- MUST NOT use vague ownership like "service layer" or "related files".
+- MUST NOT use hunk/chunk ownership.
+- For exact-file ownership, include the same file paths in `owns`, `resolvedFiles`, and `changedFiles`.
+- For directory-glob ownership, keep the glob in `owns` and list concrete expected files in `resolvedFiles` and `changedFiles`.
+- Generated or shared files are owned as whole files until committed or released.
+- Keep `released` empty at initial plan creation unless a prior ownership transfer has already been recorded.
+
+Do not add inline `## Flow-to-File Mapping`, `## Implementation Map`, workflow history, blockers, ownership, or `## Files (MANDATORY)` sections to the plan manifest.
 
 Rules:
 
@@ -226,32 +288,12 @@ Rules:
 
 ## File Coverage Enforcement (MANDATORY)
 
-- ALL files referenced in tasks MUST appear in the Files section
-- ALL files in Files section MUST be referenced in at least one task
+- ALL files referenced in `## Phases` tasks MUST appear in `.ai/artifacts/<plan-name>/state/files.json`
+- ALL files in `.ai/artifacts/<plan-name>/state/files.json` MUST be referenced in at least one `## Phases` task
 
 If mismatch exists:
 
 → regenerate the plan
-
----
-
-## Ownership Scope (MANDATORY)
-
-Add a concise `## Ownership Scope` section before `## Files (MANDATORY)`.
-
-This section is the planning-time file ownership boundary. Prefer broad, stable entries that describe which files this plan may own:
-
-- exact repo-relative files, for example `packages/supabase/src/generated.ts`
-- directory globs ending in `/**`, for example `apps/admin/src/features/admin-ugc-templates/**`
-
-Rules:
-
-- MUST use repo-relative exact files or directory globs ending in `/**`
-- MUST NOT use vague ownership like "service layer" or "related files"
-- MUST NOT use hunk/chunk ownership
-- Generated or shared files are owned as whole files until committed or released
-
----
 
 ## Plan Name Derivation (MANDATORY)
 
@@ -291,10 +333,10 @@ Before completing:
 - verify all template sections exist
 - verify `## Status` is present
 - verify all Phases are complete
-- verify User Flow Artifact is present and valid
-- verify Flow-to-File Mapping covers every user action for user-facing work
-- verify Files section is complete
-- verify Phase ↔ Files mapping is consistent
+- verify User Journey Artifact is present and valid
+- verify `.ai/artifacts/<plan-name>/implementation-map.md` covers every user action for user-facing work
+- verify `.ai/artifacts/<plan-name>/state/files.json` is complete
+- verify Phase ↔ files artifact mapping is consistent
 
 If any requirement fails:
 

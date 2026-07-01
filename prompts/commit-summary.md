@@ -176,7 +176,7 @@ Do NOT use:
 
 Before outputting the commit message and summary:
 
-Commit-summary relies on the existing `## Files (MANDATORY)` changed-file inventory and the runner-refreshed file ownership artifact. It must not repair `## Files (MANDATORY)` as a late-stage metadata fix; if the list is wrong, route the plan back through review or execution.
+Commit-summary relies on `.ai/artifacts/<plan-name>/state/files.json` as the changed-file inventory and `.ai/artifacts/<plan-name>/state/file-ownership.json` as the ownership authority. It must not repair `files.json` as a late-stage metadata fix; if the list is wrong, route the plan back through review or execution.
 
 1. Use the runner-injected `Plan-scoped commit boundary` when present.
 2. Stage only the listed non-ignored plan-owned implementation paths.

@@ -47,9 +47,9 @@ If not provided:
 Use blocker-resolution evidence from:
 
 * the runner-provided `Unblock evidence note`
-* the latest `## Blockers` entry
+* unresolved blockers in `.ai/artifacts/<plan-name>/state/workflow.json`
 * the user's current request
-* documented runtime or validation evidence already appended to the plan
+* documented runtime or validation evidence in `.ai/artifacts/<plan-name>/events/`
 
 Manual browser validation evidence MUST include:
 
@@ -74,7 +74,9 @@ If a blocker is `Type: plan dependency`:
 * if the evidence proves the dependency is resolved, mark the blocker resolved and allow the normal `blocked -> active` transition
 * if the evidence is missing or incomplete, keep the plan blocked with `Next Action = unblock-plan`
 
-For released shared file ownership, valid evidence MUST include a `## File Ownership Releases` entry from the owner plan with:
+### File Ownership Releases
+
+For released shared file ownership, valid evidence MUST include a File Ownership Releases entry in the owner plan's `.ai/artifacts/<owner-plan>/state/file-ownership.json` with:
 
 * `File:` matching the shared file path
 * `Released By:` naming the owner plan
@@ -82,7 +84,7 @@ For released shared file ownership, valid evidence MUST include a `## File Owner
 * `Status: transferred`
 * concrete validation or review evidence
 
-When unblocking from a transferred release, add the released file to this plan's `## Ownership Scope` and to `## Files (MANDATORY)` if it already has changed content for this plan. After the transition, this plan owns the transferred file.
+When unblocking from a transferred release, add the released file to this plan's `.ai/artifacts/<plan-name>/state/file-ownership.json` ownership state and to `.ai/artifacts/<plan-name>/state/files.json` if it already has changed content for this plan. After the transition, this plan owns the transferred file.
 
 After classifying blockers, if any remaining execution blocker requires user clarification, product decision, external service access, auth state, runtime setup, or manual browser validation and no concrete resolution evidence is available:
 

@@ -1,6 +1,6 @@
-# Generate User Flow Artifact
+# Generate User Journey Artifact
 
-This prompt creates a user-facing product-flow artifact from an approved spec and codebase inspection.
+This prompt creates a user-facing user-journey artifact from an approved spec and codebase inspection.
 
 ---
 
@@ -23,11 +23,11 @@ Apply the superpowers advisory guidance for analysis and edge-case checks.
 
 ## Objective
 
-Create the user-flow artifact for user-facing work before plan creation.
+Create the user-journey artifact for user-facing work before plan creation.
 
 Output path:
 
-`.ai/artifacts/<plan-name>/product-flow.md`
+`.ai/artifacts/<plan-name>/user-journey.md`
 
 Derive `<plan-name>` from the spec filename by removing the path and `.spec.md`.
 
@@ -39,7 +39,7 @@ Derive `<plan-name>` from the spec filename by removing the path and `.spec.md`.
 - Inspect the codebase only to identify current routes, components, services, APIs, state boundaries, storage effects, and existing tests.
 - The artifact must not invent desired behavior beyond the spec.
 - If the spec does not define a user-facing behavior well enough to create a deterministic flow, STOP and list the missing decisions.
-- For non-user-facing work, do not create a product-flow artifact; the later plan records `N/A: <concrete reason>` in `## User Flow Artifact`.
+- For non-user-facing work, do not create a user-journey artifact; the later plan records `N/A: <concrete reason>` in `## User Journey Artifact`.
 
 ---
 
@@ -123,7 +123,7 @@ Before completing:
 - verify the artifact is Markdown + Mermaid only
 - verify every user action comes from the approved spec or codebase-inspected entry path
 - verify no desired behavior was invented beyond the spec
-- verify the artifact is saved to `.ai/artifacts/<plan-name>/product-flow.md`
+- verify the artifact is saved to `.ai/artifacts/<plan-name>/user-journey.md`
 
 If any requirement fails:
 
@@ -145,4 +145,4 @@ Default:
 
 Return only:
 
-User flow artifact saved to .ai/artifacts/<plan-name>/product-flow.md
+User journey artifact saved to .ai/artifacts/<plan-name>/user-journey.md

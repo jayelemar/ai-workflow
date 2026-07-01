@@ -9,17 +9,17 @@ Default:
 .ai/specs/<feature-or-bug-name>.spec.md
 
 Output artifact:
-.ai/artifacts/<feature-or-bug-name>/product-flow.md
+.ai/artifacts/<feature-or-bug-name>/user-journey.md
 
 Objective:
-Create the user-flow artifact for user-facing work before plan creation.
+Create the user-journey artifact for user-facing work before plan creation.
 
 Strict Constraints:
-- You are only allowed to create or update `.ai/artifacts/<feature-or-bug-name>/product-flow.md`.
+- You are only allowed to create or update `.ai/artifacts/<feature-or-bug-name>/user-journey.md`.
 - Do not edit, modify, or delete application code, tests, routes, configs, migrations, or generated files.
 - Do not create a plan.
 - Do not execute a plan.
-- Limit output strictly to the user-flow artifact creation process.
+- Limit output strictly to the user-journey artifact creation process.
 
 Required Behavior:
 - Read `.codex/AGENTS.md`.
@@ -37,4 +37,4 @@ Required Behavior:
 Final Output:
 Return only:
 
-User flow artifact saved to .ai/artifacts/<feature-or-bug-name>/product-flow.md
+User journey artifact saved to .ai/artifacts/<feature-or-bug-name>/user-journey.md

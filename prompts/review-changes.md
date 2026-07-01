@@ -12,7 +12,7 @@ Read:
 * `.ai/instructions/shared/workflow-state.md`
 * `.ai/instructions/shared/testing.md` before running, skipping, or classifying validation
 * the repo-relative `*.spec.md` path(s) listed under the plan's `## Spec` section (if any)
-* the `.ai/artifacts/<plan-name>/product-flow.md` file listed under `## User Flow Artifact` when the plan is user-facing
+* the `.ai/artifacts/<plan-name>/user-journey.md` file listed under `## User Journey Artifact` when the plan is user-facing
 * runner-owned context snapshot `.ai/artifacts/<plan-name>/state/context.md` as the primary current-state source
 * Active Context Packet instruction files selected from `.ai/instructions/index.md`
 * the full plan file only when exact plan edits are required or the snapshot is insufficient
@@ -44,7 +44,7 @@ If not provided:
 
 ## Diff Source (MANDATORY)
 
-Review MUST be performed using only the runner-injected staged paths for the current plan. For plans with `## Ownership Scope`, the runner stages actual changed files resolved from `.ai/artifacts/<plan-name>/state/file-ownership.json`; otherwise it uses the legacy `## Files (MANDATORY)` paths.
+Review MUST be performed using only the runner-injected staged paths for the current plan. For thin-plan-v2 plans, the runner stages paths from `.ai/artifacts/<plan-name>/state/files.json` and checks `.ai/artifacts/<plan-name>/state/file-ownership.json`; legacy thin-plan-v1 plans may still use inline file sections.
 
 Use the path-scoped staged diff command injected by `workflow-runner.ts`:
 
@@ -60,7 +60,7 @@ If the path-scoped staged diff is empty:
 
 → STOP (`no staged changes to review`)
 
-If staged implementation paths do not match the expected changed-file inventory in `## Files (MANDATORY)`:
+If staged implementation paths do not match the expected changed-file inventory in `.ai/artifacts/<plan-name>/state/files.json`:
 
 * classify the finding as a `file-list mismatch`
 * do not repair the file list during review
@@ -148,11 +148,11 @@ If review validates a release entry itself, confirm that `Released To`, `Status:
 ## Source of Truth Priority
 
 1. Spec (if exists)
-2. User-flow artifact for user-facing plans
+2. User-journey artifact for user-facing plans
 3. Path-scoped staged diff
 4. Plan (reference only)
 
-Spec remains authoritative. If the user-flow artifact conflicts with the spec, treat the spec as correct and mark the flow, plan, or implementation mismatch as a review issue.
+Spec remains authoritative. If the user-journey artifact conflicts with the spec, treat the spec as correct and mark the flow, plan, or implementation mismatch as a review issue.
 
 ---
 
@@ -174,7 +174,7 @@ Analyze:
 * impacted modules
 * shared logic
 * dependencies
-* user actions, visible states, failure branches, and acceptance scenarios from `.ai/artifacts/<plan-name>/product-flow.md` for user-facing plans
+* user actions, visible states, failure branches, and acceptance scenarios from `.ai/artifacts/<plan-name>/user-journey.md` for user-facing plans
 
 ---
 
@@ -194,9 +194,9 @@ If mismatch:
 
 ---
 
-### 1a. User-Flow Coverage (MANDATORY FOR USER-FACING PLANS)
+### 1a. User Journey Coverage (MANDATORY FOR USER-FACING PLANS)
 
-For user-facing plans, read `.ai/artifacts/<plan-name>/product-flow.md` and compare it with the staged diff, validation evidence, and the plan's `## Flow-to-File Mapping`.
+For user-facing plans, read `.ai/artifacts/<plan-name>/user-journey.md` and `.ai/artifacts/<plan-name>/implementation-map.md`, then compare them with the staged diff and validation evidence.
 
 Check:
 
@@ -204,17 +204,17 @@ Check:
 * every visible state in the flow artifact is represented in the implemented UI, API response, service behavior, or documented unchanged path
 * every failure branch in the flow artifact is handled or explicitly deferred by spec-approved scope
 * acceptance scenarios from the flow artifact have validation coverage through tests, focused checks, or an explicit deferred validation note when local proof is unavailable
-* `## Flow-to-File Mapping` accurately points each user action to applicable UI route/component, API route, backend service/module, database/storage effect, and tests
+* `.ai/artifacts/<plan-name>/implementation-map.md` accurately points each user action to applicable UI route/component, API route, backend service/module, database/storage effect, and tests
 
 If a user-facing flow step lacks implementation coverage or validation coverage:
 
 → mark as CRITICAL
 
-If the staged diff implements behavior not present in the spec or product-flow artifact:
+If the staged diff implements behavior not present in the spec or user-journey artifact:
 
 → mark as CRITICAL
 
-If the product-flow artifact conflicts with the spec:
+If the user-journey artifact conflicts with the spec:
 
 → mark as CRITICAL and state that the spec remains authoritative
 
@@ -316,7 +316,9 @@ execute-plan
 
 2. add the next review entry.
 
-If the plan already contains `## Review History`, append only:
+Write `.ai/artifacts/<plan-name>/events/review-vX.md`, then update `.ai/artifacts/<plan-name>/state/workflow.json` with the latest review pointer, compact history pointer, status, nextAction, unresolved blockers, and updatedAt.
+
+For legacy thin-plan-v1 plans only, if the plan already contains `## Review History`, append only:
 
 ### Review vX
 
@@ -324,13 +326,12 @@ If the plan already contains `## Review History`, append only:
 * Evidence: .ai/artifacts/<plan-name>/events/review-vX.md
 * Decision: active
 
-Create `## Review History` only if the section is missing.
+Create `## Review History` only if the section is missing in a legacy thin-plan-v1 plan.
 
 Before updating the plan, create `.ai/artifacts/<plan-name>/events/review-vX.md` with `# Review vX`, `## Summary`, and `## Evidence`.
 Put all issue bullets, file references, remediation notes, missing validations, and unresolved risks in the review artifact.
-Review History entries may contain only `Summary`, `Decision`, and `Evidence`.
-Review History entries must stay under 512 bytes.
-MUST NOT duplicate the `## Review History` heading when it already exists.
+Review state entries may contain only compact `Summary`, `Decision`, and `Evidence` pointer fields.
+Do not duplicate the `## Review History` heading in thin-plan-v2 manifests.
 
 3. update plan with:
 
@@ -355,24 +356,11 @@ completed
 
 commit-summary
 
-2. add the next review entry.
+2. create `.ai/artifacts/<plan-name>/events/review-vX.md` with `# Review vX`, `## Summary`, and `## Evidence`, including the deferred validation note.
 
-If the plan already contains `## Review History`, append only:
+3. update `.ai/artifacts/<plan-name>/state/workflow.json` with `Summary: SAFE - DEFERRED VALIDATION`, `Decision: completed`, the review evidence pointer, compact history pointer, status, nextAction, and updatedAt.
 
-### Review vX
-
-Add a deferred validation note:
-
-* Summary: SAFE - DEFERRED VALIDATION
-* Evidence: .ai/artifacts/<plan-name>/events/review-vX.md
-* Decision: completed
-
-Create `## Review History` only if the section is missing.
-
-Before updating the plan, create `.ai/artifacts/<plan-name>/events/review-vX.md` with `# Review vX`, `## Summary`, and `## Evidence`.
-Put optional warnings, suggestions, and the specific deferred validation in the review artifact.
-
-3. do not create any extra plan section or event artifact for this path. `commit-summary` records the local commit metadata. The operator performs the deferred validation manually after commit/deploy and reopens the plan if that check finds a required fix.
+4. do not create any extra plan section for this path. `commit-summary` records the local commit metadata. The operator performs the deferred validation manually after commit/deploy and reopens the plan if that check finds a required fix.
 
 ---
 
@@ -388,19 +376,10 @@ completed
 
 commit-summary
 
-2. add the next review entry.
+2. create `.ai/artifacts/<plan-name>/events/review-vX.md` with `# Review vX`, `## Summary`, and `## Evidence`.
 
-If the plan already contains `## Review History`, append only:
+3. update `.ai/artifacts/<plan-name>/state/workflow.json` with `Summary: SAFE`, `Decision: completed`, the review evidence pointer, compact history pointer, status, nextAction, and updatedAt.
 
-### Review vX
-
-* Summary: SAFE
-* Evidence: .ai/artifacts/<plan-name>/events/review-vX.md
-* Decision: completed
-
-Create `## Review History` only if the section is missing.
-
-Before updating the plan, create `.ai/artifacts/<plan-name>/events/review-vX.md` with `# Review vX`, `## Summary`, and `## Evidence`.
 Put optional warnings and suggestions in the review artifact.
 
 ---

@@ -22,7 +22,10 @@ import {
   collectWorkflowThresholdWarnings,
   exceedsWorkflowTokenThresholds,
 } from './workflow-runner/token-warnings.ts';
-import { validateThinPlanContract } from './workflow-runner/thin-plan.ts';
+import {
+  validateThinPlanContract,
+  type ThinPlanContractVersion,
+} from './workflow-runner/thin-plan.ts';
 type CodexProfile = string;
 type CodexModel = 'gpt-5.5' | 'gpt-5.4' | 'gpt-5.4-mini' | 'gpt-5.3-codex-spark';
 type ReasoningEffort = 'medium' | 'high' | 'xhigh';
@@ -162,6 +165,8 @@ type ParsedPlan = {
   planPath: string;
   absolutePlanPath: string;
   content: string;
+  manifestContent: string;
+  thinPlanContract: ThinPlanContractVersion;
   status: Status;
   nextAction: NextAction;
   warnings: string[];
@@ -441,6 +446,12 @@ const zeroTokenUsageTotals: TokenUsageTotals = {
 
 const asRecord = (value: unknown): Record<string, unknown> | null =>
   typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : null;
+
+const isFailure = (value: unknown): value is Failure =>
+  typeof value === 'object' &&
+  value !== null &&
+  (value as { ok?: unknown }).ok === false &&
+  typeof (value as { reason?: unknown }).reason === 'string';
 
 const isFiniteNumber = (value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value);
@@ -3323,6 +3334,391 @@ const isStatus = (value: string): value is Status => VALID_STATUSES.includes(val
 const isNextAction = (value: string): value is NextAction =>
   VALID_NEXT_ACTIONS.includes(value as NextAction);
 
+type ThinPlanV2WorkflowState = {
+  planPath: string;
+  status: Status;
+  nextAction: NextAction;
+  latest?: Record<string, unknown>;
+  history?: string[];
+  unresolvedBlockers: string[];
+  updatedAt: string;
+};
+
+type ThinPlanV2FilesState = {
+  created: string[];
+  modified: string[];
+  deleted: string[];
+  changedFiles: string[];
+  released: string[];
+  headSha: string;
+  workflow?: {
+    status?: string;
+    nextAction?: string;
+  };
+};
+
+const thinPlanV2ArtifactPath = (planName: string, ...segments: string[]): string =>
+  rel('.ai', 'artifacts', planName, ...segments);
+
+const readJsonArtifact = async (
+  rootDir: string,
+  relativePath: string,
+): Promise<unknown | Failure> => {
+  let raw: string;
+  try {
+    raw = await readFile(path.join(rootDir, relativePath), 'utf8');
+  } catch (error) {
+    return { ok: false, reason: `thin-plan-v2 artifact cannot be read: ${relativePath}: ${String(error)}` };
+  }
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch {
+    return { ok: false, reason: `thin-plan-v2 artifact is malformed JSON: ${relativePath}` };
+  }
+};
+
+const parseThinPlanV2WorkflowState = (
+  raw: unknown,
+  expectedPlanPath: string,
+  artifactPath: string,
+): ThinPlanV2WorkflowState | Failure => {
+  const record = asRecord(raw);
+  const planPath = record?.planPath;
+  const status = record?.status;
+  const nextAction = record?.nextAction;
+  const updatedAt = record?.updatedAt;
+  const unresolvedBlockers = asStringArray(record?.unresolvedBlockers) ?? [];
+  const history = asStringArray(record?.history);
+
+  if (
+    typeof planPath !== 'string' ||
+    planPath !== expectedPlanPath ||
+    typeof status !== 'string' ||
+    !isStatus(status) ||
+    typeof nextAction !== 'string' ||
+    !isNextAction(nextAction) ||
+    typeof updatedAt !== 'string'
+  ) {
+    return { ok: false, reason: `thin-plan-v2 workflow state is malformed: ${artifactPath}` };
+  }
+
+  return {
+    planPath,
+    status,
+    nextAction,
+    latest: asRecord(record?.latest) ?? undefined,
+    history,
+    unresolvedBlockers,
+    updatedAt,
+  };
+};
+
+const parseThinPlanV2FilesState = (
+  raw: unknown,
+  artifactPath: string,
+): ThinPlanV2FilesState | Failure => {
+  const record = asRecord(raw);
+  const created = asStringArray(record?.created);
+  const modified = asStringArray(record?.modified);
+  const deleted = asStringArray(record?.deleted);
+  const changedFiles = asStringArray(record?.changedFiles);
+  const released = asStringArray(record?.released);
+  const headSha = record?.headSha;
+  if (!created || !modified || !deleted || !changedFiles || !released || typeof headSha !== 'string') {
+    return { ok: false, reason: `thin-plan-v2 files state is malformed: ${artifactPath}` };
+  }
+  const workflow = asRecord(record?.workflow);
+  return {
+    created,
+    modified,
+    deleted,
+    changedFiles,
+    released,
+    headSha,
+    workflow: workflow
+      ? {
+          status: typeof workflow.status === 'string' ? workflow.status : undefined,
+          nextAction: typeof workflow.nextAction === 'string' ? workflow.nextAction : undefined,
+        }
+      : undefined,
+  };
+};
+
+const readTextArtifact = async (
+  rootDir: string,
+  relativePath: string,
+): Promise<{ ok: true; content: string } | Failure> => {
+  try {
+    return { ok: true, content: await readFile(path.join(rootDir, relativePath), 'utf8') };
+  } catch (error) {
+    return { ok: false, reason: `thin-plan-v2 artifact cannot be read: ${relativePath}: ${String(error)}` };
+  }
+};
+
+const replaceManifestWorkflowValue = (content: string, heading: string, value: string): string => {
+  const lines = content.split(/\r?\n/);
+  const headingIndex = lines.findIndex((line) => line.trim() === heading);
+  if (headingIndex === -1) {
+    return content;
+  }
+  for (let index = headingIndex + 1; index < lines.length; index += 1) {
+    if (lines[index].trim().startsWith('##')) {
+      return content;
+    }
+    if (lines[index].trim().length > 0) {
+      lines[index] = value;
+      return lines.join('\n');
+    }
+  }
+  lines.splice(headingIndex + 1, 0, '', value);
+  return lines.join('\n');
+};
+
+const demoteMarkdownHeadings = (content: string): string =>
+  content
+    .replace(/^### /gm, '##### ')
+    .replace(/^## /gm, '#### ')
+    .replace(/^# /gm, '### ');
+
+const fileSectionBullets = (paths: string[]): string =>
+  (paths.length > 0 ? paths : ['None']).map((filePath) => `* ${filePath}`).join('\n');
+
+const latestRecord = (
+  workflow: ThinPlanV2WorkflowState,
+  kind: string,
+): Record<string, unknown> | undefined => asRecord(workflow.latest?.[kind]);
+
+const latestNumber = (record: Record<string, unknown> | undefined): number | undefined =>
+  typeof record?.version === 'number' && Number.isInteger(record.version) && record.version > 0
+    ? record.version
+    : undefined;
+
+const latestString = (
+  record: Record<string, unknown> | undefined,
+  key: string,
+): string | undefined => (typeof record?.[key] === 'string' ? record[key] : undefined);
+
+const synthesizeLatestEventSection = ({
+  heading,
+  label,
+  stateField,
+  stateValue,
+  latest,
+  unresolvedFindings,
+}: {
+  heading: string;
+  label: string;
+  stateField: 'Result' | 'Decision' | 'Status';
+  stateValue?: string;
+  latest: Record<string, unknown> | undefined;
+  unresolvedFindings?: string[];
+}): string => {
+  const version = latestNumber(latest);
+  if (!version) {
+    return `## ${heading}\n\n(empty)\n`;
+  }
+  const lines = [
+    `## ${heading}`,
+    '',
+    `### ${label} v${version}`,
+    '',
+    `* Summary: ${latestString(latest, 'summary') ?? '(none recorded)'}`,
+    `* ${stateField}: ${stateValue ?? '(none recorded)'}`,
+  ];
+  const evidence = latestString(latest, 'evidence');
+  if (evidence) {
+    lines.push(`* Evidence: ${evidence}`);
+  }
+  if (unresolvedFindings && unresolvedFindings.length > 0) {
+    lines.push('* Issues:', ...unresolvedFindings.map((finding) => `  * ${finding}`));
+  }
+  return `${lines.join('\n')}\n`;
+};
+
+const synthesizeThinPlanV2Content = ({
+  manifestContent,
+  workflow,
+  files,
+  fileOwnership,
+  implementationMap,
+}: {
+  manifestContent: string;
+  workflow: ThinPlanV2WorkflowState;
+  files: ThinPlanV2FilesState;
+  fileOwnership: FileOwnershipArtifact;
+  implementationMap: string;
+}): string => {
+  let content = replaceManifestWorkflowValue(manifestContent, '## Status', workflow.status);
+  content = replaceManifestWorkflowValue(content, '## Next Action', workflow.nextAction);
+  const validation = latestRecord(workflow, 'validation');
+  const review = latestRecord(workflow, 'review');
+  const execution = latestRecord(workflow, 'execution');
+  const unblock = latestRecord(workflow, 'unblock');
+  const reopen = latestRecord(workflow, 'reopen');
+  const reviewFindings = asStringArray(review?.unresolvedFindings) ?? [];
+  const blockerLines =
+    workflow.unresolvedBlockers.length > 0
+      ? [
+          '## Blockers',
+          '',
+          ...workflow.unresolvedBlockers.flatMap((blocker, index) => [
+            `### Blocker v${index + 1}`,
+            '',
+            `* Description: ${blocker}`,
+            '* Status: active',
+            '',
+          ]),
+        ].join('\n')
+      : '## Blockers\n\n(empty)\n';
+
+  const releases =
+    fileOwnership.released.length > 0
+      ? `## File Ownership Releases
+
+${fileOwnership.released
+  .map(
+    (filePath, index) => `### Release v${index + 1}
+
+* File: ${filePath}
+* Status: transferred`,
+  )
+  .join('\n\n')}
+`
+      : '';
+
+  return `${content.trimEnd()}
+
+## Implementation Map
+
+${demoteMarkdownHeadings(implementationMap).trim()}
+
+## Ownership Scope
+
+${fileSectionBullets(fileOwnership.owns)}
+
+${releases}## Files (MANDATORY)
+
+### Created files
+
+${fileSectionBullets(files.created)}
+
+### Modified files
+
+${fileSectionBullets(files.modified)}
+
+### Deleted files
+
+${fileSectionBullets(files.deleted)}
+
+${synthesizeLatestEventSection({
+  heading: 'Execution Log',
+  label: 'Execution',
+  stateField: 'Result',
+  stateValue: latestString(execution, 'result'),
+  latest: execution,
+})}
+${synthesizeLatestEventSection({
+  heading: 'Validation History',
+  label: 'Validation',
+  stateField: 'Result',
+  stateValue: latestString(validation, 'result'),
+  latest: validation,
+})}
+${synthesizeLatestEventSection({
+  heading: 'Review History',
+  label: 'Review',
+  stateField: 'Decision',
+  stateValue: latestString(review, 'decision'),
+  latest: review,
+  unresolvedFindings: reviewFindings,
+})}
+${synthesizeLatestEventSection({
+  heading: 'Unblock History',
+  label: 'Unblock',
+  stateField: 'Status',
+  stateValue: latestString(unblock, 'status'),
+  latest: unblock,
+})}
+${synthesizeLatestEventSection({
+  heading: 'Reopen History',
+  label: 'Reopen',
+  stateField: 'Status',
+  stateValue: latestString(reopen, 'status'),
+  latest: reopen,
+})}
+${blockerLines}`;
+};
+
+const loadThinPlanV2WorkingContent = async ({
+  rootDir,
+  planName,
+  planPath,
+  manifestContent,
+}: {
+  rootDir: string;
+  planName: string;
+  planPath: string;
+  manifestContent: string;
+}): Promise<
+  | {
+      ok: true;
+      content: string;
+      status: Status;
+      nextAction: NextAction;
+    }
+  | Failure
+> => {
+  const workflowPath = thinPlanV2ArtifactPath(planName, 'state', 'workflow.json');
+  const filesPath = thinPlanV2ArtifactPath(planName, 'state', 'files.json');
+  const fileOwnershipPath = thinPlanV2ArtifactPath(planName, 'state', 'file-ownership.json');
+  const implementationMapPath = thinPlanV2ArtifactPath(planName, 'implementation-map.md');
+
+  const workflowJson = await readJsonArtifact(rootDir, workflowPath);
+  if (isFailure(workflowJson)) {
+    return workflowJson;
+  }
+  const workflow = parseThinPlanV2WorkflowState(workflowJson, planPath, workflowPath);
+  if (isFailure(workflow)) {
+    return workflow;
+  }
+
+  const filesJson = await readJsonArtifact(rootDir, filesPath);
+  if (isFailure(filesJson)) {
+    return filesJson;
+  }
+  const files = parseThinPlanV2FilesState(filesJson, filesPath);
+  if (isFailure(files)) {
+    return files;
+  }
+
+  const ownershipRaw = await readJsonArtifact(rootDir, fileOwnershipPath);
+  if (isFailure(ownershipRaw)) {
+    return ownershipRaw;
+  }
+  const fileOwnership = parseFileOwnershipArtifact(JSON.stringify(ownershipRaw), fileOwnershipPath);
+  if (isFailure(fileOwnership)) {
+    return fileOwnership;
+  }
+
+  const implementationMap = await readTextArtifact(rootDir, implementationMapPath);
+  if (!implementationMap.ok) {
+    return implementationMap;
+  }
+
+  return {
+    ok: true,
+    status: workflow.status,
+    nextAction: workflow.nextAction,
+    content: synthesizeThinPlanV2Content({
+      manifestContent,
+      workflow,
+      files,
+      fileOwnership,
+      implementationMap: implementationMap.content,
+    }),
+  };
+};
+
 export const parsePlan = async ({
   planName,
   rootDir = process.cwd(),
@@ -3378,12 +3774,39 @@ export const parsePlan = async ({
     return thinPlan;
   }
 
+  if (thinPlan.contract === 'thin-plan-v2') {
+    const loaded = await loadThinPlanV2WorkingContent({
+      rootDir,
+      planName: normalized.planName,
+      planPath,
+      manifestContent: content,
+    });
+    if (!loaded.ok) {
+      return loaded;
+    }
+
+    return {
+      ok: true,
+      planName: normalized.planName,
+      planPath,
+      absolutePlanPath,
+      manifestContent: content,
+      content: loaded.content,
+      thinPlanContract: thinPlan.contract,
+      status: loaded.status,
+      nextAction: loaded.nextAction,
+      warnings: thinPlan.warnings,
+    };
+  }
+
   return {
     ok: true,
     planName: normalized.planName,
     planPath,
     absolutePlanPath,
+    manifestContent: content,
     content,
+    thinPlanContract: thinPlan.contract,
     status: rawStatus,
     nextAction: rawNextAction,
     warnings: thinPlan.warnings,
@@ -5508,6 +5931,62 @@ const refreshAndCheckFileOwnershipArtifact = async ({
   };
 };
 
+const readThinPlanV2FileOwnershipPreflight = async ({
+  rootDir,
+  plan,
+  isIgnored,
+}: {
+  rootDir: string;
+  plan: ParsedPlan;
+  isIgnored?: (relativePath: string) => Promise<boolean>;
+}): Promise<FileOwnershipPreflight | Failure> => {
+  const fileOwnershipPath = thinPlanV2ArtifactPath(plan.planName, 'state', 'file-ownership.json');
+  const filesPath = thinPlanV2ArtifactPath(plan.planName, 'state', 'files.json');
+  const ownershipRaw = await readJsonArtifact(rootDir, fileOwnershipPath);
+  if (isFailure(ownershipRaw)) {
+    return ownershipRaw;
+  }
+  const artifact = parseFileOwnershipArtifact(JSON.stringify(ownershipRaw), fileOwnershipPath);
+  if (isFailure(artifact)) {
+    return artifact;
+  }
+  const filesRaw = await readJsonArtifact(rootDir, filesPath);
+  if (isFailure(filesRaw)) {
+    return filesRaw;
+  }
+  const files = parseThinPlanV2FilesState(filesRaw, filesPath);
+  if (isFailure(files)) {
+    return files;
+  }
+
+  const conflict = await detectFileOwnershipArtifactConflict({
+    rootDir,
+    current: artifact,
+    changedFiles: files.changedFiles,
+  });
+  if (!conflict.ok) {
+    return conflict;
+  }
+
+  const ignored = isIgnored ?? ((relativePath: string) => defaultIsIgnored(rootDir, relativePath));
+  const released = new Set(files.released);
+  const reviewStagingPaths: string[] = [];
+  for (const changedFile of files.changedFiles) {
+    if (changedFile.startsWith('.ai/') || released.has(changedFile)) {
+      continue;
+    }
+    if (!(await ignored(changedFile))) {
+      reviewStagingPaths.push(changedFile);
+    }
+  }
+
+  return {
+    hasOwnershipScope: true,
+    artifact,
+    reviewStagingPaths: uniquePaths(reviewStagingPaths),
+  };
+};
+
 const parseWorkflowFileOwnershipPaths = async (
   rootDir: string,
   content: string,
@@ -6267,13 +6746,20 @@ export const runWorkflowRunner = async (
       route.promptPath === rel('.ai', 'prompts', 'review-changes.md') ||
       route.promptPath === rel('.ai', 'prompts', 'commit-summary.md')
     ) {
-      const preflight = await refreshAndCheckFileOwnershipArtifact({
-        rootDir,
-        plan: parsedPlan,
-        processRunner,
-        timestamp,
-        isIgnored: options.isIgnored,
-      });
+      const preflight =
+        parsedPlan.thinPlanContract === 'thin-plan-v2'
+          ? await readThinPlanV2FileOwnershipPreflight({
+              rootDir,
+              plan: parsedPlan,
+              isIgnored: options.isIgnored,
+            })
+          : await refreshAndCheckFileOwnershipArtifact({
+              rootDir,
+              plan: parsedPlan,
+              processRunner,
+              timestamp,
+              isIgnored: options.isIgnored,
+            });
       if ('ok' in preflight && !preflight.ok) {
         return await finishFailure(`workflow file ownership scope invalid: ${preflight.reason}`);
       }
