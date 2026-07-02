@@ -16,6 +16,7 @@ import {
   generateScopeCleanupPrompt,
   generateWorkflowContextSnapshot,
   createWorkflowWaitNotice,
+  formatCommitProgressLine,
   formatCodexJsonlEventForTerminal,
   formatWorkflowElapsedTime,
   formatWorkflowProgressLine,
@@ -669,7 +670,13 @@ test("plan creation and validation reserve task savepoints for independently rev
   for (const content of [prompt, validator, workflowInstructions]) {
     assert.match(content, /\[task:(?:NN|01)-readable-words\]/);
     assert.match(content, /independently reviewable/i);
+    assert.match(content, /meaningful commit milestones/i);
+    assert.match(content, /coherent behavior\/subsystem boundaries/i);
     assert.match(content, /do not split tasks only by lifecycle\s+phase/i);
+    assert.match(content, /implementation-only/i);
+    assert.match(content, /validation-only/i);
+    assert.match(content, /tiny checklist/i);
+    assert.match(content, /3-5 meaningful savepoints/i);
     assert.match(content, /red tests/i);
     assert.match(content, /validation commands/i);
     assert.match(content, /simple bugfix/i);
@@ -2406,6 +2413,26 @@ test("workflow progress formatter adds readable stage labels with optional color
       color: true,
     }),
     "\u001b[37;45m[2/100] STAGE REVIEW\u001b[0m\nreview -> review-plan\nmodel: gpt-5.5 | reasoning: xhigh",
+  );
+});
+
+test("commit progress formatter reports milestone counters without changing stage output", () => {
+  assert.equal(
+    formatCommitProgressLine({
+      completed: 0,
+      total: 5,
+      description: "backend upload limits",
+    }),
+    "[0/5] backend upload limits",
+  );
+
+  assert.equal(
+    formatCommitProgressLine({
+      completed: 0,
+      total: 1,
+      description: "final commit pending",
+    }),
+    "[0/1] final commit pending",
   );
 });
 
@@ -4758,10 +4785,13 @@ test("task savepoint mode commits each reviewed task, writes artifacts, logs tas
 
     const consoleOutput = output.lines.join("\n");
     assert.match(consoleOutput, /TASK 01-backend-endpoints \| implementing \| Add backend endpoints/);
+    assert.match(consoleOutput, /\[0\/2\] Add backend endpoints/);
     assert.match(consoleOutput, /TASK 01-backend-endpoints \| reviewing \| staged 1 file/);
     assert.match(consoleOutput, /TASK 01-backend-endpoints \| commit-message \| generating commit/);
     assert.match(consoleOutput, /TASK 01-backend-endpoints \| committed \| abc1234/);
+    assert.match(consoleOutput, /\[1\/2\] Add web surface/);
     assert.match(consoleOutput, /TASK 02-web-surface \| committed \| def5678/);
+    assert.match(consoleOutput, /\[2\/2\] task commits complete/);
 
     const currentTask = await readFile(
       join(workspace.root, ".ai", "artifacts", "task-savepoints", "state", "current-task.md"),
@@ -4799,6 +4829,12 @@ test("task savepoint mode commits each reviewed task, writes artifacts, logs tas
     assert.match(log, /taskStage: reviewing/);
     assert.match(log, /taskStage: committed/);
     assert.match(log, /commitSha: abc1234/);
+    assert.match(log, /commitProgress: 0\/2/);
+    assert.match(log, /commitProgressDescription: Add backend endpoints/);
+    assert.match(log, /commitProgress: 1\/2/);
+    assert.match(log, /commitProgressDescription: Add web surface/);
+    assert.match(log, /commitProgress: 2\/2/);
+    assert.match(log, /commitProgressDescription: task commits complete/);
   } finally {
     await workspace.cleanup();
   }
@@ -5298,6 +5334,51 @@ test("iteration logs include parsed context window usage from codex json output"
     assert.match(log, /contextWindowTokens: 258400/);
     assert.match(log, /contextWindowUsedTokens: 129200/);
     assert.match(log, /contextWindowUsedPercent: 50\.00/);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("iteration logs include branch, starting and ending HEAD, and non-savepoint commit progress", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    mkdirSync(join(workspace.root, ".git"), { recursive: true });
+    await writePlan(workspace.root, "workflow-runner", planWith("completed", "commit-summary"));
+
+    const output = collectConsole();
+    let headLookupCount = 0;
+    const result = await runWorkflowRunner({
+      planName: planArg("workflow-runner"),
+      rootDir: workspace.root,
+      console: output.console,
+      processRunner: async (call) => {
+        if (call.command === "git" && call.args.join(" ") === "rev-parse --abbrev-ref HEAD") {
+          return { launched: true, stdout: "feature/workflow\n", stderr: "", exitCode: 0 };
+        }
+        if (call.command === "git" && call.args.join(" ") === "rev-parse HEAD") {
+          headLookupCount += 1;
+          return {
+            launched: true,
+            stdout: headLookupCount === 1 ? "1111111111111111111111111111111111111111\n" : "2222222222222222222222222222222222222222\n",
+            stderr: "",
+            exitCode: 0,
+          };
+        }
+        if (call.command === "git" && call.args[0] === "status") {
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
+        return { launched: true, stdout: "ok", stderr: "", exitCode: 0 };
+      },
+    });
+
+    assert.equal(result.success, true);
+    assert.match(output.lines.join("\n"), /\[0\/1\] final commit pending/);
+    const log = await readFile(join(workspace.root, ".ai", "artifacts", "workflow-runner", "logs", "runner.log"), "utf8");
+    assert.match(log, /currentBranch: feature\/workflow/);
+    assert.match(log, /startingHeadSha: 1111111111111111111111111111111111111111/);
+    assert.match(log, /endingHeadSha: 2222222222222222222222222222222222222222/);
+    assert.match(log, /commitProgress: 0\/1/);
+    assert.match(log, /commitProgressDescription: final commit pending/);
   } finally {
     await workspace.cleanup();
   }
@@ -6754,6 +6835,103 @@ test("workflow runner --help prints usage without launching Codex", async () => 
     assert.match(output.join("\n"), /--compact/);
     assert.deepEqual(errors, []);
     assert.equal(processCalls.length, 0);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+for (const branch of ["main", "master", "dev", "staging"]) {
+  test(`workflow runner refuses to start on protected branch ${branch} before launching Codex`, async () => {
+    const workspace = await setupWorkspace();
+    try {
+      mkdirSync(join(workspace.root, ".git"), { recursive: true });
+      const processCalls: Parameters<ProcessRunner>[0][] = [];
+      const output = collectConsole();
+      const processRunner: ProcessRunner = async (call) => {
+        processCalls.push(call);
+        if (call.command === "git" && call.args.join(" ") === "rev-parse --abbrev-ref HEAD") {
+          return { launched: true, stdout: `${branch}\n`, stderr: "", exitCode: 0 };
+        }
+        return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+      };
+
+      const result = await runWorkflowRunner({
+        argv: [".ai/plans/workflow-runner.md"],
+        rootDir: workspace.root,
+        processRunner,
+        console: output.console,
+      });
+
+      assert.equal(result.success, false);
+      assert.match(result.reason, new RegExp(`protected branch ${branch}`));
+      assert.equal(processCalls.length, 1);
+      assert.deepEqual(processCalls[0]?.args, ["rev-parse", "--abbrev-ref", "HEAD"]);
+      assert.match(
+        output.lines.join("\n"),
+        new RegExp(`FAILED: workflow runner refuses to start on protected branch ${branch}`),
+      );
+    } finally {
+      await workspace.cleanup();
+    }
+  });
+}
+
+for (const branch of ["feature/workflow", "HEAD"]) {
+  test(`workflow runner starts on ${branch === "HEAD" ? "detached HEAD" : "non-protected branches"}`, async () => {
+    const workspace = await setupWorkspace();
+    try {
+      mkdirSync(join(workspace.root, ".git"), { recursive: true });
+      await writeThinPlanV2Artifacts(workspace.root, {
+        status: "completed",
+        nextAction: "commit-summary",
+      });
+      await writePlan(workspace.root, "artifact-state", thinPlanV2Manifest("completed", "commit-summary"));
+      const processCalls: Parameters<ProcessRunner>[0][] = [];
+      const processRunner: ProcessRunner = async (call) => {
+        processCalls.push(call);
+        if (call.command === "git" && call.args.join(" ") === "rev-parse --abbrev-ref HEAD") {
+          return { launched: true, stdout: `${branch}\n`, stderr: "", exitCode: 0 };
+        }
+        return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+      };
+
+      const result = await runWorkflowRunner({
+        argv: [".ai/plans/artifact-state.md"],
+        rootDir: workspace.root,
+        processRunner,
+        streamOutput: false,
+      });
+
+      assert.equal(result.success, true);
+      assert.equal(processCalls.some((call) => call.command === CODEX_COMMAND), true);
+    } finally {
+      await workspace.cleanup();
+    }
+  });
+}
+
+test("workflow runner fails closed when git branch cannot be determined", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    mkdirSync(join(workspace.root, ".git"), { recursive: true });
+    const processCalls: Parameters<ProcessRunner>[0][] = [];
+    const processRunner: ProcessRunner = async (call) => {
+      processCalls.push(call);
+      if (call.command === "git" && call.args.join(" ") === "rev-parse --abbrev-ref HEAD") {
+        return { launched: true, stdout: "", stderr: "fatal: not a git repository", exitCode: 128 };
+      }
+      return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+    };
+
+    const result = await runWorkflowRunner({
+      argv: [".ai/plans/workflow-runner.md"],
+      rootDir: workspace.root,
+      processRunner,
+    });
+
+    assert.equal(result.success, false);
+    assert.match(result.reason, /could not determine current git branch before starting workflow/);
+    assert.equal(processCalls.length, 1);
   } finally {
     await workspace.cleanup();
   }

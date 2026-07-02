@@ -302,9 +302,16 @@ Rules:
 
 ## Decision Logic (MANDATORY)
 
+Thin-plan-v2 state parity rule:
+
+* Every branch below that changes workflow state MUST update both the plan manifest `## Status` / `## Next Action` and `.ai/artifacts/<plan-name>/state/workflow.json` `status` / `nextAction`.
+* After writing the review artifact and workflow state, reread both files before final output.
+* If the plan manifest and workflow sidecar do not show the same `status + nextAction`, repair the mismatch before final output.
+* If the mismatch cannot be repaired, output `STOP` with the exact manifest values and workflow sidecar values.
+
 ### IF any CRITICAL issues exist:
 
-1. update:
+1. update the plan manifest:
 
 ## Status
 
@@ -340,13 +347,15 @@ Do not duplicate the `## Review History` heading in thin-plan-v2 manifests.
 * unresolved risks
 * implementation gaps
 
+4. reread the plan manifest and `.ai/artifacts/<plan-name>/state/workflow.json`; verify both show `active + execute-plan` before final output.
+
 ---
 
 ### IF NO CRITICAL issues AND final validation requires deployed, manual, or external code:
 
 Use this path when the implementation is safe to commit locally, but the final proof will be performed manually by the operator after commit, deploy, production access, external integration access, or another check outside the local reviewed workspace.
 
-1. update:
+1. update the plan manifest:
 
 ## Status
 
@@ -360,13 +369,15 @@ commit-summary
 
 3. update `.ai/artifacts/<plan-name>/state/workflow.json` with `latest.review.summary = SAFE - DEFERRED VALIDATION`, `latest.review.decision = completed`, the review evidence pointer, appended `history`, status, nextAction, and updatedAt.
 
-4. do not create any extra plan section for this path. `commit-summary` records the local commit metadata. The operator performs the deferred validation manually after commit/deploy and reopens the plan if that check finds a required fix.
+4. reread the plan manifest and `.ai/artifacts/<plan-name>/state/workflow.json`; verify both show `completed + commit-summary` before final output.
+
+5. do not create any extra plan section for this path. `commit-summary` records the local commit metadata. The operator performs the deferred validation manually after commit/deploy and reopens the plan if that check finds a required fix.
 
 ---
 
 ### IF NO CRITICAL issues AND local/final validation is complete:
 
-1. update:
+1. update the plan manifest:
 
 ## Status
 
@@ -379,6 +390,8 @@ commit-summary
 2. create `.ai/artifacts/<plan-name>/events/review-vX.md` with `# Review vX`, `## Summary`, and `## Evidence`.
 
 3. update `.ai/artifacts/<plan-name>/state/workflow.json` with `latest.review.summary = SAFE`, `latest.review.decision = completed`, the review evidence pointer, appended `history`, status, nextAction, and updatedAt.
+
+4. reread the plan manifest and `.ai/artifacts/<plan-name>/state/workflow.json`; verify both show `completed + commit-summary` before final output.
 
 Put optional warnings and suggestions in the review artifact.
 

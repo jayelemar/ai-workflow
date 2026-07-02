@@ -78,6 +78,7 @@ const VALID_NEXT_ACTIONS = [
 const MAX_ITERATIONS = 100;
 const CODEX_BINARY_COMMAND = 'codex';
 const CODEX_WORK_NODE_VERSION = 'v20.20.2';
+const PROTECTED_WORKFLOW_BRANCHES = new Set(['main', 'master', 'dev', 'staging']);
 const SUPERPOWER_SKILL_ROOT = path.join(homedir(), '.agents', 'skills');
 const SHARED_SKILL_ROOT = path.join(homedir(), '.codex-shared', 'skills');
 const TERMINAL_FAILED_COMMAND_OUTPUT_LINE_LIMIT = 4;
@@ -272,6 +273,12 @@ type WorkflowTaskContext = {
   stage: TaskStage;
   artifactPath: string;
   commitSha?: string;
+};
+
+type CommitProgress = {
+  completed: number;
+  total: number;
+  description: string;
 };
 
 type FileOwnershipArtifact = {
@@ -1865,6 +1872,12 @@ export const formatWorkflowProgressLine = ({
   return `${formattedProgressPrefix}\n${status} -> ${nextAction}\nmodel: ${model} | reasoning: ${reasoning}`;
 };
 
+export const formatCommitProgressLine = ({
+  completed,
+  total,
+  description,
+}: CommitProgress): string => `[${completed}/${total}] ${description}`;
+
 export const WORKFLOW_WAIT_NOTICE_INTERVAL_MS = 120_000;
 
 const formatWorkflowWaitElapsedTime = (elapsedMs: number): string => {
@@ -2326,7 +2339,6 @@ const createWorkflowFailureDebugRecord = ({
   stderr,
   staging,
   cleanup,
-  taskContext,
 }: {
   timestamp: string;
   iteration: number;
@@ -4241,6 +4253,103 @@ const gitHeadShortSha = async (
     return { ok: false, reason: 'task commit sha lookup returned empty output' };
   }
   return { ok: true, sha };
+};
+
+const gitMetadataExists = (rootDir: string): boolean => existsSync(path.join(rootDir, '.git'));
+
+const protectedBranchPreflight = async (
+  rootDir: string,
+  processRunner: ProcessRunner,
+): Promise<{ ok: true; branch?: string } | Failure> => {
+  if (!gitMetadataExists(rootDir)) {
+    return { ok: true };
+  }
+
+  const result = await processRunner({
+    command: 'git',
+    args: ['rev-parse', '--abbrev-ref', 'HEAD'],
+    cwd: rootDir,
+    input: '',
+    promptPath: 'git-protected-branch-preflight',
+  }).catch(
+    (error): ProcessResult => ({
+      launched: false,
+      stdout: '',
+      stderr: '',
+      error: String(error),
+    }),
+  );
+
+  if (!result.launched) {
+    return {
+      ok: false,
+      reason: `could not determine current git branch before starting workflow: ${result.error}`,
+    };
+  }
+  if (result.exitCode !== 0) {
+    const details = [result.stderr.trim(), result.stdout.trim()].filter(Boolean).join('\n');
+    return {
+      ok: false,
+      reason: `could not determine current git branch before starting workflow${details ? `: ${boundedInlineExcerpt(details)}` : ''}`,
+    };
+  }
+
+  const branch = result.stdout.trim().split(/\s+/)[0] ?? '';
+  if (!branch) {
+    return {
+      ok: false,
+      reason: 'could not determine current git branch before starting workflow: branch lookup returned empty output',
+    };
+  }
+  if (PROTECTED_WORKFLOW_BRANCHES.has(branch)) {
+    return {
+      ok: false,
+      reason: `workflow runner refuses to start on protected branch ${branch}`,
+    };
+  }
+  return { ok: true, branch };
+};
+
+const workflowHeadSha = async (
+  rootDir: string,
+  processRunner: ProcessRunner,
+): Promise<string | undefined> => {
+  if (!gitMetadataExists(rootDir)) {
+    return undefined;
+  }
+
+  const result = await processRunner({
+    command: 'git',
+    args: ['rev-parse', 'HEAD'],
+    cwd: rootDir,
+    input: '',
+    promptPath: 'git-workflow-head',
+  }).catch(
+    (): ProcessResult => ({
+      launched: false,
+      stdout: '',
+      stderr: '',
+      error: 'workflow head lookup failed',
+    }),
+  );
+  if (!result.launched || result.exitCode !== 0) {
+    return undefined;
+  }
+  return result.stdout.trim().split(/\s+/)[0] || undefined;
+};
+
+const completedTaskCommitCount = async (
+  rootDir: string,
+  planName: string,
+  tasks: PlanTask[],
+): Promise<number> => {
+  let completed = 0;
+  for (const task of tasks) {
+    if (await taskCompleted(rootDir, planName, task)) {
+      completed += 1;
+    }
+  }
+  return completed;
 };
 
 const replaceSectionValueInPlan = (content: string, heading: string, value: string): string => {
@@ -6285,6 +6394,10 @@ const logFields = ({
   staging,
   cleanup,
   taskContext,
+  currentBranch,
+  startingHeadSha,
+  endingHeadSha,
+  commitProgress,
 }: {
   timestamp: string;
   iteration: number;
@@ -6306,6 +6419,10 @@ const logFields = ({
   staging?: ReviewStagingProcess;
   cleanup?: ReviewCleanupProcess;
   taskContext?: WorkflowTaskContext;
+  currentBranch?: string;
+  startingHeadSha?: string;
+  endingHeadSha?: string;
+  commitProgress?: CommitProgress;
 }): Array<[string, string | number | undefined]> => {
   const failureMetadata = stopReason ? classifyFailureForLog(stopReason) : undefined;
   const editedFilesLog = editedFiles ? formatEditedFilesForLog(editedFiles) : undefined;
@@ -6323,6 +6440,11 @@ const logFields = ({
     ['planPath', planPath],
     ['startingStatus', status],
     ['startingNextAction', nextAction],
+    ['currentBranch', currentBranch],
+    ['startingHeadSha', startingHeadSha],
+    ['endingHeadSha', endingHeadSha],
+    ['commitProgress', commitProgress ? `${commitProgress.completed}/${commitProgress.total}` : undefined],
+    ['commitProgressDescription', commitProgress?.description],
     ['taskId', taskContext?.task.id],
     ['taskName', taskContext?.task.name],
     ['taskStage', taskContext?.stage],
@@ -6559,6 +6681,11 @@ export const runWorkflowRunner = async (
     logger.error(elapsedLine());
     return failure(finalReason, completedIterations);
   };
+  const branchPreflight = await protectedBranchPreflight(rootDir, processRunner);
+  if (!branchPreflight.ok) {
+    return await finishFailure(branchPreflight.reason);
+  }
+  const currentBranch = branchPreflight.branch;
   const initialParsedPlan = await parsePlan({ planName: planArgument, rootDir });
   if (!initialParsedPlan.ok) {
     return await finishFailure(initialParsedPlan.reason);
@@ -6596,6 +6723,20 @@ export const runWorkflowRunner = async (
       taskSavepointMode &&
       !selectedTask &&
       route.promptPath === rel('.ai', 'prompts', 'commit-summary.md');
+    const completedTaskCommits = taskSavepointMode
+      ? await completedTaskCommitCount(rootDir, parsedPlan.planName, planTasks)
+      : 0;
+    const commitProgress: CommitProgress = taskSavepointMode
+      ? {
+          completed: completedTaskCommits,
+          total: planTasks.length,
+          description: selectedTask?.name ?? 'task commits complete',
+        }
+      : {
+          completed: 0,
+          total: 1,
+          description: 'final commit pending',
+        };
     if (!selectedTask) {
       currentTaskContext = undefined;
     }
@@ -6634,6 +6775,7 @@ export const runWorkflowRunner = async (
       logger.log(formatTaskProgressLine({ task: selectedTask, stage, detail }));
       return { ok: true };
     };
+    const startingHeadSha = await workflowHeadSha(rootDir, processRunner);
     if (iterations >= MAX_ITERATIONS) {
       const reason = `maximum iterations ${MAX_ITERATIONS} reached`;
       const logTimestamp = timestamp();
@@ -6681,6 +6823,10 @@ export const runWorkflowRunner = async (
           stderr: '',
           staging: undefined,
           taskContext: currentTaskContext,
+          currentBranch,
+          startingHeadSha,
+          endingHeadSha: await workflowHeadSha(rootDir, processRunner),
+          commitProgress,
         }),
       );
       if (!logResult.ok) {
@@ -6714,6 +6860,7 @@ export const runWorkflowRunner = async (
           color: colorOutput,
         }),
       );
+      logger.log(formatCommitProgressLine(commitProgress));
       progressLogged = true;
     };
     const cleanupReviewStagingPaths = async (
@@ -6845,6 +6992,10 @@ export const runWorkflowRunner = async (
             stderr: '',
             staging: undefined,
             taskContext: currentTaskContext,
+            currentBranch,
+            startingHeadSha,
+            endingHeadSha: await workflowHeadSha(rootDir, processRunner),
+            commitProgress,
           }),
         );
         if (!logResult.ok) {
@@ -6914,6 +7065,10 @@ export const runWorkflowRunner = async (
             stderr: '',
             staging: undefined,
             taskContext: currentTaskContext,
+            currentBranch,
+            startingHeadSha,
+            endingHeadSha: await workflowHeadSha(rootDir, processRunner),
+            commitProgress,
           }),
         );
         if (!logResult.ok) {
@@ -7002,6 +7157,11 @@ export const runWorkflowRunner = async (
             stderr: '',
             staging: staged.staging,
             cleanup: reviewCleanup,
+            taskContext: currentTaskContext,
+            currentBranch,
+            startingHeadSha,
+            endingHeadSha: await workflowHeadSha(rootDir, processRunner),
+            commitProgress,
           }),
         );
         if (!logResult.ok) {
@@ -7224,6 +7384,10 @@ export const runWorkflowRunner = async (
           staging,
           cleanup: reviewCleanup,
           taskContext: currentTaskContext,
+          currentBranch,
+          startingHeadSha,
+          endingHeadSha: await workflowHeadSha(rootDir, processRunner),
+          commitProgress,
         }),
       );
       if (logResult.ok) {
