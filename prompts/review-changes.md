@@ -316,7 +316,7 @@ execute-plan
 
 2. add the next review entry.
 
-Write `.ai/artifacts/<plan-name>/events/review-vX.md`, then update `.ai/artifacts/<plan-name>/state/workflow.json` with the latest review pointer, compact history pointer, status, nextAction, unresolved blockers, and updatedAt.
+Write `.ai/artifacts/<plan-name>/events/review-vX.md`, then update `.ai/artifacts/<plan-name>/state/workflow.json` with runner-readable thin-plan-v2 state: preserve `planPath`, set `status` and `nextAction`, write the compact review event under `latest.review`, append the review artifact path to `history`, set `unresolvedBlockers`, and refresh `updatedAt`.
 
 For legacy thin-plan-v1 plans only, if the plan already contains `## Review History`, append only:
 
@@ -358,7 +358,7 @@ commit-summary
 
 2. create `.ai/artifacts/<plan-name>/events/review-vX.md` with `# Review vX`, `## Summary`, and `## Evidence`, including the deferred validation note.
 
-3. update `.ai/artifacts/<plan-name>/state/workflow.json` with `Summary: SAFE - DEFERRED VALIDATION`, `Decision: completed`, the review evidence pointer, compact history pointer, status, nextAction, and updatedAt.
+3. update `.ai/artifacts/<plan-name>/state/workflow.json` with `latest.review.summary = SAFE - DEFERRED VALIDATION`, `latest.review.decision = completed`, the review evidence pointer, appended `history`, status, nextAction, and updatedAt.
 
 4. do not create any extra plan section for this path. `commit-summary` records the local commit metadata. The operator performs the deferred validation manually after commit/deploy and reopens the plan if that check finds a required fix.
 
@@ -378,7 +378,7 @@ commit-summary
 
 2. create `.ai/artifacts/<plan-name>/events/review-vX.md` with `# Review vX`, `## Summary`, and `## Evidence`.
 
-3. update `.ai/artifacts/<plan-name>/state/workflow.json` with `Summary: SAFE`, `Decision: completed`, the review evidence pointer, compact history pointer, status, nextAction, and updatedAt.
+3. update `.ai/artifacts/<plan-name>/state/workflow.json` with `latest.review.summary = SAFE`, `latest.review.decision = completed`, the review evidence pointer, appended `history`, status, nextAction, and updatedAt.
 
 Put optional warnings and suggestions in the review artifact.
 

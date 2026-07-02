@@ -3911,10 +3911,15 @@ Run these exact commands before generating the commit message and summary:
 git status --short -- ${shellPathspecs(commitSummaryPaths)}
 git diff --name-status -- ${shellPathspecs(commitSummaryPaths)}
 git add --all -- ${shellPathspecs(commitSummaryPaths)}
+pnpm lint-staged
+git add --all -- ${shellPathspecs(commitSummaryPaths)}
 git diff --staged --name-status -- ${shellPathspecs(commitSummaryPaths)}
-git commit -m "<generated message>" -- ${shellPathspecs(commitSummaryPaths)}
+git diff --staged --name-status
+git commit -m "<generated message>"
 
-Do not stage .ai files. Do not stage or inspect unrelated paths as commit candidates.
+Do not stage .ai files. Do not stage unrelated paths as commit candidates.
+Before committing, the full staged path list must contain only paths from the plan-owned implementation list above.
+If any staged path falls outside this path list, output \`STOP\` with reason \`non plan-scoped staged changes detected\`.
 If no files are staged by the path-scoped git add, output \`STOP\` with reason \`no plan-related files to stage\`.
 `
       : '';

@@ -304,7 +304,7 @@ The artifact must include:
 
 Then update `.ai/artifacts/<plan-name>/state/workflow.json` with the matching execution event pointer:
 
-Use compact `summary`, `result`, `evidence`, compact history pointer, `status`, `nextAction`, and `updatedAt` fields.
+Use runner-readable thin-plan-v2 state: preserve `planPath`, set `status` and `nextAction`, write compact `summary`, `result`, and `evidence` fields under `latest.execution`, append the execution artifact path to `history`, preserve or update `unresolvedBlockers`, and refresh `updatedAt`.
 
 ### Validation Artifacts
 
@@ -331,7 +331,7 @@ The artifact must include:
 
 Then update `.ai/artifacts/<plan-name>/state/workflow.json` with the matching validation event pointer:
 
-Use compact `summary`, `result`, `evidence`, compact history pointer, `status`, `nextAction`, and `updatedAt` fields.
+Use runner-readable thin-plan-v2 state: preserve `planPath`, set `status` and `nextAction`, write compact `summary`, `result`, and `evidence` fields under `latest.validation`, append the validation artifact path to `history`, preserve or update `unresolvedBlockers`, and refresh `updatedAt`.
 
 ### Context Snapshot
 

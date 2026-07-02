@@ -782,9 +782,37 @@ test("fix-plan prompt updates thin-plan workflow sidecar when transitioning stat
   const prompt = await readWorkflowPrompt("fix-plan.md");
 
   assert.match(prompt, /Update `\.ai\/artifacts\/<plan-name>\/state\/workflow\.json`/);
+  assert.match(prompt, /`planPath`/);
   assert.match(prompt, /`status` = `draft`/);
   assert.match(prompt, /`nextAction` = `plan-validator`/);
+  assert.match(prompt, /`latest`/);
+  assert.match(prompt, /`history`/);
+  assert.match(prompt, /`unresolvedBlockers`/);
+  assert.match(prompt, /`updatedAt`/);
   assert.match(prompt, /must match the plan manifest/i);
+  assert.match(prompt, /Do not use legacy top-level aliases/i);
+  assert.match(prompt, /`latestValidationSummary`/);
+  assert.match(prompt, /`latestValidationResult`/);
+  assert.match(prompt, /`latestValidationEvidence`/);
+  assert.match(prompt, /`compactHistoryPointer`/);
+});
+
+test("plan-validator prompt updates thin-plan workflow sidecar with runner-readable state", async () => {
+  const prompt = await readWorkflowPrompt("plan-validator.md");
+
+  assert.match(prompt, /Update `\.ai\/artifacts\/<plan-name>\/state\/workflow\.json`/);
+  assert.match(prompt, /`planPath`/);
+  assert.match(prompt, /`status`/);
+  assert.match(prompt, /`nextAction`/);
+  assert.match(prompt, /`latest`/);
+  assert.match(prompt, /`history`/);
+  assert.match(prompt, /`unresolvedBlockers`/);
+  assert.match(prompt, /`updatedAt`/);
+  assert.match(prompt, /Do not use legacy top-level aliases/i);
+  assert.match(prompt, /`latestValidationSummary`/);
+  assert.match(prompt, /`latestValidationResult`/);
+  assert.match(prompt, /`latestValidationEvidence`/);
+  assert.match(prompt, /`compactHistoryPointer`/);
 });
 
 test("fix-plan prompt forbids unclassified or unresolved major spec-origin edits", async () => {
@@ -1098,7 +1126,9 @@ test("commit-summary prompt creates one local completed commit and forbids auto-
   const prompt = await readWorkflowPrompt("commit-summary.md");
 
   assert.match(prompt, /completed \+ commit-summary[\s\S]*create exactly one local git commit/);
-  assert.match(prompt, /git commit -m "<generated message>" -- <plan-owned paths>/);
+  assert.match(prompt, /pnpm lint-staged/);
+  assert.match(prompt, /git commit -m "<generated message>"/);
+  assert.doesNotMatch(prompt, /git commit -m "<generated message>" -- <plan-owned paths>/);
   assert.match(prompt, /MUST NOT push/);
 });
 
@@ -3278,14 +3308,18 @@ test("commit-summary workflow prompt includes plan-scoped staging commands for p
   assert.match(prompt, /git status --short -- apps\/web\/src\/simple\.ts 'docs\/plan notes\.md'/);
   assert.match(prompt, /git diff --name-status -- apps\/web\/src\/simple\.ts 'docs\/plan notes\.md'/);
   assert.match(prompt, /git add --all -- apps\/web\/src\/simple\.ts 'docs\/plan notes\.md'/);
+  assert.match(prompt, /pnpm lint-staged/);
   assert.match(
     prompt,
     /git diff --staged --name-status -- apps\/web\/src\/simple\.ts 'docs\/plan notes\.md'/,
   );
-  assert.match(
+  assert.match(prompt, /git diff --staged --name-status\n/);
+  assert.match(prompt, /git commit -m "<generated message>"/);
+  assert.doesNotMatch(
     prompt,
     /git commit -m "<generated message>" -- apps\/web\/src\/simple\.ts 'docs\/plan notes\.md'/,
   );
+  assert.match(prompt, /non plan-scoped staged changes detected/);
   assert.match(prompt, /Do not stage \.ai files/);
   assert.doesNotMatch(prompt, /use sub-agents/);
 });

@@ -193,9 +193,12 @@ Use:
 * review history
 * runner-injected path-scoped `git status --short -- <plan-owned paths>`
 * runner-injected path-scoped `git diff --name-status -- <plan-owned paths>`
-* runner-injected path-scoped `git add --all -- <plan-owned paths>`
+* runner-injected path-scoped first `git add --all -- <plan-owned paths>`
+* `pnpm lint-staged`
+* runner-injected path-scoped second `git add --all -- <plan-owned paths>`
 * runner-injected path-scoped `git diff --staged --name-status -- <plan-owned paths>`
-* runner-injected path-scoped `git commit -m "<generated message>" -- <plan-owned paths>`
+* full `git diff --staged --name-status` to confirm the staged set contains only plan-owned paths
+* `git commit -m "<generated message>"`
 
 Do NOT use repository-wide `git add --all`.
 
@@ -239,15 +242,19 @@ If `Task savepoint aggregate summary` is present:
 Otherwise:
 
 1. Stage only plan-owned paths from the runner-injected path list.
-2. Generate exactly one commit message using the commit message rules.
-3. Create exactly one local git commit using:
+2. Run `pnpm lint-staged` so formatting and lint fixes happen before commit.
+3. Stage the same runner-injected plan-owned paths again, because lint-staged tasks may modify files after the first add.
+4. Inspect the staged diff and confirm every staged path is in the runner-injected plan-owned path list.
+5. If any staged path is outside the runner-injected path list, output `STOP` with reason `non plan-scoped staged changes detected` and do not commit.
+6. Generate exactly one commit message using the commit message rules.
+7. Create exactly one local git commit using:
 
-git commit -m "<generated message>" -- <plan-owned paths>
+git commit -m "<generated message>"
 
-4. MUST NOT push.
-5. If `git commit` fails, output `STOP` and state the git failure.
-6. After the commit succeeds, read the commit SHA and current branch.
-7. Output the created commit SHA, branch, commit message, and user-facing summary.
+8. MUST NOT push.
+9. If `pnpm lint-staged` or `git commit` fails, output `STOP` and state the failure.
+10. After the commit succeeds, read the commit SHA and current branch.
+11. Output the created commit SHA, branch, commit message, and user-facing summary.
 
 Rules:
 

@@ -346,7 +346,15 @@ Rules:
 * Validation versions MUST be sequential
 * MUST create `.ai/artifacts/<plan-name>/events/validation-vX.md` before updating the plan
 * The validation artifact MUST contain detailed critical issues, warnings, spec repair classifications, allowed spec repairs, recommendations, and evidence
-* `workflow.json` MUST store only the latest validation summary, result, evidence pointer, compact history pointer, status, nextAction, and updatedAt
+* Update `.ai/artifacts/<plan-name>/state/workflow.json` with runner-readable thin-plan-v2 state:
+  * `planPath`: the exact repo-relative plan path, for example `.ai/plans/<plan-name>.md`
+  * `status`: `draft` when validation needs fixes, or `approved` when validation passes
+  * `nextAction`: `fix-plan` when validation needs fixes, or `execute-plan` when validation passes
+  * `latest`: object containing `validation` with compact `version`, `result`, `summary`, and `evidence` fields for the validation artifact just created
+  * `history`: array of event artifact paths, including the validation artifact just created
+  * `unresolvedBlockers`: array; use `[]` for ordinary validation failures
+  * `updatedAt`: current ISO timestamp
+* Do not use legacy top-level aliases such as `latestValidationSummary`, `latestValidationResult`, `latestValidationEvidence`, or `compactHistoryPointer`; the runner only reads the nested thin-plan-v2 sidecar fields above.
 * The plan manifest MUST NOT contain inline `## Validation History`
 
 ---

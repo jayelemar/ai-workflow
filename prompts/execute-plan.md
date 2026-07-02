@@ -332,7 +332,7 @@ The artifact must include:
 <commands, outputs, files changed, or blockers that support the plan entry>
 ```
 
-Then update `.ai/artifacts/<plan-name>/state/workflow.json` with the latest execution pointer, compact history pointer, `status`, `nextAction`, unresolved blockers if any, and `updatedAt`.
+Then update `.ai/artifacts/<plan-name>/state/workflow.json` with runner-readable thin-plan-v2 state: preserve `planPath`, set `status` and `nextAction`, write the compact execution event under `latest.execution`, append the execution artifact path to `history`, set `unresolvedBlockers` to active blocker strings or `[]`, and refresh `updatedAt`.
 
 Wording rules:
 
@@ -461,14 +461,14 @@ Update the plan with:
 Update artifacts with:
 
 * created, modified, deleted, changedFiles, released, headSha, and workflow state in `.ai/artifacts/<plan-name>/state/files.json`
-* blockers encountered, validation results, latest event pointers, and compact history pointers in `.ai/artifacts/<plan-name>/state/workflow.json`
+* blockers encountered, validation results, latest event pointers under `latest`, and compact event path history in `.ai/artifacts/<plan-name>/state/workflow.json`
 * ownership changes and releases in `.ai/artifacts/<plan-name>/state/file-ownership.json`
 * deviations and evidence in event artifacts under `.ai/artifacts/<plan-name>/events/`
 
 Reconcile `.ai/artifacts/<plan-name>/state/files.json` after implementation to the actual created, modified, and deleted plan-owned paths before moving to `Status = review`. `files.json` is the changed-file inventory for review and commit, not the ownership authority.
 
 Keep workflow state entries concise: compact summary, one state field, and evidence pointer only.
-Detailed validation evidence belongs in `.ai/artifacts/<plan-name>/events/validation-vX.md`, with only the latest validation pointer in `.ai/artifacts/<plan-name>/state/workflow.json`.
+Detailed validation evidence belongs in `.ai/artifacts/<plan-name>/events/validation-vX.md`, with only the latest validation pointer under `latest.validation` in `.ai/artifacts/<plan-name>/state/workflow.json`.
 
 ---
 
