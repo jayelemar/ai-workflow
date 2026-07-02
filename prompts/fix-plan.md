@@ -214,6 +214,12 @@ draft
 
 plan-validator
 
+Update `.ai/artifacts/<plan-name>/state/workflow.json` in the same edit so:
+
+* `status` = `draft`
+* `nextAction` = `plan-validator`
+* workflow sidecar state must match the plan manifest state
+
 ---
 
 ## Plan Update (MANDATORY)

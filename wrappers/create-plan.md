@@ -24,6 +24,8 @@ Strict Constraints:
   - `.ai/artifacts/<feature-or-bug-name>/state/files.json`
   - `.ai/artifacts/<feature-or-bug-name>/state/workflow.json`
   - `.ai/artifacts/<feature-or-bug-name>/state/file-ownership.json`
+  - `.ai/artifacts/<feature-or-bug-name>/state/context.md`
+  - `.ai/artifacts/<feature-or-bug-name>/events/`
   - `.ai/plans/<feature-or-bug-name>.md`
 - Do not edit, modify, or delete application code, tests, routes, configs, migrations, or generated files.
 - Do not apply code changes.
@@ -50,10 +52,14 @@ Required Behavior:
 - If the spec is incomplete, vague, or ambiguous, STOP and list the missing decisions instead of creating a plan.
 - Follow the plan template exactly.
 - Save the plan to `.ai/plans/<feature-or-bug-name>.md`.
+- Create every artifact listed in the plan template's `## Artifacts` section before returning, including `state/context.md` and the `events/` directory.
 
 Initial Plan State:
 - `## Status` must be `draft`.
 - `## Next Action` must be `plan-validator`.
+- `.ai/artifacts/<feature-or-bug-name>/state/workflow.json` must use `status: "draft"` and `nextAction: "plan-validator"`.
+- `.ai/artifacts/<feature-or-bug-name>/state/context.md` must exist with an initial snapshot that names the plan path, spec path, artifact paths, status, next action, and notes that no validation/execution/review events exist yet.
+- `.ai/artifacts/<feature-or-bug-name>/events/` must exist even when it is empty.
 
 Final Output:
 Return only:

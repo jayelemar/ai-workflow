@@ -778,6 +778,15 @@ test("fix-plan prompt allows spec edits only for latest minor spec repair valida
   assert.match(prompt, /return to `draft \+ plan-validator`/);
 });
 
+test("fix-plan prompt updates thin-plan workflow sidecar when transitioning state", async () => {
+  const prompt = await readWorkflowPrompt("fix-plan.md");
+
+  assert.match(prompt, /Update `\.ai\/artifacts\/<plan-name>\/state\/workflow\.json`/);
+  assert.match(prompt, /`status` = `draft`/);
+  assert.match(prompt, /`nextAction` = `plan-validator`/);
+  assert.match(prompt, /must match the plan manifest/i);
+});
+
 test("fix-plan prompt forbids unclassified or unresolved major spec-origin edits", async () => {
   const prompt = await readWorkflowPrompt("fix-plan.md");
 
@@ -3499,7 +3508,7 @@ test("parsePlan accepts thin-plan-v2 manifest and reads current state from workf
       status: "review",
       nextAction: "review-plan",
     });
-    await writePlan(workspace.root, "artifact-state", thinPlanV2Manifest("draft", "plan-validator"));
+    await writePlan(workspace.root, "artifact-state", thinPlanV2Manifest("review", "review-plan"));
 
     const parsed = await parsePlan({
       planName: planArg("artifact-state"),
@@ -3512,6 +3521,28 @@ test("parsePlan accepts thin-plan-v2 manifest and reads current state from workf
     assert.match(parsed.ok ? parsed.content : "", /## Files \(MANDATORY\)/);
     assert.match(parsed.ok ? parsed.content : "", /## Review History/);
     assert.match(parsed.ok ? parsed.content : "", /src\/artifact-state\.ts/);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("parsePlan rejects thin-plan-v2 manifest and workflow sidecar state mismatch", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writeThinPlanV2Artifacts(workspace.root, {
+      status: "draft",
+      nextAction: "fix-plan",
+    });
+    await writePlan(workspace.root, "artifact-state", thinPlanV2Manifest("draft", "plan-validator"));
+
+    const parsed = await parsePlan({
+      planName: planArg("artifact-state"),
+      rootDir: workspace.root,
+    });
+
+    assert.equal(parsed.ok, false);
+    assert.match(parsed.ok ? "" : parsed.reason, /thin-plan-v2 manifest state mismatch/);
+    assert.match(parsed.ok ? "" : parsed.reason, /workflow\.json/);
   } finally {
     await workspace.cleanup();
   }
@@ -3575,7 +3606,7 @@ test("workflow context snapshot reads validation, review, and blockers from thin
       latestReviewSummary: "HIGH RISK",
       activeBlockers: ["Plan dependency | .ai/plans/owner.md still owns src/artifact-state.ts"],
     });
-    await writePlan(workspace.root, "artifact-state", thinPlanV2Manifest("draft", "plan-validator"));
+    await writePlan(workspace.root, "artifact-state", thinPlanV2Manifest("blocked", "unblock-plan"));
     const parsed = await parsePlan({
       planName: planArg("artifact-state"),
       rootDir: workspace.root,
@@ -4431,7 +4462,7 @@ test("thin-plan-v2 review and commit-summary stage plan-owned paths from files.j
       modified: ["src/artifact-state.ts"],
       changedFiles: ["src/artifact-state.ts"],
     });
-    await writePlan(workspace.root, "artifact-state", thinPlanV2Manifest("draft", "plan-validator"));
+    await writePlan(workspace.root, "artifact-state", thinPlanV2Manifest("review", "review-plan"));
     const calls: Parameters<ProcessRunner>[0][] = [];
     const result = await runWorkflowRunner({
       planName: planArg("artifact-state"),
@@ -4445,6 +4476,11 @@ test("thin-plan-v2 review and commit-summary stage plan-owned paths from files.j
           return { launched: true, stdout: "", stderr: "", exitCode: 0 };
         }
         if (call.promptPath === ".ai/prompts/review-changes.md") {
+          await writePlan(
+            workspace.root,
+            "artifact-state",
+            thinPlanV2Manifest("completed", "commit-summary"),
+          );
           await writeThinPlanV2Artifacts(workspace.root, {
             status: "completed",
             nextAction: "commit-summary",

@@ -3784,6 +3784,12 @@ export const parsePlan = async ({
     if (!loaded.ok) {
       return loaded;
     }
+    if (loaded.status !== rawStatus || loaded.nextAction !== rawNextAction) {
+      return {
+        ok: false,
+        reason: `thin-plan-v2 manifest state mismatch: plan manifest has ${rawStatus} + ${rawNextAction}, but .ai/artifacts/${normalized.planName}/state/workflow.json has ${loaded.status} + ${loaded.nextAction}`,
+      };
+    }
 
     return {
       ok: true,

@@ -226,13 +226,15 @@ If any user action cannot be mapped to implementation or validation coverage:
 
 Write `.ai/artifacts/<plan-name>/state/files.json` with:
 
-- Created files
-- Modified files
-- Deleted files
+- `created`
+- `modified`
+- `deleted`
 - `changedFiles`
 - `released`
 - `headSha`
 - workflow state
+
+The `created`, `modified`, `deleted`, `changedFiles`, and `released` fields MUST be string arrays. Do not use legacy aliases such as `createdFiles`, `modifiedFiles`, or `deletedFiles`.
 
 This artifact is the review and commit changed-file inventory. It should list the expected created, modified, and deleted file paths inferred from the request, spec, and codebase. It is reconciled after implementation by `execute-plan` from actual git changes.
 
@@ -241,10 +243,20 @@ Write `.ai/artifacts/<plan-name>/state/workflow.json` with:
 - `planPath`
 - `status`
 - `nextAction`
-- latest event pointers
-- compact history pointers
+- `latest`
+- `history`
 - unresolved blockers
 - `updatedAt`
+
+The initial `workflow.json` MUST use:
+
+- `status`: `draft`
+- `nextAction`: `plan-validator`
+- `latest`: `{}`
+- `history`: `[]`
+- `unresolvedBlockers`: `[]`
+
+Do not use legacy aliases such as `latestEvent`, `latestValidation`, `latestReview`, or `compactHistory`.
 
 Write `.ai/artifacts/<plan-name>/state/file-ownership.json` with the planning-time ownership boundary and current workflow state.
 
@@ -258,6 +270,20 @@ It MUST be valid JSON with exactly the runner-required ownership fields:
 - `resolvedFiles`: string array of concrete repo-relative files expected to be changed by the plan
 - `changedFiles`: string array matching the initial expected changed-file inventory from `files.json`
 - `headSha`: current `git rev-parse HEAD` string
+- `updatedAt`: ISO timestamp string
+
+Write `.ai/artifacts/<plan-name>/state/context.md` with an initial runner context snapshot.
+
+It MUST:
+
+- exist before returning from create-plan
+- identify the plan path, spec path, workflow status, next action, and required artifact paths
+- state that no validation, execution, review, or blocker events exist yet for a new plan
+- be concise because the runner uses it as a warm context packet
+
+Create `.ai/artifacts/<plan-name>/events/` as a directory before returning from create-plan.
+
+The directory may be empty for a new draft plan, but it MUST exist because thin-plan-v2 validation treats it as a required artifact.
 - `updatedAt`: ISO timestamp string
 
 Rules:
