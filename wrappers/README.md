@@ -11,12 +11,26 @@ For cloning, installation, publishing, runner setup, and troubleshooting, use
 
 ## Recommended Flow
 
+Canonical lifecycle:
+
+```text
+spec -> user-journey artifact -> plan -> runner
+```
+
 1. Create a spec:
    - Feature: use `.ai/wrappers/generate-feature-spec.md`
    - Bugfix: use `.ai/wrappers/generate-bugfix-spec.md`
-2. Create a plan:
+2. Optionally create a user-journey artifact for user-facing work when you want to
+   inspect it before planning:
+   - Use `.ai/wrappers/generate-user-flow.md`
+   - Output: `.ai/artifacts/<plan-name>/user-journey.md`
+   - Skip this manual step when using `.ai/wrappers/create-plan.md`; it creates
+     or regenerates the user-journey artifact automatically for user-facing
+     work before writing the plan.
+   - Skip for non-user-facing work; the plan records `N/A: <concrete reason>`.
+3. Create a plan:
    - Use `.ai/wrappers/create-plan.md`
-3. Use one post-plan path:
+4. Use one post-plan path:
 
 Default runner path:
 

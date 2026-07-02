@@ -214,6 +214,19 @@ draft
 
 plan-validator
 
+Update `.ai/artifacts/<plan-name>/state/workflow.json` in the same edit so:
+
+* `planPath` remains the exact repo-relative plan path, for example `.ai/plans/<plan-name>.md`
+* `status` = `draft`
+* `nextAction` = `plan-validator`
+* `latest` preserves the latest validation entry as `latest.validation` with compact `version`, `result`, `summary`, and `evidence` fields
+* `history` is an array of event artifact paths and includes the latest validation evidence path
+* `unresolvedBlockers` is an array; use `[]` when no blocker remains
+* `updatedAt` is refreshed to the current ISO timestamp
+* workflow sidecar state must match the plan manifest state
+
+Do not use legacy top-level aliases such as `latestValidationSummary`, `latestValidationResult`, `latestValidationEvidence`, or `compactHistoryPointer`; the runner only reads the nested thin-plan-v2 sidecar fields above.
+
 ---
 
 ## Plan Update (MANDATORY)

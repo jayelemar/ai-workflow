@@ -4,15 +4,20 @@ This prompt stages completed plan implementation files, then generates the final
 
 It does NOT modify code.
 
-For `completed + commit-summary`, it DOES create exactly one local git commit from runner-injected plan-owned paths, unless final deployment validation has already passed and the plan needs only a final summary using the recorded commit.
-
-For `deployment-validation + commit-summary`, it DOES create exactly one local git commit and update the plan with deployment-validation metadata.
+For `completed + commit-summary`, it DOES create exactly one local git commit from runner-injected plan-owned paths.
 
 It does NOT perform validation or review.
 
 It DOES run `git add` for files related to the completed plan implementation only.
 
 It MUST NOT push. Auto-push is out of scope for this prompt.
+
+In task savepoint mode, the runner may inject either:
+
+* `Task savepoint current task` for a per-task local commit
+* `Task savepoint aggregate summary` for the final aggregate-only summary
+
+When `Task savepoint aggregate summary` is present, do NOT create a git commit. Verify no remaining plan-owned changes exist and summarize the task commits/artifacts only.
 
 ---
 
@@ -52,9 +57,8 @@ Read:
 Expected:
 
 * completed
-* deployment-validation
 
-IF Status is neither `completed` nor `deployment-validation`:
+IF Status is not `completed`:
 
 → STOP (`plan is not ready for commit summary`)
 
@@ -68,15 +72,11 @@ Expected:
 
 commit-summary
 
-IF Next Action != commit-summary:
+IF Next Action is not `commit-summary`:
 
 → STOP (`unexpected next action for commit summary`)
 
-If Status is `completed`, use the completed commit rules below.
-
-If Status is `deployment-validation`, use the deployment-validation commit rules below.
-
-If Status is `completed` and the latest `## Deployment Validation` entry has `Status: passed`, read its evidence artifact for the recorded commit metadata. Do not create a second commit when no plan-owned changes remain. Produce the final completion summary using the recorded commit from the artifact.
+Use the completed commit rules below.
 
 ---
 
@@ -113,6 +113,18 @@ feat(site-editor): add hover click marker
 fix(auth): correct token refresh handling
 
 refactor(payment): simplify invoice calculation flow
+
+### Task Savepoint Commit Body
+
+When `Task savepoint current task` is present, the commit message MUST include a body with:
+
+* Plan name
+* Task ID
+* Task words
+* Changed files
+* Validation summary
+* Review result
+* Task artifact path
 
 ---
 
@@ -164,7 +176,7 @@ Do NOT use:
 
 Before outputting the commit message and summary:
 
-Commit-summary relies on the existing `## Files (MANDATORY)` list. It must not repair `## Files (MANDATORY)` as a late-stage metadata fix; if the list is wrong, route the plan back through review or execution.
+Commit-summary relies on `.ai/artifacts/<plan-name>/state/files.json` as the changed-file inventory and `.ai/artifacts/<plan-name>/state/file-ownership.json` as the ownership authority. It must not repair `files.json` as a late-stage metadata fix; if the list is wrong, route the plan back through review or execution.
 
 1. Use the runner-injected `Plan-scoped commit boundary` when present.
 2. Stage only the listed non-ignored plan-owned implementation paths.
@@ -181,9 +193,12 @@ Use:
 * review history
 * runner-injected path-scoped `git status --short -- <plan-owned paths>`
 * runner-injected path-scoped `git diff --name-status -- <plan-owned paths>`
-* runner-injected path-scoped `git add --all -- <plan-owned paths>`
+* runner-injected path-scoped first `git add --all -- <plan-owned paths>`
+* `pnpm lint-staged`
+* runner-injected path-scoped second `git add --all -- <plan-owned paths>`
 * runner-injected path-scoped `git diff --staged --name-status -- <plan-owned paths>`
-* runner-injected path-scoped `git commit -m "<generated message>" -- <plan-owned paths>`
+* full `git diff --staged --name-status` to confirm the staged set contains only plan-owned paths
+* `git commit -m "<generated message>"`
 
 Do NOT use repository-wide `git add --all`.
 
@@ -214,101 +229,38 @@ completed
 
 commit-summary
 
-and the latest `## Deployment Validation` entry is not `Status: passed` with a recorded commit in its evidence artifact.
-
 Required behavior:
 
+If `Task savepoint aggregate summary` is present:
+
+1. Do not run `git add`.
+2. Do not run `git commit`.
+3. Verify no remaining plan-owned changes exist.
+4. Summarize the task commit SHAs and artifact paths.
+5. MUST NOT push.
+
+Otherwise:
+
 1. Stage only plan-owned paths from the runner-injected path list.
-2. Generate exactly one commit message using the commit message rules.
-3. Create exactly one local git commit using:
+2. Run `pnpm lint-staged` so formatting and lint fixes happen before commit.
+3. Stage the same runner-injected plan-owned paths again, because lint-staged tasks may modify files after the first add.
+4. Inspect the staged diff and confirm every staged path is in the runner-injected plan-owned path list.
+5. If any staged path is outside the runner-injected path list, output `STOP` with reason `non plan-scoped staged changes detected` and do not commit.
+6. Generate exactly one commit message using the commit message rules.
+7. Create exactly one local git commit using:
 
-git commit -m "<generated message>" -- <plan-owned paths>
+git commit -m "<generated message>"
 
-4. MUST NOT push.
-5. If `git commit` fails, output `STOP` and state the git failure.
-6. After the commit succeeds, read the commit SHA and current branch.
-7. Output the created commit SHA, branch, commit message, and user-facing summary.
+8. MUST NOT push.
+9. If `pnpm lint-staged` or `git commit` fails, output `STOP` and state the failure.
+10. After the commit succeeds, read the commit SHA and current branch.
+11. Output the created commit SHA, branch, commit message, and user-facing summary.
 
 Rules:
 
 * Do not update the plan.
-* Do not create a deployment-validation entry.
 * Do not create more than one commit.
 * Do not stage or commit `.ai/` files.
-
----
-
-## Deployment Validation Commit Rules
-
-Apply this section ONLY when the plan starts as:
-
-## Status
-
-deployment-validation
-
-## Next Action
-
-commit-summary
-
-Required behavior:
-
-1. Stage only plan-owned paths from the runner-injected path list.
-2. Create exactly one local git commit from those staged changes.
-3. MUST NOT push.
-4. If `git commit` fails, output `STOP`, state the git failure, and do not record a commit hash.
-5. After the commit succeeds, read the commit SHA and current branch.
-6. Create `.ai/artifacts/<plan-name>/events/deployment-validation-vX.md` with `# Deployment Validation vX`, `## Summary`, and `## Evidence`.
-   The artifact must include the commit SHA, branch, commit timestamp, push status, deployment status, reason deployed validation is required, and specific pending validation.
-7. Update the plan with:
-
-## Deployment Validation
-
-### Deployment Validation vX
-
-* Summary:
-* Evidence: .ai/artifacts/<plan-name>/events/deployment-validation-vX.md
-* Status: pending
-
-8. Transition the plan to:
-
-## Status
-
-deployment-validation
-
-## Next Action
-
-unblock-plan
-
-Rules:
-
-* Preserve previous execution, review, validation, and blocker history.
-* Append the next sequential `### Deployment Validation vX` entry if the section already exists.
-* Deployment Validation entries may contain only `Summary`, `Status`, and `Evidence`.
-* Do not overwrite an existing deployment-validation artifact unless it belongs to the same current run and the previous `git commit` failed before a hash was recorded.
-* The output must include the created commit SHA, branch, pending push/deploy status, and pending validation.
-
----
-
-## Final Deployment Validation Summary Rules
-
-Apply this section ONLY when the plan starts as:
-
-## Status
-
-completed
-
-## Next Action
-
-commit-summary
-
-and the latest `## Deployment Validation` entry has `Status: passed` with a recorded commit in its evidence artifact.
-
-Rules:
-
-* Read the evidence artifact and use the recorded commit for the final completion summary.
-* If no plan-owned changes remain, do not create a second commit.
-* Do not push.
-* Do not alter the recorded deployment-validation evidence.
 
 ---
 
@@ -328,7 +280,7 @@ Rules:
 
 **Summary**
 
-* COMMIT CREATED | DEPLOYMENT VALIDATION READY
+* COMMIT CREATED
 * stage result/state line first
 * at most 2-3 short high-signal bullets
 
@@ -344,7 +296,6 @@ Rules:
 Status:
 
 * completed
-* deployment-validation
 
 Next Action:
 

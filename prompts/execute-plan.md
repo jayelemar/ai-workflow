@@ -13,6 +13,9 @@ Read:
 * `.ai/instructions/shared/testing.md` before running, skipping, or classifying validation
 * the repo-relative `*.spec.md` path(s) listed under the plan's `## Spec` section (if any)
 * runner-owned context snapshot `.ai/artifacts/<plan-name>/state/context.md` as the primary current-state source
+* the plan file's `## Phases` section for preparation, implementation, validation tasks, and task savepoints
+* `.ai/artifacts/<plan-name>/state/workflow.json` for current workflow state, latest event pointers, blockers, and compact history
+* `.ai/artifacts/<plan-name>/state/files.json` for the changed-file inventory
 * Active Context Packet instruction files selected from `.ai/instructions/index.md`
 * the full plan file only when exact plan edits are required or the snapshot is insufficient
 
@@ -27,9 +30,7 @@ Load:
 
 * `.ai/prompts/superpowers.md`
 
-Use superpower skills:
-
-* analyze
+Apply the superpowers advisory guidance for analysis and edge-case checks.
 
 ---
 
@@ -53,9 +54,12 @@ Ensure the plan contains:
 
 * `## Status`
 * `## Next Action`
-* `## Phases`
-* defined scope
-* validation approach
+* `## Artifacts`
+* readable `## Phases`
+* readable `.ai/artifacts/<plan-name>/state/workflow.json`
+* readable `.ai/artifacts/<plan-name>/state/files.json`
+* defined scope in `.ai/artifacts/<plan-name>/state/file-ownership.json`
+* validation approach in `## Phases`
 
 If missing:
 
@@ -178,17 +182,19 @@ If any plan step:
 
 ### 4. File Ownership Check
 
-From plan:
+From artifacts:
 
-* Created files
-* Modified files
-* Deleted files
+* `.ai/artifacts/<plan-name>/state/file-ownership.json`
+* `.ai/artifacts/<plan-name>/state/files.json`
 
 Rules:
 
-* paths MUST be explicit
-* if a file section has no files, it MUST contain exactly `* None`
-* no directories or vague references
+* entries MUST be repo-relative exact files or directory globs ending in `/**`
+* no vague references
+* ownership is file-level only; do not use hunk/chunk ownership
+* generated or shared files are owned as whole files until committed or released
+
+The runner reads `.ai/artifacts/<plan-name>/state/file-ownership.json` and `.ai/artifacts/<plan-name>/state/files.json` for thin-plan-v2 plans. Treat runner-reported artifact conflicts as authoritative.
 
 If unclear:
 
@@ -205,6 +211,17 @@ If plan contradicts codebase reality:
 ---
 
 ## Execution
+
+### Task Savepoint Mode
+
+If the runner injects `Task savepoint current task`:
+
+* implement ONLY that task ID and task name
+* validate only the current task's changed behavior plus directly affected regressions
+* do not start the next `[task:...]` item
+* keep `.ai/` artifacts out of git commits
+* when the current task is implemented and validated, set `Status = review` and `Next Action = review-plan`
+* if implementation or validation fails, keep the same task active, record the failure, and do not route to `commit-summary`
 
 ### Phase Execution Rules
 
@@ -289,12 +306,7 @@ After `Status: transferred`, the releasing plan must not edit, stage, review, or
 
 ### Phase Tracking (MANDATORY)
 
-Update:
-
-## Phases
-
-* [x] completed
-* [ ] pending
+Update the plan's `## Phases` task state only when task wording or completion notes need correction.
 
 ---
 
@@ -320,26 +332,14 @@ The artifact must include:
 <commands, outputs, files changed, or blockers that support the plan entry>
 ```
 
-Then append the next thin plan entry.
-
-If the plan already contains `## Execution Log`, append only:
-
-### Execution vX
-
-* Summary:
-* Result: completed | partial | blocked
-* Evidence: .ai/artifacts/<plan-name>/events/execution-vX.md
-
-Create `## Execution Log` only if the section is missing.
+Then update `.ai/artifacts/<plan-name>/state/workflow.json` with runner-readable thin-plan-v2 state: preserve `planPath`, set `status` and `nextAction`, write the compact execution event under `latest.execution`, append the execution artifact path to `history`, set `unresolvedBlockers` to active blocker strings or `[]`, and refresh `updatedAt`.
 
 Wording rules:
 
-* Execution Log entries may contain only `Summary`, `Result`, and `Evidence`.
-* Keep inline execution entries under 512 bytes.
+* Workflow event state may contain only compact summary, state/result/decision, and evidence pointer fields.
 * Put command output, detailed file notes, blocker explanations, validation output, and reasoning in the artifact.
-* Do not record reasoning narration, wait-state updates, or artifact body text in the plan.
-* Plan updates should state what changed, what was validated, and remaining action.
-* MUST NOT duplicate the `## Execution Log` heading when it already exists.
+* Do not record reasoning narration, wait-state updates, or artifact body text in the plan manifest.
+* Artifact state updates should state what changed, what was validated, and remaining action.
 
 ---
 
@@ -456,20 +456,19 @@ Post-Execution Validation MUST NOT set:
 
 Update the plan with:
 
-* completed phases
-* Created files (exact paths)
-* Modified files (exact paths)
-* Deleted files (exact paths)
-* file bullets must contain only exact path values; do not append comments or conditions, except an inferred path may end with ` (assumed)`
-* if any file section has no files, write exactly `* None`
-* blockers encountered
-* validation results
-* deviations (if any)
+* `## Status` and `## Next Action` only when workflow state changes
 
-Reconcile `## Files (MANDATORY)` after implementation to the actual created, modified, and deleted plan-owned paths before moving to `Status = review`.
+Update artifacts with:
 
-Keep `Execution Log` and `Validation History` entries concise: `Summary`, one state field, and `Evidence` only, with each entry under 512 bytes.
-Detailed validation evidence belongs in `.ai/artifacts/<plan-name>/events/validation-vX.md`, with only the summary/result/evidence path kept inline under `## Validation History`.
+* created, modified, deleted, changedFiles, released, headSha, and workflow state in `.ai/artifacts/<plan-name>/state/files.json`
+* blockers encountered, validation results, latest event pointers under `latest`, and compact event path history in `.ai/artifacts/<plan-name>/state/workflow.json`
+* ownership changes and releases in `.ai/artifacts/<plan-name>/state/file-ownership.json`
+* deviations and evidence in event artifacts under `.ai/artifacts/<plan-name>/events/`
+
+Reconcile `.ai/artifacts/<plan-name>/state/files.json` after implementation to the actual created, modified, and deleted plan-owned paths before moving to `Status = review`. `files.json` is the changed-file inventory for review and commit, not the ownership authority.
+
+Keep workflow state entries concise: compact summary, one state field, and evidence pointer only.
+Detailed validation evidence belongs in `.ai/artifacts/<plan-name>/events/validation-vX.md`, with only the latest validation pointer under `latest.validation` in `.ai/artifacts/<plan-name>/state/workflow.json`.
 
 ---
 

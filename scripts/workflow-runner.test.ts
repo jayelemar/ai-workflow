@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
@@ -34,6 +34,7 @@ import {
   workflowContextSnapshotRelativePath,
   workflowFileLockPath,
   writeProcessInput,
+  parsePlanTasks,
   type ProcessRunner,
 } from "./workflow-runner.ts";
 
@@ -128,6 +129,88 @@ ${(files.deleted?.length ? files.deleted : ["None"]).map((file) => `* ${file}`).
 ${extra}
 `;
 
+const planWithTaskSavepoints = (status: string, nextAction: string, extra = "") =>
+  planWithFileScope(
+    status,
+    nextAction,
+    {
+      modified: ["src/task-work.ts"],
+    },
+    `## Phases
+
+### Implementation
+
+* Objective: Complete task-savepoint work.
+* Tasks:
+  1. [task:01-backend-endpoints] Add backend endpoints
+  2. [task:02-web-surface] Add web surface
+* Expected Outcome: Task savepoints complete.
+
+${extra}`,
+  );
+
+const thinPlanV2Manifest = (
+  status = "draft",
+  nextAction = "plan-validator",
+  extra = "",
+) => `# Plan: artifact-state
+
+## Workflow Content Rules
+
+thin-plan-v2
+
+## Status
+
+${status}
+
+## Next Action
+
+${nextAction}
+
+## Spec
+
+.ai/specs/artifact-state.spec.md
+
+## Artifacts
+
+* User journey: .ai/artifacts/artifact-state/user-journey.md
+* Implementation map: .ai/artifacts/artifact-state/implementation-map.md
+* Workflow state: .ai/artifacts/artifact-state/state/workflow.json
+* File ownership: .ai/artifacts/artifact-state/state/file-ownership.json
+* Files: .ai/artifacts/artifact-state/state/files.json
+* Context: .ai/artifacts/artifact-state/state/context.md
+* Events: .ai/artifacts/artifact-state/events/
+
+## Workflow State Rules
+
+Artifact state is authoritative for workflow history, blockers, ownership, and file inventory.
+
+## Phases
+
+### Preparation
+
+* Objective: Inspect current workflow state.
+* Tasks:
+  1. Inspect .ai/artifacts/artifact-state/state/workflow.json.
+* Expected outcome: Current state is understood.
+
+### Implementation
+
+* Objective: Implement artifact-backed state.
+* Tasks:
+  1. [task:01-artifact-state] Implement artifact-backed state in .ai/scripts/workflow-runner.ts.
+* Expected outcome: Artifact-backed state is implemented.
+
+### Validation
+
+* Objective: Validate workflow runner behavior.
+* Tasks:
+  1. Run workflow runner tests.
+* Expected outcome: Workflow runner tests pass.
+
+${extra}
+`;
+
 const ownershipReleaseSection = (file: string, releasedTo = ".ai/plans/dependent-plan.md") => `## File Ownership Releases
 
 ### Release v1
@@ -137,6 +220,11 @@ const ownershipReleaseSection = (file: string, releasedTo = ".ai/plans/dependent
 * Released To: ${releasedTo}
 * Evidence: current-plan file-specific validation passed
 * Status: transferred
+`;
+
+const ownershipScopeSection = (entries: string[]) => `## Ownership Scope
+
+${entries.map((entry) => `* ${entry}`).join("\n")}
 `;
 
 const deploymentValidationSection = (planName: string, status = "pending") => `## Deployment Validation
@@ -211,6 +299,121 @@ const writeWorkflowFileLock = async (
   mkdirSync(dirname(lockPath), { recursive: true });
   await writeFile(lockPath, typeof metadata === "string" ? metadata : JSON.stringify(metadata), "utf8");
   return lockPath;
+};
+
+const writeFileOwnershipArtifact = async (
+  root: string,
+  planName: string,
+  artifact: Record<string, unknown>,
+) => {
+  const artifactPath = join(root, ".ai", "artifacts", planName, "state", "file-ownership.json");
+  mkdirSync(dirname(artifactPath), { recursive: true });
+  await writeFile(artifactPath, JSON.stringify(artifact, null, 2), "utf8");
+  return artifactPath;
+};
+
+const writeThinPlanV2Artifacts = async (
+  root: string,
+  overrides: Partial<{
+    status: string;
+    nextAction: string;
+    latestValidationResult: string;
+    latestReviewSummary: string;
+    activeBlockers: string[];
+    created: string[];
+    modified: string[];
+    deleted: string[];
+    changedFiles: string[];
+    owns: string[];
+  }> = {},
+) => {
+  const planName = "artifact-state";
+  const artifactRoot = join(root, ".ai", "artifacts", planName);
+  mkdirSync(join(artifactRoot, "state"), { recursive: true });
+  mkdirSync(join(artifactRoot, "events"), { recursive: true });
+  await writeFile(
+    join(artifactRoot, "implementation-map.md"),
+    `# Implementation Map
+
+N/A: internal workflow automation only.
+`,
+    "utf8",
+  );
+  await writeFile(join(artifactRoot, "state", "context.md"), "# Context\n\n(empty)\n", "utf8");
+  await writeFile(
+    join(artifactRoot, "state", "workflow.json"),
+    `${JSON.stringify(
+      {
+        planPath: ".ai/plans/artifact-state.md",
+        status: overrides.status ?? "review",
+        nextAction: overrides.nextAction ?? "review-plan",
+        latest: {
+          validation: {
+            version: 2,
+            result: overrides.latestValidationResult ?? "PASS",
+            summary: "Required checks passed.",
+            evidence: ".ai/artifacts/artifact-state/events/validation-v2.md",
+          },
+          review: {
+            version: 3,
+            summary: overrides.latestReviewSummary ?? "NEEDS FIX",
+            decision: "active",
+            evidence: ".ai/artifacts/artifact-state/events/review-v3.md",
+            unresolvedFindings: ["Fix the artifact state reader."],
+          },
+        },
+        history: [
+          ".ai/artifacts/artifact-state/events/validation-v2.md",
+          ".ai/artifacts/artifact-state/events/review-v3.md",
+        ],
+        unresolvedBlockers: overrides.activeBlockers ?? ["Blocker v1 | owner plan still active"],
+        updatedAt: "2026-07-01T00:00:00.000Z",
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+  const changedFiles = overrides.changedFiles ?? overrides.modified ?? ["src/artifact-state.ts"];
+  await writeFile(
+    join(artifactRoot, "state", "file-ownership.json"),
+    `${JSON.stringify(
+      {
+        planPath: ".ai/plans/artifact-state.md",
+        status: overrides.status ?? "review",
+        nextAction: overrides.nextAction ?? "review-plan",
+        owns: overrides.owns ?? changedFiles,
+        released: [],
+        resolvedFiles: overrides.owns ?? changedFiles,
+        changedFiles,
+        headSha: "abc123",
+        updatedAt: "2026-07-01T00:00:00.000Z",
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+  await writeFile(
+    join(artifactRoot, "state", "files.json"),
+    `${JSON.stringify(
+      {
+        created: overrides.created ?? [],
+        modified: overrides.modified ?? ["src/artifact-state.ts"],
+        deleted: overrides.deleted ?? [],
+        changedFiles,
+        released: [],
+        headSha: "abc123",
+        workflow: {
+          status: overrides.status ?? "review",
+          nextAction: overrides.nextAction ?? "review-plan",
+        },
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
 };
 
 const planArg = (planName: string) => `.ai/plans/${planName}.md`;
@@ -394,9 +597,141 @@ const GIT_SHOW_SED_COMMAND =
   "git show :apps/backend/src/documents/document-content-generator.service.ts | nl -ba | sed -n '340,435p'";
 
 const readWorkflowPrompt = (name: string) => readFile(join(process.cwd(), ".ai", "prompts", name), "utf8");
+const readWorkflowWrapper = (name: string) => readFile(join(process.cwd(), ".ai", "wrappers", name), "utf8");
 const readInstruction = (name: string) =>
   readFile(join(process.cwd(), ".ai", "instructions", name), "utf8");
 const readPlanTemplate = () => readFile(join(process.cwd(), ".ai", "templates", "plan.template.md"), "utf8");
+
+test("generate-user-flow prompt defines the user-journey artifact contract", async () => {
+  const prompt = await readWorkflowPrompt("generate-user-flow.md");
+  const wrapper = await readWorkflowWrapper("generate-user-flow.md");
+
+  assert.match(prompt, /\.ai\/artifacts\/<plan-name>\/user-journey\.md/);
+  assert.match(prompt, /approved spec/i);
+  assert.match(prompt, /codebase inspection/i);
+  assert.match(prompt, /must not invent desired behavior beyond the spec/i);
+  assert.match(prompt, /Markdown \+ Mermaid only/i);
+  for (const section of [
+    "Goal",
+    "Actors",
+    "Entry Points",
+    "User Flows",
+    "Mermaid Diagram",
+    "States",
+    "Failures",
+    "Acceptance Scenarios",
+    "Open Decisions",
+  ]) {
+    assert.match(prompt, new RegExp(`## ${section}`));
+  }
+  assert.match(wrapper, /Use: \.ai\/prompts\/generate-user-flow\.md/);
+  assert.match(wrapper, /Spec file:/);
+  assert.match(wrapper, /Output artifact:/);
+});
+
+test("create-plan prompt auto-preflights user-facing flow artifacts or records non-user-facing N/A", async () => {
+  const prompt = await readWorkflowPrompt("create-plan.md");
+
+  assert.match(prompt, /user-facing/i);
+  assert.match(prompt, /\.ai\/artifacts\/<plan-name>\/user-journey\.md/);
+  assert.match(prompt, /automatically create it by applying `\.ai\/prompts\/generate-user-flow\.md`/i);
+  assert.match(prompt, /automatically regenerate it by applying `\.ai\/prompts\/generate-user-flow\.md`/i);
+  assert.match(prompt, /read the user-journey artifact before planning/i);
+  assert.match(prompt, /For non-user-facing work/i);
+  assert.match(prompt, /write exactly `N\/A:/);
+  assert.match(prompt, /concrete reason/i);
+});
+
+test("plan template requires artifact pointers for implementation map and state files", async () => {
+  const template = await readPlanTemplate();
+
+  assert.match(template, /thin-plan-v2/);
+  assert.match(template, /## Artifacts/);
+  assert.match(template, /\.ai\/artifacts\/<plan-name>\/user-journey\.md/);
+  assert.match(template, /\.ai\/artifacts\/<plan-name>\/implementation-map\.md/);
+  assert.match(template, /\.ai\/artifacts\/<plan-name>\/state\/workflow\.json/);
+  assert.match(template, /\.ai\/artifacts\/<plan-name>\/state\/file-ownership\.json/);
+  assert.match(template, /\.ai\/artifacts\/<plan-name>\/state\/files\.json/);
+  assert.match(template, /N\/A: <concrete reason>/);
+  assert.match(template, /## Phases/);
+  assert.match(template, /### Preparation/);
+  assert.match(template, /### Implementation/);
+  assert.match(template, /### Validation/);
+  assert.match(template, /tests/i);
+});
+
+test("plan creation and validation reserve task savepoints for independently reviewable chunks", async () => {
+  const prompt = await readWorkflowPrompt("create-plan.md");
+  const template = await readPlanTemplate();
+  const validator = await readWorkflowPrompt("plan-validator.md");
+  const workflowInstructions = await readInstruction("ai-workflow.md");
+
+  for (const content of [prompt, validator, workflowInstructions]) {
+    assert.match(content, /\[task:(?:NN|01)-readable-words\]/);
+    assert.match(content, /independently reviewable/i);
+    assert.match(content, /do not split tasks only by lifecycle\s+phase/i);
+    assert.match(content, /red tests/i);
+    assert.match(content, /validation commands/i);
+    assert.match(content, /simple bugfix/i);
+    assert.match(content, /task savepoints/i);
+  }
+  assert.match(validator, /mark as CRITICAL/i);
+  assert.match(validator, /cannot pass and commit independently/i);
+  assert.match(template, /^## Phases$/m);
+});
+
+test("whop pro trial plan keeps simple bugfix work in one final-commit task", async (t) => {
+  const planPath = join(process.cwd(), ".ai", "plans", "whop-pro-trial-sandbox-checkout-error.md");
+  if (!existsSync(planPath)) {
+    t.skip("local ignored plan fixture is not present");
+    return;
+  }
+
+  const plan = await readFile(planPath, "utf8");
+
+  assert.doesNotMatch(plan, /\[task:\d{2}-/);
+  assert.match(plan, /staged web regression tests/i);
+  assert.match(plan, /backend regression tests/i);
+  assert.match(plan, /implementation/i);
+  assert.match(plan, /validation/i);
+  assert.match(plan, /final-commit/i);
+});
+
+test("workflow prompts define task savepoint execution, review, commit, and aggregate rules", async () => {
+  const executePrompt = await readWorkflowPrompt("execute-plan.md");
+  const reviewPrompt = await readWorkflowPrompt("review-changes.md");
+  const commitPrompt = await readWorkflowPrompt("commit-summary.md");
+
+  assert.match(executePrompt, /Task Savepoint Mode/);
+  assert.match(executePrompt, /implement ONLY that task ID/);
+  assert.match(executePrompt, /do not start the next `\[task:\.\.\.\]` item/);
+  assert.match(reviewPrompt, /review ONLY the staged diff for that task ID/);
+  assert.match(reviewPrompt, /if review fails, do not commit/i);
+  assert.match(commitPrompt, /Task savepoint aggregate summary/);
+  assert.match(commitPrompt, /do NOT create a git commit/i);
+  assert.match(commitPrompt, /Task artifact path/);
+});
+
+test("plan-validator prompt fails user-facing flow steps without implementation and validation coverage", async () => {
+  const prompt = await readWorkflowPrompt("plan-validator.md");
+
+  assert.match(prompt, /implementation-map\.md/i);
+  assert.match(prompt, /user-facing/i);
+  assert.match(prompt, /each user action/i);
+  assert.match(prompt, /implementation coverage/i);
+  assert.match(prompt, /validation coverage/i);
+  assert.match(prompt, /mark as CRITICAL/i);
+});
+
+test("workflow docs expose spec to user-journey artifact to plan to runner flow", async () => {
+  const readme = await readFile(join(process.cwd(), ".ai", "README.md"), "utf8");
+  const wrappersReadme = await readWorkflowWrapper("README.md");
+
+  assert.match(readme, /spec -> user-journey artifact -> plan -> runner/i);
+  assert.match(wrappersReadme, /spec -> user-journey artifact -> plan -> runner/i);
+  assert.match(readme, /\.ai\/wrappers\/generate-user-flow\.md/);
+  assert.match(wrappersReadme, /\.ai\/wrappers\/generate-user-flow\.md/);
+});
 
 test("plan-validator prompt classifies spec-origin findings as minor repairs or major decisions", async () => {
   const prompt = await readWorkflowPrompt("plan-validator.md");
@@ -441,6 +776,43 @@ test("fix-plan prompt allows spec edits only for latest minor spec repair valida
   assert.match(prompt, /Spec edits are allowed ONLY when the latest validation history entry points to an evidence artifact/);
   assert.match(prompt, /edit only the named spec file and named spec section\(s\) from the latest validation artifact/);
   assert.match(prompt, /return to `draft \+ plan-validator`/);
+});
+
+test("fix-plan prompt updates thin-plan workflow sidecar when transitioning state", async () => {
+  const prompt = await readWorkflowPrompt("fix-plan.md");
+
+  assert.match(prompt, /Update `\.ai\/artifacts\/<plan-name>\/state\/workflow\.json`/);
+  assert.match(prompt, /`planPath`/);
+  assert.match(prompt, /`status` = `draft`/);
+  assert.match(prompt, /`nextAction` = `plan-validator`/);
+  assert.match(prompt, /`latest`/);
+  assert.match(prompt, /`history`/);
+  assert.match(prompt, /`unresolvedBlockers`/);
+  assert.match(prompt, /`updatedAt`/);
+  assert.match(prompt, /must match the plan manifest/i);
+  assert.match(prompt, /Do not use legacy top-level aliases/i);
+  assert.match(prompt, /`latestValidationSummary`/);
+  assert.match(prompt, /`latestValidationResult`/);
+  assert.match(prompt, /`latestValidationEvidence`/);
+  assert.match(prompt, /`compactHistoryPointer`/);
+});
+
+test("plan-validator prompt updates thin-plan workflow sidecar with runner-readable state", async () => {
+  const prompt = await readWorkflowPrompt("plan-validator.md");
+
+  assert.match(prompt, /Update `\.ai\/artifacts\/<plan-name>\/state\/workflow\.json`/);
+  assert.match(prompt, /`planPath`/);
+  assert.match(prompt, /`status`/);
+  assert.match(prompt, /`nextAction`/);
+  assert.match(prompt, /`latest`/);
+  assert.match(prompt, /`history`/);
+  assert.match(prompt, /`unresolvedBlockers`/);
+  assert.match(prompt, /`updatedAt`/);
+  assert.match(prompt, /Do not use legacy top-level aliases/i);
+  assert.match(prompt, /`latestValidationSummary`/);
+  assert.match(prompt, /`latestValidationResult`/);
+  assert.match(prompt, /`latestValidationEvidence`/);
+  assert.match(prompt, /`compactHistoryPointer`/);
 });
 
 test("fix-plan prompt forbids unclassified or unresolved major spec-origin edits", async () => {
@@ -550,18 +922,19 @@ test("superpowers prompt does not require compact agent progress updates", async
   assert.doesNotMatch(prompt, /Use bullets only for multiple actionable findings, capped at 3/);
 });
 
-test("create-plan prompt defines Files as the planning-time ownership boundary", async () => {
+test("create-plan prompt defines artifact state as the planning-time boundary", async () => {
   const prompt = await readWorkflowPrompt("create-plan.md");
 
-  assert.match(prompt, /planning-time expected ownership boundary/i);
-  assert.match(prompt, /expected created, modified, and deleted file paths/i);
-  assert.match(prompt, /reconciled after implementation by `execute-plan`/i);
+  assert.match(prompt, /state\/file-ownership\.json/);
+  assert.match(prompt, /planning-time ownership boundary/i);
+  assert.match(prompt, /state\/files\.json/);
+  assert.match(prompt, /changed-file inventory/i);
 });
 
-test("execute-plan prompt reconciles Files after implementation before review", async () => {
+test("execute-plan prompt reconciles files.json after implementation before review", async () => {
   const prompt = await readWorkflowPrompt("execute-plan.md");
 
-  assert.match(prompt, /reconcile `## Files \(MANDATORY\)` after implementation/i);
+  assert.match(prompt, /Reconcile `?\.ai\/artifacts\/<plan-name>\/state\/files\.json`? after implementation/i);
   assert.match(prompt, /actual created, modified, and deleted plan-owned paths/i);
   assert.match(prompt, /before moving to `Status = review`/i);
 });
@@ -569,7 +942,7 @@ test("execute-plan prompt reconciles Files after implementation before review", 
 test("review-changes prompt routes file-list mismatches back to execution", async () => {
   const prompt = await readWorkflowPrompt("review-changes.md");
 
-  assert.match(prompt, /If staged implementation paths do not match `## Files \(MANDATORY\)`/);
+  assert.match(prompt, /If staged implementation paths do not match the expected changed-file inventory in `\.ai\/artifacts\/<plan-name>\/state\/files\.json`/);
   assert.match(prompt, /file-list mismatch/i);
   assert.match(prompt, /Status = active/);
   assert.match(prompt, /Next Action = execute-plan/);
@@ -578,67 +951,57 @@ test("review-changes prompt routes file-list mismatches back to execution", asyn
 test("commit-summary prompt does not repair Files metadata", async () => {
   const prompt = await readWorkflowPrompt("commit-summary.md");
 
-  assert.match(prompt, /relies on the existing `## Files \(MANDATORY\)` list/i);
-  assert.match(prompt, /must not repair `## Files \(MANDATORY\)`/i);
+  assert.match(prompt, /relies on `\.ai\/artifacts\/<plan-name>\/state\/files\.json` as the changed-file inventory/i);
+  assert.match(prompt, /state\/file-ownership\.json/);
+  assert.match(prompt, /must not repair `files\.json`/i);
   assert.match(prompt, /route the plan back through review or execution/i);
 });
 
-test("execute-plan prompt requires concise execution log and validation update wording", async () => {
+test("execute-plan prompt requires concise artifact event and validation update wording", async () => {
   const prompt = await readWorkflowPrompt("execute-plan.md");
 
-  assert.match(prompt, /Execution Log entries may contain only `Summary`, `Result`, and `Evidence`/);
-  assert.match(prompt, /Keep inline execution entries under 512 bytes/);
-  assert.match(prompt, /Do not record reasoning narration, wait-state updates, or artifact body text in the plan/);
-  assert.match(prompt, /Plan updates should state what changed, what was validated, and remaining action/);
+  assert.match(prompt, /Workflow event state may contain only compact summary, state\/result\/decision, and evidence pointer fields/);
+  assert.match(prompt, /Do not record reasoning narration, wait-state updates, or artifact body text in the plan manifest/);
+  assert.match(prompt, /Artifact state updates should state what changed, what was validated, and remaining action/);
 });
 
-test("review-changes prompt requires concise actionable Review History entries", async () => {
+test("review-changes prompt requires concise actionable review artifact state", async () => {
   const prompt = await readWorkflowPrompt("review-changes.md");
 
-  assert.match(prompt, /Review History entries may contain only `Summary`, `Decision`, and `Evidence`/);
+  assert.match(prompt, /Review state entries may contain only compact `Summary`, `Decision`, and `Evidence` pointer fields/);
   assert.match(prompt, /Put all issue bullets, file references, remediation notes, missing validations, and unresolved risks in the review artifact/);
   assert.match(prompt, /self-contained/i);
   assert.match(prompt, /must not rely on surrounding prose, earlier review versions, or shorthand like `same as above`/i);
   assert.match(prompt, /Do not use Review History for terminal-output summaries/);
 });
 
-test("plan template uses artifact-first thin-plan workflow stubs", async () => {
+test("plan template uses thin-plan-v2 artifact-first manifest", async () => {
   const template = await readPlanTemplate();
 
-  assert.match(template, /Keep workflow history entries under 512 bytes/);
-  assert.match(template, /Keep aggregate workflow history under 4 KB/);
-  assert.match(template, /may contain only `Summary`, exactly one of `Result`, `Decision`, or `Status`, and `Evidence`/);
+  assert.match(template, /thin-plan-v2/);
+  assert.match(template, /user-journey\.md/);
+  assert.match(template, /implementation-map\.md/);
+  assert.match(template, /^## Phases$/m);
+  assert.match(template, /workflow\.json/);
+  assert.match(template, /files\.json/);
+  assert.match(template, /file-ownership\.json/);
   assert.doesNotMatch(template, /\* Issues:/);
   assert.doesNotMatch(template, /\* Critical Issues:/);
   assert.doesNotMatch(template, /\* Warnings:/);
   assert.doesNotMatch(template, /\* Required Fixes:/);
 });
 
-test("plan template keeps workflow history sections as empty stubs", async () => {
+test("plan template omits inline workflow runtime sections", async () => {
   const template = await readPlanTemplate();
 
-  const validationSection = template.match(/## Validation History([\s\S]*?)## Review History/);
-  const reviewSection = template.match(/## Review History([\s\S]*?)## Reopen History/);
-  const reopenSection = template.match(/## Reopen History([\s\S]*?)## Blockers/);
-
-  assert.ok(validationSection, "expected Validation History section");
-  assert.ok(reviewSection, "expected Review History section");
-  assert.ok(reopenSection, "expected Reopen History section");
-
-  for (const [sectionName, section] of [
-    ["Validation History", validationSection[1]],
-    ["Review History", reviewSection[1]],
-    ["Reopen History", reopenSection[1]],
-  ] as const) {
-    assert.match(section, /\(empty\)/, `${sectionName} should keep the empty stub`);
-    assert.doesNotMatch(section, /^---$/m, `${sectionName} must not include section separators`);
-    assert.doesNotMatch(section, /\bRules:\b/, `${sectionName} must not include inline rules`);
-    assert.doesNotMatch(
-      section,
-      /###\s+(Validation|Review|Reopen)\s+v\d+/,
-      `${sectionName} must not include inline entry examples`,
-    );
-  }
+  assert.doesNotMatch(template, /^## Flow-to-File Mapping$/m);
+  assert.doesNotMatch(template, /^## Implementation Map$/m);
+  assert.doesNotMatch(template, /^## Execution Log$/m);
+  assert.doesNotMatch(template, /^## Validation History$/m);
+  assert.doesNotMatch(template, /^## Review History$/m);
+  assert.doesNotMatch(template, /^## Blockers$/m);
+  assert.doesNotMatch(template, /^## Ownership Scope$/m);
+  assert.doesNotMatch(template, /^## Files \(MANDATORY\)$/m);
 });
 
 test("execute-plan prompt uses snapshot remediation context before full review history", async () => {
@@ -663,6 +1026,20 @@ test("review-changes prompt loads testing instructions before validation", async
   assert.match(prompt, /before running, skipping, or classifying validation/i);
 });
 
+test("review-changes prompt validates user-facing diffs against user-journey artifacts", async () => {
+  const prompt = await readWorkflowPrompt("review-changes.md");
+
+  assert.match(prompt, /\.ai\/artifacts\/<plan-name>\/user-journey\.md/);
+  assert.match(prompt, /user-facing/i);
+  assert.match(prompt, /implementation-map\.md/i);
+  assert.match(prompt, /each user action/i);
+  assert.match(prompt, /visible state/i);
+  assert.match(prompt, /failure branch/i);
+  assert.match(prompt, /validation coverage/i);
+  assert.match(prompt, /Spec remains authoritative/i);
+  assert.match(prompt, /mark as CRITICAL/i);
+});
+
 test("testing instructions require command-level escalation for local E2E in Codex sandbox", async () => {
   const instructions = await readInstruction("shared/testing.md");
 
@@ -682,12 +1059,11 @@ test("unblock-plan prompt can resume plan dependency blockers after owner comple
   assert.match(prompt, /blocked -> active/);
 });
 
-test("unblock-plan prompt recognizes deployment-validation owner commits as stable dependency evidence", async () => {
+test("unblock-plan prompt does not accept deployment-validation owner evidence", async () => {
   const prompt = await readWorkflowPrompt("unblock-plan.md");
 
-  assert.match(prompt, /deployment-validation \+ unblock-plan/);
-  assert.match(prompt, /deployment-validation artifact/);
-  assert.match(prompt, /stable/);
+  assert.doesNotMatch(prompt, /deployment-validation \+ unblock-plan/);
+  assert.doesNotMatch(prompt, /deployment-validation artifact/);
   assert.match(prompt, /plan dependency/);
 });
 
@@ -724,18 +1100,23 @@ test("review-changes prompt expects runner pre-review cleanup for clearly unrela
 
   assert.match(prompt, /runner may auto-unstage clearly unrelated staged hunks before review/i);
   assert.match(prompt, /review the remaining path-scoped staged diff only/i);
-  assert.match(prompt, /if unrelated changes remain after runner cleanup/i);
+  assert.match(prompt, /non plan-scoped changes detected/i);
+  assert.match(prompt, /Status = active/);
+  assert.match(prompt, /Next Action = execute-plan/);
+  assert.doesNotMatch(prompt, /Hunk Ownership/);
+  assert.doesNotMatch(prompt, /any unrelated hunk inside the path-scoped diff is a STOP condition/i);
 });
 
-test("commit-summary prompt creates one local deployment-validation commit and forbids auto-push", async () => {
+test("commit-summary prompt only accepts completed commit-summary plans", async () => {
   const prompt = await readWorkflowPrompt("commit-summary.md");
 
-  assert.match(prompt, /deployment-validation/);
-  assert.match(prompt, /exactly one local git commit/);
+  assert.match(prompt, /completed \+ commit-summary[\s\S]*create exactly one local git commit/);
+  assert.match(prompt, /IF Status is not `completed`/);
+  assert.match(prompt, /IF Next Action is not `commit-summary`/);
   assert.match(prompt, /MUST NOT push/);
-  assert.match(prompt, /## Deployment Validation/);
-  assert.match(prompt, /artifact must include the commit SHA, branch, commit timestamp, push status, deployment status/);
-  assert.match(prompt, /Deployment Validation entries may contain only `Summary`, `Status`, and `Evidence`/);
+  assert.doesNotMatch(prompt, /deployment-validation/);
+  assert.doesNotMatch(prompt, /## Deployment Validation/);
+  assert.doesNotMatch(prompt, /Deployment Validation entries may contain only `Summary`, `Status`, and `Evidence`/);
   assert.doesNotMatch(prompt, /\* Commit:/);
   assert.doesNotMatch(prompt, /\* Push Status:/);
   assert.doesNotMatch(prompt, /\* Deployment Status:/);
@@ -745,16 +1126,18 @@ test("commit-summary prompt creates one local completed commit and forbids auto-
   const prompt = await readWorkflowPrompt("commit-summary.md");
 
   assert.match(prompt, /completed \+ commit-summary[\s\S]*create exactly one local git commit/);
-  assert.match(prompt, /git commit -m "<generated message>" -- <plan-owned paths>/);
+  assert.match(prompt, /pnpm lint-staged/);
+  assert.match(prompt, /git commit -m "<generated message>"/);
+  assert.doesNotMatch(prompt, /git commit -m "<generated message>" -- <plan-owned paths>/);
   assert.match(prompt, /MUST NOT push/);
 });
 
-test("commit-summary prompt avoids a second commit after deployment validation passes", async () => {
+test("commit-summary prompt does not branch for deployment validation pass-through", async () => {
   const prompt = await readWorkflowPrompt("commit-summary.md");
 
-  assert.match(prompt, /Status: passed/);
-  assert.match(prompt, /do not create a second commit/);
-  assert.match(prompt, /recorded commit/);
+  assert.doesNotMatch(prompt, /Status: passed/);
+  assert.doesNotMatch(prompt, /do not create a second commit/);
+  assert.doesNotMatch(prompt, /recorded commit/);
 });
 
 test("commit-summary prompt unstages clearly unrelated staged hunks after path-scoped git add", async () => {
@@ -765,23 +1148,23 @@ test("commit-summary prompt unstages clearly unrelated staged hunks after path-s
   assert.match(prompt, /do not stop for clearly unrelated hunks/i);
 });
 
-test("unblock-plan prompt updates deployment-validation state from deployment evidence", async () => {
+test("unblock-plan prompt handles only blocked plan recovery", async () => {
   const prompt = await readWorkflowPrompt("unblock-plan.md");
 
-  assert.match(prompt, /deployment-validation/);
-  assert.match(prompt, /Push Status/);
-  assert.match(prompt, /Deployment Status/);
-  assert.match(prompt, /final validation evidence/);
-  assert.match(prompt, /completed \+ commit-summary/);
-  assert.match(prompt, /reopening \+ reopen-plan/);
+  assert.match(prompt, /IF Status is not `blocked`/);
+  assert.match(prompt, /blocked -> active/);
+  assert.doesNotMatch(prompt, /deployment-validation/);
+  assert.doesNotMatch(prompt, /Push Status/);
+  assert.doesNotMatch(prompt, /Deployment Status/);
+  assert.doesNotMatch(prompt, /final validation evidence/);
+  assert.doesNotMatch(prompt, /reopening \+ reopen-plan/);
 });
 
-test("unblock-plan prompt stops deployment validation when no new evidence is available", async () => {
+test("unblock-plan prompt does not require deployment-validation evidence", async () => {
   const prompt = await readWorkflowPrompt("unblock-plan.md");
 
-  assert.match(prompt, /If no concrete new deployment-validation evidence is available/);
-  assert.match(prompt, /output `STOP`/);
-  assert.match(prompt, /deployment-validation evidence is required/);
+  assert.doesNotMatch(prompt, /If no concrete new deployment-validation evidence is available/);
+  assert.doesNotMatch(prompt, /deployment-validation evidence is required/);
   assert.match(prompt, /MUST NOT return success without changing the plan/);
 });
 
@@ -811,7 +1194,8 @@ test("workflow prompts define transferred file ownership releases", async () => 
     assert.match(prompt, /Status: transferred/);
   }
   assert.match(executePrompt, /must not edit, stage, review, or commit the released file again/);
-  assert.match(unblockPrompt, /add the released file to its own `## Files \(MANDATORY\)`/);
+  assert.match(unblockPrompt, /state\/file-ownership\.json/);
+  assert.match(unblockPrompt, /state\/files\.json/);
   assert.match(reviewPrompt, /reject the review for the releasing plan/);
 });
 
@@ -1479,7 +1863,7 @@ test("codex live output formatter colorizes hybrid labels when color is enabled"
       }),
       { color: true },
     ),
-    "\u001b[31m[failed]\u001b[0m pnpm test (exit 7)\n  failed\n  command output omitted from workflow log\n\n",
+    "\u001b[31m[failed]\u001b[0m pnpm test (exit 7)\n  output: 6 bytes, 1 lines omitted\n  command output omitted from workflow log\n\n",
   );
   assert.equal(
     formatCodexJsonlEventForTerminal(codexAgentMessageLine("Done"), { color: true }),
@@ -1912,7 +2296,7 @@ test("codex live output formatter summarizes git show search and line-range pipe
   );
 });
 
-test("codex live output formatter shows a bounded excerpt for failed command output", () => {
+test("codex live output formatter shows only output metadata for failed command output", () => {
   const output = Array.from({ length: 12 }, (_, index) => `line ${index + 1}`).join("\n");
 
   assert.equal(
@@ -1931,18 +2315,15 @@ test("codex live output formatter shows a bounded excerpt for failed command out
     ),
     [
       "[failed] pnpm test (exit 1)",
-      "  line 1",
-      "  line 2",
-      "  line 3",
-      "  line 4",
-      "  ... output truncated in terminal; command output omitted from workflow log",
+      `  output: ${Buffer.byteLength(output, "utf8")} bytes, 12 lines omitted`,
+      "  command output omitted from workflow log",
       "",
       "",
     ].join("\n"),
   );
 });
 
-test("codex live output formatter summarizes failed Jest test output", () => {
+test("codex live output formatter keeps failed Jest test output metadata-only", () => {
   const output = [
     "FAIL test/onboarding/document-content-generator.service.spec.ts (10.998 s)",
     "  ● DocumentContentGeneratorService › widens unmapped suffixless Austin Market Research competitor queries to matching registration country",
@@ -1971,14 +2352,8 @@ test("codex live output formatter summarizes failed Jest test output", () => {
     ),
     [
       "[failed] jest test (exit 1)",
-      "- test/onboarding/document-content-generator.service.spec.ts",
-      "- widens unmapped suffixless",
-      "",
-      "expect(received).toBeGreaterThan(expected)",
-      "Expected: > 0",
-      "Received:   -1",
-      "",
-      "command output omitted from workflow log",
+      `  output: ${Buffer.byteLength(output, "utf8")} bytes, 9 lines omitted`,
+      "  command output omitted from workflow log",
       "",
       "",
     ].join("\n"),
@@ -2000,7 +2375,7 @@ test("codex live output formatter treats unknown command exits as failed but kee
         },
       }),
     ),
-    "[failed] pnpm test (exit unknown)\n  no exit\n  command output omitted from workflow log\n\n",
+    "[failed] pnpm test (exit unknown)\n  output: 7 bytes, 1 lines omitted\n  command output omitted from workflow log\n\n",
   );
 });
 
@@ -2177,7 +2552,7 @@ test("codex live output formatter separates adjacent JSONL event blocks", () => 
 
 test("codex live output formatter suppresses successful plan section read commands", () => {
   const planPath = ".ai/plans/market-research-competitor-discovery.md";
-  const headingSearchCommand = String.raw`rg -n '^## (Status|Next Action|Files \(MANDATORY\)|Hunk Ownership|File Ownership Releases|Validation Evidence|Review History|Blockers)' ${planPath}`;
+  const headingSearchCommand = String.raw`rg -n '^## (Status|Next Action|Ownership Scope|Files \(MANDATORY\)|File Ownership Releases|Validation Evidence|Review History|Blockers)' ${planPath}`;
   const sectionReadCommand = String.raw`awk '/^## File Ownership Releases$/{flag=1; print; next} flag && /^## /{exit} flag{print}' ${planPath}`;
 
   assert.equal(formatCodexJsonlEventForTerminal(codexCommandStartedLine(headingSearchCommand), { color: false }), "");
@@ -2211,7 +2586,7 @@ test("codex live output formatter suppresses successful plan section read comman
     ),
     [
       "[failed] plan section read (exit 1)",
-      "  missing section",
+      "  output: 15 bytes, 1 lines omitted",
       "  command output omitted from workflow log",
       "",
       "",
@@ -2319,7 +2694,7 @@ test("codex live output formatter suppresses consecutive duplicate command summa
       codexCommandStartedLine(GIT_STAGED_NAME_STATUS_COMMAND),
       codexCommandOutputLine(
         "match\n",
-        String.raw`/bin/bash -lc "rg -n ''\''^(## Hunk Ownership|## File Ownership Releases|## Review History|## Deployment Validation|## Status|## Next Action|### Review v)' .ai/plans/market-research-competitor-discovery.md"`,
+        String.raw`/bin/bash -lc "rg -n ''\''^(## Ownership Scope|## File Ownership Releases|## Review History|## Deployment Validation|## Status|## Next Action|### Review v)' .ai/plans/market-research-competitor-discovery.md"`,
       ),
     ].join("\n") + "\n",
   );
@@ -2335,7 +2710,7 @@ test("codex live output formatter suppresses consecutive duplicate command summa
       "  +7 more",
       "",
       "Search in market-research-competitor-discovery.md",
-      "- ## Hunk Ownership",
+      "- ## Ownership Scope",
       "- ## File Ownership Releases",
       "- ## Review History",
       "  +4 more",
@@ -2933,16 +3308,56 @@ test("commit-summary workflow prompt includes plan-scoped staging commands for p
   assert.match(prompt, /git status --short -- apps\/web\/src\/simple\.ts 'docs\/plan notes\.md'/);
   assert.match(prompt, /git diff --name-status -- apps\/web\/src\/simple\.ts 'docs\/plan notes\.md'/);
   assert.match(prompt, /git add --all -- apps\/web\/src\/simple\.ts 'docs\/plan notes\.md'/);
+  assert.match(prompt, /pnpm lint-staged/);
   assert.match(
     prompt,
     /git diff --staged --name-status -- apps\/web\/src\/simple\.ts 'docs\/plan notes\.md'/,
   );
-  assert.match(
+  assert.match(prompt, /git diff --staged --name-status\n/);
+  assert.match(prompt, /git commit -m "<generated message>"/);
+  assert.doesNotMatch(
     prompt,
     /git commit -m "<generated message>" -- apps\/web\/src\/simple\.ts 'docs\/plan notes\.md'/,
   );
+  assert.match(prompt, /non plan-scoped staged changes detected/);
   assert.match(prompt, /Do not stage \.ai files/);
   assert.doesNotMatch(prompt, /use sub-agents/);
+});
+
+test("workflow prompt includes task savepoint current task and aggregate-only commit summary modes", () => {
+  const taskPrompt = generateWorkflowPrompt({
+    promptPath: ".ai/prompts/execute-plan.md",
+    planPath: ".ai/plans/workflow-runner.md",
+    promptContent: "EXECUTE PLAN PROMPT",
+    taskContext: {
+      task: {
+        id: "01-backend-endpoints",
+        words: "backend-endpoints",
+        name: "Add backend endpoints",
+        artifactWords: "add-backend-endpoints",
+      },
+      stage: "implementing",
+      artifactPath:
+        ".ai/artifacts/workflow-runner/tasks/01-backend-endpoints-add-backend-endpoints-v1.md",
+    },
+  });
+
+  assert.match(taskPrompt, /Task savepoint current task:/);
+  assert.match(taskPrompt, /Task ID: 01-backend-endpoints/);
+  assert.match(taskPrompt, /Task Stage: implementing/);
+  assert.match(taskPrompt, /Do not start another `\[task:\.\.\.\]` item/);
+
+  const aggregatePrompt = generateWorkflowPrompt({
+    promptPath: ".ai/prompts/commit-summary.md",
+    planPath: ".ai/plans/workflow-runner.md",
+    promptContent: "COMMIT SUMMARY PROMPT",
+    commitSummaryPaths: ["src/file.ts"],
+    taskSavepointAggregateSummary: true,
+  });
+
+  assert.match(aggregatePrompt, /Task savepoint aggregate summary:/);
+  assert.match(aggregatePrompt, /Do not create a git commit/);
+  assert.doesNotMatch(aggregatePrompt, /git commit -m "<generated message>"/);
 });
 
 test("review workflow prompt shell-quotes path-scoped diff commands", () => {
@@ -3050,6 +3465,25 @@ test("parsePlan requires the repo-relative .ai/plans markdown path", async () =>
   }
 });
 
+test("parsePlanTasks extracts stable task IDs, words, and readable names", () => {
+  const tasks = parsePlanTasks(planWithTaskSavepoints("active", "execute-plan"));
+
+  assert.deepEqual(tasks, [
+    {
+      id: "01-backend-endpoints",
+      words: "backend-endpoints",
+      name: "Add backend endpoints",
+      artifactWords: "add-backend-endpoints",
+    },
+    {
+      id: "02-web-surface",
+      words: "web-surface",
+      name: "Add web surface",
+      artifactWords: "add-web-surface",
+    },
+  ]);
+});
+
 test("parsePlan accepts markdown code-wrapped workflow metadata values", async () => {
   const workspace = await setupWorkspace();
   try {
@@ -3096,6 +3530,135 @@ execute-plan
 
     assert.equal(parsed.ok, false);
     assert.match(parsed.ok ? "" : parsed.reason, /thin-plan-v1/);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("parsePlan accepts thin-plan-v2 manifest and reads current state from workflow.json", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writeThinPlanV2Artifacts(workspace.root, {
+      status: "review",
+      nextAction: "review-plan",
+    });
+    await writePlan(workspace.root, "artifact-state", thinPlanV2Manifest("review", "review-plan"));
+
+    const parsed = await parsePlan({
+      planName: planArg("artifact-state"),
+      rootDir: workspace.root,
+    });
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.ok && parsed.status, "review");
+    assert.equal(parsed.ok && parsed.nextAction, "review-plan");
+    assert.match(parsed.ok ? parsed.content : "", /## Files \(MANDATORY\)/);
+    assert.match(parsed.ok ? parsed.content : "", /## Review History/);
+    assert.match(parsed.ok ? parsed.content : "", /src\/artifact-state\.ts/);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("parsePlan rejects thin-plan-v2 manifest and workflow sidecar state mismatch", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writeThinPlanV2Artifacts(workspace.root, {
+      status: "draft",
+      nextAction: "fix-plan",
+    });
+    await writePlan(workspace.root, "artifact-state", thinPlanV2Manifest("draft", "plan-validator"));
+
+    const parsed = await parsePlan({
+      planName: planArg("artifact-state"),
+      rootDir: workspace.root,
+    });
+
+    assert.equal(parsed.ok, false);
+    assert.match(parsed.ok ? "" : parsed.reason, /thin-plan-v2 manifest state mismatch/);
+    assert.match(parsed.ok ? "" : parsed.reason, /workflow\.json/);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("parsePlan rejects thin-plan-v2 when required artifacts are missing", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(workspace.root, "artifact-state", thinPlanV2Manifest());
+
+    const parsed = await parsePlan({
+      planName: planArg("artifact-state"),
+      rootDir: workspace.root,
+    });
+
+    assert.equal(parsed.ok, false);
+    assert.match(parsed.ok ? "" : parsed.reason, /thin-plan-v2 artifact does not exist.*implementation-map\.md/);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("parsePlan rejects thin-plan-v2 forbidden inline workflow sections", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writeThinPlanV2Artifacts(workspace.root);
+    await writePlan(
+      workspace.root,
+      "artifact-state",
+      thinPlanV2Manifest(
+        "draft",
+        "plan-validator",
+        `## Implementation Map
+
+### User Action: Inline mapping
+
+* UI route/component: apps/web/src/app/page.tsx
+`,
+      ),
+    );
+
+    const parsed = await parsePlan({
+      planName: planArg("artifact-state"),
+      rootDir: workspace.root,
+    });
+
+    assert.equal(parsed.ok, false);
+    assert.match(parsed.ok ? "" : parsed.reason, /thin-plan-v2 contains forbidden inline section Implementation Map/);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("workflow context snapshot reads validation, review, and blockers from thin-plan-v2 workflow state", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writeThinPlanV2Artifacts(workspace.root, {
+      status: "blocked",
+      nextAction: "unblock-plan",
+      latestValidationResult: "FAIL",
+      latestReviewSummary: "HIGH RISK",
+      activeBlockers: ["Plan dependency | .ai/plans/owner.md still owns src/artifact-state.ts"],
+    });
+    await writePlan(workspace.root, "artifact-state", thinPlanV2Manifest("blocked", "unblock-plan"));
+    const parsed = await parsePlan({
+      planName: planArg("artifact-state"),
+      rootDir: workspace.root,
+    });
+    assert.equal(parsed.ok, true);
+
+    const snapshot = generateWorkflowContextSnapshot({
+      planName: "artifact-state",
+      planPath: ".ai/plans/artifact-state.md",
+      planContent: parsed.ok ? parsed.content : "",
+    });
+
+    assert.match(snapshot, /\* Status: blocked/);
+    assert.match(snapshot, /\* Next Action: unblock-plan/);
+    assert.match(snapshot, /\* Result: FAIL/);
+    assert.match(snapshot, /\* Summary: HIGH RISK/);
+    assert.match(snapshot, /Fix the artifact state reader/);
+    assert.match(snapshot, /Plan dependency \| \.ai\/plans\/owner\.md still owns src\/artifact-state\.ts/);
   } finally {
     await workspace.cleanup();
   }
@@ -3259,17 +3822,11 @@ test("parsePlan accepts thin-plan workflow entries with only summary, state, and
       kind: "review",
       version: 1,
     });
-    await writeWorkflowEventArtifact({
-      root: workspace.root,
-      planName: "thin-stubs",
-      kind: "deployment-validation",
-      version: 1,
-    });
     await writePlan(
       workspace.root,
       "thin-stubs",
       planWith(
-        "deployment-validation",
+        "completed",
         "commit-summary",
         `## Validation History
 
@@ -3283,23 +3840,39 @@ test("parsePlan accepts thin-plan workflow entries with only summary, state, and
 
 ### Review v1
 
-* Summary: Safe for deployment validation.
-* Decision: deployment-validation
+* Summary: Safe for local commit summary.
+* Decision: completed
 * Evidence: .ai/artifacts/thin-stubs/events/review-v1.md
-
-## Deployment Validation
-
-### Deployment Validation v1
-
-* Summary: Manual production check remains pending.
-* Status: pending
-* Evidence: .ai/artifacts/thin-stubs/events/deployment-validation-v1.md
 `,
       ),
     );
 
     const parsed = await parsePlan({
       planName: planArg("thin-stubs"),
+      rootDir: workspace.root,
+    });
+
+    assert.equal(parsed.ok, true);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("parsePlan ignores historical Deployment Validation sections for thin-plan validation", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(
+      workspace.root,
+      "historical-deployment-validation",
+      planWith(
+        "completed",
+        "commit-summary",
+        deploymentValidationSection("historical-deployment-validation"),
+      ),
+    );
+
+    const parsed = await parsePlan({
+      planName: planArg("historical-deployment-validation"),
       rootDir: workspace.root,
     });
 
@@ -3709,7 +4282,7 @@ test("parsePlan rejects missing, mismatched, and oversized thin-plan artifacts",
   }
 });
 
-test("parsePlan accepts deployment-validation as a workflow status", async () => {
+test("parsePlan rejects deployment-validation as an unsupported workflow status", async () => {
   const workspace = await setupWorkspace();
   try {
     await writePlan(workspace.root, "workflow-runner", planWith("deployment-validation", "unblock-plan"));
@@ -3718,9 +4291,8 @@ test("parsePlan accepts deployment-validation as a workflow status", async () =>
       rootDir: workspace.root,
     });
 
-    assert.equal(parsed.ok, true);
-    assert.equal(parsed.ok && parsed.status, "deployment-validation");
-    assert.equal(parsed.ok && parsed.nextAction, "unblock-plan");
+    assert.equal(parsed.ok, false);
+    assert.match(parsed.ok ? "" : parsed.reason, /unknown status value: deployment-validation/);
   } finally {
     await workspace.cleanup();
   }
@@ -3766,22 +4338,6 @@ test("routes only spec-defined executable pairs and sends blocked plans through 
       ["active-execute", "active", "execute-plan", ".ai/prompts/execute-plan.md", "gpt-5.5", "high"],
       ["blocked-unblock", "blocked", "unblock-plan", ".ai/prompts/unblock-plan.md", "gpt-5.4", "medium"],
       ["blocked-legacy", "blocked", "execute-plan", ".ai/prompts/unblock-plan.md", "gpt-5.4", "medium"],
-      [
-        "deployment-validation-commit",
-        "deployment-validation",
-        "commit-summary",
-        ".ai/prompts/commit-summary.md",
-        "gpt-5.3-codex-spark",
-        "medium",
-      ],
-      [
-        "deployment-validation-unblock",
-        "deployment-validation",
-        "unblock-plan",
-        ".ai/prompts/unblock-plan.md",
-        "gpt-5.4",
-        "medium",
-      ],
       ["review-review", "review", "review-plan", ".ai/prompts/review-changes.md", "gpt-5.5", "xhigh"],
       ["reopen-reopen", "reopening", "reopen-plan", ".ai/prompts/reopen-plan.md", "gpt-5.4", "medium"],
       ["completed-commit", "completed", "commit-summary", ".ai/prompts/commit-summary.md", "gpt-5.3-codex-spark", "medium"],
@@ -3804,38 +4360,13 @@ test("routes only spec-defined executable pairs and sends blocked plans through 
               launchedReasoning.push(call.args[5] ?? "");
             }
             if (promptPath === ".ai/prompts/unblock-plan.md") {
-              const nextPlan =
-                status === "deployment-validation"
-                  ? planWith("deployment-validation", "unblock-plan", deploymentValidationSection(name))
-                  : planWith("active", "execute-plan");
-              if (status === "deployment-validation") {
-                writeWorkflowEventArtifactSync({
-                  root: workspace.root,
-                  planName: name,
-                  kind: "deployment-validation",
-                  version: 1,
-                });
-              }
-              writeFileSync(join(workspace.root, ".ai", "plans", `${name}.md`), nextPlan);
+              writeFileSync(join(workspace.root, ".ai", "plans", `${name}.md`), planWith("active", "execute-plan"));
               return;
             }
             if (promptPath === ".ai/prompts/execute-plan.md") {
               writeFileSync(
                 join(workspace.root, ".ai", "plans", `${name}.md`),
                 planWith("blocked", "unblock-plan"),
-              );
-              return;
-            }
-            if (status === "deployment-validation" && promptPath === ".ai/prompts/commit-summary.md") {
-              writeWorkflowEventArtifactSync({
-                root: workspace.root,
-                planName: name,
-                kind: "deployment-validation",
-                version: 1,
-              });
-              writeFileSync(
-                join(workspace.root, ".ai", "plans", `${name}.md`),
-                planWith("deployment-validation", "unblock-plan", deploymentValidationSection(name)),
               );
               return;
             }
@@ -3871,50 +4402,15 @@ test("routes only spec-defined executable pairs and sends blocked plans through 
     });
     assert.equal(completedReopen.success, false);
     assert.match(completedReopen.reason, /undefined status\/next action pair/);
-  } finally {
-    await workspace.cleanup();
-  }
-});
 
-test("deployment-validation commit-summary stops with deployment-validation outcome after recording commit metadata", async () => {
-  const workspace = await setupWorkspace();
-  try {
-    await writePlan(workspace.root, "deploy-check", planWith("deployment-validation", "commit-summary"));
-    const output = collectConsole();
-    const calls: Parameters<ProcessRunner>[0][] = [];
-    const result = await runWorkflowRunner({
-      planName: planArg("deploy-check"),
+    await writePlan(workspace.root, "deployment-validation", planWith("deployment-validation", "unblock-plan"));
+    const deploymentValidation = await runWorkflowRunner({
+      planName: planArg("deployment-validation"),
       rootDir: workspace.root,
-      console: output.console,
-      processRunner: runnerReturning({ launched: true, stdout: "summary", stderr: "", exitCode: 0 }, (call) => {
-        calls.push(call);
-        writeWorkflowEventArtifactSync({
-          root: workspace.root,
-          planName: "deploy-check",
-          kind: "deployment-validation",
-          version: 1,
-          evidence: "Commit: abc1234",
-        });
-        writeFileSync(
-          join(workspace.root, ".ai", "plans", "deploy-check.md"),
-          planWith("deployment-validation", "unblock-plan", deploymentValidationSection("deploy-check")),
-        );
-      }),
+      processRunner: runnerReturning({ launched: true, stdout: "", stderr: "", exitCode: 0 }),
     });
-
-    assert.equal(result.success, false);
-    assert.match(result.reason, /deployment validation/);
-    assert.deepEqual(
-      calls.filter((call) => call.command === CODEX_COMMAND).map((call) => call.promptPath),
-      [".ai/prompts/commit-summary.md"],
-    );
-    assert.match(output.lines.join("\n"), /DEPLOYMENT VALIDATION/);
-    assert.doesNotMatch(output.lines.join("\n"), /abc1234/);
-    const artifact = await readFile(
-      join(workspace.root, ".ai", "artifacts", "deploy-check", "events", "deployment-validation-v1.md"),
-      "utf8",
-    );
-    assert.match(artifact, /abc1234/);
+    assert.equal(deploymentValidation.success, false);
+    assert.match(deploymentValidation.reason, /unknown status value: deployment-validation/);
   } finally {
     await workspace.cleanup();
   }
@@ -3984,6 +4480,64 @@ test("review safe path routes to completed commit-summary and succeeds after pla
         ["add", "--all", "--", "src/file.ts"],
         ["diff", "--cached", "--unified=0", "--"],
         ["status", "--short", "--", "src/file.ts"],
+      ],
+    );
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("thin-plan-v2 review and commit-summary stage plan-owned paths from files.json", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writeThinPlanV2Artifacts(workspace.root, {
+      status: "review",
+      nextAction: "review-plan",
+      modified: ["src/artifact-state.ts"],
+      changedFiles: ["src/artifact-state.ts"],
+    });
+    await writePlan(workspace.root, "artifact-state", thinPlanV2Manifest("review", "review-plan"));
+    const calls: Parameters<ProcessRunner>[0][] = [];
+    const result = await runWorkflowRunner({
+      planName: planArg("artifact-state"),
+      rootDir: workspace.root,
+      processRunner: async (call) => {
+        calls.push(call);
+        if (call.command === "git" && call.args[0] === "diff") {
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
+        if (call.command === "git") {
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
+        if (call.promptPath === ".ai/prompts/review-changes.md") {
+          await writePlan(
+            workspace.root,
+            "artifact-state",
+            thinPlanV2Manifest("completed", "commit-summary"),
+          );
+          await writeThinPlanV2Artifacts(workspace.root, {
+            status: "completed",
+            nextAction: "commit-summary",
+            modified: ["src/artifact-state.ts"],
+            changedFiles: ["src/artifact-state.ts"],
+          });
+        }
+        return { launched: true, stdout: "summary", stderr: "", exitCode: 0 };
+      },
+    });
+
+    assert.equal(result.success, true);
+    assert.deepEqual(
+      calls.filter((call) => call.command === CODEX_COMMAND).map((call) => call.promptPath),
+      [".ai/prompts/review-changes.md", ".ai/prompts/commit-summary.md"],
+    );
+    assert.deepEqual(
+      calls.filter((call) => call.command === "git").map((call) => call.args.slice(0, 4)),
+      [
+        ["diff", "--staged", "--name-status", "--"],
+        ["add", "--all", "--", "src/artifact-state.ts"],
+        ["diff", "--cached", "--unified=0", "--"],
+        ["status", "--short", "--", "src/artifact-state.ts"],
       ],
     );
   } finally {
@@ -4137,6 +4691,164 @@ test("workflow runner succeeds after review defers final browser validation to m
     assert.match(consoleOutput, /SUCCESS/);
     assert.doesNotMatch(consoleOutput, /BLOCKED/);
     assert.doesNotMatch(consoleOutput, /DEPLOYMENT VALIDATION/);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("task savepoint mode commits each reviewed task, writes artifacts, logs task context, and finishes with aggregate summary", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(workspace.root, "task-savepoints", planWithTaskSavepoints("active", "execute-plan"));
+
+    const output = collectConsole();
+    const calls: Parameters<ProcessRunner>[0][] = [];
+    let executeRuns = 0;
+    let reviewRuns = 0;
+    let taskCommitRuns = 0;
+    let aggregateRuns = 0;
+    const shas = ["abc1234", "def5678"];
+
+    const result = await runWorkflowRunner({
+      planName: planArg("task-savepoints"),
+      rootDir: workspace.root,
+      console: output.console,
+      processRunner: async (call) => {
+        calls.push(call);
+        if (call.command === "git" && call.args[0] === "rev-parse") {
+          return {
+            launched: true,
+            stdout: `${shas[Math.max(0, taskCommitRuns - 1)]}\n`,
+            stderr: "",
+            exitCode: 0,
+          };
+        }
+        if (call.command === "git") {
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
+        if (call.promptPath === ".ai/prompts/execute-plan.md") {
+          executeRuns += 1;
+          await writePlan(workspace.root, "task-savepoints", planWithTaskSavepoints("review", "review-plan"));
+        }
+        if (call.promptPath === ".ai/prompts/review-changes.md") {
+          reviewRuns += 1;
+          await writePlan(
+            workspace.root,
+            "task-savepoints",
+            planWithTaskSavepoints("completed", "commit-summary"),
+          );
+        }
+        if (call.promptPath === ".ai/prompts/commit-summary.md") {
+          const prompt = call.args.at(-1) ?? "";
+          if (prompt.includes("Task savepoint aggregate summary")) {
+            aggregateRuns += 1;
+          } else {
+            taskCommitRuns += 1;
+          }
+        }
+        return { launched: true, stdout: "ok", stderr: "", exitCode: 0 };
+      },
+    });
+
+    assert.equal(result.success, true);
+    assert.equal(executeRuns, 2);
+    assert.equal(reviewRuns, 2);
+    assert.equal(taskCommitRuns, 2);
+    assert.equal(aggregateRuns, 1);
+
+    const consoleOutput = output.lines.join("\n");
+    assert.match(consoleOutput, /TASK 01-backend-endpoints \| implementing \| Add backend endpoints/);
+    assert.match(consoleOutput, /TASK 01-backend-endpoints \| reviewing \| staged 1 file/);
+    assert.match(consoleOutput, /TASK 01-backend-endpoints \| commit-message \| generating commit/);
+    assert.match(consoleOutput, /TASK 01-backend-endpoints \| committed \| abc1234/);
+    assert.match(consoleOutput, /TASK 02-web-surface \| committed \| def5678/);
+
+    const currentTask = await readFile(
+      join(workspace.root, ".ai", "artifacts", "task-savepoints", "state", "current-task.md"),
+      "utf8",
+    );
+    assert.match(currentTask, /Task ID: 02-web-surface/);
+    assert.match(currentTask, /Stage: committed/);
+    assert.match(currentTask, /Commit SHA: def5678/);
+
+    const taskFiles = await readdir(join(workspace.root, ".ai", "artifacts", "task-savepoints", "tasks"));
+    assert.deepEqual(taskFiles.sort(), [
+      "01-backend-endpoints-add-backend-endpoints-v1.md",
+      "02-web-surface-add-web-surface-v1.md",
+    ]);
+    const firstArtifact = await readFile(
+      join(
+        workspace.root,
+        ".ai",
+        "artifacts",
+        "task-savepoints",
+        "tasks",
+        "01-backend-endpoints-add-backend-endpoints-v1.md",
+      ),
+      "utf8",
+    );
+    assert.match(firstArtifact, /## Commit SHA\s+abc1234/);
+    assert.match(firstArtifact, /## Next Task\s+02-web-surface/);
+
+    const log = await readFile(
+      join(workspace.root, ".ai", "artifacts", "task-savepoints", "logs", "runner.log"),
+      "utf8",
+    );
+    assert.match(log, /taskId: 01-backend-endpoints/);
+    assert.match(log, /taskStage: implementing/);
+    assert.match(log, /taskStage: reviewing/);
+    assert.match(log, /taskStage: committed/);
+    assert.match(log, /commitSha: abc1234/);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("task savepoint mode stops failed review before commit and keeps current task active", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(workspace.root, "task-review-fail", planWithTaskSavepoints("active", "execute-plan"));
+
+    const output = collectConsole();
+    const calls: Parameters<ProcessRunner>[0][] = [];
+    const result = await runWorkflowRunner({
+      planName: planArg("task-review-fail"),
+      rootDir: workspace.root,
+      console: output.console,
+      processRunner: async (call) => {
+        calls.push(call);
+        if (call.command === "git") {
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
+        if (call.promptPath === ".ai/prompts/execute-plan.md") {
+          await writePlan(workspace.root, "task-review-fail", planWithTaskSavepoints("review", "review-plan"));
+          return { launched: true, stdout: "ok", stderr: "", exitCode: 0 };
+        }
+        if (call.promptPath === ".ai/prompts/review-changes.md") {
+          return {
+            launched: true,
+            stdout: codexAgentMessageLine("STOP: review failed for current task"),
+            stderr: "",
+            exitCode: 0,
+          };
+        }
+        return { launched: true, stdout: "ok", stderr: "", exitCode: 0 };
+      },
+    });
+
+    assert.equal(result.success, false);
+    assert.match(result.reason, /review failed for current task/);
+    assert.equal(
+      calls.some((call) => call.promptPath === ".ai/prompts/commit-summary.md"),
+      false,
+    );
+    const currentTask = await readFile(
+      join(workspace.root, ".ai", "artifacts", "task-review-fail", "state", "current-task.md"),
+      "utf8",
+    );
+    assert.match(currentTask, /Task ID: 01-backend-endpoints/);
+    assert.match(currentTask, /Stage: reviewing/);
+    assert.doesNotMatch(output.lines.join("\n"), /committed/);
   } finally {
     await workspace.cleanup();
   }
@@ -5296,6 +6008,333 @@ test("workflow runner stops before execution when another live runner owns a pla
   }
 });
 
+test("workflow runner stops before execution when another active ownership artifact owns a resolved file", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(
+      workspace.root,
+      "current-plan",
+      planWithFileScope(
+        "active",
+        "execute-plan",
+        {
+          modified: ["apps/web/src/shared.ts"],
+        },
+        ownershipScopeSection(["apps/web/src/shared.ts"]),
+      ),
+    );
+    await writeFileOwnershipArtifact(workspace.root, "other-plan", {
+      planPath: ".ai/plans/other-plan.md",
+      status: "active",
+      nextAction: "execute-plan",
+      owns: ["apps/web/src/shared.ts"],
+      released: [],
+      resolvedFiles: ["apps/web/src/shared.ts"],
+      changedFiles: [],
+      headSha: "abc123",
+      updatedAt: "2026-06-04T00:00:00.000Z",
+    });
+
+    const calls: Parameters<ProcessRunner>[0][] = [];
+    const result = await runWorkflowRunner({
+      argv: [".ai/plans/current-plan.md"],
+      rootDir: workspace.root,
+      processRunner: async (call) => {
+        calls.push(call);
+        if (call.command === "git" && call.args[0] === "status") {
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
+        if (call.command === "git" && call.args[0] === "rev-parse") {
+          return { launched: true, stdout: "currenthead\n", stderr: "", exitCode: 0 };
+        }
+        return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+      },
+    });
+
+    assert.equal(result.success, false);
+    assert.match(result.reason, /workflow file ownership conflict/);
+    assert.match(result.reason, /\.ai\/plans\/other-plan\.md/);
+    assert.match(result.reason, /apps\/web\/src\/shared\.ts/);
+    assert.equal(calls.some((call) => call.command === CODEX_COMMAND), false);
+
+    const artifact = JSON.parse(
+      await readFile(
+        join(workspace.root, ".ai", "artifacts", "current-plan", "state", "file-ownership.json"),
+        "utf8",
+      ),
+    );
+    assert.deepEqual(artifact.resolvedFiles, ["apps/web/src/shared.ts"]);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("workflow runner resolves ownership globs to actual changed files for review staging", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(
+      workspace.root,
+      "glob-plan",
+      planWithFileScope(
+        "review",
+        "review-plan",
+        {
+          modified: ["stale/files-list.ts"],
+        },
+        ownershipScopeSection(["apps/admin/src/features/admin-ugc-templates/**"]),
+      ),
+    );
+
+    const calls: Parameters<ProcessRunner>[0][] = [];
+    const result = await runWorkflowRunner({
+      argv: [".ai/plans/glob-plan.md"],
+      rootDir: workspace.root,
+      isIgnored: async () => false,
+      processRunner: async (call) => {
+        calls.push(call);
+        if (call.promptPath === "git-commit-summary-clean-check") {
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
+        if (call.command === "git" && call.args[0] === "status" && call.args[1] === "--short") {
+          return {
+            launched: true,
+            stdout: [
+              " M apps/admin/src/features/admin-ugc-templates/list.tsx",
+              " M apps/web/src/features/dashboard/ignore.tsx",
+            ].join("\n"),
+            stderr: "",
+            exitCode: 0,
+          };
+        }
+        if (call.command === "git" && call.args[0] === "rev-parse") {
+          return { launched: true, stdout: "headsha\n", stderr: "", exitCode: 0 };
+        }
+        if (call.command === "git") {
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
+        if (call.promptPath === ".ai/prompts/review-changes.md") {
+          await writePlan(
+            workspace.root,
+            "glob-plan",
+            planWithFileScope(
+              "completed",
+              "commit-summary",
+              {
+                modified: ["apps/admin/src/features/admin-ugc-templates/list.tsx"],
+              },
+              ownershipScopeSection(["apps/admin/src/features/admin-ugc-templates/**"]),
+            ),
+          );
+        }
+        return { launched: true, stdout: "summary", stderr: "", exitCode: 0 };
+      },
+    });
+
+    assert.equal(result.success, true);
+    const gitAddCall = calls.find((call) => call.command === "git" && call.args[0] === "add");
+    assert.ok(gitAddCall);
+    assert.deepEqual(gitAddCall.args, [
+      "add",
+      "--all",
+      "--",
+      "apps/admin/src/features/admin-ugc-templates/list.tsx",
+    ]);
+
+    const artifact = JSON.parse(
+      await readFile(
+        join(workspace.root, ".ai", "artifacts", "glob-plan", "state", "file-ownership.json"),
+        "utf8",
+      ),
+    );
+    assert.deepEqual(artifact.resolvedFiles, ["apps/admin/src/features/admin-ugc-templates/list.tsx"]);
+    assert.deepEqual(artifact.changedFiles, ["apps/admin/src/features/admin-ugc-templates/list.tsx"]);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("completed clean ownership artifacts do not block later plans", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(
+      workspace.root,
+      "current-plan",
+      planWithFileScope(
+        "active",
+        "execute-plan",
+        {
+          modified: ["src/shared.ts"],
+        },
+        ownershipScopeSection(["src/shared.ts"]),
+      ),
+    );
+    await writeFileOwnershipArtifact(workspace.root, "completed-plan", {
+      planPath: ".ai/plans/completed-plan.md",
+      status: "completed",
+      nextAction: "commit-summary",
+      owns: ["src/shared.ts"],
+      released: [],
+      resolvedFiles: ["src/shared.ts"],
+      changedFiles: [],
+      headSha: "abc123",
+      updatedAt: "2026-06-04T00:00:00.000Z",
+    });
+
+    const calls: Parameters<ProcessRunner>[0][] = [];
+    const result = await runWorkflowRunner({
+      argv: [".ai/plans/current-plan.md"],
+      rootDir: workspace.root,
+      processRunner: async (call) => {
+        calls.push(call);
+        if (call.command === "git" && call.args[0] === "status") {
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
+        if (call.command === "git" && call.args[0] === "rev-parse") {
+          return { launched: true, stdout: "headsha\n", stderr: "", exitCode: 0 };
+        }
+        if (call.promptPath === ".ai/prompts/execute-plan.md") {
+          await writePlan(
+            workspace.root,
+            "current-plan",
+            planWithFileScope(
+              "blocked",
+              "unblock-plan",
+              {
+                modified: ["src/shared.ts"],
+              },
+              ownershipScopeSection(["src/shared.ts"]),
+            ),
+          );
+        }
+        return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+      },
+    });
+
+    assert.equal(result.success, false);
+    assert.match(result.reason, /plan blocked after execute-plan/);
+    assert.equal(calls.some((call) => call.promptPath === ".ai/prompts/execute-plan.md"), true);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("completed dirty ownership artifacts still block later plans", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(
+      workspace.root,
+      "current-plan",
+      planWithFileScope(
+        "active",
+        "execute-plan",
+        {
+          modified: ["src/shared.ts"],
+        },
+        ownershipScopeSection(["src/shared.ts"]),
+      ),
+    );
+    await writeFileOwnershipArtifact(workspace.root, "completed-plan", {
+      planPath: ".ai/plans/completed-plan.md",
+      status: "completed",
+      nextAction: "commit-summary",
+      owns: ["src/shared.ts"],
+      released: [],
+      resolvedFiles: ["src/shared.ts"],
+      changedFiles: [],
+      headSha: "abc123",
+      updatedAt: "2026-06-04T00:00:00.000Z",
+    });
+
+    const calls: Parameters<ProcessRunner>[0][] = [];
+    const result = await runWorkflowRunner({
+      argv: [".ai/plans/current-plan.md"],
+      rootDir: workspace.root,
+      processRunner: async (call) => {
+        calls.push(call);
+        if (call.command === "git" && call.args[0] === "status") {
+          return { launched: true, stdout: " M src/shared.ts\n", stderr: "", exitCode: 0 };
+        }
+        if (call.command === "git" && call.args[0] === "rev-parse") {
+          return { launched: true, stdout: "headsha\n", stderr: "", exitCode: 0 };
+        }
+        return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+      },
+    });
+
+    assert.equal(result.success, false);
+    assert.match(result.reason, /workflow file ownership conflict/);
+    assert.match(result.reason, /src\/shared\.ts/);
+    assert.equal(calls.some((call) => call.command === CODEX_COMMAND), false);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("released ownership artifact files do not block dependent plans", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(
+      workspace.root,
+      "current-plan",
+      planWithFileScope(
+        "active",
+        "execute-plan",
+        {
+          modified: ["src/shared.ts"],
+        },
+        ownershipScopeSection(["src/shared.ts"]),
+      ),
+    );
+    await writeFileOwnershipArtifact(workspace.root, "other-plan", {
+      planPath: ".ai/plans/other-plan.md",
+      status: "active",
+      nextAction: "execute-plan",
+      owns: ["src/shared.ts"],
+      released: ["src/shared.ts"],
+      resolvedFiles: [],
+      changedFiles: [],
+      headSha: "abc123",
+      updatedAt: "2026-06-04T00:00:00.000Z",
+    });
+
+    const calls: Parameters<ProcessRunner>[0][] = [];
+    const result = await runWorkflowRunner({
+      argv: [".ai/plans/current-plan.md"],
+      rootDir: workspace.root,
+      processRunner: async (call) => {
+        calls.push(call);
+        if (call.command === "git" && call.args[0] === "status") {
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
+        if (call.command === "git" && call.args[0] === "rev-parse") {
+          return { launched: true, stdout: "headsha\n", stderr: "", exitCode: 0 };
+        }
+        if (call.promptPath === ".ai/prompts/execute-plan.md") {
+          await writePlan(
+            workspace.root,
+            "current-plan",
+            planWithFileScope(
+              "blocked",
+              "unblock-plan",
+              {
+                modified: ["src/shared.ts"],
+              },
+              ownershipScopeSection(["src/shared.ts"]),
+            ),
+          );
+        }
+        return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+      },
+    });
+
+    assert.equal(result.success, false);
+    assert.match(result.reason, /plan blocked after execute-plan/);
+    assert.equal(calls.some((call) => call.promptPath === ".ai/prompts/execute-plan.md"), true);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
 test("workflow runner excludes transferred file ownership releases from execution locks", async () => {
   const workspace = await setupWorkspace();
   try {
@@ -5688,6 +6727,38 @@ test(`compact CLI validation failures stop before ${CODEX_EXEC_LABEL}`, async ()
   }
 });
 
+test("workflow runner --help prints usage without launching Codex", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    const processCalls: Parameters<ProcessRunner>[0][] = [];
+    const processRunner: ProcessRunner = async (call) => {
+      processCalls.push(call);
+      return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+    };
+    const output: string[] = [];
+    const errors: string[] = [];
+
+    const result = await runWorkflowRunner({
+      argv: ["--help"],
+      rootDir: workspace.root,
+      processRunner,
+      console: {
+        log: (message) => output.push(message),
+        error: (message) => errors.push(message),
+      },
+    });
+
+    assert.equal(result.success, true);
+    assert.equal(result.exitCode, 0);
+    assert.match(output.join("\n"), /Usage: pnpm exec tsx \.ai\/scripts\/workflow-runner\.ts/);
+    assert.match(output.join("\n"), /--compact/);
+    assert.deepEqual(errors, []);
+    assert.equal(processCalls.length, 0);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
 test("compact CLI failure output includes the stop reason and workflow log path", async () => {
   const workspace = await setupWorkspace();
   try {
@@ -5798,6 +6869,43 @@ test(`${CODEX_COMMAND} launch failures, nonzero exits, STOP output, and empty ca
         ),
       );
     }
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("unblock-plan STOP that keeps the plan blocked reports a blocked outcome", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(
+      workspace.root,
+      "still-blocked",
+      planWith(
+        "blocked",
+        "unblock-plan",
+        "\n## Blockers\n\n### Blocker 1\n\n* Type: runtime setup\n* Description: Docker unavailable\n* Required Action: Start Docker.\n",
+      ),
+    );
+    const { lines, console } = collectConsole();
+    const result = await runWorkflowRunner({
+      planName: planArg("still-blocked"),
+      rootDir: workspace.root,
+      console,
+      processRunner: runnerReturning({
+        launched: true,
+        stdout: codexAgentMessageLine(
+          "STOP\nBlocking reason: `blocker resolution evidence is required`\n\n**Summary**\n- STILL BLOCKED",
+        ),
+        stderr: "",
+        exitCode: 0,
+      }),
+    });
+
+    assert.equal(result.success, false);
+    assert.match(result.reason, /plan remains blocked after unblock-plan/);
+    assert.doesNotMatch(result.reason, /output contained STOP/);
+    assert.equal(lines.includes("BLOCKED"), true);
+    assert.equal(lines.some((line) => line.startsWith("FAILED:")), false);
   } finally {
     await workspace.cleanup();
   }
@@ -6044,98 +7152,6 @@ test("transition guards enforce execute-plan and review-changes handoffs", async
       }
     }
 
-    const deploymentValidationTransitions = [
-      ["deploy-still-pending", "deployment-validation", "unblock-plan", ["unblock"], false],
-      ["deploy-passed", "completed", "commit-summary", ["unblock", "commit-summary"], false],
-      ["deploy-failed", "reopening", "reopen-plan", ["unblock", "reopen", "execute"], false],
-      ["deploy-active", "active", "execute-plan", ["unblock"], true],
-    ] as const;
-    for (const [name, status, nextAction, expectedStages, shouldFailTransition] of deploymentValidationTransitions) {
-      writeWorkflowEventArtifactSync({
-        root: workspace.root,
-        planName: name,
-        kind: "deployment-validation",
-        version: 1,
-      });
-      await writePlan(
-        workspace.root,
-        name,
-        planWith("deployment-validation", "unblock-plan", deploymentValidationSection(name)),
-      );
-      const launchedPrompts: string[] = [];
-      const result = await runWorkflowRunner({
-        planName: planArg(name),
-        rootDir: workspace.root,
-        processRunner: runnerReturning(
-          { launched: true, stdout: "ok", stderr: "", exitCode: 0 },
-          (call) => {
-            if (call.command !== CODEX_COMMAND) {
-              return;
-            }
-            launchedPrompts.push(call.promptPath);
-            if (call.promptPath === ".ai/prompts/unblock-plan.md") {
-              writeWorkflowEventArtifactSync({
-                root: workspace.root,
-                planName: name,
-                kind: "deployment-validation",
-                version: 1,
-              });
-              const deploymentValidationExtra =
-                deploymentValidationSection(name, status === "completed" ? "passed" : "pending") +
-                (status === "deployment-validation"
-                  ? "\n## Unblock History\n\n### Unblock v1\n\n* Summary: deployment evidence recorded\n* Evidence: .ai/artifacts/" +
-                    name +
-                    "/events/unblock-v1.md\n* Decision: active\n"
-                  : "");
-              if (status === "deployment-validation") {
-                writeWorkflowEventArtifactSync({
-                  root: workspace.root,
-                  planName: name,
-                  kind: "unblock",
-                  version: 1,
-                });
-              }
-              writeFileSync(
-                join(workspace.root, ".ai", "plans", `${name}.md`),
-                planWith(status, nextAction, deploymentValidationExtra),
-              );
-              return;
-            }
-            if (call.promptPath === ".ai/prompts/reopen-plan.md") {
-              writeFileSync(join(workspace.root, ".ai", "plans", `${name}.md`), planWith("active", "execute-plan"));
-            }
-            if (call.promptPath === ".ai/prompts/execute-plan.md") {
-              writeFileSync(join(workspace.root, ".ai", "plans", `${name}.md`), planWith("blocked", "unblock-plan"));
-            }
-          },
-        ),
-      });
-
-      assert.deepEqual(
-        launchedPrompts.map((promptPath) =>
-          promptPath === ".ai/prompts/unblock-plan.md"
-            ? "unblock"
-            : promptPath === ".ai/prompts/commit-summary.md"
-              ? "commit-summary"
-              : promptPath === ".ai/prompts/reopen-plan.md"
-                ? "reopen"
-                : "execute",
-        ),
-        expectedStages,
-        name,
-      );
-      if (shouldFailTransition) {
-        assert.equal(result.success, false, name);
-        assert.match(result.reason, /deployment-validation unblock-plan may only hand off/, name);
-        const log = await readFile(join(workspace.root, ".ai", "artifacts", name, "logs", "runner.log"), "utf8");
-        assertFailureMetadata(log, {
-          kind: "invalid-transition",
-          reason: /failureReason: deployment-validation unblock-plan may only hand off/,
-          nextSuggestedAction: /nextSuggestedAction: fix plan status and next action, then rerun workflow-runner/,
-        });
-      }
-    }
-
     await writePlan(workspace.root, "review-completed", planWith("review", "review-plan"));
     const reviewCompleted = await runWorkflowRunner({
       planName: planArg("review-completed"),
@@ -6162,26 +7178,16 @@ test("transition guards enforce execute-plan and review-changes handoffs", async
         { launched: true, stdout: "ok", stderr: "", exitCode: 0 },
         (call) => {
           if (call.command === CODEX_COMMAND) {
-            writeWorkflowEventArtifactSync({
-              root: workspace.root,
-              planName: "review-deployment-validation",
-              kind: "deployment-validation",
-              version: 1,
-            });
             writeFileSync(
               join(workspace.root, ".ai", "plans", "review-deployment-validation.md"),
-              planWith(
-                "deployment-validation",
-                "commit-summary",
-                deploymentValidationSection("review-deployment-validation"),
-              ),
+              planWith("deployment-validation", "commit-summary"),
             );
           }
         },
       ),
     });
     assert.equal(reviewDeploymentValidation.success, false);
-    assert.match(reviewDeploymentValidation.reason, /review-changes may only hand off/);
+    assert.match(reviewDeploymentValidation.reason, /unknown status value: deployment-validation/);
   } finally {
     await workspace.cleanup();
   }
@@ -6872,6 +7878,96 @@ test("review staging auto-unstages unrelated hunks before review prompt runs", a
       ],
     );
     assert.equal(calls[4].input.includes('const unrelated = "remove";'), true);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("review-plan does not require hunk ownership before review", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(
+      workspace.root,
+      "review-shared-hunk-scope",
+      planWithFileScope(
+        "review",
+        "review-plan",
+        {
+          modified: ["schema/openapi.generated.json"],
+        },
+        `## Hunk Ownership
+
+### schema/openapi.generated.json
+
+* Owned: generated \`users\` endpoint entries produced by the current plan.
+* Excluded: generated \`billing\` endpoint entries owned by billing API work.
+`,
+      ),
+    );
+    const diff = [
+      "diff --git a/schema/openapi.generated.json b/schema/openapi.generated.json",
+      "index 1111111..2222222 100644",
+      "--- a/schema/openapi.generated.json",
+      "+++ b/schema/openapi.generated.json",
+      '@@ -42,6 +42,9 @@ "paths": {',
+      '   "/users": {',
+      '     "get": { "operationId": "listUsers" }',
+      "   },",
+      '+  "/reports": {',
+      '+    "get": { "operationId": "listReports" }',
+      "+  },",
+    ].join("\n");
+    const calls: Parameters<ProcessRunner>[0][] = [];
+    const result = await runWorkflowRunner({
+      planName: planArg("review-shared-hunk-scope"),
+      rootDir: workspace.root,
+      processRunner: async (call) => {
+        calls.push(call);
+        if (
+          call.command === "git" &&
+          call.args[0] === "diff" &&
+          call.args[1] === "--staged" &&
+          call.args[2] === "--name-status"
+        ) {
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
+        if (call.command === "git" && call.args[0] === "diff") {
+          return { launched: true, stdout: diff, stderr: "", exitCode: 0 };
+        }
+        if (call.command === "git") {
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
+        if (call.promptPath === ".ai/prompts/scope-cleanup.md") {
+          return {
+            launched: true,
+            stdout: codexAgentMessageLine(JSON.stringify({ action: "keep" })),
+            stderr: "",
+            exitCode: 0,
+          };
+        }
+        if (call.promptPath === ".ai/prompts/review-changes.md") {
+          await writePlan(
+            workspace.root,
+            "review-shared-hunk-scope",
+            planWithFileScope("completed", "commit-summary", {
+              modified: ["schema/openapi.generated.json"],
+            }),
+          );
+        }
+        return { launched: true, stdout: "summary", stderr: "", exitCode: 0 };
+      },
+    });
+
+    assert.equal(result.success, true);
+    assert.equal(calls.some((call) => call.promptPath === ".ai/prompts/review-changes.md"), true);
+    assert.equal(
+      calls.some(
+        (call) =>
+          call.command === "git" &&
+          call.promptPath === "git-review-hunk-ownership-diff",
+      ),
+      false,
+    );
   } finally {
     await workspace.cleanup();
   }

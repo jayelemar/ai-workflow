@@ -30,9 +30,7 @@ Load:
 
 * `.ai/prompts/superpowers.md`
 
-Use superpower skills:
-
-* analyze
+Apply the superpowers advisory guidance for analysis and edge-case checks.
 
 Do not broadly load `.ai/instructions/**` beyond the routed files required for
 the current preflight or execution work.
@@ -230,8 +228,9 @@ code preview.
 
 ## Out-of-Scope File Gate (MANDATORY)
 
-Use the plan's `## Files (MANDATORY)` section as the non-test ownership
-boundary.
+Use `.ai/artifacts/<plan-name>/state/file-ownership.json` as the non-test ownership
+boundary. `.ai/artifacts/<plan-name>/state/files.json` is the changed-file inventory and may be
+reconciled after implementation.
 
 If the current step requires a non-test file outside that boundary:
 
@@ -275,7 +274,7 @@ trail under:
 
 During `draft` preflight:
 
-* keep `## Validation History` current through the normal `plan-validator` / `fix-plan` loop
+* keep `.ai/artifacts/<plan-name>/state/workflow.json` current through the normal `plan-validator` / `fix-plan` loop
 * keep any allowed plan/spec repairs traceable to the latest validation findings
 * do not use the execution diff approval gate for those preflight plan/spec writes
 * refresh the workflow context snapshot after each plan update so later review-compatible stages read current state
@@ -303,15 +302,9 @@ The artifact must include:
 <commands, outputs, files changed, approvals, blockers, or other proof>
 ```
 
-Then append the matching thin plan entry under `## Execution Log`:
+Then update `.ai/artifacts/<plan-name>/state/workflow.json` with the matching execution event pointer:
 
-```markdown
-### Execution vX
-
-* Summary:
-* Result: completed | partial | blocked
-* Evidence: .ai/artifacts/<plan-name>/events/execution-vX.md
-```
+Use runner-readable thin-plan-v2 state: preserve `planPath`, set `status` and `nextAction`, write compact `summary`, `result`, and `evidence` fields under `latest.execution`, append the execution artifact path to `history`, preserve or update `unresolvedBlockers`, and refresh `updatedAt`.
 
 ### Validation Artifacts
 
@@ -336,15 +329,9 @@ The artifact must include:
 <commands run, result details, failures, or deferred-risk notes>
 ```
 
-Then append the matching thin plan entry under `## Validation History`:
+Then update `.ai/artifacts/<plan-name>/state/workflow.json` with the matching validation event pointer:
 
-```markdown
-### Validation vX
-
-* Summary:
-* Result: PASS | NEEDS FIX | DEFERRED
-* Evidence: .ai/artifacts/<plan-name>/events/validation-vX.md
-```
+Use runner-readable thin-plan-v2 state: preserve `planPath`, set `status` and `nextAction`, write compact `summary`, `result`, and `evidence` fields under `latest.validation`, append the validation artifact path to `history`, preserve or update `unresolvedBlockers`, and refresh `updatedAt`.
 
 ### Context Snapshot
 
@@ -392,10 +379,9 @@ Keep plan progress, `## Status`, and `## Next Action` aligned with
 At minimum after each run:
 
 * record the completed or partial execution progress for the current step in
-  `## Execution Log`
-* record validation results in `## Validation History` when validation runs
-* keep the execution and validation event artifacts in sync with those plan
-  entries
+  `.ai/artifacts/<plan-name>/state/workflow.json`
+* record validation results in `.ai/artifacts/<plan-name>/state/workflow.json` when validation runs
+* keep the execution and validation event artifacts in sync with workflow state
 * refresh the workflow context snapshot after updating the plan
 * keep `Status = active` and `Next Action = execute-plan` while implementation
   work remains
