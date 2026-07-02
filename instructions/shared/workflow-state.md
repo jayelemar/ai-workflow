@@ -1,5 +1,5 @@
-Version: 1.8
-Last Updated: 2026-06-30
+Version: 1.9
+Last Updated: 2026-07-02
 
 # Workflow State Instructions
 
@@ -24,6 +24,14 @@ Define the canonical plan workflow state machine: plan statuses, next actions, a
 - `.ai/plans/*.md`
 
 ## Rules
+
+Thin-plan-v2 state parity:
+
+* The plan manifest `## Status` and `## Next Action` values and `.ai/artifacts/<plan-name>/state/workflow.json` `status` and `nextAction` values are one logical state.
+* Any workflow prompt that updates either location MUST update both locations before final output.
+* After every state transition, the prompt MUST reread both locations and verify the values match.
+* If the values do not match, repair the mismatch before final output; if repair is not possible, STOP with the exact mismatch.
+* Do not rely on the runner's post-run mismatch check as the first parity verification.
 
 Allowed Status Values:
 

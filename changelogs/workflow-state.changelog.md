@@ -1,5 +1,9 @@
 # Workflow State Instruction Changelog
 
+## v1.9 — 2026-07-02
+
+* Added a thin-plan-v2 state parity rule requiring prompts to update and reread both the plan manifest and `workflow.json` after every state transition.
+
 ## v1.8 — 2026-06-30
 
 * Removed `deployment-validation` from the canonical statuses, transitions, next-action mapping, and documented workflow loops.

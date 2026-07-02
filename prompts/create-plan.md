@@ -136,7 +136,9 @@ Each phase MUST include:
 
 ### Task Savepoints
 
-Task savepoints are for independently reviewable chunks only.
+Task savepoints are meaningful commit milestones for independently reviewable
+chunks only. Use `[task:...]` only for coherent behavior/subsystem boundaries,
+not every numbered checklist item.
 
 Required task syntax:
 
@@ -148,8 +150,11 @@ Rules:
   the task includes red tests, implementation, and validation commands.
 - Use task savepoints only when every task can pass, be reviewed, and be
   committed independently.
-- Do not split tasks only by lifecycle phase, app layer, red tests, or
-  validation commands.
+- Prefer no task IDs for simple fixes.
+- Prefer 3-5 meaningful savepoints for larger multi-subsystem plans.
+- Do not split tasks only by lifecycle phase, app layer, isolated red-test
+  work, implementation-only work, validation-only work, or tiny checklist
+  items.
 - Use two-digit increasing numeric prefixes: `01`, `02`, `03`.
 - Use lowercase readable words separated by hyphens after the numeric prefix.
 - Keep task IDs stable after plan creation, even if task wording changes.

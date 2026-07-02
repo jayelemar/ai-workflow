@@ -85,9 +85,10 @@ Validate:
 
 ## Task Savepoint Validation (MANDATORY)
 
-Task savepoints are valid only for independently reviewable chunks. A task
-savepoint chunk must be able to pass, be reviewed, and be committed
-independently.
+Task savepoints are valid only as meaningful commit milestones for
+independently reviewable chunks. A task savepoint chunk must be able to pass, be
+reviewed, and be committed independently. Valid savepoints group work by
+coherent behavior/subsystem boundaries, not by numbered checklist items.
 
 `1. [task:01-readable-words] Do the task`
 
@@ -99,13 +100,21 @@ Rules:
 * Task-savepoint plans use runner task artifacts under `.ai/artifacts/<plan-name>/tasks/`.
 * Simple bugfix plans keep the existing final-commit behavior and do not require task IDs.
 * A simple bugfix SHOULD be one final-commit task even when it includes red tests, implementation, and validation commands.
-* Do not split tasks only by lifecycle phase, app layer, red tests, or validation commands.
+* Prefer no task IDs for simple fixes.
+* Prefer 3-5 meaningful savepoints for larger multi-subsystem plans.
+* Do not split tasks only by lifecycle phase, app layer, isolated red-test work, implementation-only work, validation-only work, or tiny checklist items.
 
 If a plan has multiple task-savepoint IDs but the tasks cannot pass and commit independently:
 
 → mark as CRITICAL
 
 If a plan splits a simple bugfix into separate test, implementation, or validation task savepoints:
+
+→ mark as CRITICAL
+
+If a plan uses task savepoints for lifecycle-only, implementation-only,
+validation-only, or tiny checklist splits instead of coherent
+behavior/subsystem boundaries:
 
 → mark as CRITICAL
 
