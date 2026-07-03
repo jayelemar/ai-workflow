@@ -9103,11 +9103,8 @@ export const runWorkflowRunner = async (
       if (!snapshotResult.ok) {
         return await finishFailure(snapshotResult.reason);
       }
-      const reviewSummary = extractLatestReviewSummary(updated.content);
-      const reason = reviewSummary.summary
-        ? `${path.basename(route.promptPath, ".md")} routed plan back to active + execute-plan: ${reviewSummary.summary}`
-        : `${path.basename(route.promptPath, ".md")} routed plan back to active + execute-plan`;
-      return await finishFailure(reason);
+      parsedPlan = updated;
+      continue;
     }
 
     if (isQualityReviewPrompt(route.promptPath)) {

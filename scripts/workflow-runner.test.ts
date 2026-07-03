@@ -9272,7 +9272,63 @@ test("review cleanup failures write staging and cleanup command evidence to the 
   }
 });
 
-test(`review quality failure stops at active execute-plan, unstages review paths, and does not resume execute-plan automatically`, async () => {
+test(`review changes failure resumes execute-plan after unstaging review paths`, async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(workspace.root, "review-spec-active", planWith("review", "review-plan"));
+    const calls: Parameters<ProcessRunner>[0][] = [];
+    const result = await runWorkflowRunner({
+      planName: planArg("review-spec-active"),
+      rootDir: workspace.root,
+      processRunner: async (call) => {
+        calls.push(call);
+        if (call.command === "git") {
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
+        if (call.command === CODEX_COMMAND && call.promptPath === ".ai/prompts/review-changes.md") {
+          writeWorkflowEventArtifactSync({
+            root: workspace.root,
+            planName: "review-spec-active",
+            kind: "review-spec",
+            version: 1,
+          });
+          writeFileSync(
+            join(workspace.root, ".ai", "plans", "review-spec-active.md"),
+            planWith(
+              "active",
+              "execute-plan",
+              "\n## Review History\n\n### Review v1\n\n* Summary: NEEDS FIX\n* Decision: active\n* Evidence: .ai/artifacts/review-spec-active/events/review-spec-v1.md\n",
+            ),
+          );
+          return { launched: true, stdout: "needs fix", stderr: "", exitCode: 0 };
+        }
+        if (call.command === CODEX_COMMAND && call.promptPath === ".ai/prompts/execute-plan.md") {
+          writeFileSync(
+            join(workspace.root, ".ai", "plans", "review-spec-active.md"),
+            planWith("blocked", "unblock-plan", "\n## Blockers\n\n* rerun paused after review fix handoff\n"),
+          );
+          return { launched: true, stdout: "paused", stderr: "", exitCode: 0 };
+        }
+        return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+      },
+    });
+
+    assert.equal(result.success, false);
+    assert.match(result.reason, /plan blocked after execute-plan/i);
+    assert.deepEqual(calls.map((call) => [call.command, call.args[0] ?? "", call.promptPath]), [
+      ["git", "diff", "git-pre-review-staged-check"],
+      ["git", "add", "git-staging"],
+      ["git", "diff", "git-scope-cleanup-diff"],
+      [CODEX_COMMAND, "exec", ".ai/prompts/review-changes.md"],
+      ["git", "restore", "git-review-unstage"],
+      [CODEX_COMMAND, "exec", ".ai/prompts/execute-plan.md"],
+    ]);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test(`review quality failure resumes execute-plan after unstaging review paths`, async () => {
   const workspace = await setupWorkspace();
   try {
     await writePlan(workspace.root, "review-active", planWith("review", "review-plan"));
@@ -9319,12 +9375,19 @@ test(`review quality failure stops at active execute-plan, unstages review paths
           );
           return { launched: true, stdout: "needs fix", stderr: "", exitCode: 0 };
         }
+        if (call.command === CODEX_COMMAND && call.promptPath === ".ai/prompts/execute-plan.md") {
+          writeFileSync(
+            join(workspace.root, ".ai", "plans", "review-active.md"),
+            planWith("blocked", "unblock-plan", "\n## Blockers\n\n* rerun paused after review fix handoff\n"),
+          );
+          return { launched: true, stdout: "paused", stderr: "", exitCode: 0 };
+        }
         return { launched: true, stdout: "", stderr: "", exitCode: 0 };
       },
     });
 
     assert.equal(result.success, false);
-    assert.match(result.reason, /review.*active \+ execute-plan/i);
+    assert.match(result.reason, /plan blocked after execute-plan/i);
     assert.deepEqual(calls.map((call) => [call.command, call.args[0] ?? "", call.promptPath]), [
       ["git", "diff", "git-pre-review-staged-check"],
       ["git", "add", "git-staging"],
@@ -9332,6 +9395,7 @@ test(`review quality failure stops at active execute-plan, unstages review paths
       [CODEX_COMMAND, "exec", ".ai/prompts/review-changes.md"],
       [CODEX_COMMAND, "exec", ".ai/prompts/review-quality.md"],
       ["git", "restore", "git-review-unstage"],
+      [CODEX_COMMAND, "exec", ".ai/prompts/execute-plan.md"],
     ]);
   } finally {
     await workspace.cleanup();
