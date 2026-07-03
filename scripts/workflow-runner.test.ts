@@ -2473,15 +2473,6 @@ test("commit progress formatter reports milestone counters without changing stag
     }),
     "[0/5] backend upload limits",
   );
-
-  assert.equal(
-    formatCommitProgressLine({
-      completed: 0,
-      total: 1,
-      description: "final commit pending",
-    }),
-    "[0/1] final commit pending",
-  );
 });
 
 test("workflow wait formatter emits a light yellow append-only silence notice", () => {
@@ -5558,7 +5549,7 @@ test("iteration logs include parsed context window usage from codex json output"
   }
 });
 
-test("iteration logs include branch, starting and ending HEAD, and non-savepoint commit progress", async () => {
+test("iteration logs include branch and HEAD without non-savepoint commit progress", async () => {
   const workspace = await setupWorkspace();
   try {
     mkdirSync(join(workspace.root, ".git"), { recursive: true });
@@ -5591,13 +5582,13 @@ test("iteration logs include branch, starting and ending HEAD, and non-savepoint
     });
 
     assert.equal(result.success, true);
-    assert.match(output.lines.join("\n"), /\[0\/1\] final commit pending/);
+    assert.doesNotMatch(output.lines.join("\n"), /\[0\/1\] final commit pending/);
     const log = await readFile(join(workspace.root, ".ai", "artifacts", "workflow-runner", "logs", "runner.log"), "utf8");
     assert.match(log, /currentBranch: feature\/workflow/);
     assert.match(log, /startingHeadSha: 1111111111111111111111111111111111111111/);
     assert.match(log, /endingHeadSha: 2222222222222222222222222222222222222222/);
-    assert.match(log, /commitProgress: 0\/1/);
-    assert.match(log, /commitProgressDescription: final commit pending/);
+    assert.doesNotMatch(log, /commitProgress:/);
+    assert.doesNotMatch(log, /commitProgressDescription:/);
   } finally {
     await workspace.cleanup();
   }
