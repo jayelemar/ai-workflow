@@ -7203,7 +7203,7 @@ test("workflow runner prints same-plan unlock command when a live lock blocks re
     assert.match(result.reason, /run this on the terminal:/);
     assert.match(
       result.reason,
-      /pnpm workflow:unlock \.ai\/plans\/current-plan\.md apps\/web\/src\/shared\.ts/,
+      /pnpm workflow:unlock \.ai\/plans\/current-plan\.md/,
     );
   } finally {
     await workspace.cleanup();

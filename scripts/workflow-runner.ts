@@ -486,11 +486,8 @@ export const workflowFileLockPath = (
   return path.join(workflowFileLockDir(rootDir), `${digest}.json`);
 };
 
-const workflowFileUnlockPathHint = (
-  planPath: string,
-  ownedPath: string,
-): string =>
-  `run this on the terminal:\npnpm workflow:unlock ${shellQuote(planPath)} ${shellQuote(ownedPath)}`;
+const workflowFileUnlockPathHint = (planPath: string): string =>
+  `run this on the terminal:\npnpm workflow:unlock ${shellQuote(planPath)}`;
 
 const zeroTokenUsageTotals: TokenUsageTotals = {
   inputTokens: 0,
@@ -7589,7 +7586,7 @@ const acquireWorkflowFileOwnershipForPaths = async ({
       if (isProcessAlive(existing.pid)) {
         const unlockHint =
           existing.planPath === planPath
-            ? `\n\n${workflowFileUnlockPathHint(planPath, ownedPath)}`
+            ? `\n\n${workflowFileUnlockPathHint(planPath)}`
             : "";
         const releaseFailure = await releaseAttemptLocks();
         return (
