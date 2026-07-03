@@ -340,14 +340,18 @@ Default stage routing:
 | `execute-plan` | `gpt-5.5` | `high` |
 | `unblock-plan` | `gpt-5.4` | `medium` |
 | `review-changes` | `gpt-5.5` | `xhigh` |
+| `review-quality` | `gpt-5.5` | `xhigh` |
 | `reopen-plan` | `gpt-5.4` | `medium` |
 | `commit-summary` | `gpt-5.3-codex-spark` | `medium` |
 | `scope-cleanup` | `gpt-5.5` | `xhigh` |
 
 Notes:
 
-- `review-changes` remains the main correctness gate, so it keeps the
-  highest-quality model and reasoning tier.
+- `review + review-plan` remains the public review entrypoint.
+- The runner internally splits review into `review-changes` (stage-1 spec
+  review) and `review-quality` (stage-2 quality review).
+- `review-changes` remains the main correctness gate, so both review stages
+  keep the highest-quality model and reasoning tier.
 - `commit-summary` uses `gpt-5.3-codex-spark` because it is the cheapest
   low-risk stage: formatting the final commit subject and user-facing summary,
   not validating implementation correctness.

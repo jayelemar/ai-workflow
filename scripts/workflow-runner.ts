@@ -42,6 +42,7 @@ const FIX_PLAN_PROMPT_PATH = '.ai/prompts/fix-plan.md';
 const EXECUTE_PLAN_PROMPT_PATH = '.ai/prompts/execute-plan.md';
 const UNBLOCK_PLAN_PROMPT_PATH = '.ai/prompts/unblock-plan.md';
 const REVIEW_CHANGES_PROMPT_PATH = '.ai/prompts/review-changes.md';
+const REVIEW_QUALITY_PROMPT_PATH = '.ai/prompts/review-quality.md';
 const REOPEN_PLAN_PROMPT_PATH = '.ai/prompts/reopen-plan.md';
 const COMMIT_SUMMARY_PROMPT_PATH = '.ai/prompts/commit-summary.md';
 const SCOPE_CLEANUP_PROMPT_PATH = '.ai/prompts/scope-cleanup.md';
@@ -52,6 +53,7 @@ const PROMPT_CODEX_EXECUTION_OVERRIDES: Record<string, CodexExecutionConfig> = {
   [EXECUTE_PLAN_PROMPT_PATH]: { model: 'gpt-5.5', reasoning: 'high' },
   [UNBLOCK_PLAN_PROMPT_PATH]: { model: 'gpt-5.4', reasoning: 'medium' },
   [REVIEW_CHANGES_PROMPT_PATH]: { model: 'gpt-5.5', reasoning: 'xhigh' },
+  [REVIEW_QUALITY_PROMPT_PATH]: { model: 'gpt-5.5', reasoning: 'xhigh' },
   [REOPEN_PLAN_PROMPT_PATH]: { model: 'gpt-5.4', reasoning: 'medium' },
   [COMMIT_SUMMARY_PROMPT_PATH]: { model: 'gpt-5.3-codex-spark', reasoning: 'medium' },
   [SCOPE_CLEANUP_PROMPT_PATH]: { model: 'gpt-5.5', reasoning: 'xhigh' },
@@ -1822,6 +1824,10 @@ const stageStylesByPromptPath: Record<string, { label: string; colorCode: string
   [rel('.ai', 'prompts', 'execute-plan.md')]: { label: 'EXECUTE', colorCode: '\u001b[37;45m' },
   [rel('.ai', 'prompts', 'unblock-plan.md')]: { label: 'UNBLOCK', colorCode: '\u001b[37;45m' },
   [rel('.ai', 'prompts', 'review-changes.md')]: { label: 'REVIEW', colorCode: '\u001b[37;45m' },
+  [rel('.ai', 'prompts', 'review-quality.md')]: {
+    label: 'QUALITY REVIEW',
+    colorCode: '\u001b[37;45m',
+  },
   [rel('.ai', 'prompts', 'reopen-plan.md')]: { label: 'REOPEN', colorCode: '\u001b[37;45m' },
   [rel('.ai', 'prompts', 'commit-summary.md')]: { label: 'SUMMARY', colorCode: '\u001b[37;45m' },
 };
@@ -2716,6 +2722,7 @@ const promptActionLabels: Record<string, string> = {
   [rel('.ai', 'prompts', 'execute-plan.md')]: 'Execute',
   [rel('.ai', 'prompts', 'unblock-plan.md')]: 'Unblock',
   [rel('.ai', 'prompts', 'review-changes.md')]: 'Review',
+  [rel('.ai', 'prompts', 'review-quality.md')]: 'Quality review',
   [rel('.ai', 'prompts', 'fix-review.md')]: 'Fix review',
   [rel('.ai', 'prompts', 'reopen-plan.md')]: 'Reopen',
   [rel('.ai', 'prompts', 'commit-summary.md')]: 'Commit summary',
@@ -3847,6 +3854,20 @@ const routeFor = (status: Status, nextAction: NextAction): Route => {
   };
 };
 
+const internalRouteForPromptPath = (promptPath: string): Route => ({
+  executable: true,
+  promptPath,
+  terminal: false,
+});
+
+const isSpecReviewPrompt = (promptPath: string): boolean => promptPath === REVIEW_CHANGES_PROMPT_PATH;
+
+const isQualityReviewPrompt = (promptPath: string): boolean =>
+  promptPath === REVIEW_QUALITY_PROMPT_PATH;
+
+const isReviewPrompt = (promptPath: string): boolean =>
+  isSpecReviewPrompt(promptPath) || isQualityReviewPrompt(promptPath);
+
 const readPrompt = async (
   rootDir: string,
   promptPath: string,
@@ -3893,7 +3914,7 @@ export const generateWorkflowPrompt = ({
   }
 
   const reviewBoundary =
-    promptPath === rel('.ai', 'prompts', 'review-changes.md') && reviewStagingPaths.length > 0
+    isReviewPrompt(promptPath) && reviewStagingPaths.length > 0
       ? `
 Plan-scoped diff boundary:
 Use only these plan-owned staged paths:
@@ -3985,6 +4006,7 @@ The previous stage exceeded token thresholds.
     rel('.ai', 'prompts', 'fix-plan.md'),
     rel('.ai', 'prompts', 'execute-plan.md'),
     rel('.ai', 'prompts', 'review-changes.md'),
+    rel('.ai', 'prompts', 'review-quality.md'),
     rel('.ai', 'prompts', 'fix-review.md'),
     rel('.ai', 'prompts', 'reopen-plan.md'),
   ].includes(promptPath)
@@ -6506,13 +6528,23 @@ const transitionAllowed = (
       };
     }
   }
-  if (promptPath === rel('.ai', 'prompts', 'review-changes.md')) {
+  if (promptPath === REVIEW_CHANGES_PROMPT_PATH) {
+    const allowedActive = next.status === 'active' && next.nextAction === 'execute-plan';
+    const allowedReview = next.status === 'review' && next.nextAction === 'review-plan';
+    if (!allowedActive && !allowedReview) {
+      return {
+        ok: false,
+        reason: `review-changes may only hand off to active + execute-plan or review + review-plan, got ${next.status} + ${next.nextAction}`,
+      };
+    }
+  }
+  if (promptPath === REVIEW_QUALITY_PROMPT_PATH) {
     const allowedActive = next.status === 'active' && next.nextAction === 'execute-plan';
     const allowedCompleted = next.status === 'completed' && next.nextAction === 'commit-summary';
     if (!allowedActive && !allowedCompleted) {
       return {
         ok: false,
-        reason: `review-changes may only hand off to active + execute-plan or completed + commit-summary, got ${next.status} + ${next.nextAction}`,
+        reason: `review-quality may only hand off to active + execute-plan or completed + commit-summary, got ${next.status} + ${next.nextAction}`,
       };
     }
   }
@@ -6585,6 +6617,9 @@ export const runWorkflowRunner = async (
   const heldWorkflowFileLockPaths = new Set<string>();
   const emittedWorkflowWarnings = new Set<string>();
   let currentTaskContext: WorkflowTaskContext | undefined;
+  let internalPromptPathOverride: string | undefined;
+  let carriedReviewStagingPaths: string[] | undefined;
+  let carriedReviewStagingProcess: ReviewStagingProcess | undefined;
   const markWorkflowLogCreated = (planName: string) => {
     workflowLogPath = rel('.ai', 'artifacts', planName, 'logs', 'runner.log');
   };
@@ -6704,7 +6739,10 @@ export const runWorkflowRunner = async (
   };
 
   while (true) {
-    const route = routeFor(parsedPlan.status, parsedPlan.nextAction);
+    const route = internalPromptPathOverride
+      ? internalRouteForPromptPath(internalPromptPathOverride)
+      : routeFor(parsedPlan.status, parsedPlan.nextAction);
+    internalPromptPathOverride = undefined;
     if (!route.executable) {
       return await finishFailure(route.reason);
     }
@@ -6867,7 +6905,7 @@ export const runWorkflowRunner = async (
       paths: string[] | undefined,
     ): Promise<{ ok: true } | Failure> => {
       if (
-        route.promptPath !== rel('.ai', 'prompts', 'review-changes.md') ||
+        !isReviewPrompt(route.promptPath) ||
         !paths ||
         paths.length === 0 ||
         reviewCleanup
@@ -6901,7 +6939,7 @@ export const runWorkflowRunner = async (
     }
     if (
       route.promptPath === rel('.ai', 'prompts', 'execute-plan.md') ||
-      route.promptPath === rel('.ai', 'prompts', 'review-changes.md') ||
+      isReviewPrompt(route.promptPath) ||
       route.promptPath === rel('.ai', 'prompts', 'commit-summary.md')
     ) {
       const preflight =
@@ -6942,245 +6980,254 @@ export const runWorkflowRunner = async (
         return await finishFailure(acquired.reason);
       }
     }
-    if (route.promptPath === rel('.ai', 'prompts', 'review-changes.md')) {
-      const preExistingStagedWork = await checkForPreReviewStagedWork(rootDir, processRunner);
-      if (!preExistingStagedWork.ok) {
-        logWorkflowProgress();
-        const durationMs = Math.max(0, now() - attemptStartedAt);
-        const logTimestamp = timestamp();
-        const failureMetadata = classifyFailureForLog(preExistingStagedWork.reason);
-        const failureDebugResult = await appendFailureDebugLedger(
-          rootDir,
-          parsedPlan.planName,
-          createWorkflowFailureDebugRecord({
-            timestamp: logTimestamp,
-            iteration: nextIteration,
-            planPath: parsedPlan.planPath,
-            status: parsedPlan.status,
-            nextAction: parsedPlan.nextAction,
-            promptPath: route.promptPath,
-            result: 'not-launched',
-            exitCode: undefined,
-            stopReason: preExistingStagedWork.reason,
-            failureMetadata,
-            stdout: '',
-            stderr: '',
-          }),
-        );
-        if (!failureDebugResult.ok) {
-          return await finishFailure(failureDebugResult.reason);
+    if (isReviewPrompt(route.promptPath)) {
+      if (isSpecReviewPrompt(route.promptPath)) {
+        const preExistingStagedWork = await checkForPreReviewStagedWork(rootDir, processRunner);
+        if (!preExistingStagedWork.ok) {
+          logWorkflowProgress();
+          const durationMs = Math.max(0, now() - attemptStartedAt);
+          const logTimestamp = timestamp();
+          const failureMetadata = classifyFailureForLog(preExistingStagedWork.reason);
+          const failureDebugResult = await appendFailureDebugLedger(
+            rootDir,
+            parsedPlan.planName,
+            createWorkflowFailureDebugRecord({
+              timestamp: logTimestamp,
+              iteration: nextIteration,
+              planPath: parsedPlan.planPath,
+              status: parsedPlan.status,
+              nextAction: parsedPlan.nextAction,
+              promptPath: route.promptPath,
+              result: 'not-launched',
+              exitCode: undefined,
+              stopReason: preExistingStagedWork.reason,
+              failureMetadata,
+              stdout: '',
+              stderr: '',
+            }),
+          );
+          if (!failureDebugResult.ok) {
+            return await finishFailure(failureDebugResult.reason);
+          }
+          const logResult = await appendLog(
+            rootDir,
+            parsedPlan.planName,
+            logFields({
+              timestamp: logTimestamp,
+              iteration: nextIteration,
+              planPath: parsedPlan.planPath,
+              status: parsedPlan.status,
+              nextAction: parsedPlan.nextAction,
+              promptPath: route.promptPath,
+              model: executionConfig.model,
+              reasoning: executionConfig.reasoning,
+              contextUsage: unavailableContextUsage,
+              result: 'not-launched',
+              exitCode: undefined,
+              durationMs,
+              stopReason: preExistingStagedWork.reason,
+              failureDebugPath: failureDebugResult.pointer,
+              stdout: '',
+              stderr: '',
+              staging: undefined,
+              taskContext: currentTaskContext,
+              currentBranch,
+              startingHeadSha,
+              endingHeadSha: await workflowHeadSha(rootDir, processRunner),
+              commitProgress,
+            }),
+          );
+          if (!logResult.ok) {
+            return await finishFailure(logResult.reason);
+          }
+          markWorkflowLogCreated(parsedPlan.planName);
+          return await finishFailure(preExistingStagedWork.reason);
         }
-        const logResult = await appendLog(
-          rootDir,
-          parsedPlan.planName,
-          logFields({
-            timestamp: logTimestamp,
-            iteration: nextIteration,
-            planPath: parsedPlan.planPath,
-            status: parsedPlan.status,
-            nextAction: parsedPlan.nextAction,
-            promptPath: route.promptPath,
-            model: executionConfig.model,
-            reasoning: executionConfig.reasoning,
-            contextUsage: unavailableContextUsage,
-            result: 'not-launched',
-            exitCode: undefined,
-            durationMs,
-            stopReason: preExistingStagedWork.reason,
-            failureDebugPath: failureDebugResult.pointer,
-            stdout: '',
-            stderr: '',
-            staging: undefined,
-            taskContext: currentTaskContext,
-            currentBranch,
-            startingHeadSha,
-            endingHeadSha: await workflowHeadSha(rootDir, processRunner),
-            commitProgress,
-          }),
-        );
-        if (!logResult.ok) {
-          return await finishFailure(logResult.reason);
+        const parsedPaths =
+          fileOwnershipPreflight?.hasOwnershipScope && fileOwnershipPreflight.reviewStagingPaths
+            ? fileOwnershipPreflight.reviewStagingPaths.length > 0
+              ? { ok: true as const, paths: fileOwnershipPreflight.reviewStagingPaths }
+              : {
+                  ok: false as const,
+                  reason: 'plan has no changed ownership files to stage for review',
+                }
+            : await parseReviewStagingPaths({
+                content: parsedPlan.content,
+                rootDir,
+                isIgnored:
+                  options.isIgnored ?? ((relativePath) => defaultIsIgnored(rootDir, relativePath)),
+              });
+        if (!parsedPaths.ok) {
+          const durationMs = Math.max(0, now() - attemptStartedAt);
+          const logTimestamp = timestamp();
+          const failureMetadata = classifyFailureForLog(parsedPaths.reason);
+          const failureDebugResult = await appendFailureDebugLedger(
+            rootDir,
+            parsedPlan.planName,
+            createWorkflowFailureDebugRecord({
+              timestamp: logTimestamp,
+              iteration: nextIteration,
+              planPath: parsedPlan.planPath,
+              status: parsedPlan.status,
+              nextAction: parsedPlan.nextAction,
+              promptPath: route.promptPath,
+              result: 'not-launched',
+              exitCode: undefined,
+              stopReason: parsedPaths.reason,
+              failureMetadata,
+              stdout: '',
+              stderr: '',
+            }),
+          );
+          if (!failureDebugResult.ok) {
+            return await finishFailure(failureDebugResult.reason);
+          }
+          const logResult = await appendLog(
+            rootDir,
+            parsedPlan.planName,
+            logFields({
+              timestamp: logTimestamp,
+              iteration: nextIteration,
+              planPath: parsedPlan.planPath,
+              status: parsedPlan.status,
+              nextAction: parsedPlan.nextAction,
+              promptPath: route.promptPath,
+              model: executionConfig.model,
+              reasoning: executionConfig.reasoning,
+              contextUsage: unavailableContextUsage,
+              result: 'not-launched',
+              exitCode: undefined,
+              durationMs,
+              stopReason: parsedPaths.reason,
+              failureDebugPath: failureDebugResult.pointer,
+              stdout: '',
+              stderr: '',
+              staging: undefined,
+              taskContext: currentTaskContext,
+              currentBranch,
+              startingHeadSha,
+              endingHeadSha: await workflowHeadSha(rootDir, processRunner),
+              commitProgress,
+            }),
+          );
+          if (!logResult.ok) {
+            return await finishFailure(logResult.reason);
+          }
+          markWorkflowLogCreated(parsedPlan.planName);
+          return await finishFailure(parsedPaths.reason);
         }
-        markWorkflowLogCreated(parsedPlan.planName);
-        return await finishFailure(preExistingStagedWork.reason);
-      }
-      const parsedPaths =
-        fileOwnershipPreflight?.hasOwnershipScope && fileOwnershipPreflight.reviewStagingPaths
-          ? fileOwnershipPreflight.reviewStagingPaths.length > 0
-            ? { ok: true as const, paths: fileOwnershipPreflight.reviewStagingPaths }
-            : {
-                ok: false as const,
-                reason: 'plan has no changed ownership files to stage for review',
-              }
-          : await parseReviewStagingPaths({
-              content: parsedPlan.content,
-              rootDir,
-              isIgnored:
-                options.isIgnored ?? ((relativePath) => defaultIsIgnored(rootDir, relativePath)),
-            });
-      if (!parsedPaths.ok) {
-        const durationMs = Math.max(0, now() - attemptStartedAt);
-        const logTimestamp = timestamp();
-        const failureMetadata = classifyFailureForLog(parsedPaths.reason);
-        const failureDebugResult = await appendFailureDebugLedger(
-          rootDir,
-          parsedPlan.planName,
-          createWorkflowFailureDebugRecord({
-            timestamp: logTimestamp,
-            iteration: nextIteration,
-            planPath: parsedPlan.planPath,
-            status: parsedPlan.status,
-            nextAction: parsedPlan.nextAction,
-            promptPath: route.promptPath,
-            result: 'not-launched',
-            exitCode: undefined,
-            stopReason: parsedPaths.reason,
-            failureMetadata,
-            stdout: '',
-            stderr: '',
-          }),
-        );
-        if (!failureDebugResult.ok) {
-          return await finishFailure(failureDebugResult.reason);
+        if (selectedTask) {
+          const taskStage = await setTaskStage({
+            stage: 'reviewing',
+            detail: `staged ${parsedPaths.paths.length} ${
+              parsedPaths.paths.length === 1 ? 'file' : 'files'
+            }`,
+          });
+          if (!taskStage.ok) {
+            return await finishFailure(taskStage.reason);
+          }
         }
-        const logResult = await appendLog(
+        const acquired = await acquireWorkflowFileOwnershipForPaths({
           rootDir,
-          parsedPlan.planName,
-          logFields({
-            timestamp: logTimestamp,
-            iteration: nextIteration,
-            planPath: parsedPlan.planPath,
-            status: parsedPlan.status,
-            nextAction: parsedPlan.nextAction,
-            promptPath: route.promptPath,
-            model: executionConfig.model,
-            reasoning: executionConfig.reasoning,
-            contextUsage: unavailableContextUsage,
-            result: 'not-launched',
-            exitCode: undefined,
-            durationMs,
-            stopReason: parsedPaths.reason,
-            failureDebugPath: failureDebugResult.pointer,
-            stdout: '',
-            stderr: '',
-            staging: undefined,
-            taskContext: currentTaskContext,
-            currentBranch,
-            startingHeadSha,
-            endingHeadSha: await workflowHeadSha(rootDir, processRunner),
-            commitProgress,
-          }),
-        );
-        if (!logResult.ok) {
-          return await finishFailure(logResult.reason);
-        }
-        markWorkflowLogCreated(parsedPlan.planName);
-        return await finishFailure(parsedPaths.reason);
-      }
-      if (selectedTask) {
-        const taskStage = await setTaskStage({
-          stage: 'reviewing',
-          detail: `staged ${parsedPaths.paths.length} ${
-            parsedPaths.paths.length === 1 ? 'file' : 'files'
-          }`,
+          planPath: parsedPlan.planPath,
+          paths: parsedPaths.paths,
+          heldLockPaths: heldWorkflowFileLockPaths,
+          now: timestamp,
         });
-        if (!taskStage.ok) {
-          return await finishFailure(taskStage.reason);
+        if (!acquired.ok) {
+          return await finishFailure(acquired.reason);
         }
-      }
-      const acquired = await acquireWorkflowFileOwnershipForPaths({
-        rootDir,
-        planPath: parsedPlan.planPath,
-        paths: parsedPaths.paths,
-        heldLockPaths: heldWorkflowFileLockPaths,
-        now: timestamp,
-      });
-      if (!acquired.ok) {
-        return await finishFailure(acquired.reason);
-      }
-      logWorkflowProgress();
-      logger.log(
-        `Staging ${parsedPaths.paths.length} plan-owned ${
-          parsedPaths.paths.length === 1 ? 'file' : 'files'
-        } for review...`,
-      );
-      const staged = await runReviewStagingForPaths(rootDir, parsedPaths.paths, processRunner);
-      if (!staged.ok) {
-        const cleanup = await cleanupReviewStagingPaths(parsedPaths.paths);
-        const stopReason = cleanup.ok ? staged.reason : `${staged.reason}; ${cleanup.reason}`;
-        const durationMs = Math.max(0, now() - attemptStartedAt);
-        const logTimestamp = timestamp();
-        const failureMetadata = classifyFailureForLog(stopReason);
-        const failureDebugResult = await appendFailureDebugLedger(
-          rootDir,
-          parsedPlan.planName,
-          createWorkflowFailureDebugRecord({
-            timestamp: logTimestamp,
-            iteration: nextIteration,
-            planPath: parsedPlan.planPath,
-            status: parsedPlan.status,
-            nextAction: parsedPlan.nextAction,
-            promptPath: route.promptPath,
-            result: staged.staging ? 'staging-failed' : 'not-launched',
-            exitCode: undefined,
-            stopReason,
-            failureMetadata,
-            stdout: '',
-            stderr: '',
-            staging: staged.staging,
-            cleanup: reviewCleanup,
-            taskContext: currentTaskContext,
-          }),
+        logWorkflowProgress();
+        logger.log(
+          `Staging ${parsedPaths.paths.length} plan-owned ${
+            parsedPaths.paths.length === 1 ? 'file' : 'files'
+          } for review...`,
         );
-        if (!failureDebugResult.ok) {
-          return await finishFailure(failureDebugResult.reason);
+        const staged = await runReviewStagingForPaths(rootDir, parsedPaths.paths, processRunner);
+        if (!staged.ok) {
+          const cleanup = await cleanupReviewStagingPaths(parsedPaths.paths);
+          const stopReason = cleanup.ok ? staged.reason : `${staged.reason}; ${cleanup.reason}`;
+          const durationMs = Math.max(0, now() - attemptStartedAt);
+          const logTimestamp = timestamp();
+          const failureMetadata = classifyFailureForLog(stopReason);
+          const failureDebugResult = await appendFailureDebugLedger(
+            rootDir,
+            parsedPlan.planName,
+            createWorkflowFailureDebugRecord({
+              timestamp: logTimestamp,
+              iteration: nextIteration,
+              planPath: parsedPlan.planPath,
+              status: parsedPlan.status,
+              nextAction: parsedPlan.nextAction,
+              promptPath: route.promptPath,
+              result: staged.staging ? 'staging-failed' : 'not-launched',
+              exitCode: undefined,
+              stopReason,
+              failureMetadata,
+              stdout: '',
+              stderr: '',
+              staging: staged.staging,
+              cleanup: reviewCleanup,
+              taskContext: currentTaskContext,
+            }),
+          );
+          if (!failureDebugResult.ok) {
+            return await finishFailure(failureDebugResult.reason);
+          }
+          const logResult = await appendLog(
+            rootDir,
+            parsedPlan.planName,
+            logFields({
+              timestamp: logTimestamp,
+              iteration: nextIteration,
+              planPath: parsedPlan.planPath,
+              status: parsedPlan.status,
+              nextAction: parsedPlan.nextAction,
+              promptPath: route.promptPath,
+              model: executionConfig.model,
+              reasoning: executionConfig.reasoning,
+              contextUsage: unavailableContextUsage,
+              result: staged.staging ? 'staging-failed' : 'not-launched',
+              exitCode: undefined,
+              durationMs,
+              stopReason,
+              failureDebugPath: failureDebugResult.pointer,
+              stdout: '',
+              stderr: '',
+              staging: staged.staging,
+              cleanup: reviewCleanup,
+              taskContext: currentTaskContext,
+              currentBranch,
+              startingHeadSha,
+              endingHeadSha: await workflowHeadSha(rootDir, processRunner),
+              commitProgress,
+            }),
+          );
+          if (!logResult.ok) {
+            return await finishFailure(logResult.reason);
+          }
+          markWorkflowLogCreated(parsedPlan.planName);
+          return await finishFailure(stopReason);
         }
-        const logResult = await appendLog(
+        await runScopeCleanupForPaths({
+          codexRuntime,
           rootDir,
-          parsedPlan.planName,
-          logFields({
-            timestamp: logTimestamp,
-            iteration: nextIteration,
-            planPath: parsedPlan.planPath,
-            status: parsedPlan.status,
-            nextAction: parsedPlan.nextAction,
-            promptPath: route.promptPath,
-            model: executionConfig.model,
-            reasoning: executionConfig.reasoning,
-            contextUsage: unavailableContextUsage,
-            result: staged.staging ? 'staging-failed' : 'not-launched',
-            exitCode: undefined,
-            durationMs,
-            stopReason,
-            failureDebugPath: failureDebugResult.pointer,
-            stdout: '',
-            stderr: '',
-            staging: staged.staging,
-            cleanup: reviewCleanup,
-            taskContext: currentTaskContext,
-            currentBranch,
-            startingHeadSha,
-            endingHeadSha: await workflowHeadSha(rootDir, processRunner),
-            commitProgress,
-          }),
-        );
-        if (!logResult.ok) {
-          return await finishFailure(logResult.reason);
+          planPath: parsedPlan.planPath,
+          planContent: parsedPlan.content,
+          paths: staged.paths,
+          processRunner,
+          mode: 'review',
+        });
+        staging = staged.staging;
+        reviewStagingPaths = staged.paths;
+      } else {
+        if (!carriedReviewStagingPaths || carriedReviewStagingPaths.length === 0) {
+          return await finishFailure('quality review requires prior spec review staging paths');
         }
-        markWorkflowLogCreated(parsedPlan.planName);
-        return await finishFailure(stopReason);
+        logWorkflowProgress();
+        reviewStagingPaths = carriedReviewStagingPaths;
+        staging = carriedReviewStagingProcess;
       }
-      await runScopeCleanupForPaths({
-        codexRuntime,
-        rootDir,
-        planPath: parsedPlan.planPath,
-        planContent: parsedPlan.content,
-        paths: staged.paths,
-        processRunner,
-        mode: 'review',
-      });
-      staging = staged.staging;
-      reviewStagingPaths = staged.paths;
     }
     if (route.promptPath === rel('.ai', 'prompts', 'commit-summary.md')) {
       const parsedPaths = await parseCommitSummaryPaths(
@@ -7654,11 +7701,7 @@ export const runWorkflowRunner = async (
       return await finishFailure(reason);
     }
 
-    if (
-      route.promptPath === rel('.ai', 'prompts', 'review-changes.md') &&
-      updated.status === 'active' &&
-      updated.nextAction === 'execute-plan'
-    ) {
+    if (isReviewPrompt(route.promptPath) && updated.status === 'active' && updated.nextAction === 'execute-plan') {
       const cleanup = await cleanupReviewStagingPaths(reviewStagingPaths);
       if (!cleanup.ok) {
         const logResult = await appendIterationLog(cleanup.reason);
@@ -7671,6 +7714,46 @@ export const runWorkflowRunner = async (
         }
         return await finishFailure(cleanup.reason);
       }
+      carriedReviewStagingPaths = undefined;
+      carriedReviewStagingProcess = undefined;
+      const logResult = await appendIterationLog(undefined, updated);
+      if (!logResult.ok) {
+        return await finishFailure(logResult.reason);
+      }
+      const snapshotResult = await syncWorkflowSnapshot(updated);
+      if (!snapshotResult.ok) {
+        return await finishFailure(snapshotResult.reason);
+      }
+      const reviewSummary = extractLatestReviewSummary(updated.content);
+      const reason = reviewSummary.summary
+        ? `${path.basename(route.promptPath, '.md')} routed plan back to active + execute-plan: ${reviewSummary.summary}`
+        : `${path.basename(route.promptPath, '.md')} routed plan back to active + execute-plan`;
+      return await finishFailure(reason);
+    }
+
+    if (
+      isSpecReviewPrompt(route.promptPath) &&
+      updated.status === 'review' &&
+      updated.nextAction === 'review-plan'
+    ) {
+      carriedReviewStagingPaths = reviewStagingPaths;
+      carriedReviewStagingProcess = staging;
+      const logResult = await appendIterationLog(undefined, updated);
+      if (!logResult.ok) {
+        return await finishFailure(logResult.reason);
+      }
+      const snapshotResult = await syncWorkflowSnapshot(updated);
+      if (!snapshotResult.ok) {
+        return await finishFailure(snapshotResult.reason);
+      }
+      internalPromptPathOverride = REVIEW_QUALITY_PROMPT_PATH;
+      parsedPlan = updated;
+      continue;
+    }
+
+    if (isQualityReviewPrompt(route.promptPath)) {
+      carriedReviewStagingPaths = undefined;
+      carriedReviewStagingProcess = undefined;
     }
 
     const logResult = await appendIterationLog(undefined, updated);
