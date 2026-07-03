@@ -54,13 +54,9 @@ type CodexExecutionConfig = {
   reasoning: ReasoningEffort;
 };
 
-<<<<<<< Updated upstream
 // codex-work codex-work6598
 export const WORKFLOW_RUNNER_CODEX_PROFILE: CodexProfile =
   "codex-work6598" as const;
-=======
-export const WORKFLOW_RUNNER_CODEX_PROFILE: CodexProfile = 'codex-work6598' as const;
->>>>>>> Stashed changes
 const CODEX_PROFILE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 
 const PLAN_VALIDATOR_PROMPT_PATH = ".ai/prompts/plan-validator.md";
@@ -7112,16 +7108,11 @@ const detectFileOwnershipArtifactConflict = async ({
   for (const other of otherArtifacts.artifacts) {
     const otherFiles = effectiveArtifactResolvedFiles(other, changedFiles);
     const conflictingFiles =
-<<<<<<< Updated upstream
       other.status === "completed" && other.nextAction === "commit-summary"
         ? otherFiles.filter(
             (filePath) =>
-              currentFiles.has(filePath) && dirtyFiles.has(filePath),
+              currentFiles.has(filePath) && dirtyFileSet.has(filePath),
           )
-=======
-      other.status === 'completed' && other.nextAction === 'commit-summary'
-        ? otherFiles.filter((filePath) => currentFiles.has(filePath) && dirtyFileSet.has(filePath))
->>>>>>> Stashed changes
         : blockingOwnershipStatuses.has(other.status)
           ? otherFiles.filter((filePath) => currentFiles.has(filePath))
           : [];
@@ -9032,11 +9023,8 @@ export const runWorkflowRunner = async (
       if (!snapshotResult.ok) {
         return await finishFailure(snapshotResult.reason);
       }
-      const reviewSummary = extractLatestReviewSummary(updated.content);
-      const reason = reviewSummary.summary
-        ? `${path.basename(route.promptPath, ".md")} routed plan back to active + execute-plan: ${reviewSummary.summary}`
-        : `${path.basename(route.promptPath, ".md")} routed plan back to active + execute-plan`;
-      return await finishFailure(reason);
+      parsedPlan = updated;
+      continue;
     }
 
     if (
