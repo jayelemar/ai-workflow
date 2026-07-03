@@ -2628,7 +2628,7 @@ test("workflow progress formatter adds readable stage labels with optional color
       reasoning: "high",
       color: false,
     }),
-    "[1/100] STAGE EXECUTE\nactive -> execute-plan\nmodel: gpt-5.5 | reasoning: high",
+    "[1/100] STAGE EXECUTE\nactive -> execute-plan\nmodel: gpt-5.5 | reasoning: high\n",
   );
 
   assert.equal(
@@ -2642,7 +2642,7 @@ test("workflow progress formatter adds readable stage labels with optional color
       reasoning: "xhigh",
       color: true,
     }),
-    "\u001b[37;45m[2/100] STAGE REVIEW\u001b[0m\nreview -> review-plan\nmodel: gpt-5.5 | reasoning: xhigh",
+    "\u001b[37;45m[2/100] STAGE REVIEW\u001b[0m\nreview -> review-plan\nmodel: gpt-5.5 | reasoning: xhigh\n",
   );
 });
 
@@ -2742,10 +2742,11 @@ test("codex live output formatter buffers partial JSONL chunks and passes throug
   formatter.stdout(event.slice(0, 12));
   formatter.stdout(`${event.slice(12)}\nplain output\n`);
   formatter.stderr("stderr output\n");
+  formatter.stderr("Reading additional input from stdin...\n");
   formatter.flush();
 
   assert.equal(stdout, "[agent]\nChunked\n\nplain output\n");
-  assert.equal(stderr, "stderr output\n");
+  assert.equal(stderr, "stderr output\nReading additional input from stdin...\n\n");
 });
 
 test("codex live output formatter summarizes apply_patch verification failures on stderr", () => {
@@ -6776,6 +6777,100 @@ test("completed clean ownership artifacts do not block later plans", async () =>
               ownershipScopeSection(["src/shared.ts"]),
             ),
           );
+        }
+        return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+      },
+    });
+
+    assert.equal(result.success, false);
+    assert.match(result.reason, /plan blocked after execute-plan/);
+    assert.equal(calls.some((call) => call.promptPath === ".ai/prompts/execute-plan.md"), true);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("thin-plan ownership preflight trusts terminal workflow state over stale ownership status", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(
+      workspace.root,
+      "artifact-state",
+      thinPlanV2Manifest("approved", "execute-plan"),
+    );
+    await writeThinPlanV2Artifacts(workspace.root, {
+      status: "approved",
+      nextAction: "execute-plan",
+      modified: ["src/shared.ts"],
+      changedFiles: ["src/shared.ts"],
+      owns: ["src/shared.ts"],
+      latest: {
+        validation: {
+          version: 1,
+          result: "APPROVED",
+          summary: "Plan approved.",
+          evidence: ".ai/artifacts/artifact-state/events/validation-v1.md",
+        },
+      },
+      history: [".ai/artifacts/artifact-state/events/validation-v1.md"],
+      activeBlockers: [],
+    });
+    await writeFileOwnershipArtifact(workspace.root, "completed-plan", {
+      planPath: ".ai/plans/completed-plan.md",
+      status: "review",
+      nextAction: "review-plan",
+      owns: ["src/shared.ts"],
+      released: [],
+      resolvedFiles: ["src/shared.ts"],
+      changedFiles: ["src/shared.ts"],
+      headSha: "abc123",
+      updatedAt: "2026-06-04T00:00:00.000Z",
+    });
+    mkdirSync(join(workspace.root, ".ai", "artifacts", "completed-plan", "state"), { recursive: true });
+    await writeFile(
+      join(workspace.root, ".ai", "artifacts", "completed-plan", "state", "workflow.json"),
+      `${JSON.stringify(
+        {
+          planPath: ".ai/plans/completed-plan.md",
+          status: "completed",
+          nextAction: "commit-summary",
+          latest: {},
+          history: [],
+          unresolvedBlockers: [],
+          updatedAt: "2026-06-04T00:05:00.000Z",
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+
+    const calls: Parameters<ProcessRunner>[0][] = [];
+    const result = await runWorkflowRunner({
+      argv: [".ai/plans/artifact-state.md"],
+      rootDir: workspace.root,
+      processRunner: async (call) => {
+        calls.push(call);
+        if (call.command === "git" && call.args[0] === "status") {
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
+        if (call.command === "git" && call.args[0] === "rev-parse") {
+          return { launched: true, stdout: "headsha\n", stderr: "", exitCode: 0 };
+        }
+        if (call.promptPath === ".ai/prompts/execute-plan.md") {
+          await writePlan(
+            workspace.root,
+            "artifact-state",
+            thinPlanV2Manifest("blocked", "unblock-plan"),
+          );
+          await writeThinPlanV2Artifacts(workspace.root, {
+            status: "blocked",
+            nextAction: "unblock-plan",
+            modified: ["src/shared.ts"],
+            changedFiles: ["src/shared.ts"],
+            owns: ["src/shared.ts"],
+            activeBlockers: ["Blocker v1 | validation environment unavailable"],
+          });
         }
         return { launched: true, stdout: "", stderr: "", exitCode: 0 };
       },

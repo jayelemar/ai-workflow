@@ -54,9 +54,13 @@ type CodexExecutionConfig = {
   reasoning: ReasoningEffort;
 };
 
+<<<<<<< Updated upstream
 // codex-work codex-work6598
 export const WORKFLOW_RUNNER_CODEX_PROFILE: CodexProfile =
   "codex-work6598" as const;
+=======
+export const WORKFLOW_RUNNER_CODEX_PROFILE: CodexProfile = 'codex-work6598' as const;
+>>>>>>> Stashed changes
 const CODEX_PROFILE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 
 const PLAN_VALIDATOR_PROMPT_PATH = ".ai/prompts/plan-validator.md";
@@ -2406,7 +2410,8 @@ const applyPatchVerificationFailureSummary = (
 };
 
 const formatCodexStderrForTerminal = (text: string, color = false): string =>
-  applyPatchVerificationFailureSummary(text, color) ?? text;
+  applyPatchVerificationFailureSummary(text, color) ??
+  text.replace(/(^|\n)(Reading additional input from stdin\.\.\.)(\r?\n|$)/g, '$1$2\n\n');
 
 const stageStylesByPromptPath: Record<
   string,
@@ -2489,7 +2494,7 @@ export const formatWorkflowProgressLine = ({
   const formattedProgressPrefix = color
     ? `${stage.colorCode}${progressPrefix}${ANSI_RESET}`
     : progressPrefix;
-  return `${formattedProgressPrefix}\n${status} -> ${nextAction}\nmodel: ${model} | reasoning: ${reasoning}`;
+  return `${formattedProgressPrefix}\n${status} -> ${nextAction}\nmodel: ${model} | reasoning: ${reasoning}\n`;
 };
 
 export const formatCommitProgressLine = ({
@@ -7037,7 +7042,33 @@ const readOtherFileOwnershipArtifacts = async (
       return parsed;
     }
     if (parsed.planPath !== currentPlanPath) {
-      artifacts.push(parsed);
+      const workflowPath = path.join(artifactsRoot, entry, 'state', 'workflow.json');
+      let artifact = parsed;
+      try {
+        const workflowRaw = await readFile(workflowPath, 'utf8');
+        const workflow = parseThinPlanV2WorkflowState(
+          JSON.parse(workflowRaw) as unknown,
+          parsed.planPath,
+          path.relative(rootDir, workflowPath),
+        );
+        if (isFailure(workflow)) {
+          return workflow;
+        }
+        artifact = {
+          ...parsed,
+          status: workflow.status,
+          nextAction: workflow.nextAction,
+        };
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code !== 'ENOENT') {
+          return {
+            ok: false,
+            reason: `file ownership workflow artifact cannot be read: ${workflowPath}: ${String(error)}`,
+          };
+        }
+      }
+      artifacts.push(artifact);
     }
   }
 
@@ -7061,10 +7092,12 @@ const detectFileOwnershipArtifactConflict = async ({
   rootDir,
   current,
   changedFiles,
+  dirtyFiles = changedFiles,
 }: {
   rootDir: string;
   current: FileOwnershipArtifact;
   changedFiles: string[];
+  dirtyFiles?: string[];
 }): Promise<{ ok: true } | Failure> => {
   const otherArtifacts = await readOtherFileOwnershipArtifacts(
     rootDir,
@@ -7075,15 +7108,20 @@ const detectFileOwnershipArtifactConflict = async ({
   }
 
   const currentFiles = new Set(current.resolvedFiles);
-  const dirtyFiles = new Set(changedFiles);
+  const dirtyFileSet = new Set(dirtyFiles);
   for (const other of otherArtifacts.artifacts) {
     const otherFiles = effectiveArtifactResolvedFiles(other, changedFiles);
     const conflictingFiles =
+<<<<<<< Updated upstream
       other.status === "completed" && other.nextAction === "commit-summary"
         ? otherFiles.filter(
             (filePath) =>
               currentFiles.has(filePath) && dirtyFiles.has(filePath),
           )
+=======
+      other.status === 'completed' && other.nextAction === 'commit-summary'
+        ? otherFiles.filter((filePath) => currentFiles.has(filePath) && dirtyFileSet.has(filePath))
+>>>>>>> Stashed changes
         : blockingOwnershipStatuses.has(other.status)
           ? otherFiles.filter((filePath) => currentFiles.has(filePath))
           : [];
@@ -7157,10 +7195,14 @@ const refreshAndCheckFileOwnershipArtifact = async ({
 const readThinPlanV2FileOwnershipPreflight = async ({
   rootDir,
   plan,
+  processRunner,
+  checkCompletedDirtyConflicts,
   isIgnored,
 }: {
   rootDir: string;
   plan: ParsedPlan;
+  processRunner: ProcessRunner;
+  checkCompletedDirtyConflicts: boolean;
   isIgnored?: (relativePath: string) => Promise<boolean>;
 }): Promise<FileOwnershipPreflight | Failure> => {
   const fileOwnershipPath = thinPlanV2ArtifactPath(
@@ -7192,11 +7234,20 @@ const readThinPlanV2FileOwnershipPreflight = async ({
   if (isFailure(files)) {
     return files;
   }
+  let dirtyFiles: string[] | undefined;
+  if (checkCompletedDirtyConflicts) {
+    const changed = await readGitChangedFiles(rootDir, processRunner);
+    if (!changed.ok) {
+      return changed;
+    }
+    dirtyFiles = changed.paths;
+  }
 
   const conflict = await detectFileOwnershipArtifactConflict({
     rootDir,
     current: artifact,
     changedFiles: files.changedFiles,
+    dirtyFiles,
   });
   if (!conflict.ok) {
     return conflict;
@@ -8117,6 +8168,8 @@ export const runWorkflowRunner = async (
           ? await readThinPlanV2FileOwnershipPreflight({
               rootDir,
               plan: parsedPlan,
+              processRunner,
+              checkCompletedDirtyConflicts: route.promptPath === rel('.ai', 'prompts', 'execute-plan.md'),
               isIgnored: options.isIgnored,
             })
           : await refreshAndCheckFileOwnershipArtifact({
