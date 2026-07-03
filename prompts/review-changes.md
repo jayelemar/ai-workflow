@@ -1,6 +1,7 @@
-# Review Changes (State-Machine Driven)
+# Review Changes (Stage 1 Spec Review)
 
-This prompt defines review-specific behavior only.
+This prompt defines stage-1 spec review behavior only.
+The runner enforces stage-2 quality review separately in the same `review + review-plan` workflow entry.
 
 ---
 
@@ -20,7 +21,7 @@ Read:
 Use the runner-provided Active Context Packet and index-selected instruction files only. Do not broadly load `.ai/instructions/**`.
 Read the full plan only when exact plan edits are required or the snapshot is insufficient.
 Do not load full historical sections unless the snapshot is insufficient.
-Review remains quality-first even after a prior token spike: use the snapshot first, but keep fallback access to the full plan or exact event files whenever needed for correctness.
+Spec review is fail-fast even after a prior token spike: use the snapshot first, but keep fallback access to the full plan or exact event files whenever needed for correctness.
 
 Load:
 
@@ -166,7 +167,7 @@ If the runner injects `Task savepoint current task`:
 * verify the current task's validation evidence before approving it
 * do not review or approve future `[task:...]` items
 * if review fails, do not commit; set or keep `Status = active` and `Next Action = execute-plan`
-* if review passes, route only the current task to `completed + commit-summary`
+* if review passes, keep the plan at `review + review-plan`; the runner-enforced stage-2 quality review decides whether the current task may continue to `completed + commit-summary`
 
 Analyze:
 
@@ -203,7 +204,7 @@ Check:
 * each user action in the flow artifact is implemented by the staged diff or already covered by unchanged existing code referenced by the mapping
 * every visible state in the flow artifact is represented in the implemented UI, API response, service behavior, or documented unchanged path
 * every failure branch in the flow artifact is handled or explicitly deferred by spec-approved scope
-* acceptance scenarios from the flow artifact have validation coverage through tests, focused checks, or an explicit deferred validation note when local proof is unavailable
+* acceptance scenarios from the flow artifact have validation coverage through tests, focused checks, or explicit local evidence
 * `.ai/artifacts/<plan-name>/implementation-map.md` accurately points each user action to applicable UI route/component, API route, backend service/module, database/storage effect, and tests
 
 If a user-facing flow step lacks implementation coverage or validation coverage:
@@ -220,26 +221,7 @@ If the user-journey artifact conflicts with the spec:
 
 ---
 
-### 2. Regression Risk
-
-Check:
-
-* existing functionality impact
-* shared logic impact
-* breaking changes
-
----
-
-### 3. Rule Compliance
-
-Validate against:
-
-* `.codex/AGENTS.md`
-* Active Context Packet instruction files selected from `.ai/instructions/index.md`
-
----
-
-### 4. Scope Control
+### 2. Scope Control
 
 Ensure:
 
@@ -248,28 +230,27 @@ Ensure:
 
 ---
 
-### 5. Code Quality
-
-Check:
-
-* readability
-* consistency
-* justified complexity
-
----
-
-### 6. Validation Evidence (MANDATORY)
+### 3. Validation Coverage Against Intended Behavior
 
 Check:
 
 * tests executed
 * commands run
 * results recorded
+* acceptance coverage for the intended behavior
 
 Rules:
 
-* missing validation → WARNING
-* risky change without validation → CRITICAL
+* missing validation evidence for a claimed implemented behavior → WARNING
+* risky behavior change without validation evidence → CRITICAL
+
+---
+
+### Stage Boundary
+
+Do not perform regression risk, readability, consistency, maintainability, or justified-complexity review in this stage.
+The runner-enforced stage-2 quality review owns those checks and the completion decision.
+Do not make deferred external validation decisions in this stage.
 
 ---
 
@@ -280,23 +261,23 @@ Rules:
 * spec violation
 * missing behavior
 * incorrect logic
-* breaking change
-* high-risk change without validation
+* file-list mismatch
+* user-journey implementation gap
+* user-journey validation gap
+* high-risk behavior change without validation evidence
 
 ---
 
 ### WARNING
 
-* missing validation evidence
-* deviation from plan
-* potential regression risk
+* missing validation evidence for a low-risk claimed behavior
+* deviation from plan-owned validation intent
 
 ---
 
 ### SUGGESTION
 
-* readability improvement
-* maintainability improvement
+* none in this stage unless it directly clarifies spec compliance work
 
 ---
 
@@ -323,19 +304,19 @@ execute-plan
 
 2. add the next review entry.
 
-Write `.ai/artifacts/<plan-name>/events/review-vX.md`, then update `.ai/artifacts/<plan-name>/state/workflow.json` with runner-readable thin-plan-v2 state: preserve `planPath`, set `status` and `nextAction`, write the compact review event under `latest.review`, append the review artifact path to `history`, set `unresolvedBlockers`, and refresh `updatedAt`.
+Write `.ai/artifacts/<plan-name>/events/review-spec-vX.md`, then update `.ai/artifacts/<plan-name>/state/workflow.json` with runner-readable thin-plan-v2 state: preserve `planPath`, set `status` and `nextAction`, write the compact spec review event under `latest.reviewSpec`, mirror the same compact state under `latest.review` for compatibility, append the spec-review artifact path to `history`, set `unresolvedBlockers`, and refresh `updatedAt`.
 
 For legacy thin-plan-v1 plans only, if the plan already contains `## Review History`, append only:
 
 ### Review vX
 
 * Summary: NEEDS FIX
-* Evidence: .ai/artifacts/<plan-name>/events/review-vX.md
+* Evidence: .ai/artifacts/<plan-name>/events/review-spec-vX.md
 * Decision: active
 
 Create `## Review History` only if the section is missing in a legacy thin-plan-v1 plan.
 
-Before updating the plan, create `.ai/artifacts/<plan-name>/events/review-vX.md` with `# Review vX`, `## Summary`, and `## Evidence`.
+Before updating the plan, create `.ai/artifacts/<plan-name>/events/review-spec-vX.md` with `# Review Spec vX`, `## Summary`, and `## Evidence`.
 Put all issue bullets, file references, remediation notes, missing validations, and unresolved risks in the review artifact.
 Review state entries may contain only compact `Summary`, `Decision`, and `Evidence` pointer fields.
 Do not duplicate the `## Review History` heading in thin-plan-v2 manifests.
@@ -351,49 +332,34 @@ Do not duplicate the `## Review History` heading in thin-plan-v2 manifests.
 
 ---
 
-### IF NO CRITICAL issues AND final validation requires deployed, manual, or external code:
-
-Use this path when the implementation is safe to commit locally, but the final proof will be performed manually by the operator after commit, deploy, production access, external integration access, or another check outside the local reviewed workspace.
+### IF NO CRITICAL issues:
 
 1. update the plan manifest:
 
 ## Status
 
-completed
+review
 
 ## Next Action
 
-commit-summary
+review-plan
 
-2. create `.ai/artifacts/<plan-name>/events/review-vX.md` with `# Review vX`, `## Summary`, and `## Evidence`, including the deferred validation note.
+2. create `.ai/artifacts/<plan-name>/events/review-spec-vX.md` with `# Review Spec vX`, `## Summary`, and `## Evidence`.
 
-3. update `.ai/artifacts/<plan-name>/state/workflow.json` with `latest.review.summary = SAFE - DEFERRED VALIDATION`, `latest.review.decision = completed`, the review evidence pointer, appended `history`, status, nextAction, and updatedAt.
+3. update `.ai/artifacts/<plan-name>/state/workflow.json` with `latest.reviewSpec.summary = SPEC PASS`, `latest.reviewSpec.decision = review`, the spec-review evidence pointer, appended `history`, status, nextAction, and updatedAt. Mirror the same compact pass state under `latest.review` for compatibility until stage-2 quality review replaces it.
 
-4. reread the plan manifest and `.ai/artifacts/<plan-name>/state/workflow.json`; verify both show `completed + commit-summary` before final output.
+4. reread the plan manifest and `.ai/artifacts/<plan-name>/state/workflow.json`; verify both show `review + review-plan` before final output.
 
-5. do not create any extra plan section for this path. `commit-summary` records the local commit metadata. The operator performs the deferred validation manually after commit/deploy and reopens the plan if that check finds a required fix.
+5. do not transition directly to `completed + commit-summary`.
+The runner-enforced stage-2 quality review must run next.
 
----
+For legacy thin-plan-v1 plans only, append:
 
-### IF NO CRITICAL issues AND local/final validation is complete:
+### Review vX
 
-1. update the plan manifest:
-
-## Status
-
-completed
-
-## Next Action
-
-commit-summary
-
-2. create `.ai/artifacts/<plan-name>/events/review-vX.md` with `# Review vX`, `## Summary`, and `## Evidence`.
-
-3. update `.ai/artifacts/<plan-name>/state/workflow.json` with `latest.review.summary = SAFE`, `latest.review.decision = completed`, the review evidence pointer, appended `history`, status, nextAction, and updatedAt.
-
-4. reread the plan manifest and `.ai/artifacts/<plan-name>/state/workflow.json`; verify both show `completed + commit-summary` before final output.
-
-Put optional warnings and suggestions in the review artifact.
+* Summary: SPEC PASS
+* Evidence: .ai/artifacts/<plan-name>/events/review-spec-vX.md
+* Decision: review
 
 ---
 
@@ -416,7 +382,7 @@ Rules:
 * File and line references should stay in the review artifact; use inline terminal refs only when needed to avoid ambiguity.
 * Do not include long examples unless they are required to prove the issue.
 * Do not output separate spec coverage or regression risk sections.
-* Fold spec coverage and regression risk into `**Issues**` only when actionable.
+* Fold spec coverage into `**Issues**` only when actionable.
 * Keep `**Final Verdict**` exactly in the checkbox format below.
 
 **Plan**
@@ -444,9 +410,9 @@ Rules:
 Status:
 
 * active
-* completed
+* review
 
 Next Action:
 
 * execute-plan
-* commit-summary
+* review-plan

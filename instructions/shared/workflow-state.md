@@ -16,6 +16,7 @@ Define the canonical plan workflow state machine: plan statuses, next actions, a
 - `.ai/prompts/execute-plan.md`
 - `.ai/prompts/unblock-plan.md`
 - `.ai/prompts/review-changes.md`
+- `.ai/prompts/review-quality.md`
 - `.ai/prompts/fix-review.md`
 - `.ai/prompts/reopen-plan.md`
 - `.ai/prompts/commit-summary.md`
@@ -185,6 +186,12 @@ Review passed:
 
 Status = completed
 Next Action = commit-summary
+
+Review implementation note:
+
+* Public entry remains `review + review-plan`.
+* The runner internally executes stage-1 spec review first, then stage-2 quality review.
+* Only stage-2 quality review may approve `completed + commit-summary`.
 
 Completed `commit-summary` is the terminal safe-to-merge path. It creates the local plan-scoped commit and runner success represents that no further next action is required.
 

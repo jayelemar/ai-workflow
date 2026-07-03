@@ -144,6 +144,39 @@ const expectedWorkflowEventArtifactPath = (
   version: number,
 ): string => rel('.ai', 'artifacts', planName, 'events', `${kind}-v${version}.md`);
 
+const splitReviewWorkflowEventArtifactPathPattern = (planName: string): RegExp =>
+  new RegExp(
+    `^${escapeRegExp(rel('.ai', 'artifacts', planName, 'events', 'review-'))}(spec|quality)-v\\d+\\.md$`,
+    'i',
+  );
+
+const workflowEventEvidencePathMatches = (
+  planName: string,
+  kind: WorkflowEventKind,
+  version: number,
+  evidencePath: string,
+): boolean => {
+  if (evidencePath === expectedWorkflowEventArtifactPath(planName, kind, version)) {
+    return true;
+  }
+  if (kind !== 'review') {
+    return false;
+  }
+  return splitReviewWorkflowEventArtifactPathPattern(planName).test(evidencePath);
+};
+
+const workflowEventEvidencePathRequirement = (
+  planName: string,
+  kind: WorkflowEventKind,
+  version: number,
+): string => {
+  const expectedPath = expectedWorkflowEventArtifactPath(planName, kind, version);
+  if (kind !== 'review') {
+    return expectedPath;
+  }
+  return `${expectedPath} or a split review artifact path under .ai/artifacts/${planName}/events/ (review-spec-vN.md or review-quality-vN.md)`;
+};
+
 const parseWorkflowEventHeading = (
   heading: string,
   label: string,
@@ -383,21 +416,23 @@ export const validateThinPlanContract = async ({
         };
       }
       const evidencePath = rawFieldValue(entry.lines, 'Evidence');
-      const expectedPath = expectedWorkflowEventArtifactPath(
-        planName,
-        kind,
-        parsedHeading.version,
-      );
       if (!evidencePath) {
         return {
           ok: false,
           reason: `thin-plan ${label} v${parsedHeading.version} is missing Evidence`,
         };
       }
-      if (evidencePath !== expectedPath) {
+      if (
+        !workflowEventEvidencePathMatches(
+          planName,
+          kind,
+          parsedHeading.version,
+          evidencePath,
+        )
+      ) {
         return {
           ok: false,
-          reason: `thin-plan ${label} v${parsedHeading.version} evidence path must be ${expectedPath}`,
+          reason: `thin-plan ${label} v${parsedHeading.version} evidence path must be ${workflowEventEvidencePathRequirement(planName, kind, parsedHeading.version)}`,
         };
       }
 
