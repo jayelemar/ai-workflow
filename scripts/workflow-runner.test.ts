@@ -8794,6 +8794,120 @@ test("review staging auto-unstages unrelated hunks before review prompt runs", a
   }
 });
 
+test("review scope cleanup receives prior non-plan-scoped STOP evidence", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(
+      workspace.root,
+      "review-scope-cleanup-retry",
+      planWithFileScope("review", "review-plan", {
+        modified: ["e2e/support-issue-widget.spec.ts"],
+      }),
+    );
+    const failureLogDir = join(
+      workspace.root,
+      ".ai",
+      "artifacts",
+      "review-scope-cleanup-retry",
+      "logs",
+    );
+    mkdirSync(failureLogDir, { recursive: true });
+    writeFileSync(
+      join(failureLogDir, "failure.jsonl"),
+      `${JSON.stringify({
+        failureKind: "codex-stop",
+        failureReason: "non plan-scoped changes detected.",
+        promptPath: ".ai/prompts/review-changes.md",
+        lastAgentMessageExcerpt:
+          "STOP: non plan-scoped changes detected. Path-scoped staged diff includes unrelated e2e hunks: dynamic Supabase env/auth storage setup, 2FA route mock, and /login heading change.",
+      })}\n`,
+    );
+
+    const calls: Parameters<ProcessRunner>[0][] = [];
+    const result = await runWorkflowRunner({
+      planName: planArg("review-scope-cleanup-retry"),
+      rootDir: workspace.root,
+      processRunner: async (call) => {
+        calls.push(call);
+        if (call.command === "git" && call.args[0] === "diff") {
+          return {
+            launched: true,
+            stdout: [
+              "diff --git a/e2e/support-issue-widget.spec.ts b/e2e/support-issue-widget.spec.ts",
+              "index 1111111..2222222 100644",
+              "--- a/e2e/support-issue-widget.spec.ts",
+              "+++ b/e2e/support-issue-widget.spec.ts",
+              "@@ -1,0 +2,1 @@",
+              '+const localSupabaseUrl = ".env.local";',
+            ].join("\n"),
+            stderr: "",
+            exitCode: 0,
+          };
+        }
+        if (call.command === "git") {
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
+        if (call.promptPath === ".ai/prompts/scope-cleanup.md") {
+          return {
+            launched: true,
+            stdout: codexAgentMessageLine(JSON.stringify({ action: "keep" })),
+            stderr: "",
+            exitCode: 0,
+          };
+        }
+        if (call.promptPath === ".ai/prompts/review-changes.md") {
+          writeWorkflowEventArtifactSync({
+            root: workspace.root,
+            planName: "review-scope-cleanup-retry",
+            kind: "review-spec",
+            version: 1,
+          });
+          await writePlan(
+            workspace.root,
+            "review-scope-cleanup-retry",
+            planWithFileScope(
+              "review",
+              "review-plan",
+              {
+                modified: ["e2e/support-issue-widget.spec.ts"],
+              },
+              legacyReviewHistorySection({
+                summary: "SPEC PASS",
+                evidence:
+                  ".ai/artifacts/review-scope-cleanup-retry/events/review-spec-v1.md",
+                decision: "review",
+              }),
+            ),
+          );
+        }
+        if (call.promptPath === ".ai/prompts/review-quality.md") {
+          await writePlan(
+            workspace.root,
+            "review-scope-cleanup-retry",
+            planWithFileScope("completed", "commit-summary", {
+              modified: ["e2e/support-issue-widget.spec.ts"],
+            }),
+          );
+        }
+        return { launched: true, stdout: "summary", stderr: "", exitCode: 0 };
+      },
+    });
+
+    assert.equal(result.success, true);
+    const cleanupCall = calls.find(
+      (call) => call.promptPath === ".ai/prompts/scope-cleanup.md",
+    );
+    assert.match(
+      cleanupCall?.args.join("\n") ?? "",
+      /Previous non-plan-scoped review STOP evidence:/,
+    );
+    assert.match(cleanupCall?.args.join("\n") ?? "", /dynamic Supabase env/);
+    assert.match(cleanupCall?.args.join("\n") ?? "", /2FA route mock/);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
 test("review-plan does not require hunk ownership before review", async () => {
   const workspace = await setupWorkspace();
   try {

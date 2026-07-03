@@ -54,13 +54,9 @@ type CodexExecutionConfig = {
   reasoning: ReasoningEffort;
 };
 
-<<<<<<< Updated upstream
 // codex-work codex-work6598
 export const WORKFLOW_RUNNER_CODEX_PROFILE: CodexProfile =
   "codex-work6598" as const;
-=======
-export const WORKFLOW_RUNNER_CODEX_PROFILE: CodexProfile = 'codex-work6598' as const;
->>>>>>> Stashed changes
 const CODEX_PROFILE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 
 const PLAN_VALIDATOR_PROMPT_PATH = ".ai/prompts/plan-validator.md";
@@ -5332,6 +5328,48 @@ const appendFailureDebugLedger = async (
   }
 };
 
+const readLatestNonPlanScopedReviewStopEvidence = async (
+  rootDir: string,
+  planName: string,
+): Promise<string | undefined> => {
+  let content: string;
+  try {
+    content = await readFile(
+      failureDebugLedgerAbsolutePath(rootDir, planName),
+      "utf8",
+    );
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "ENOENT") {
+      return undefined;
+    }
+    return undefined;
+  }
+
+  const lines = content.split(/\r?\n/).filter(Boolean);
+  for (const line of lines.reverse()) {
+    let entry: Partial<WorkflowFailureDebugRecord>;
+    try {
+      entry = JSON.parse(line) as Partial<WorkflowFailureDebugRecord>;
+    } catch {
+      continue;
+    }
+    if (
+      entry.promptPath !== REVIEW_CHANGES_PROMPT_PATH ||
+      entry.failureKind !== "codex-stop" ||
+      !entry.failureReason?.includes("non plan-scoped changes detected")
+    ) {
+      continue;
+    }
+    return boundedInlineExcerpt(
+      entry.lastAgentMessageExcerpt ??
+        entry.stopExcerpt ??
+        entry.failureReason,
+    );
+  }
+  return undefined;
+};
+
 const tokenUsageLedgerRelativePath = (planName: string): string =>
   rel(".ai", "artifacts", planName, "logs", "token-usage.jsonl");
 
@@ -6441,6 +6479,7 @@ export const generateScopeCleanupPrompt = ({
   paths,
   diff,
   mode,
+  previousNonPlanScopedStopEvidence,
 }: {
   promptContent: string;
   planPath: string;
@@ -6449,6 +6488,7 @@ export const generateScopeCleanupPrompt = ({
   paths: string[];
   diff: string;
   mode: "review" | "commit-summary";
+  previousNonPlanScopedStopEvidence?: string;
 }): string => `Use ${SCOPE_CLEANUP_PROMPT_PATH} to clean staged scope for ${mode}.
 
 Support prompt content:
@@ -6472,6 +6512,7 @@ ${specPaths.length > 0 ? specPaths.map((specPath) => `- ${specPath}`).join("\n")
 Plan-owned staged paths:
 ${paths.map((stagingPath) => `- ${stagingPath}`).join("\n")}
 
+${previousNonPlanScopedStopEvidence ? `Previous non-plan-scoped review STOP evidence:\n${previousNonPlanScopedStopEvidence}\n\nUse this reviewer evidence to identify hunks that must be unstaged before review runs again.\n\n` : ""}\
 Path-scoped staged diff:
 ${diff}
 `;
@@ -6507,6 +6548,13 @@ const runScopeCleanupForPaths = async ({
     return;
   }
 
+  const previousNonPlanScopedStopEvidence =
+    mode === "review"
+      ? await readLatestNonPlanScopedReviewStopEvidence(
+          rootDir,
+          path.posix.basename(planPath, ".md"),
+        )
+      : undefined;
   const cleanupPrompt = generateScopeCleanupPrompt({
     promptContent: prompt.content,
     planPath,
@@ -6517,6 +6565,7 @@ const runScopeCleanupForPaths = async ({
     paths,
     diff,
     mode,
+    previousNonPlanScopedStopEvidence,
   });
   const executionConfig = codexExecutionConfig(SCOPE_CLEANUP_PROMPT_PATH);
   const result = await processRunner({
@@ -7112,16 +7161,11 @@ const detectFileOwnershipArtifactConflict = async ({
   for (const other of otherArtifacts.artifacts) {
     const otherFiles = effectiveArtifactResolvedFiles(other, changedFiles);
     const conflictingFiles =
-<<<<<<< Updated upstream
       other.status === "completed" && other.nextAction === "commit-summary"
         ? otherFiles.filter(
             (filePath) =>
-              currentFiles.has(filePath) && dirtyFiles.has(filePath),
+              currentFiles.has(filePath) && dirtyFileSet.has(filePath),
           )
-=======
-      other.status === 'completed' && other.nextAction === 'commit-summary'
-        ? otherFiles.filter((filePath) => currentFiles.has(filePath) && dirtyFileSet.has(filePath))
->>>>>>> Stashed changes
         : blockingOwnershipStatuses.has(other.status)
           ? otherFiles.filter((filePath) => currentFiles.has(filePath))
           : [];
