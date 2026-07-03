@@ -486,6 +486,12 @@ export const workflowFileLockPath = (
   return path.join(workflowFileLockDir(rootDir), `${digest}.json`);
 };
 
+const workflowFileUnlockPathHint = (
+  planPath: string,
+  ownedPath: string,
+): string =>
+  `run this on the terminal:\npnpm workflow:unlock ${shellQuote(planPath)} ${shellQuote(ownedPath)}`;
+
 const zeroTokenUsageTotals: TokenUsageTotals = {
   inputTokens: 0,
   cachedInputTokens: 0,
@@ -7581,11 +7587,15 @@ const acquireWorkflowFileOwnershipForPaths = async ({
         break;
       }
       if (isProcessAlive(existing.pid)) {
+        const unlockHint =
+          existing.planPath === planPath
+            ? `\n\n${workflowFileUnlockPathHint(planPath, ownedPath)}`
+            : "";
         const releaseFailure = await releaseAttemptLocks();
         return (
           releaseFailure ?? {
             ok: false,
-            reason: `workflow file ownership conflict: ${ownedPath} is already owned by ${existing.planPath} (pid ${existing.pid})`,
+            reason: `workflow file ownership conflict: ${ownedPath} is already owned by ${existing.planPath} (pid ${existing.pid})${unlockHint}`,
           }
         );
       }
@@ -9016,6 +9026,26 @@ export const runWorkflowRunner = async (
       return await finishNonterminalRouteOutcome(nonterminalOutcome);
     }
 
+    if (
+      isSpecReviewPrompt(route.promptPath) &&
+      updated.status === "review" &&
+      updated.nextAction === "review-plan"
+    ) {
+      carriedReviewStagingPaths = reviewStagingPaths;
+      carriedReviewStagingProcess = staging;
+      const logResult = await appendIterationLog(undefined, updated);
+      if (!logResult.ok) {
+        return await finishFailure(logResult.reason);
+      }
+      const snapshotResult = await syncWorkflowSnapshot(updated);
+      if (!snapshotResult.ok) {
+        return await finishFailure(snapshotResult.reason);
+      }
+      internalPromptPathOverride = REVIEW_QUALITY_PROMPT_PATH;
+      parsedPlan = updated;
+      continue;
+    }
+
     if (updated.content === previousContent) {
       const cleanup = await cleanupReviewStagingPaths(reviewStagingPaths);
       const reason = cleanup.ok
@@ -9081,26 +9111,6 @@ export const runWorkflowRunner = async (
         ? `${path.basename(route.promptPath, ".md")} routed plan back to active + execute-plan: ${reviewSummary.summary}`
         : `${path.basename(route.promptPath, ".md")} routed plan back to active + execute-plan`;
       return await finishFailure(reason);
-    }
-
-    if (
-      isSpecReviewPrompt(route.promptPath) &&
-      updated.status === "review" &&
-      updated.nextAction === "review-plan"
-    ) {
-      carriedReviewStagingPaths = reviewStagingPaths;
-      carriedReviewStagingProcess = staging;
-      const logResult = await appendIterationLog(undefined, updated);
-      if (!logResult.ok) {
-        return await finishFailure(logResult.reason);
-      }
-      const snapshotResult = await syncWorkflowSnapshot(updated);
-      if (!snapshotResult.ok) {
-        return await finishFailure(snapshotResult.reason);
-      }
-      internalPromptPathOverride = REVIEW_QUALITY_PROMPT_PATH;
-      parsedPlan = updated;
-      continue;
     }
 
     if (isQualityReviewPrompt(route.promptPath)) {

@@ -5441,7 +5441,7 @@ test(`${CODEX_EXEC_LABEL} prompt contains selected prompt content and exact plan
       ),
     });
     assert.equal(result.success, false);
-    assert.equal(calls.length, 7);
+    assert.equal(calls.length, 8);
     assert.deepEqual(
       calls.map((call) => [call.command, call.args[0], call.promptPath]),
       [
@@ -5451,6 +5451,7 @@ test(`${CODEX_EXEC_LABEL} prompt contains selected prompt content and exact plan
         ["git", "diff", "git-scope-cleanup-diff"],
         [CODEX_COMMAND, "exec", ".ai/prompts/scope-cleanup.md"],
         [CODEX_COMMAND, "exec", ".ai/prompts/review-changes.md"],
+        [CODEX_COMMAND, "exec", ".ai/prompts/review-quality.md"],
         ["git", "restore", "git-review-unstage"],
       ],
     );
@@ -5496,6 +5497,7 @@ test(`${OVERRIDE_CODEX_EXEC_LABEL} override applies to launched codex commands a
         ".ai/prompts/execute-plan.md",
         ".ai/prompts/scope-cleanup.md",
         ".ai/prompts/review-changes.md",
+        ".ai/prompts/review-quality.md",
       ],
     );
     assert.equal(calls[0].command, OVERRIDE_CODEX_PROFILE);
@@ -7173,6 +7175,41 @@ test("workflow runner stops before execution when an existing file lock is malfo
   }
 });
 
+test("workflow runner prints same-plan unlock command when a live lock blocks rerun", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(
+      workspace.root,
+      "current-plan",
+      planWithFileScope("active", "execute-plan", {
+        modified: ["apps/web/src/shared.ts"],
+      }),
+    );
+    await writeWorkflowFileLock(workspace.root, "apps/web/src/shared.ts", {
+      planPath: ".ai/plans/current-plan.md",
+      pid: process.ppid,
+      createdAt: "2026-06-04T00:00:00.000Z",
+      path: "apps/web/src/shared.ts",
+    });
+
+    const result = await runWorkflowRunner({
+      argv: [".ai/plans/current-plan.md"],
+      rootDir: workspace.root,
+      processRunner: runnerReturning({ launched: true, stdout: "", stderr: "", exitCode: 0 }),
+    });
+
+    assert.equal(result.success, false);
+    assert.match(result.reason, /workflow file ownership conflict/);
+    assert.match(result.reason, /run this on the terminal:/);
+    assert.match(
+      result.reason,
+      /pnpm workflow:unlock \.ai\/plans\/current-plan\.md apps\/web\/src\/shared\.ts/,
+    );
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
 test("workflow runner releases file ownership locks after failure and STOP outcomes", async () => {
   const workspace = await setupWorkspace();
   try {
@@ -8673,6 +8710,118 @@ test("review-plan stages plan-owned files normally when the repo has no pre-exis
         [CODEX_COMMAND, "exec", ".ai/prompts/review-quality.md"],
         [CODEX_COMMAND, "exec", ".ai/prompts/commit-summary.md"],
         ["git", "status", "git-commit-summary-clean-check"],
+      ],
+    );
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("thin-plan-v2 spec review continues to quality when spec-pass sidecar is already current", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writeThinPlanV2Artifacts(workspace.root, {
+      status: "review",
+      nextAction: "review-plan",
+      modified: ["src/artifact-state.ts"],
+      changedFiles: ["src/artifact-state.ts"],
+      latest: {
+        validation: {
+          version: 2,
+          result: "PASS",
+          summary: "Required checks passed.",
+          evidence: ".ai/artifacts/artifact-state/events/validation-v2.md",
+        },
+        reviewSpec: {
+          version: 1,
+          summary: "SPEC PASS",
+          decision: "review",
+          evidence: ".ai/artifacts/artifact-state/events/review-spec-v1.md",
+        },
+        review: {
+          version: 1,
+          summary: "SPEC PASS",
+          decision: "review",
+          evidence: ".ai/artifacts/artifact-state/events/review-spec-v1.md",
+        },
+      },
+      history: [
+        ".ai/artifacts/artifact-state/events/validation-v2.md",
+        ".ai/artifacts/artifact-state/events/review-spec-v1.md",
+      ],
+    });
+    await writePlan(workspace.root, "artifact-state", thinPlanV2Manifest("review", "review-plan"));
+    const calls: Parameters<ProcessRunner>[0][] = [];
+    const result = await runWorkflowRunner({
+      planName: planArg("artifact-state"),
+      rootDir: workspace.root,
+      processRunner: async (call) => {
+        calls.push(call);
+        if (call.command === "git" && call.args[0] === "diff") {
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
+        if (call.command === "git") {
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
+        if (call.promptPath === ".ai/prompts/review-changes.md") {
+          return { launched: true, stdout: "spec review ok", stderr: "", exitCode: 0 };
+        }
+        if (call.promptPath === ".ai/prompts/review-quality.md") {
+          await writePlan(
+            workspace.root,
+            "artifact-state",
+            thinPlanV2Manifest("completed", "commit-summary"),
+          );
+          await writeThinPlanV2Artifacts(workspace.root, {
+            status: "completed",
+            nextAction: "commit-summary",
+            modified: ["src/artifact-state.ts"],
+            changedFiles: ["src/artifact-state.ts"],
+            latest: {
+              validation: {
+                version: 2,
+                result: "PASS",
+                summary: "Required checks passed.",
+                evidence: ".ai/artifacts/artifact-state/events/validation-v2.md",
+              },
+              reviewSpec: {
+                version: 1,
+                summary: "SPEC PASS",
+                decision: "review",
+                evidence: ".ai/artifacts/artifact-state/events/review-spec-v1.md",
+              },
+              reviewQuality: {
+                version: 1,
+                summary: "SAFE",
+                decision: "completed",
+                evidence: ".ai/artifacts/artifact-state/events/review-quality-v1.md",
+              },
+              review: {
+                version: 1,
+                summary: "SAFE",
+                decision: "completed",
+                evidence: ".ai/artifacts/artifact-state/events/review-quality-v1.md",
+              },
+            },
+            history: [
+              ".ai/artifacts/artifact-state/events/validation-v2.md",
+              ".ai/artifacts/artifact-state/events/review-spec-v1.md",
+              ".ai/artifacts/artifact-state/events/review-quality-v1.md",
+            ],
+          });
+          return { launched: true, stdout: "quality review ok", stderr: "", exitCode: 0 };
+        }
+        return { launched: true, stdout: "summary", stderr: "", exitCode: 0 };
+      },
+    });
+
+    assert.equal(result.success, true);
+    assert.deepEqual(
+      calls.filter((call) => call.command === CODEX_COMMAND).map((call) => call.promptPath),
+      [
+        ".ai/prompts/review-changes.md",
+        ".ai/prompts/review-quality.md",
+        ".ai/prompts/commit-summary.md",
       ],
     );
   } finally {
