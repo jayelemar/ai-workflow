@@ -559,6 +559,16 @@ const codexAgentMessageLine = (text: string) =>
     },
   });
 
+const codexSubagentStateLine = (message: string) =>
+  JSON.stringify({
+    type: "item.completed",
+    item: {
+      id: "item_collab",
+      type: "collab_tool_call",
+      agents_states: [{ message }],
+    },
+  });
+
 const codexCommandOutputLine = (text: string, command = "pnpm test") =>
   JSON.stringify({
     type: "item.completed",
@@ -1150,6 +1160,17 @@ test("review-changes prompt requires actionable issue output for failed reviews"
   assert.match(prompt, /terminal output shows what needs to be fixed without opening the artifact file/);
 });
 
+test("review prompts forbid manual restaging remediation because workflow-runner owns review staging", async () => {
+  const stageOnePrompt = await readWorkflowPrompt("review-changes.md");
+  const stageTwoPrompt = await readWorkflowPrompt("review-quality.md");
+
+  for (const prompt of [stageOnePrompt, stageTwoPrompt]) {
+    assert.match(prompt, /workflow-runner owns review staging/i);
+    assert.match(prompt, /fix the working tree and leave files unstaged/i);
+    assert.match(prompt, /Do not tell the operator to stage or restage review fixes/i);
+  }
+});
+
 test("review-changes prompt expects runner pre-review cleanup for clearly unrelated hunks", async () => {
   const prompt = await readWorkflowPrompt("review-changes.md");
 
@@ -1564,6 +1585,167 @@ test("codex live output formatter condenses shared non-review summaries without 
       "",
     ].join("\n"),
   );
+});
+
+test("codex live output formatter preserves approval Code Preview when color is disabled", () => {
+  const workflowSummary = [
+    "**Plan**",
+    "`.ai/plans/approval-preview.md`",
+    "",
+    "**Summary**",
+    "* APPROVAL REQUIRED",
+    "* Review the proposed edit before apply.",
+    "",
+    "**Key Details**",
+    "* File: `apps/web/src/components/banner.tsx`",
+    "",
+    "**Code Preview**",
+    "```tsx",
+    "const Message = ({ count }: { count: number }) => (",
+    '  <Alert tone="success" count={count}>',
+    "    Ready {/* approved */}",
+    "  </Alert>",
+    ");",
+    "```",
+    "",
+    "**Next**",
+    "Status: `active`",
+    "Next Action: `execute-plan`",
+    "",
+    "**Waiting for Approval**",
+    "Reply `approve` to apply.",
+  ].join("\n");
+
+  assert.equal(
+    formatCodexJsonlEventForTerminal(codexAgentMessageLine(workflowSummary), { color: false }),
+    [
+      "[agent]",
+      "**Plan**",
+      "`.ai/plans/approval-preview.md`",
+      "",
+      "**Summary**",
+      "* APPROVAL REQUIRED",
+      "* Review the proposed edit before apply.",
+      "",
+      "**Key Details**",
+      "* File: `apps/web/src/components/banner.tsx`",
+      "",
+      "**Code Preview**",
+      "```tsx",
+      "const Message = ({ count }: { count: number }) => (",
+      '  <Alert tone="success" count={count}>',
+      "    Ready {/* approved */}",
+      "  </Alert>",
+      ");",
+      "```",
+      "",
+      "**Next**",
+      "Status: `active`",
+      "Next Action: `execute-plan`",
+      "",
+      "**Waiting for Approval**",
+      "Reply `approve` to apply.",
+      "",
+      "",
+    ].join("\n"),
+  );
+});
+
+test("codex live output formatter colorizes approval Code Preview tsx fences", () => {
+  const workflowSummary = [
+    "**Plan**",
+    "`.ai/plans/approval-preview.md`",
+    "",
+    "**Summary**",
+    "* APPROVAL REQUIRED",
+    "",
+    "**Key Details**",
+    "* File: `apps/web/src/components/banner.tsx`",
+    "",
+    "**Code Preview**",
+    "```tsx",
+    "const Message = ({ count }: { count: number }) => (",
+    '  <Alert tone="success" count={count}>',
+    "    Ready {/* approved */}",
+    "  </Alert>",
+    ");",
+    "```",
+    "",
+    "**Next**",
+    "Status: `active`",
+    "Next Action: `execute-plan`",
+    "",
+    "**Waiting for Approval**",
+    "Reply `approve` to apply.",
+  ].join("\n");
+
+  const formatted = formatCodexJsonlEventForTerminal(codexAgentMessageLine(workflowSummary), { color: true });
+
+  assert.match(formatted, /\u001b\[34mconst\u001b\[0m Message/);
+  assert.match(formatted, /<\u001b\[36mAlert\u001b\[0m/);
+  assert.match(formatted, /\u001b\[35mtone\u001b\[0m=/);
+  assert.match(formatted, /\u001b\[32m"success"\u001b\[0m/);
+  assert.match(formatted, /\u001b\[34mnumber\u001b\[0m/);
+  assert.match(formatted, /\u001b\[90m\{\/\* approved \*\/\}\u001b\[0m/);
+});
+
+test("codex live output formatter renders subagent approval Code Preview state messages", () => {
+  const workflowSummary = [
+    "**Plan**",
+    "`.ai/plans/approval-preview.md`",
+    "",
+    "**Summary**",
+    "* APPROVAL REQUIRED",
+    "",
+    "**Key Details**",
+    "* File: `apps/web/src/components/banner.tsx`",
+    "",
+    "**Code Preview**",
+    "```tsx",
+    "const count = 1;",
+    "```",
+    "",
+    "**Next**",
+    "Status: `active`",
+    "Next Action: `execute-plan`",
+    "",
+    "**Waiting for Approval**",
+    "Reply `approve` to apply.",
+  ].join("\n");
+
+  const formatted = formatCodexJsonlEventForTerminal(codexSubagentStateLine(workflowSummary), { color: true });
+
+  assert.match(formatted, /\u001b\[38;5;214m\[agent\]\u001b\[0m/);
+  assert.match(formatted, /\*\*Code Preview\*\*/);
+  assert.match(formatted, /\u001b\[34mconst\u001b\[0m count = \u001b\[33m1\u001b\[0m;/);
+});
+
+test("codex live output formatter keeps normal workflow shared summary compact when code fences are present", () => {
+  const workflowSummary = [
+    "**Plan**",
+    "`.ai/plans/workflow-runner.md`",
+    "",
+    "**Summary**",
+    "* PLAN UPDATED",
+    "",
+    "**Key Details**",
+    "* Updated formatter behavior.",
+    "",
+    "**Diagnostics**",
+    "```ts",
+    "const unrelated = shouldNotRender();",
+    "```",
+    "",
+    "**Next**",
+    "Status: `draft`",
+    "Next Action: `plan-validator`",
+  ].join("\n");
+
+  const formatted = formatCodexJsonlEventForTerminal(codexAgentMessageLine(workflowSummary), { color: false });
+
+  assert.match(formatted, /\*\*Key Details\*\*\n\* Updated formatter behavior\./);
+  assert.doesNotMatch(formatted, /shouldNotRender/);
+  assert.doesNotMatch(formatted, /```ts/);
 });
 
 test("codex live output formatter hides completed commit-summary next action in the Next block", () => {
@@ -3320,6 +3502,20 @@ test("workflow prompt pins superpower skills to the installed global skill root"
   assert.match(prompt, /executing-plans\/SKILL\.md/);
   assert.match(prompt, /subagent-driven-development\/SKILL\.md/);
   assert.match(prompt, /Do not read superpower skills from \/home\/jetermulo\/\.codex-shared\/skills/);
+});
+
+test("workflow prompt includes Codex-compatible sub-agent spawn guidance", () => {
+  const prompt = generateWorkflowPrompt({
+    promptPath: ".ai/prompts/review-changes.md",
+    planPath: ".ai/plans/workflow-runner.md",
+    promptContent: "REVIEW CHANGES PROMPT",
+    planContent: planWith("review", "review-plan"),
+  });
+
+  assert.match(prompt, /use sub-agents/i);
+  assert.match(prompt, /full-history fork/i);
+  assert.match(prompt, /omit `agent_type`, `model`, and `reasoning_effort`/);
+  assert.match(prompt, /spawn without a full-history fork/);
 });
 
 test("workflow prompt selects area instructions from plan-owned paths", () => {
@@ -8290,7 +8486,7 @@ test("review-plan stops before staging or prompt execution when any staged files
     assert.equal(failed.success, false);
     assert.match(
       failed.reason,
-      /review blocked before review-plan because staged files already exist; finish pending staged work or another review first:\n\nM  other-plan\.ts;\nA  src\/leftover\.ts/,
+      /review blocked before review-plan because staged files already exist; human may manually unstage them, then rerun workflow-runner so it owns review staging:\n\nM  other-plan\.ts;\nA  src\/leftover\.ts/,
     );
     assert.doesNotMatch(failed.reason, /other-plan\.ts; A\tsrc\/leftover\.ts/);
     assert.deepEqual(
@@ -8299,7 +8495,7 @@ test("review-plan stops before staging or prompt execution when any staged files
     );
     assert.equal(
       output.lines.some((line) =>
-        /staged files already exist; finish pending staged work or another review first:\n\nM  other-plan\.ts;\nA  src\/leftover\.ts/.test(
+        /staged files already exist; human may manually unstage them, then rerun workflow-runner so it owns review staging:\n\nM  other-plan\.ts;\nA  src\/leftover\.ts/.test(
           line,
         ),
       ),
@@ -8313,9 +8509,9 @@ test("review-plan stops before staging or prompt execution when any staged files
     assertFailureMetadata(log, {
       kind: "review-entry-staged-work",
       reason:
-        /failureReason: review blocked before review-plan because staged files already exist; finish pending staged work or another review first:\n\nM  other-plan\.ts;\nA  src\/leftover\.ts/,
+        /failureReason: review blocked before review-plan because staged files already exist; human may manually unstage them, then rerun workflow-runner so it owns review staging:\n\nM  other-plan\.ts;\nA  src\/leftover\.ts/,
       nextSuggestedAction:
-        /nextSuggestedAction: finish or unstage existing staged work before starting review-plan, then rerun workflow-runner/,
+        /nextSuggestedAction: human may manually unstage existing staged work before starting review-plan, then rerun workflow-runner/,
     });
   } finally {
     await workspace.cleanup();

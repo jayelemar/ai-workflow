@@ -70,6 +70,8 @@ If stage-1 spec review pass evidence is missing:
 
 Review MUST be performed using only the runner-injected staged paths for the current plan.
 
+Workflow-runner owns review staging. When review fails and routes back to execution, remediation must tell the operator or next execution agent to fix the working tree and leave files unstaged, then rerun workflow-runner. Do not tell the operator to stage or restage review fixes; pre-staged files block the next review entry.
+
 Use the path-scoped staged diff command injected by `workflow-runner.ts`:
 
 git diff --staged -- <plan-owned paths>
