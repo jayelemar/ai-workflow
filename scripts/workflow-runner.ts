@@ -3457,6 +3457,25 @@ const slugifyTaskWords = (value: string): string =>
     .replace(/^-+|-+$/g, "")
     .replace(/-{2,}/g, "-");
 
+const MAX_TASK_ARTIFACT_FILENAME_BYTES = 255;
+const TASK_ARTIFACT_VERSION_SUFFIX_RESERVED_BYTES = "-v999999.md".length;
+
+const taskArtifactWordsForFilename = (
+  taskId: string,
+  artifactWords: string,
+): string => {
+  const separatorBytes = 1;
+  const availableBytes =
+    MAX_TASK_ARTIFACT_FILENAME_BYTES -
+    Buffer.byteLength(taskId, "utf8") -
+    separatorBytes -
+    TASK_ARTIFACT_VERSION_SUFFIX_RESERVED_BYTES;
+  if (Buffer.byteLength(artifactWords, "utf8") <= availableBytes) {
+    return artifactWords;
+  }
+  return artifactWords.slice(0, Math.max(1, availableBytes)).replace(/-+$/g, "");
+};
+
 export const parsePlanTasks = (content: string): PlanTask[] => {
   const tasks: PlanTask[] = [];
   const seen = new Set<string>();
@@ -3475,11 +3494,12 @@ export const parsePlanTasks = (content: string): PlanTask[] => {
     seen.add(id);
     const name = match[2].trim();
     const words = id.replace(/^[0-9]{2}-/, "");
+    const artifactWords = slugifyTaskWords(name) || words;
     tasks.push({
       id,
       words,
       name,
-      artifactWords: slugifyTaskWords(name) || words,
+      artifactWords: taskArtifactWordsForFilename(id, artifactWords),
     });
   }
 
@@ -4936,11 +4956,11 @@ const currentTaskRelativePath = (planName: string): string =>
 const taskArtifactFilePrefix = (task: PlanTask): string =>
   `${task.id}-${task.artifactWords}-v`;
 
-const existingTaskArtifactVersions = async (
+const existingTaskArtifactEntries = async (
   rootDir: string,
   planName: string,
   task: PlanTask,
-): Promise<number[]> => {
+): Promise<{ entry: string; version: number }[]> => {
   const taskDir = path.join(rootDir, taskArtifactsRelativeDir(planName));
   let entries: string[];
   try {
@@ -4952,17 +4972,34 @@ const existingTaskArtifactVersions = async (
     }
     throw error;
   }
-  const prefix = taskArtifactFilePrefix(task);
+  const artifactPattern = new RegExp(
+    `^${escapeRegExp(task.id)}(?:-.+)?-v([1-9][0-9]*)\\.md$`,
+  );
   return entries
     .map((entry) => {
-      if (!entry.startsWith(prefix) || !entry.endsWith(".md")) {
+      const match = entry.match(artifactPattern);
+      if (!match) {
         return undefined;
       }
-      const version = Number(entry.slice(prefix.length, -".md".length));
-      return Number.isInteger(version) && version > 0 ? version : undefined;
+      const version = Number(match[1]);
+      return Number.isInteger(version) && version > 0
+        ? { entry, version }
+        : undefined;
     })
-    .filter((version): version is number => typeof version === "number")
-    .sort((a, b) => a - b);
+    .filter(
+      (artifact): artifact is { entry: string; version: number } =>
+        artifact !== undefined,
+    )
+    .sort((a, b) => a.version - b.version);
+};
+
+const existingTaskArtifactVersions = async (
+  rootDir: string,
+  planName: string,
+  task: PlanTask,
+): Promise<number[]> => {
+  const artifacts = await existingTaskArtifactEntries(rootDir, planName, task);
+  return artifacts.map((artifact) => artifact.version);
 };
 
 const taskCompleted = async (
@@ -5017,15 +5054,12 @@ const latestTaskArtifactRelativePath = async (
   planName: string,
   task: PlanTask,
 ): Promise<string | undefined> => {
-  const versions = await existingTaskArtifactVersions(rootDir, planName, task);
-  const latestVersion = versions.at(-1);
-  if (!latestVersion) {
+  const artifacts = await existingTaskArtifactEntries(rootDir, planName, task);
+  const latestArtifact = artifacts.at(-1);
+  if (!latestArtifact) {
     return undefined;
   }
-  return rel(
-    taskArtifactsRelativeDir(planName),
-    `${taskArtifactFilePrefix(task)}${latestVersion}.md`,
-  );
+  return rel(taskArtifactsRelativeDir(planName), latestArtifact.entry);
 };
 
 const formatTaskProgressLine = ({

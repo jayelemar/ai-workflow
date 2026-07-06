@@ -268,12 +268,14 @@ If required execution or bugfix work needs a file outside the current plan-owned
 * If the file is owned by another active plan, treat this as a `plan dependency`, not as a generic file-scope failure.
 * Do NOT keep executing both plans in parallel.
 * Update the current plan to `Status = blocked` and `Next Action = unblock-plan`.
-* Add a blocker with:
+* Create an execution event artifact that records a blocker with:
   * `Type: plan dependency`
   * the required file path
   * the owner plan path
   * evidence that the file is owned by another active plan
   * the required action: complete the owner plan or release the shared file ownership
+* Update `.ai/artifacts/<plan-name>/state/workflow.json` with `status: "blocked"`, `nextAction: "unblock-plan"`, `latest.execution`, appended `history`, and `unresolvedBlockers`.
+* MUST NOT add inline `## Blockers` to thin-plan-v2 manifests.
 * STOP.
 
 If no owner plan path can be identified:
@@ -361,11 +363,7 @@ blocked
 
 unblock-plan
 
-2. add:
-
-## Blockers
-
-### Blocker N
+2. create an execution event artifact with the blocker details:
 
 * Type:
 * Description:
@@ -375,7 +373,11 @@ unblock-plan
 * Evidence:
 * Next Step:
 
-3. STOP
+3. update `.ai/artifacts/<plan-name>/state/workflow.json` with runner-readable thin-plan-v2 state: preserve `planPath`, set `status` to `blocked`, set `nextAction` to `unblock-plan`, write compact `latest.execution`, append the execution artifact path to `history`, set `unresolvedBlockers` to active blocker strings, and refresh `updatedAt`.
+
+4. MUST NOT add inline `## Blockers` to thin-plan-v2 manifests.
+
+5. STOP
 
 ---
 

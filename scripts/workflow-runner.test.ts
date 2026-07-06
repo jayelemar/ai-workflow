@@ -1051,6 +1051,17 @@ test("execute-plan prompt turns cross-plan file conflicts into resumable plan de
   assert.match(prompt, /Do NOT keep executing both plans in parallel/);
 });
 
+test("execute and unblock prompts keep thin-plan-v2 workflow history out of the manifest", async () => {
+  const executePrompt = await readWorkflowPrompt("execute-plan.md");
+  const unblockPrompt = await readWorkflowPrompt("unblock-plan.md");
+
+  assert.match(executePrompt, /MUST NOT add inline `## Blockers`/);
+  assert.match(executePrompt, /`unresolvedBlockers`/);
+  assert.match(unblockPrompt, /MUST NOT add inline `## Blockers`/);
+  assert.match(unblockPrompt, /MUST NOT add inline `## Unblock History`/);
+  assert.match(unblockPrompt, /latest\.unblock/);
+});
+
 test("execute-plan prompt defers unavailable external final validation to review", async () => {
   const prompt = await readWorkflowPrompt("execute-plan.md");
 
@@ -5455,6 +5466,112 @@ test("task savepoint mode commits each reviewed task, writes artifacts, logs tas
     assert.match(log, /commitProgressDescription: Add web surface/);
     assert.match(log, /commitProgress: 2\/2/);
     assert.match(log, /commitProgressDescription: task commits complete/);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("task savepoint artifacts use filenames within filesystem component limits for long task names", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    const longTaskName =
+      "Update support issue widget create flow so restored saved drafts are sanitized, invalid saved options clear with user feedback, invalid files reject on selection, empty titles and descriptions block inline, field errors clear after correction, no side effects happen on validation failure, partial attachment failures roll back, success clears drafts, failures surface inline, and created issues open detail pages";
+    const plan = planWithFileScope(
+      "active",
+      "execute-plan",
+      {
+        modified: ["src/task-work.ts"],
+      },
+      `## Phases
+
+### Implementation
+
+* Objective: Complete task-savepoint work.
+* Tasks:
+  1. [task:04-widget-real-create] ${longTaskName}
+  2. [task:05-widget-follow-up] Finalize widget follow-up
+* Expected Outcome: Task savepoint complete.
+`,
+    );
+    await writePlan(workspace.root, "long-task-artifact", plan);
+
+    let specReviewRuns = 0;
+    let taskCommitRuns = 0;
+    const result = await runWorkflowRunner({
+      planName: planArg("long-task-artifact"),
+      rootDir: workspace.root,
+      processRunner: async (call) => {
+        if (call.command === "git" && call.args[0] === "rev-parse") {
+          return { launched: true, stdout: "abc1234\n", stderr: "", exitCode: 0 };
+        }
+        if (call.command === "git") {
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
+        if (call.promptPath === ".ai/prompts/execute-plan.md") {
+          await writePlan(workspace.root, "long-task-artifact", plan.replace("active", "review").replace("execute-plan", "review-plan"));
+        }
+        if (call.promptPath === ".ai/prompts/review-changes.md") {
+          specReviewRuns += 1;
+          writeWorkflowEventArtifactSync({
+            root: workspace.root,
+            planName: "long-task-artifact",
+            kind: "review-spec",
+            version: specReviewRuns,
+          });
+          await writePlan(
+            workspace.root,
+            "long-task-artifact",
+            plan
+              .replace("active", "review")
+              .replace("execute-plan", "review-plan")
+              .concat(
+                legacyReviewHistorySection({
+                  summary: "SPEC PASS",
+                  evidence: ".ai/artifacts/long-task-artifact/events/review-spec-v1.md",
+                  decision: "review",
+                }),
+              ),
+          );
+        }
+        if (call.promptPath === ".ai/prompts/review-quality.md") {
+          await writePlan(
+            workspace.root,
+            "long-task-artifact",
+            plan.replace("active", "completed").replace("execute-plan", "commit-summary"),
+          );
+        }
+        if (call.promptPath === ".ai/prompts/commit-summary.md") {
+          const prompt = call.args.at(-1) ?? "";
+          if (prompt.includes("Task savepoint aggregate summary")) {
+            return { launched: true, stdout: "aggregate summary", stderr: "", exitCode: 0 };
+          }
+          taskCommitRuns += 1;
+          const subjects = [
+            "feat(widget): create real support issues",
+            "feat(widget): finalize follow up",
+          ];
+          return {
+            launched: true,
+            stdout: commitSummaryOutput({
+              planPath: ".ai/plans/long-task-artifact.md",
+              subject: subjects[Math.max(0, taskCommitRuns - 1)] ?? subjects[0],
+              summaryLines: ["Created support issues through the reviewed widget flow."],
+            }),
+            stderr: "",
+            exitCode: 0,
+          };
+        }
+        return { launched: true, stdout: "ok", stderr: "", exitCode: 0 };
+      },
+    });
+
+    assert.equal(result.success, true);
+    const taskFiles = await readdir(join(workspace.root, ".ai", "artifacts", "long-task-artifact", "tasks"));
+    assert.equal(taskFiles.length, 2);
+    const longTaskFile = taskFiles.find((file) => file.startsWith("04-widget-real-create-"));
+    assert.equal(typeof longTaskFile, "string");
+    assert.equal(Buffer.byteLength(longTaskFile, "utf8") <= 255, true);
+    assert.match(longTaskFile, /-v1\.md$/);
   } finally {
     await workspace.cleanup();
   }
