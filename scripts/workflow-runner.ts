@@ -7024,6 +7024,59 @@ const parseCommitSummaryPaths = async (
   };
 };
 
+const parseThinPlanV2CommitSummaryPaths = async (
+  rootDir: string,
+  planName: string,
+  isIgnored?: (relativePath: string) => Promise<boolean>,
+): Promise<ReviewStagingResult> => {
+  const filesPath = thinPlanV2ArtifactPath(planName, "state", "files.json");
+  const filesRaw = await readJsonArtifact(rootDir, filesPath);
+  if (isFailure(filesRaw)) {
+    return filesRaw;
+  }
+  const files = parseThinPlanV2FilesState(filesRaw, filesPath);
+  if (isFailure(files)) {
+    return files;
+  }
+
+  const ignored =
+    isIgnored ??
+    ((relativePath: string) => defaultIsIgnored(rootDir, relativePath));
+  const released = new Set(files.released);
+  const paths: string[] = [];
+  for (const changedFile of files.changedFiles) {
+    if (changedFile.startsWith(".ai/") || released.has(changedFile)) {
+      continue;
+    }
+    if (!(await ignored(changedFile))) {
+      paths.push(changedFile);
+    }
+  }
+
+  const unique = uniquePaths(paths);
+  if (unique.length === 0) {
+    return {
+      ok: false,
+      reason: "all commit summary paths are git-ignored",
+    };
+  }
+
+  return { ok: true, paths: unique };
+};
+
+export const parseCommitSummaryPathsForPlan = async (
+  rootDir: string,
+  plan: ParsedPlan,
+  isIgnored?: (relativePath: string) => Promise<boolean>,
+): Promise<ReviewStagingResult> => {
+  if (plan.thinPlanContract === "thin-plan-v2") {
+    return parseThinPlanV2CommitSummaryPaths(rootDir, plan.planName, isIgnored);
+  }
+
+  const parsed = await parseCommitSummaryPaths(rootDir, plan.content, isIgnored);
+  return parsed;
+};
+
 const verifyCommitSummaryPathsClean = async (
   rootDir: string,
   paths: string[],
@@ -8455,9 +8508,9 @@ export const runWorkflowRunner = async (
         return await finishFailure(recoveredCommit.reason);
       }
       if (recoveredCommit.commit) {
-        const parsedPaths = await parseCommitSummaryPaths(
+        const parsedPaths = await parseCommitSummaryPathsForPlan(
           rootDir,
-          parsedPlan.content,
+          parsedPlan,
           options.isIgnored,
         );
         if (!parsedPaths.ok) {
@@ -9036,9 +9089,9 @@ export const runWorkflowRunner = async (
       }
     }
     if (route.promptPath === rel(".ai", "prompts", "commit-summary.md")) {
-      const parsedPaths = await parseCommitSummaryPaths(
+      const parsedPaths = await parseCommitSummaryPathsForPlan(
         rootDir,
-        parsedPlan.content,
+        parsedPlan,
         options.isIgnored,
       );
       if (!parsedPaths.ok) {

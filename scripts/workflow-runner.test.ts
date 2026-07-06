@@ -26,6 +26,7 @@ import {
   processStdioForInput,
   parseCodexTokenUsage,
   parsePlan,
+  parseCommitSummaryPathsForPlan,
   parseContextUsage,
   parseReviewStagingPaths,
   runWorkflowRunner,
@@ -5172,7 +5173,7 @@ ${aggregateEntries}
       }),
     });
 
-    assert.equal(result.success, true);
+    assert.equal(result.success, true, result.success ? "" : result.reason);
     assert.equal(
       output.lines.some((line) =>
         /WARNING: Thin-plan workflow history is .* > 4 KB/i.test(line),
@@ -5780,7 +5781,7 @@ test("review safe path routes to completed commit-summary and succeeds after pla
       },
     });
 
-    assert.equal(result.success, true);
+    assert.equal(result.success, true, result.success ? "" : result.reason);
     assert.deepEqual(
       calls
         .filter((call) => call.command === CODEX_COMMAND)
@@ -11213,6 +11214,47 @@ test("commit-summary excludes transferred file ownership releases from commit bo
     assert.doesNotMatch(prompt, /- src\/shared\.ts/);
     assert.match(prompt, /git add --all -- src\/owned\.ts/);
     assert.doesNotMatch(prompt, /git add --all -- src\/shared\.ts/);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("commit-summary uses thin-plan-v2 files artifact instead of inline files", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writeThinPlanV2Artifacts(workspace.root, {
+      status: "completed",
+      nextAction: "commit-summary",
+      modified: ["src/artifact-state.ts", ".ai/artifacts/artifact-state/logs/runner.log"],
+      changedFiles: [
+        "src/artifact-state.ts",
+        ".ai/artifacts/artifact-state/logs/runner.log",
+      ],
+    });
+    const parsed = await parseCommitSummaryPathsForPlan(
+      workspace.root,
+      {
+        planName: "artifact-state",
+        planPath: ".ai/plans/artifact-state.md",
+        absolutePlanPath: join(
+          workspace.root,
+          ".ai",
+          "plans",
+          "artifact-state.md",
+        ),
+        manifestContent: thinPlanV2Manifest("completed", "commit-summary"),
+        content: planWithFileScope("completed", "commit-summary", {
+          modified: ["src/inline-should-not-be-used.ts"],
+        }),
+        thinPlanContract: "thin-plan-v2",
+        status: "completed",
+        nextAction: "commit-summary",
+        warnings: [],
+      },
+      async () => false,
+    );
+
+    assert.deepEqual(parsed.ok && parsed.paths, ["src/artifact-state.ts"]);
   } finally {
     await workspace.cleanup();
   }
