@@ -4341,11 +4341,11 @@ test("workflow prompt includes task savepoint current task and aggregate-only co
         id: "01-backend-endpoints",
         words: "backend-endpoints",
         name: "Add backend endpoints",
-        artifactWords: "add-backend-endpoints",
+        artifactWords: "backend-endpoints",
       },
       stage: "implementing",
       artifactPath:
-        ".ai/artifacts/workflow-runner/tasks/01-backend-endpoints-add-backend-endpoints-v1.md",
+        ".ai/artifacts/workflow-runner/tasks/01-backend-endpoints-v1.md",
     },
   });
 
@@ -4364,11 +4364,11 @@ test("workflow prompt includes task savepoint current task and aggregate-only co
         id: "01-backend-endpoints",
         words: "backend-endpoints",
         name: "Add backend endpoints",
-        artifactWords: "add-backend-endpoints",
+        artifactWords: "backend-endpoints",
       },
       stage: "committed",
       artifactPath:
-        ".ai/artifacts/workflow-runner/tasks/01-backend-endpoints-add-backend-endpoints-v1.md",
+        ".ai/artifacts/workflow-runner/tasks/01-backend-endpoints-v1.md",
     },
   });
 
@@ -4534,13 +4534,13 @@ test("parsePlanTasks extracts stable task IDs, words, and readable names", () =>
       id: "01-backend-endpoints",
       words: "backend-endpoints",
       name: "Add backend endpoints",
-      artifactWords: "add-backend-endpoints",
+      artifactWords: "backend-endpoints",
     },
     {
       id: "02-web-surface",
       words: "web-surface",
       name: "Add web surface",
-      artifactWords: "add-web-surface",
+      artifactWords: "web-surface",
     },
   ]);
 });
@@ -6309,8 +6309,8 @@ test("task savepoint mode commits each reviewed task, writes artifacts, logs tas
       join(workspace.root, ".ai", "artifacts", "task-savepoints", "tasks"),
     );
     assert.deepEqual(taskFiles.sort(), [
-      "01-backend-endpoints-add-backend-endpoints-v1.md",
-      "02-web-surface-add-web-surface-v1.md",
+      "01-backend-endpoints-v1.md",
+      "02-web-surface-v1.md",
     ]);
     const firstArtifact = await readFile(
       join(
@@ -6319,7 +6319,7 @@ test("task savepoint mode commits each reviewed task, writes artifacts, logs tas
         "artifacts",
         "task-savepoints",
         "tasks",
-        "01-backend-endpoints-add-backend-endpoints-v1.md",
+        "01-backend-endpoints-v1.md",
       ),
       "utf8",
     );
@@ -6389,8 +6389,7 @@ test("task savepoint mode commits each reviewed task, writes artifacts, logs tas
   }
 });
 
-<<<<<<< Updated upstream
-test("task savepoint artifacts use filenames within filesystem component limits for long task names", async () => {
+test("task savepoint artifacts use task ID filenames for long task names", async () => {
   const workspace = await setupWorkspace();
   try {
     const longTaskName =
@@ -6419,7 +6418,120 @@ test("task savepoint artifacts use filenames within filesystem component limits 
     const result = await runWorkflowRunner({
       planName: planArg("long-task-artifact"),
       rootDir: workspace.root,
-=======
+      processRunner: async (call) => {
+        if (call.command === "git" && call.args[0] === "rev-parse") {
+          return {
+            launched: true,
+            stdout: "abc1234\n",
+            stderr: "",
+            exitCode: 0,
+          };
+        }
+        if (call.command === "git") {
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
+        if (call.promptPath === ".ai/prompts/execute-plan.md") {
+          await writePlan(
+            workspace.root,
+            "long-task-artifact",
+            plan
+              .replace("active", "review")
+              .replace("execute-plan", "review-plan"),
+          );
+          return { launched: true, stdout: "ok", stderr: "", exitCode: 0 };
+        }
+        if (call.promptPath === ".ai/prompts/review-changes.md") {
+          specReviewRuns += 1;
+          writeWorkflowEventArtifactSync({
+            root: workspace.root,
+            planName: "long-task-artifact",
+            kind: "review-spec",
+            version: specReviewRuns,
+          });
+          await writePlan(
+            workspace.root,
+            "long-task-artifact",
+            plan
+              .replace("active", "review")
+              .replace("execute-plan", "review-plan")
+              .concat(
+                legacyReviewHistorySection({
+                  summary: "SPEC PASS",
+                  evidence:
+                    ".ai/artifacts/long-task-artifact/events/review-spec-v1.md",
+                  decision: "review",
+                }),
+              ),
+          );
+          return { launched: true, stdout: "ok", stderr: "", exitCode: 0 };
+        }
+        if (call.promptPath === ".ai/prompts/review-quality.md") {
+          await writePlan(
+            workspace.root,
+            "long-task-artifact",
+            plan
+              .replace("active", "completed")
+              .replace("execute-plan", "commit-summary"),
+          );
+          return { launched: true, stdout: "ok", stderr: "", exitCode: 0 };
+        }
+        if (call.promptPath === ".ai/prompts/commit-summary.md") {
+          const prompt = call.args.at(-1) ?? "";
+          if (prompt.includes("Task savepoint aggregate summary")) {
+            return {
+              launched: true,
+              stdout: "aggregate summary",
+              stderr: "",
+              exitCode: 0,
+            };
+          }
+          taskCommitRuns += 1;
+          const subjects = [
+            "feat(widget): create real support issues",
+            "feat(widget): finalize follow up",
+          ];
+          return {
+            launched: true,
+            stdout: commitSummaryOutput({
+              planPath: ".ai/plans/long-task-artifact.md",
+              subject: subjects[Math.max(0, taskCommitRuns - 1)] ?? subjects[0],
+              summaryLines: [
+                "Created support issues through the reviewed widget flow.",
+              ],
+            }),
+            stderr: "",
+            exitCode: 0,
+          };
+        }
+        return { launched: true, stdout: "ok", stderr: "", exitCode: 0 };
+      },
+    });
+
+    assert.equal(result.success, true);
+    const taskFiles = await readdir(
+      join(workspace.root, ".ai", "artifacts", "long-task-artifact", "tasks"),
+    );
+    assert.deepEqual(taskFiles.sort(), [
+      "04-widget-real-create-v1.md",
+      "05-widget-follow-up-v1.md",
+    ]);
+    const longTaskArtifact = await readFile(
+      join(
+        workspace.root,
+        ".ai",
+        "artifacts",
+        "long-task-artifact",
+        "tasks",
+        "04-widget-real-create-v1.md",
+      ),
+      "utf8",
+    );
+    assert.match(longTaskArtifact, new RegExp(longTaskName));
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
 test("task savepoint mode resumes remaining tasks before commit-summary on rerun", async () => {
   const workspace = await setupWorkspace();
   try {
@@ -6435,7 +6547,7 @@ test("task savepoint mode resumes remaining tasks before commit-summary on rerun
       "artifacts",
       "task-savepoint-resume",
       "tasks",
-      "01-backend-endpoints-add-backend-endpoints-v1.md",
+      "01-backend-endpoints-v1.md",
     );
     mkdirSync(dirname(firstTaskArtifact), { recursive: true });
     writeFileSync(
@@ -6467,16 +6579,11 @@ feat(api): add backend endpoints
       planName: planArg("task-savepoint-resume"),
       rootDir: workspace.root,
       console: collectConsole().console,
->>>>>>> Stashed changes
       processRunner: async (call) => {
         if (call.command === "git" && call.args[0] === "rev-parse") {
           return {
             launched: true,
-<<<<<<< Updated upstream
-            stdout: "abc1234\n",
-=======
             stdout: "def5678\n",
->>>>>>> Stashed changes
             stderr: "",
             exitCode: 0,
           };
@@ -6484,16 +6591,6 @@ feat(api): add backend endpoints
         if (call.command === "git") {
           return { launched: true, stdout: "", stderr: "", exitCode: 0 };
         }
-<<<<<<< Updated upstream
-        if (call.promptPath === ".ai/prompts/execute-plan.md") {
-          await writePlan(
-            workspace.root,
-            "long-task-artifact",
-            plan
-              .replace("active", "review")
-              .replace("execute-plan", "review-plan"),
-          );
-=======
         promptCalls.push(call.promptPath);
         if (call.promptPath === ".ai/prompts/execute-plan.md") {
           executeRuns += 1;
@@ -6505,37 +6602,17 @@ feat(api): add backend endpoints
             planWithTaskSavepoints("review", "review-plan"),
           );
           return { launched: true, stdout: "ok", stderr: "", exitCode: 0 };
->>>>>>> Stashed changes
         }
         if (call.promptPath === ".ai/prompts/review-changes.md") {
           specReviewRuns += 1;
           writeWorkflowEventArtifactSync({
             root: workspace.root,
-<<<<<<< Updated upstream
-            planName: "long-task-artifact",
-=======
             planName: "task-savepoint-resume",
->>>>>>> Stashed changes
             kind: "review-spec",
             version: specReviewRuns,
           });
           await writePlan(
             workspace.root,
-<<<<<<< Updated upstream
-            "long-task-artifact",
-            plan
-              .replace("active", "review")
-              .replace("execute-plan", "review-plan")
-              .concat(
-                legacyReviewHistorySection({
-                  summary: "SPEC PASS",
-                  evidence:
-                    ".ai/artifacts/long-task-artifact/events/review-spec-v1.md",
-                  decision: "review",
-                }),
-              ),
-          );
-=======
             "task-savepoint-resume",
             planWithTaskSavepoints(
               "review",
@@ -6549,50 +6626,25 @@ feat(api): add backend endpoints
             ),
           );
           return { launched: true, stdout: "ok", stderr: "", exitCode: 0 };
->>>>>>> Stashed changes
         }
         if (call.promptPath === ".ai/prompts/review-quality.md") {
           await writePlan(
             workspace.root,
-<<<<<<< Updated upstream
-            "long-task-artifact",
-            plan
-              .replace("active", "completed")
-              .replace("execute-plan", "commit-summary"),
-          );
-=======
             "task-savepoint-resume",
             planWithTaskSavepoints("completed", "commit-summary"),
           );
           return { launched: true, stdout: "ok", stderr: "", exitCode: 0 };
->>>>>>> Stashed changes
         }
         if (call.promptPath === ".ai/prompts/commit-summary.md") {
           const prompt = call.args.at(-1) ?? "";
           if (prompt.includes("Task savepoint aggregate summary")) {
-<<<<<<< Updated upstream
+            aggregateRuns += 1;
             return {
               launched: true,
               stdout: "aggregate summary",
               stderr: "",
               exitCode: 0,
             };
-          }
-          taskCommitRuns += 1;
-          const subjects = [
-            "feat(widget): create real support issues",
-            "feat(widget): finalize follow up",
-          ];
-          return {
-            launched: true,
-            stdout: commitSummaryOutput({
-              planPath: ".ai/plans/long-task-artifact.md",
-              subject: subjects[Math.max(0, taskCommitRuns - 1)] ?? subjects[0],
-              summaryLines: [
-                "Created support issues through the reviewed widget flow.",
-=======
-            aggregateRuns += 1;
-            return { launched: true, stdout: "aggregate summary", stderr: "", exitCode: 0 };
           }
           taskCommitRuns += 1;
           assert.match(prompt, /Task ID: 02-web-surface/);
@@ -6603,7 +6655,6 @@ feat(api): add backend endpoints
               subject: "feat(web): add support ticket surface",
               summaryLines: [
                 "Added the web surface for the reviewed support-ticket task.",
->>>>>>> Stashed changes
               ],
             }),
             stderr: "",
@@ -6615,18 +6666,6 @@ feat(api): add backend endpoints
     });
 
     assert.equal(result.success, true);
-<<<<<<< Updated upstream
-    const taskFiles = await readdir(
-      join(workspace.root, ".ai", "artifacts", "long-task-artifact", "tasks"),
-    );
-    assert.equal(taskFiles.length, 2);
-    const longTaskFile = taskFiles.find((file) =>
-      file.startsWith("04-widget-real-create-"),
-    );
-    assert.equal(typeof longTaskFile, "string");
-    assert.equal(Buffer.byteLength(longTaskFile, "utf8") <= 255, true);
-    assert.match(longTaskFile, /-v1\.md$/);
-=======
     assert.equal(executeRuns, 1);
     assert.equal(taskCommitRuns, 1);
     assert.equal(aggregateRuns, 1);
@@ -6670,7 +6709,7 @@ test("task savepoint mode reopens thin-plan-v2 without writing generated section
       "artifacts",
       "artifact-state",
       "tasks",
-      "01-backend-endpoints-add-backend-endpoints-v1.md",
+      "01-backend-endpoints-v1.md",
     );
     mkdirSync(dirname(firstTaskArtifact), { recursive: true });
     writeFileSync(
@@ -6839,7 +6878,12 @@ test("task savepoint mode recovers missing task artifact from existing task comm
           const prompt = call.args.at(-1) ?? "";
           if (prompt.includes("Task savepoint aggregate summary")) {
             aggregateRuns += 1;
-            return { launched: true, stdout: "aggregate summary", stderr: "", exitCode: 0 };
+            return {
+              launched: true,
+              stdout: "aggregate summary",
+              stderr: "",
+              exitCode: 0,
+            };
           }
           taskCommitRuns += 1;
           assert.match(prompt, /Task ID: 02-web-surface/);
@@ -6875,8 +6919,7 @@ test("task savepoint mode recovers missing task artifact from existing task comm
         "tasks",
       ),
     );
-    assert.match(taskFiles.join("\n"), /01-backend-endpoints-/);
->>>>>>> Stashed changes
+    assert.match(taskFiles.join("\n"), /^01-backend-endpoints-v1\.md$/m);
   } finally {
     await workspace.cleanup();
   }
@@ -7077,10 +7120,11 @@ ${extra}`,
         "tasks",
       ),
     );
-    assert.deepEqual(taskFiles.length, 2);
-    assert.match(taskFiles[0] ?? "", /^01-backend-prompt-search-guidance-/);
-    assert.match(taskFiles[0] ?? "", /-[a-f0-9]{8}-v1\.md$/);
-    assert.ok((taskFiles[0] ?? "").length <= 255);
+    assert.deepEqual(taskFiles.sort(), [
+      "01-backend-prompt-search-guidance-v1.md",
+      "02-web-surface-v1.md",
+    ]);
+    assert.ok(taskFiles.every((file) => file.length <= 255));
   } finally {
     await workspace.cleanup();
   }

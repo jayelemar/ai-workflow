@@ -105,9 +105,6 @@ const VALID_NEXT_ACTIONS = [
   "commit-summary",
 ] as const;
 const MAX_ITERATIONS = 100;
-const TASK_ARTIFACT_FILENAME_MAX_CHARS = 240;
-const TASK_ARTIFACT_VERSION_DIGITS_BUDGET = 4;
-const TASK_ARTIFACT_HASH_CHARS = 8;
 const CODEX_BINARY_COMMAND = "codex";
 const CODEX_WORK_NODE_VERSION = "v20.20.2";
 const PROTECTED_WORKFLOW_BRANCHES = new Set([
@@ -3458,38 +3455,6 @@ const planSectionLines = (content: string, heading: string): string[] => {
   return collected;
 };
 
-const slugifyTaskWords = (value: string): string =>
-  value
-    .toLowerCase()
-    .replace(/`[^`]*`/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .replace(/-{2,}/g, "-");
-
-const taskArtifactWords = (
-  taskId: string,
-  taskName: string,
-  fallbackWords: string,
-): string => {
-  const slug = slugifyTaskWords(taskName) || fallbackWords;
-  const reservedLength =
-    `${taskId}--v${"9".repeat(TASK_ARTIFACT_VERSION_DIGITS_BUDGET)}.md`.length;
-  const maxArtifactWordsLength = Math.max(
-    1,
-    TASK_ARTIFACT_FILENAME_MAX_CHARS - reservedLength,
-  );
-  if (slug.length <= maxArtifactWordsLength) {
-    return slug;
-  }
-  const hash = createHash("sha256")
-    .update(taskName)
-    .digest("hex")
-    .slice(0, TASK_ARTIFACT_HASH_CHARS);
-  const readableBudget = Math.max(0, maxArtifactWordsLength - hash.length - 1);
-  const readablePrefix = slug.slice(0, readableBudget).replace(/-+$/g, "");
-  return readablePrefix.length > 0 ? `${readablePrefix}-${hash}` : hash;
-};
-
 export const parsePlanTasks = (content: string): PlanTask[] => {
   const tasks: PlanTask[] = [];
   const seen = new Set<string>();
@@ -3512,7 +3477,7 @@ export const parsePlanTasks = (content: string): PlanTask[] => {
       id,
       words,
       name,
-      artifactWords: taskArtifactWords(id, name, words),
+      artifactWords: words,
     });
   }
 
@@ -4966,8 +4931,13 @@ const executionSummaryRelativePath = (planName: string): string =>
 const currentTaskRelativePath = (planName: string): string =>
   rel(".ai", "artifacts", planName, "state", "current-task.md");
 
-const taskArtifactFilePrefix = (task: PlanTask): string =>
-  `${task.id}-${task.artifactWords}-v`;
+const taskArtifactFilePrefix = (task: PlanTask): string => {
+  const suffix =
+    task.artifactWords && task.artifactWords !== task.words
+      ? `-${task.artifactWords}`
+      : "";
+  return `${task.id}${suffix}-v`;
+};
 
 const existingTaskArtifactEntries = async (
   rootDir: string,
@@ -5206,6 +5176,10 @@ const writeTaskArtifact = async ({
 }): Promise<{ ok: true } | Failure> => {
   const artifactPath = path.join(rootDir, context.artifactPath);
   const body = `# Task Savepoint: ${context.task.id}
+
+## Task Name
+
+${context.task.name}
 
 ## Summary
 
@@ -5642,7 +5616,9 @@ const reopenPlanForNextTask = async (
     | { absolutePath: string; content: string }
     | undefined;
   if (plan.thinPlanContract === "thin-plan-v2") {
-    const rootDir = path.dirname(path.dirname(path.dirname(plan.absolutePlanPath)));
+    const rootDir = path.dirname(
+      path.dirname(path.dirname(plan.absolutePlanPath)),
+    );
     const workflowPath = thinPlanV2ArtifactPath(
       plan.planName,
       "state",
