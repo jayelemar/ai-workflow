@@ -112,6 +112,40 @@ For non-user-facing work:
 
 ---
 
+## User-Facing Plan Authoring Preflight (MANDATORY)
+
+For user-facing work, run this preflight in order before finalizing the draft:
+
+1. validate or regenerate `user-journey.md`
+2. derive or repair `implementation-map.md` from every user-flow and acceptance-scenario action
+3. write plan phases
+4. run a mandatory self-check
+5. revise the plan/artifacts in place if the self-check finds gaps
+
+Auto-correct when possible. STOP only when the preflight still cannot satisfy these rules.
+
+The mandatory self-check MUST verify:
+
+- each `[task:..]` chunk can pass, be reviewed, and be committed independently
+- no lifecycle-only or red-test-only savepoints remain
+- each spec-required behavior, especially visible validation and failure-state behavior, is assigned to a concrete task
+- each implementation-map row has implementation and validation coverage
+
+If a savepoint is invalid:
+
+- rewrite or remove invalid task savepoints
+- rewrite lifecycle-only or red-test-only chunks into independently passable subsystem or behavior chunks
+- remove task IDs entirely when the work is really one final-commit fix
+
+If the implementation map or phase ownership is under-scoped:
+
+- repair missing user-action rows before finalizing phases
+- expand task ownership until every spec-required behavior and every implementation-map row is covered
+
+STOP only when the preflight still cannot satisfy these rules without inventing behavior beyond the spec.
+
+---
+
 ## Plan Requirements
 
 Populate the template with:
@@ -216,6 +250,7 @@ Rules:
 - The tests entry must identify validation coverage for the action.
 - Every user action in `## User Flows` and `## Acceptance Scenarios` of the flow artifact must appear in this mapping.
 - The mapping must not include actions that do not appear in the flow artifact.
+- Build or repair this artifact before finalizing `## Phases` for user-facing work.
 
 For non-user-facing work, write exactly `N/A: <concrete reason>` in `implementation-map.md`.
 

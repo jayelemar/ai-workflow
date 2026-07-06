@@ -276,6 +276,16 @@ When the work is user-facing, this wrapper first ensures
 spec. If it is missing or stale, the wrapper applies
 `.ai/prompts/generate-user-flow.md` automatically before writing the plan.
 
+`create-plan` also auto-preflights user-facing plan authoring before returning
+the draft:
+
+- repair or regenerate `.ai/artifacts/<plan-name>/user-journey.md`
+- derive or repair `.ai/artifacts/<plan-name>/implementation-map.md`
+- rewrite invalid savepoints into independently passable chunks
+- verify each spec-required behavior is owned by a concrete task
+- STOP only when those checks still cannot be satisfied without inventing
+  behavior beyond the spec
+
 ### Choose A Post-Plan Path
 
 You have two options:

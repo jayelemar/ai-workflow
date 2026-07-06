@@ -671,6 +671,36 @@ test("create-plan prompt auto-preflights user-facing flow artifacts or records n
   assert.match(prompt, /concrete reason/i);
 });
 
+test("create-plan prompt completes implementation-map preflight before finalizing plan phases", async () => {
+  const prompt = await readWorkflowPrompt("create-plan.md");
+
+  assert.match(prompt, /run this preflight in order/i);
+  assert.match(prompt, /1\.\s+validate or regenerate `?user-journey\.md`?/i);
+  assert.match(prompt, /2\.\s+derive or repair `?implementation-map\.md`? from every user-flow and acceptance-scenario action/i);
+  assert.match(prompt, /3\.\s+write plan phases/i);
+  assert.match(prompt, /4\.\s+run a mandatory self-check/i);
+  assert.match(prompt, /5\.\s+revise the plan\/artifacts in place if the self-check finds gaps/i);
+});
+
+test("create-plan prompt self-checks savepoints and spec behavior ownership before returning", async () => {
+  const prompt = await readWorkflowPrompt("create-plan.md");
+
+  assert.match(prompt, /each `?\[task:[^\n`]+`? chunk can pass, be reviewed, and be committed independently/i);
+  assert.match(prompt, /no lifecycle-only or red-test-only savepoints remain/i);
+  assert.match(prompt, /each spec-required behavior/i);
+  assert.match(prompt, /visible validation and failure-state behavior/i);
+  assert.match(prompt, /assigned to a concrete task/i);
+  assert.match(prompt, /each implementation-map row has implementation and validation coverage/i);
+});
+
+test("create-plan prompt auto-corrects preflight defects and STOPs only when unresolved", async () => {
+  const prompt = await readWorkflowPrompt("create-plan.md");
+
+  assert.match(prompt, /auto-correct when possible/i);
+  assert.match(prompt, /rewrite or remove invalid task savepoints/i);
+  assert.match(prompt, /STOP only when the preflight still cannot satisfy these rules/i);
+});
+
 test("plan template requires artifact pointers for implementation map and state files", async () => {
   const template = await readPlanTemplate();
 
@@ -768,6 +798,19 @@ test("workflow docs expose spec to user-journey artifact to plan to runner flow"
   assert.match(wrappersReadme, /\.ai\/wrappers\/generate-user-flow\.md/);
 });
 
+test("workflow docs describe create-plan preflighting implementation maps, savepoints, and behavior ownership", async () => {
+  const wrapper = await readWorkflowWrapper("create-plan.md");
+  const readme = await readFile(join(process.cwd(), ".ai", "README.md"), "utf8");
+  const wrappersReadme = await readWorkflowWrapper("README.md");
+
+  for (const content of [wrapper, readme, wrappersReadme]) {
+    assert.match(content, /implementation-map\.md/i);
+    assert.match(content, /savepoint/i);
+    assert.match(content, /spec-required behavior|behavior ownership/i);
+    assert.match(content, /auto-?preflight/i);
+  }
+});
+
 test("plan-validator prompt classifies spec-origin findings as minor repairs or major decisions", async () => {
   const prompt = await readWorkflowPrompt("plan-validator.md");
 
@@ -811,6 +854,17 @@ test("fix-plan prompt allows spec edits only for latest minor spec repair valida
   assert.match(prompt, /Spec edits are allowed ONLY when the latest validation history entry points to an evidence artifact/);
   assert.match(prompt, /edit only the named spec file and named spec section\(s\) from the latest validation artifact/);
   assert.match(prompt, /return to `draft \+ plan-validator`/);
+});
+
+test("fix-plan prompt reruns the same authoring preflight after applying validation findings", async () => {
+  const prompt = await readWorkflowPrompt("fix-plan.md");
+
+  assert.match(prompt, /after applying the latest validation findings, rerun the same authoring preflight used by `?create-plan`?/i);
+  assert.match(prompt, /re-read the spec, `?user-journey\.md`?, and `?implementation-map\.md`?/i);
+  assert.match(prompt, /repair missing action rows and under-scoped behavior ownership/i);
+  assert.match(prompt, /rewrite bad task savepoints into coherent subsystem\/behavior chunks/i);
+  assert.match(prompt, /remove task IDs when the work is really one final-commit fix/i);
+  assert.match(prompt, /do not limit fixes to patching only the cited lines/i);
 });
 
 test("fix-plan prompt updates thin-plan workflow sidecar when transitioning state", async () => {
@@ -2747,6 +2801,36 @@ test("codex live output formatter buffers partial JSONL chunks and passes throug
 
   assert.equal(stdout, "[agent]\nChunked\n\nplain output\n");
   assert.equal(stderr, "stderr output\nReading additional input from stdin...\n\n");
+});
+
+test("codex live output formatter inserts a blank line before formatted event blocks after raw output", () => {
+  let combined = "";
+  const formatter = createCodexLiveOutputFormatter({
+    stdout: (chunk) => {
+      combined += chunk;
+    },
+    stderr: (chunk) => {
+      combined += chunk;
+    },
+  });
+
+  formatter.stderr("Reading additional input from stdin...\n");
+  formatter.stdout(`${JSON.stringify({ type: "thread.started", thread_id: "thread_123" })}\n`);
+  formatter.stdout(`${JSON.stringify({ type: "turn.started" })}\n`);
+  formatter.flush();
+
+  assert.equal(
+    combined,
+    [
+      "Reading additional input from stdin...",
+      "",
+      "[codex] thread started thread_123",
+      "",
+      "[codex] turn started",
+      "",
+      "",
+    ].join("\n"),
+  );
 });
 
 test("codex live output formatter summarizes apply_patch verification failures on stderr", () => {
@@ -8302,6 +8386,62 @@ test("workflow runner prints edited file summaries before the completed turn mar
     } else {
       process.env.NO_COLOR = originalNoColor;
     }
+    await workspace.cleanup();
+  }
+});
+
+test("workflow runner leaves a blank line between commit progress and streamed live output", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(
+      workspace.root,
+      "task-savepoint-spacing",
+      planWithTaskSavepoints("completed", "commit-summary"),
+    );
+    let output = "";
+    const result = await runWorkflowRunner({
+      planName: planArg("task-savepoint-spacing"),
+      rootDir: workspace.root,
+      console: {
+        log: (message) => {
+          output += `${message}\n`;
+        },
+        error: (message) => {
+          output += `${message}\n`;
+        },
+      },
+      outputStream: {
+        stdout: (chunk) => {
+          output += chunk;
+        },
+        stderr: (chunk) => {
+          output += chunk;
+        },
+      },
+      processRunner: runnerReturning(
+        {
+          launched: true,
+          stdout: `${JSON.stringify({ type: "thread.started", thread_id: "thread_123" })}\n${JSON.stringify({ type: "turn.started" })}\n`,
+          stderr: "Reading additional input from stdin...\n",
+          exitCode: 0,
+        },
+        (call) => {
+          if (call.command === CODEX_COMMAND) {
+            call.onStderr?.("Reading additional input from stdin...\n");
+            call.onStdout?.(
+              `${JSON.stringify({ type: "thread.started", thread_id: "thread_123" })}\n${JSON.stringify({ type: "turn.started" })}\n`,
+            );
+          }
+        },
+      ),
+    });
+
+    assert.equal(result.success, true);
+    assert.match(
+      output,
+      /\[0\/2\] Add backend endpoints\n\nReading additional input from stdin\.\.\.\n\n\[codex\] thread started thread_123\n\n\[codex\] turn started\n\nSUCCESS/,
+    );
+  } finally {
     await workspace.cleanup();
   }
 });

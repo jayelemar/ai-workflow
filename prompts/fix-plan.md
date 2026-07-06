@@ -183,6 +183,29 @@ Rules:
 * maintain file coverage
 * maintain traceability
 
+After applying the latest validation findings, rerun the same authoring preflight used by `create-plan`.
+
+Do not limit fixes to patching only the cited lines when the plan artifacts or task boundaries are still invalid.
+
+Preflight steps:
+
+1. re-read the spec, `user-journey.md`, and `implementation-map.md`
+2. repair missing action rows and under-scoped behavior ownership
+3. rewrite bad task savepoints into coherent subsystem/behavior chunks
+4. remove task IDs when the work is really one final-commit fix
+5. re-check that every implementation-map row has implementation and validation coverage and that each spec-required behavior is owned by a concrete task
+
+Preflight constraints:
+
+* keep the same scope rules from this prompt
+* do not introduce new product behavior
+* do not bypass validation findings
+* do not edit the spec outside allowed minor repairs
+
+If preflight finds an unresolved gap after auto-correction:
+
+→ STOP (`plan fix incomplete`)
+
 ---
 
 ## Post-Fix Validation

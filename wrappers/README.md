@@ -27,6 +27,9 @@ spec -> user-journey artifact -> plan -> runner
    - Skip this manual step when using `.ai/wrappers/create-plan.md`; it creates
      or regenerates the user-journey artifact automatically for user-facing
      work before writing the plan.
+   - `create-plan` also auto-preflights `.ai/artifacts/<plan-name>/implementation-map.md`,
+     savepoint validity, and spec-required behavior ownership before it returns
+     a draft plan.
    - Skip for non-user-facing work; the plan records `N/A: <concrete reason>`.
 3. Create a plan:
    - Use `.ai/wrappers/create-plan.md`

@@ -56,7 +56,7 @@ type CodexExecutionConfig = {
 
 // codex-work codex-work6598
 export const WORKFLOW_RUNNER_CODEX_PROFILE: CodexProfile =
-  "codex-work6598" as const;
+  "codex-work" as const;
 const CODEX_PROFILE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 
 const PLAN_VALIDATOR_PROMPT_PATH = ".ai/prompts/plan-validator.md";
@@ -8159,7 +8159,11 @@ export const runWorkflowRunner = async (
         }),
       );
       if (commitProgress) {
-        logger.log(formatCommitProgressLine(commitProgress));
+        logger.log(
+          streamOutput
+            ? `${formatCommitProgressLine(commitProgress)}\n`
+            : formatCommitProgressLine(commitProgress),
+        );
       }
       progressLogged = true;
     };
