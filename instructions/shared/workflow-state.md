@@ -30,6 +30,7 @@ Define the canonical plan workflow state machine: plan statuses, next actions, a
 Thin-plan-v2 state parity:
 
 * The plan manifest `## Status` and `## Next Action` values and `.ai/artifacts/<plan-name>/state/workflow.json` `status` and `nextAction` values are one logical state.
+* Do not duplicate workflow `status` or `nextAction` in `.ai/artifacts/<plan-name>/state/files.json` or `.ai/artifacts/<plan-name>/state/file-ownership.json`; those files are inventory and ownership sidecars only.
 * Any workflow prompt that updates either location MUST update both locations before final output.
 * After every state transition, the prompt MUST reread both locations and verify the values match.
 * If the values do not match, repair the mismatch before final output; if repair is not possible, STOP with the exact mismatch.

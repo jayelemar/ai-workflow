@@ -332,8 +332,8 @@ type CompletedTaskSavepoint = {
 
 type FileOwnershipArtifact = {
   planPath: string;
-  status: Status;
-  nextAction: NextAction;
+  status?: Status;
+  nextAction?: NextAction;
   owns: string[];
   released: string[];
   resolvedFiles: string[];
@@ -4133,10 +4133,6 @@ type ThinPlanV2FilesState = {
   changedFiles: string[];
   released: string[];
   headSha: string;
-  workflow?: {
-    status?: string;
-    nextAction?: string;
-  };
 };
 
 const thinPlanV2ArtifactPath = (
@@ -4230,7 +4226,6 @@ const parseThinPlanV2FilesState = (
       reason: `thin-plan-v2 files state is malformed: ${artifactPath}`,
     };
   }
-  const workflow = asRecord(record?.workflow);
   return {
     created,
     modified,
@@ -4238,16 +4233,6 @@ const parseThinPlanV2FilesState = (
     changedFiles,
     released,
     headSha,
-    workflow: workflow
-      ? {
-          status:
-            typeof workflow.status === "string" ? workflow.status : undefined,
-          nextAction:
-            typeof workflow.nextAction === "string"
-              ? workflow.nextAction
-              : undefined,
-        }
-      : undefined,
   };
 };
 
@@ -7365,10 +7350,6 @@ const parseFileOwnershipArtifact = (
   const updatedAt = record?.updatedAt;
   if (
     typeof planPath !== "string" ||
-    typeof status !== "string" ||
-    !isStatus(status) ||
-    typeof nextAction !== "string" ||
-    !isNextAction(nextAction) ||
     !owns ||
     !released ||
     !resolvedFiles ||
@@ -7381,11 +7362,25 @@ const parseFileOwnershipArtifact = (
       reason: `file ownership artifact is malformed: ${artifactPath}`,
     };
   }
+  const hasLegacyWorkflowState =
+    status !== undefined || nextAction !== undefined;
+  if (
+    hasLegacyWorkflowState &&
+    (typeof status !== "string" ||
+      !isStatus(status) ||
+      typeof nextAction !== "string" ||
+      !isNextAction(nextAction))
+  ) {
+    return {
+      ok: false,
+      reason: `file ownership artifact is malformed: ${artifactPath}`,
+    };
+  }
 
   return {
     planPath,
-    status,
-    nextAction,
+    status: hasLegacyWorkflowState ? status : undefined,
+    nextAction: hasLegacyWorkflowState ? nextAction : undefined,
     owns,
     released,
     resolvedFiles,
@@ -7449,8 +7444,6 @@ const refreshCurrentFileOwnershipArtifact = async ({
   );
   const artifact: FileOwnershipArtifact = {
     planPath: plan.planPath,
-    status: plan.status,
-    nextAction: plan.nextAction,
     owns: ownershipScope.entries,
     released: released.paths,
     resolvedFiles,
@@ -7563,6 +7556,12 @@ const readOtherFileOwnershipArtifacts = async (
             reason: `file ownership workflow artifact cannot be read: ${workflowPath}: ${String(error)}`,
           };
         }
+        if (!artifact.status || !artifact.nextAction) {
+          return {
+            ok: false,
+            reason: `file ownership workflow artifact cannot be read: ${workflowPath}: missing canonical workflow state`,
+          };
+        }
       }
       artifacts.push(artifact);
     }
@@ -7606,6 +7605,12 @@ const detectFileOwnershipArtifactConflict = async ({
   const currentFiles = new Set(current.resolvedFiles);
   const dirtyFileSet = new Set(dirtyFiles);
   for (const other of otherArtifacts.artifacts) {
+    if (!other.status || !other.nextAction) {
+      return {
+        ok: false,
+        reason: `file ownership artifact is missing canonical workflow state: ${other.planPath}`,
+      };
+    }
     const otherFiles = effectiveArtifactResolvedFiles(other, changedFiles);
     const conflictingFiles =
       other.status === "completed" && other.nextAction === "commit-summary"

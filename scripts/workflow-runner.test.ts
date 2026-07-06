@@ -436,8 +436,6 @@ N/A: internal workflow automation only.
     `${JSON.stringify(
       {
         planPath: ".ai/plans/artifact-state.md",
-        status: overrides.status ?? "review",
-        nextAction: overrides.nextAction ?? "review-plan",
         owns: overrides.owns ?? changedFiles,
         released: [],
         resolvedFiles: overrides.owns ?? changedFiles,
@@ -460,10 +458,6 @@ N/A: internal workflow automation only.
         changedFiles,
         released: [],
         headSha: "abc123",
-        workflow: {
-          status: overrides.status ?? "review",
-          nextAction: overrides.nextAction ?? "review-plan",
-        },
       },
       null,
       2,
@@ -1593,6 +1587,12 @@ test("commit-summary prompt creates one local completed commit and forbids auto-
   assert.match(prompt, /git commit --cleanup=verbatim -F - <<'EOF'/);
   assert.match(prompt, /<generated subject>/);
   assert.match(prompt, /<generated body>/);
+  assert.match(prompt, /Do not include workflow metadata/);
+  assert.match(prompt, /Do not paste long file lists/);
+  assert.match(
+    prompt,
+    /Do not include sections named `Plan`, `Task ID`, `Task words`, `Task artifact path`, `Changed files`, `Validation summary`, or `Review result`/,
+  );
   assert.match(prompt, /execution-summary\.md/);
   assert.match(prompt, /sole writer[\s\S]*execution-summary\.md/i);
   assert.doesNotMatch(prompt, /git commit -m "<generated message>"/);
@@ -4629,6 +4629,58 @@ test("parsePlan accepts thin-plan-v2 manifest and reads current state from workf
   }
 });
 
+test("parsePlan accepts thin-plan-v2 sidecars without duplicated workflow state", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writeThinPlanV2Artifacts(workspace.root, {
+      status: "completed",
+      nextAction: "commit-summary",
+    });
+
+    const ownershipPath = join(
+      workspace.root,
+      ".ai",
+      "artifacts",
+      "artifact-state",
+      "state",
+      "file-ownership.json",
+    );
+    const ownership = JSON.parse(await readFile(ownershipPath, "utf8"));
+    delete ownership.status;
+    delete ownership.nextAction;
+    await writeFile(ownershipPath, `${JSON.stringify(ownership, null, 2)}\n`);
+
+    const filesPath = join(
+      workspace.root,
+      ".ai",
+      "artifacts",
+      "artifact-state",
+      "state",
+      "files.json",
+    );
+    const files = JSON.parse(await readFile(filesPath, "utf8"));
+    delete files.workflow;
+    await writeFile(filesPath, `${JSON.stringify(files, null, 2)}\n`);
+
+    await writePlan(
+      workspace.root,
+      "artifact-state",
+      thinPlanV2Manifest("completed", "commit-summary"),
+    );
+
+    const parsed = await parsePlan({
+      planName: planArg("artifact-state"),
+      rootDir: workspace.root,
+    });
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.ok && parsed.status, "completed");
+    assert.equal(parsed.ok && parsed.nextAction, "commit-summary");
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
 test("parsePlan rejects thin-plan-v2 manifest and workflow sidecar state mismatch", async () => {
   const workspace = await setupWorkspace();
   try {
@@ -5934,7 +5986,7 @@ test("thin-plan-v2 review and commit-summary stage plan-owned paths from files.j
       },
     });
 
-    assert.equal(result.success, true);
+    assert.equal(result.success, true, result.success ? "" : result.reason);
     assert.deepEqual(
       calls
         .filter((call) => call.command === CODEX_COMMAND)
@@ -6117,7 +6169,7 @@ test("workflow runner succeeds after review defers final browser validation to m
       ),
     });
 
-    assert.equal(result.success, true);
+    assert.equal(result.success, true, result.success ? "" : result.reason);
     assert.equal(result.reason, "completed + commit-summary finished");
     assert.deepEqual(
       calls
@@ -11054,7 +11106,7 @@ test("workflow runner leaves a blank line between commit progress and streamed l
       ),
     });
 
-    assert.equal(result.success, true);
+    assert.equal(result.success, true, result.success ? "" : result.reason);
     assert.match(
       output,
       /\[0\/2\] Add backend endpoints\n\nReading additional input from stdin\.\.\.\n\n\[codex\] thread started thread_123\n\n\[codex\] turn started\n\nSUCCESS/,

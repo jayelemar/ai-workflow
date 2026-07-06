@@ -121,7 +121,7 @@ refactor(payment): simplify invoice calculation flow
 For every created commit, generate:
 
 * one conventional-commit subject line
-* one structured multiline body
+* one concise GitHub-readable body
 
 Use this exact command shape:
 
@@ -133,22 +133,22 @@ git commit --cleanup=verbatim -F - <<'EOF'
 EOF
 ```
 
-Body sections:
+Body rules:
 
-* Plan
-* Changed files
-* Validation summary
-* Review result
+* 1-3 short paragraphs or 2-4 bullets.
+* Explain what changed and why it matters.
+* Mention important validation in one sentence only when useful.
+* Do not include workflow metadata such as plan name, task ID, task words, task artifact path, changed-file inventory, runner stage names, or `.ai/` artifact paths.
+* Do not paste long file lists. The diff already records changed files.
+* Do not include sections named `Plan`, `Task ID`, `Task words`, `Task artifact path`, `Changed files`, `Validation summary`, or `Review result`.
 
-When `Task savepoint current task` is present, also include:
+Allowed body example:
 
-* Plan name
-* Task ID
-* Task words
-* Changed files
-* Validation summary
-* Review result
-* Task artifact path
+```text
+Connects the issue widget to real support-ticket creation, including inline validation, attachment rollback handling, draft cleanup, and navigation to the created ticket.
+
+Validated with lint-staged before commit.
+```
 
 ---
 

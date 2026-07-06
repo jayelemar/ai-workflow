@@ -282,11 +282,12 @@ Write `.ai/artifacts/<plan-name>/state/files.json` with:
 - `changedFiles`
 - `released`
 - `headSha`
-- workflow state
 
 The `created`, `modified`, `deleted`, `changedFiles`, and `released` fields MUST be string arrays. Do not use legacy aliases such as `createdFiles`, `modifiedFiles`, or `deletedFiles`.
 
 This artifact is the review and commit changed-file inventory. It should list the expected created, modified, and deleted file paths inferred from the request, spec, and codebase. It is reconciled after implementation by `execute-plan` from actual git changes.
+
+Do not write workflow state into `files.json`. Workflow state belongs only in the plan manifest and `workflow.json`.
 
 Write `.ai/artifacts/<plan-name>/state/workflow.json` with:
 
@@ -308,19 +309,19 @@ The initial `workflow.json` MUST use:
 
 Do not use legacy aliases such as `latestEvent`, `latestValidation`, `latestReview`, or `compactHistory`.
 
-Write `.ai/artifacts/<plan-name>/state/file-ownership.json` with the planning-time ownership boundary and current workflow state.
+Write `.ai/artifacts/<plan-name>/state/file-ownership.json` with the planning-time ownership boundary.
 
 It MUST be valid JSON with exactly the runner-required ownership fields:
 
 - `planPath`: string
-- `status`: allowed workflow status string
-- `nextAction`: allowed workflow next-action string
 - `owns`: string array of repo-relative exact file paths or directory globs ending in `/**`
 - `released`: string array; use `[]` during initial plan creation
 - `resolvedFiles`: string array of concrete repo-relative files expected to be changed by the plan
 - `changedFiles`: string array matching the initial expected changed-file inventory from `files.json`
 - `headSha`: current `git rev-parse HEAD` string
 - `updatedAt`: ISO timestamp string
+
+Do not write `status` or `nextAction` into `file-ownership.json`. Workflow state belongs only in the plan manifest and `workflow.json`.
 
 Write `.ai/artifacts/<plan-name>/state/context.md` with an initial runner context snapshot.
 

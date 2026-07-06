@@ -462,12 +462,14 @@ Update the plan with:
 
 Update artifacts with:
 
-* created, modified, deleted, changedFiles, released, headSha, and workflow state in `.ai/artifacts/<plan-name>/state/files.json`
+* created, modified, deleted, changedFiles, released, and headSha in `.ai/artifacts/<plan-name>/state/files.json`
 * blockers encountered, validation results, latest event pointers under `latest`, and compact event path history in `.ai/artifacts/<plan-name>/state/workflow.json`
 * ownership changes and releases in `.ai/artifacts/<plan-name>/state/file-ownership.json`
 * deviations and evidence in event artifacts under `.ai/artifacts/<plan-name>/events/`
 
 Reconcile `.ai/artifacts/<plan-name>/state/files.json` after implementation to the actual created, modified, and deleted plan-owned paths before moving to `Status = review`. `files.json` is the changed-file inventory for review and commit, not the ownership authority.
+
+Do not write workflow `status` or `nextAction` into `files.json` or `file-ownership.json`. Workflow state belongs only in the plan manifest and `.ai/artifacts/<plan-name>/state/workflow.json`.
 
 Keep workflow state entries concise: compact summary, one state field, and evidence pointer only.
 Detailed validation evidence belongs in `.ai/artifacts/<plan-name>/events/validation-vX.md`, with only the latest validation pointer under `latest.validation` in `.ai/artifacts/<plan-name>/state/workflow.json`.
