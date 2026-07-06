@@ -24,6 +24,11 @@ Create any missing planning prerequisite artifact, then create the implementatio
 - savepoint validity
 - spec-required behavior ownership
 
+After the plan is created, the workflow runner performs the
+`sync-plan-artifacts` stage before validation. That stage reconciles the plan,
+spec, user-journey artifact, implementation map, and thin-plan-v2 state before
+handing off to `plan-validator`.
+
 Strict Constraints:
 - You are only allowed to create or update planning artifacts for this feature or bug:
   - `.ai/artifacts/<feature-or-bug-name>/user-journey.md`
@@ -66,8 +71,8 @@ Required Behavior:
 
 Initial Plan State:
 - `## Status` must be `draft`.
-- `## Next Action` must be `plan-validator`.
-- `.ai/artifacts/<feature-or-bug-name>/state/workflow.json` must use `status: "draft"` and `nextAction: "plan-validator"`.
+- `## Next Action` must be `sync-plan-artifacts`.
+- `.ai/artifacts/<feature-or-bug-name>/state/workflow.json` must use `status: "draft"` and `nextAction: "sync-plan-artifacts"`.
 - `.ai/artifacts/<feature-or-bug-name>/state/context.md` must exist with an initial snapshot that names the plan path, spec path, artifact paths, status, next action, and notes that no validation/execution/review events exist yet.
 - `.ai/artifacts/<feature-or-bug-name>/events/` must exist even when it is empty.
 

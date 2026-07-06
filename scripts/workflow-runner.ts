@@ -56,10 +56,11 @@ type CodexExecutionConfig = {
 
 // codex-work codex-work6598
 export const WORKFLOW_RUNNER_CODEX_PROFILE: CodexProfile =
-  "codex-work" as const;
+  "codex-work6598" as const;
 const CODEX_PROFILE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 
 const PLAN_VALIDATOR_PROMPT_PATH = ".ai/prompts/plan-validator.md";
+const SYNC_PLAN_ARTIFACTS_PROMPT_PATH = ".ai/prompts/sync-plan-artifacts.md";
 const FIX_PLAN_PROMPT_PATH = ".ai/prompts/fix-plan.md";
 const EXECUTE_PLAN_PROMPT_PATH = ".ai/prompts/execute-plan.md";
 const UNBLOCK_PLAN_PROMPT_PATH = ".ai/prompts/unblock-plan.md";
@@ -70,6 +71,7 @@ const COMMIT_SUMMARY_PROMPT_PATH = ".ai/prompts/commit-summary.md";
 const SCOPE_CLEANUP_PROMPT_PATH = ".ai/prompts/scope-cleanup.md";
 
 const PROMPT_CODEX_EXECUTION_OVERRIDES: Record<string, CodexExecutionConfig> = {
+  [SYNC_PLAN_ARTIFACTS_PROMPT_PATH]: { model: "gpt-5.4", reasoning: "medium" },
   [PLAN_VALIDATOR_PROMPT_PATH]: { model: "gpt-5.4", reasoning: "high" },
   [FIX_PLAN_PROMPT_PATH]: { model: "gpt-5.4", reasoning: "medium" },
   [EXECUTE_PLAN_PROMPT_PATH]: { model: "gpt-5.5", reasoning: "high" },
@@ -94,6 +96,7 @@ const VALID_STATUSES = [
   "blocked",
 ] as const;
 const VALID_NEXT_ACTIONS = [
+  "sync-plan-artifacts",
   "plan-validator",
   "fix-plan",
   "execute-plan",
@@ -2420,6 +2423,10 @@ const stageStylesByPromptPath: Record<
     label: "VALIDATE",
     colorCode: "\u001b[37;45m",
   },
+  [rel(".ai", "prompts", "sync-plan-artifacts.md")]: {
+    label: "SYNC ARTIFACTS",
+    colorCode: "\u001b[37;45m",
+  },
   [rel(".ai", "prompts", "fix-plan.md")]: {
     label: "FIX PLAN",
     colorCode: "\u001b[37;45m",
@@ -3377,6 +3384,7 @@ const codexExecArgs = ({
 };
 
 const promptRoutes: Record<string, string> = {
+  "draft|sync-plan-artifacts": SYNC_PLAN_ARTIFACTS_PROMPT_PATH,
   "draft|plan-validator": PLAN_VALIDATOR_PROMPT_PATH,
   "draft|fix-plan": FIX_PLAN_PROMPT_PATH,
   "approved|execute-plan": EXECUTE_PLAN_PROMPT_PATH,
@@ -3389,6 +3397,7 @@ const promptRoutes: Record<string, string> = {
 };
 
 const promptActionLabels: Record<string, string> = {
+  [rel(".ai", "prompts", "sync-plan-artifacts.md")]: "Sync artifacts",
   [rel(".ai", "prompts", "plan-validator.md")]: "Validate",
   [rel(".ai", "prompts", "fix-plan.md")]: "Fix",
   [rel(".ai", "prompts", "execute-plan.md")]: "Execute",
@@ -4834,6 +4843,7 @@ The previous stage exceeded token thresholds.
 `
       : "";
   const subAgentGuidance = [
+    rel(".ai", "prompts", "sync-plan-artifacts.md"),
     rel(".ai", "prompts", "plan-validator.md"),
     rel(".ai", "prompts", "fix-plan.md"),
     rel(".ai", "prompts", "execute-plan.md"),
@@ -7746,6 +7756,18 @@ const transitionAllowed = (
   previous: ParsedPlan,
   next: ParsedPlan,
 ): { ok: true } | Failure => {
+  if (promptPath === SYNC_PLAN_ARTIFACTS_PROMPT_PATH) {
+    const allowedDraftValidator =
+      next.status === "draft" && next.nextAction === "plan-validator";
+    const allowedDraftSync =
+      next.status === "draft" && next.nextAction === "sync-plan-artifacts";
+    if (!allowedDraftValidator && !allowedDraftSync) {
+      return {
+        ok: false,
+        reason: `sync-plan-artifacts may only hand off to draft + plan-validator or remain draft + sync-plan-artifacts, got ${next.status} + ${next.nextAction}`,
+      };
+    }
+  }
   if (promptPath === rel(".ai", "prompts", "execute-plan.md")) {
     const allowedReview =
       next.status === "review" && next.nextAction === "review-plan";

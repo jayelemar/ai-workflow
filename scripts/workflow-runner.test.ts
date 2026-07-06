@@ -45,6 +45,7 @@ type Workspace = {
 };
 
 const PROMPTS = {
+  "sync-plan-artifacts.md": "SYNC PLAN ARTIFACTS PROMPT",
   "plan-validator.md": "PLAN VALIDATOR PROMPT",
   "fix-plan.md": "FIX PLAN PROMPT",
   "execute-plan.md": "EXECUTE PLAN PROMPT",
@@ -701,6 +702,18 @@ test("create-plan prompt auto-corrects preflight defects and STOPs only when unr
   assert.match(prompt, /STOP only when the preflight still cannot satisfy these rules/i);
 });
 
+test("create-plan defaults new draft plans to sync-plan-artifacts before validation", async () => {
+  const prompt = await readWorkflowPrompt("create-plan.md");
+  const template = await readPlanTemplate();
+  const wrapper = await readWorkflowWrapper("create-plan.md");
+
+  assert.match(template, /## Next Action\s*\n\s*sync-plan-artifacts/);
+  assert.match(prompt, /Next Action\s*=\s*sync-plan-artifacts/i);
+  assert.match(prompt, /draft \+ sync-plan-artifacts/i);
+  assert.match(wrapper, /sync-plan-artifacts/i);
+  assert.match(wrapper, /before validation/i);
+});
+
 test("plan template requires artifact pointers for implementation map and state files", async () => {
   const template = await readPlanTemplate();
 
@@ -792,10 +805,23 @@ test("workflow docs expose spec to user-journey artifact to plan to runner flow"
   const readme = await readFile(join(process.cwd(), ".ai", "README.md"), "utf8");
   const wrappersReadme = await readWorkflowWrapper("README.md");
 
-  assert.match(readme, /spec -> user-journey artifact -> plan -> runner/i);
-  assert.match(wrappersReadme, /spec -> user-journey artifact -> plan -> runner/i);
+  assert.match(readme, /spec -> user-journey artifact -> plan -> sync artifacts -> validator\/runner/i);
+  assert.match(wrappersReadme, /spec -> user-journey artifact -> plan -> sync artifacts -> validator\/runner/i);
   assert.match(readme, /\.ai\/wrappers\/generate-user-flow\.md/);
   assert.match(wrappersReadme, /\.ai\/wrappers\/generate-user-flow\.md/);
+});
+
+test("workflow-state docs include the sync-plan-artifacts draft loop", async () => {
+  const workflowState = await readInstruction("shared/workflow-state.md");
+  const aiWorkflow = await readInstruction("ai-workflow.md");
+
+  assert.match(workflowState, /sync-plan-artifacts/);
+  assert.match(workflowState, /draft\s*→\s*sync-plan-artifacts/i);
+  assert.match(workflowState, /Sync Plan Artifacts Loop/i);
+  assert.match(workflowState, /draft \+ plan-validator/i);
+  assert.match(workflowState, /draft \+ sync-plan-artifacts/i);
+  assert.match(aiWorkflow, /sync-plan-artifacts/);
+  assert.match(aiWorkflow, /post-plan\/pre-validator sync/i);
 });
 
 test("workflow docs describe create-plan preflighting implementation maps, savepoints, and behavior ownership", async () => {
@@ -902,6 +928,30 @@ test("plan-validator prompt updates thin-plan workflow sidecar with runner-reada
   assert.match(prompt, /`latestValidationResult`/);
   assert.match(prompt, /`latestValidationEvidence`/);
   assert.match(prompt, /`compactHistoryPointer`/);
+});
+
+test("sync-plan-artifacts prompt defines the pre-validator artifact sync contract", async () => {
+  const prompt = await readWorkflowPrompt("sync-plan-artifacts.md");
+
+  assert.match(prompt, /\.ai\/instructions\/shared\/workflow-state\.md/);
+  assert.match(prompt, /read the plan/i);
+  assert.match(prompt, /read the spec/i);
+  assert.match(prompt, /user-journey\.md/i);
+  assert.match(prompt, /implementation-map\.md/i);
+  assert.match(prompt, /state\/workflow\.json/i);
+  assert.match(prompt, /plan-owned/i);
+  assert.match(prompt, /\.ai\/plans\/<plan-name>\.md/);
+  assert.match(prompt, /\.ai\/artifacts\/<plan-name>\//);
+  assert.match(prompt, /must not edit app code/i);
+  assert.match(prompt, /tests/i);
+  assert.match(prompt, /migrations/i);
+  assert.match(prompt, /generated files/i);
+  assert.match(prompt, /Status\s*=\s*draft/);
+  assert.match(prompt, /Next Action\s*=\s*plan-validator/);
+  assert.match(prompt, /draft \+ plan-validator/);
+  assert.match(prompt, /STOP/i);
+  assert.match(prompt, /product decision/i);
+  assert.match(prompt, /draft \+ sync-plan-artifacts/);
 });
 
 test("fix-plan prompt forbids unclassified or unresolved major spec-origin edits", async () => {
@@ -3130,6 +3180,7 @@ test("codex live output formatter passes color option through streamed JSONL chu
 
 test("generates manual workflow prompts for every prompt action", () => {
   const cases = [
+    [".ai/prompts/sync-plan-artifacts.md", "Sync artifacts", "SYNC PLAN ARTIFACTS PROMPT"],
     [".ai/prompts/plan-validator.md", "Validate", "PLAN VALIDATOR PROMPT"],
     [".ai/prompts/fix-plan.md", "Fix", "FIX PLAN PROMPT"],
     [".ai/prompts/execute-plan.md", "Execute", "EXECUTE PLAN PROMPT"],
@@ -3185,6 +3236,7 @@ test("review prompt requires compact terminal output", async () => {
 
 test("non-review prompts use the shared terminal output contract", async () => {
   const prompts = await Promise.all([
+    readWorkflowPrompt("sync-plan-artifacts.md"),
     readWorkflowPrompt("plan-validator.md"),
     readWorkflowPrompt("fix-plan.md"),
     readWorkflowPrompt("execute-plan.md"),
@@ -3203,10 +3255,10 @@ test("non-review prompts use the shared terminal output contract", async () => {
     assert.match(prompt, /Next Action:/);
   }
 
-  assert.match(prompts[2], /\*\*Validation\*\*/);
-  assert.match(prompts[6], /single conventional-commit subject line/i);
-  assert.match(prompts[6], /short user-facing summary list prefixed with `--`/i);
-  assert.match(prompts[6], /do not include a branch line/i);
+  assert.match(prompts[3], /\*\*Validation\*\*/);
+  assert.match(prompts[7], /single conventional-commit subject line/i);
+  assert.match(prompts[7], /short user-facing summary list prefixed with `--`/i);
+  assert.match(prompts[7], /do not include a branch line/i);
 });
 
 test("superpowers prompt describes analysis as advisory guidance, not a missing skill", async () => {
@@ -3925,6 +3977,28 @@ test("parsePlan rejects thin-plan-v2 manifest and workflow sidecar state mismatc
     assert.equal(parsed.ok, false);
     assert.match(parsed.ok ? "" : parsed.reason, /thin-plan-v2 manifest state mismatch/);
     assert.match(parsed.ok ? "" : parsed.reason, /workflow\.json/);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("parsePlan rejects thin-plan-v2 sync state when workflow sidecar is mismatched", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writeThinPlanV2Artifacts(workspace.root, {
+      status: "draft",
+      nextAction: "plan-validator",
+    });
+    await writePlan(workspace.root, "artifact-state", thinPlanV2Manifest("draft", "sync-plan-artifacts"));
+
+    const parsed = await parsePlan({
+      planName: planArg("artifact-state"),
+      rootDir: workspace.root,
+    });
+
+    assert.equal(parsed.ok, false);
+    assert.match(parsed.ok ? "" : parsed.reason, /thin-plan-v2 manifest state mismatch/);
+    assert.match(parsed.ok ? "" : parsed.reason, /draft \+ sync-plan-artifacts/);
   } finally {
     await workspace.cleanup();
   }
@@ -4680,6 +4754,7 @@ test("routes only spec-defined executable pairs and sends blocked plans through 
   const workspace = await setupWorkspace();
   try {
     const cases = [
+      ["draft-sync", "draft", "sync-plan-artifacts", ".ai/prompts/sync-plan-artifacts.md", "gpt-5.4", "medium"],
       ["draft-validator", "draft", "plan-validator", ".ai/prompts/plan-validator.md", "gpt-5.4", "high"],
       ["draft-fix", "draft", "fix-plan", ".ai/prompts/fix-plan.md", "gpt-5.4", "medium"],
       ["approved-execute", "approved", "execute-plan", ".ai/prompts/execute-plan.md", "gpt-5.5", "high"],
@@ -4707,18 +4782,25 @@ test("routes only spec-defined executable pairs and sends blocked plans through 
               launchedModels.push(call.args[3] ?? "");
               launchedReasoning.push(call.args[5] ?? "");
             }
-            if (promptPath === ".ai/prompts/unblock-plan.md") {
+            if (call.promptPath === ".ai/prompts/sync-plan-artifacts.md") {
+              writeFileSync(
+                join(workspace.root, ".ai", "plans", `${name}.md`),
+                planWith("draft", "plan-validator"),
+              );
+              return;
+            }
+            if (call.promptPath === ".ai/prompts/unblock-plan.md") {
               writeFileSync(join(workspace.root, ".ai", "plans", `${name}.md`), planWith("active", "execute-plan"));
               return;
             }
-            if (promptPath === ".ai/prompts/execute-plan.md") {
+            if (call.promptPath === ".ai/prompts/execute-plan.md") {
               writeFileSync(
                 join(workspace.root, ".ai", "plans", `${name}.md`),
                 planWith("blocked", "unblock-plan"),
               );
               return;
             }
-            if (promptPath !== ".ai/prompts/commit-summary.md") {
+            if (call.promptPath !== ".ai/prompts/commit-summary.md") {
               writeFileSync(
                 join(workspace.root, ".ai", "plans", `${name}.md`),
                 planWith("blocked", "unblock-plan"),
@@ -5641,6 +5723,10 @@ test("reopen-plan prompts include selected prompt content and continue to execut
 });
 
 test("codex execution config requires an explicit prompt mapping", () => {
+  assert.deepEqual(codexExecutionConfig(".ai/prompts/sync-plan-artifacts.md"), {
+    model: "gpt-5.4",
+    reasoning: "medium",
+  });
   assert.deepEqual(codexExecutionConfig(".ai/prompts/commit-summary.md"), {
     model: "gpt-5.3-codex-spark",
     reasoning: "medium",
