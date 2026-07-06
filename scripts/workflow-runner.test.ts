@@ -5510,6 +5510,132 @@ test("task savepoint mode stops failed review before commit and keeps current ta
   }
 });
 
+test("task savepoint mode bounds artifact filenames for long task names", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    const longTaskName =
+      "Goal update only the prompt search planning savepoint so it owns prompt wording and prompt query assertions for preserving the existing market research section model source backed competitor analysis instructions conservative limitations and downstream section guidance without claiming generator enforced semantics files likely to change dependencies approved spec and the current prompt search planning entry points already exercised by the existing backend tests validation first add or update deterministic prompt search planning assertions that fail against the current wording then implement the prompt search guidance change and run completion criteria the savepoint owns only prompt search guidance plus its failing tests passes without schema or ui changes and does not claim summary classification benchmark confidence or source traceability enforcement that still lives in v1";
+    const planContent = (status: string, nextAction: string, extra = "") =>
+      planWithFileScope(
+        status,
+        nextAction,
+        {
+          modified: ["src/task-work.ts"],
+        },
+        `## Phases
+
+### Implementation
+
+* Objective: Complete task-savepoint work.
+* Tasks:
+  1. [task:01-backend-prompt-search-guidance] ${longTaskName}
+  2. [task:02-web-surface] Add web surface
+* Expected Outcome: Task savepoints complete.
+
+${extra}`,
+      );
+
+    await writePlan(
+      workspace.root,
+      "task-savepoint-long-name",
+      planContent("active", "execute-plan"),
+    );
+
+    let reviewRuns = 0;
+    let taskCommitRuns = 0;
+    const result = await runWorkflowRunner({
+      planName: planArg("task-savepoint-long-name"),
+      rootDir: workspace.root,
+      console: collectConsole().console,
+      processRunner: async (call) => {
+        if (call.command === "git" && call.args[0] === "rev-parse") {
+          return {
+            launched: true,
+            stdout: taskCommitRuns === 1 ? "abc1234\n" : "def5678\n",
+            stderr: "",
+            exitCode: 0,
+          };
+        }
+        if (call.command === "git") {
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
+        if (call.promptPath === ".ai/prompts/execute-plan.md") {
+          await writePlan(
+            workspace.root,
+            "task-savepoint-long-name",
+            planContent("review", "review-plan"),
+          );
+          return { launched: true, stdout: "ok", stderr: "", exitCode: 0 };
+        }
+        if (call.promptPath === ".ai/prompts/review-changes.md") {
+          reviewRuns += 1;
+          writeWorkflowEventArtifactSync({
+            root: workspace.root,
+            planName: "task-savepoint-long-name",
+            kind: "review-spec",
+            version: reviewRuns,
+          });
+          await writePlan(
+            workspace.root,
+            "task-savepoint-long-name",
+            planContent(
+              "review",
+              "review-plan",
+              legacyReviewHistorySection({
+                summary: "SPEC PASS",
+                evidence: `.ai/artifacts/task-savepoint-long-name/events/review-spec-v${reviewRuns}.md`,
+                decision: "review",
+                version: reviewRuns,
+              }),
+            ),
+          );
+          return { launched: true, stdout: "ok", stderr: "", exitCode: 0 };
+        }
+        if (call.promptPath === ".ai/prompts/review-quality.md") {
+          await writePlan(
+            workspace.root,
+            "task-savepoint-long-name",
+            planContent("completed", "commit-summary"),
+          );
+          return { launched: true, stdout: "ok", stderr: "", exitCode: 0 };
+        }
+        if (call.promptPath === ".ai/prompts/commit-summary.md") {
+          const prompt = call.args.at(-1) ?? "";
+          if (prompt.includes("Task savepoint aggregate summary")) {
+            return { launched: true, stdout: "aggregate summary", stderr: "", exitCode: 0 };
+          }
+          taskCommitRuns += 1;
+          return {
+            launched: true,
+            stdout: commitSummaryOutput({
+              planPath: ".ai/plans/task-savepoint-long-name.md",
+              subject: "test(workflow): keep task artifacts writable",
+              summaryLines: [
+                "Committed the long-name task without overflowing the task artifact filename.",
+              ],
+            }),
+            stderr: "",
+            exitCode: 0,
+          };
+        }
+        return { launched: true, stdout: "ok", stderr: "", exitCode: 0 };
+      },
+    });
+
+    assert.equal(result.success, true);
+
+    const taskFiles = await readdir(
+      join(workspace.root, ".ai", "artifacts", "task-savepoint-long-name", "tasks"),
+    );
+    assert.deepEqual(taskFiles.length, 2);
+    assert.match(taskFiles[0] ?? "", /^01-backend-prompt-search-guidance-/);
+    assert.match(taskFiles[0] ?? "", /-[a-f0-9]{8}-v1\.md$/);
+    assert.ok((taskFiles[0] ?? "").length <= 255);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
 test("execute-plan blocked output is concise and includes the latest unresolved blocker detail", async () => {
   const workspace = await setupWorkspace();
   try {

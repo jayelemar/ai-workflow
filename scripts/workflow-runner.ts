@@ -105,6 +105,9 @@ const VALID_NEXT_ACTIONS = [
   "commit-summary",
 ] as const;
 const MAX_ITERATIONS = 100;
+const TASK_ARTIFACT_FILENAME_MAX_CHARS = 240;
+const TASK_ARTIFACT_VERSION_DIGITS_BUDGET = 4;
+const TASK_ARTIFACT_HASH_CHARS = 8;
 const CODEX_BINARY_COMMAND = "codex";
 const CODEX_WORK_NODE_VERSION = "v20.20.2";
 const PROTECTED_WORKFLOW_BRANCHES = new Set([
@@ -3457,6 +3460,33 @@ const slugifyTaskWords = (value: string): string =>
     .replace(/^-+|-+$/g, "")
     .replace(/-{2,}/g, "-");
 
+const taskArtifactWords = (
+  taskId: string,
+  taskName: string,
+  fallbackWords: string,
+): string => {
+  const slug = slugifyTaskWords(taskName) || fallbackWords;
+  const reservedLength =
+    `${taskId}--v${"9".repeat(TASK_ARTIFACT_VERSION_DIGITS_BUDGET)}.md`.length;
+  const maxArtifactWordsLength = Math.max(
+    1,
+    TASK_ARTIFACT_FILENAME_MAX_CHARS - reservedLength,
+  );
+  if (slug.length <= maxArtifactWordsLength) {
+    return slug;
+  }
+  const hash = createHash("sha256")
+    .update(taskName)
+    .digest("hex")
+    .slice(0, TASK_ARTIFACT_HASH_CHARS);
+  const readableBudget = Math.max(
+    0,
+    maxArtifactWordsLength - hash.length - 1,
+  );
+  const readablePrefix = slug.slice(0, readableBudget).replace(/-+$/g, "");
+  return readablePrefix.length > 0 ? `${readablePrefix}-${hash}` : hash;
+};
+
 export const parsePlanTasks = (content: string): PlanTask[] => {
   const tasks: PlanTask[] = [];
   const seen = new Set<string>();
@@ -3479,7 +3509,7 @@ export const parsePlanTasks = (content: string): PlanTask[] => {
       id,
       words,
       name,
-      artifactWords: slugifyTaskWords(name) || words,
+      artifactWords: taskArtifactWords(id, name, words),
     });
   }
 
