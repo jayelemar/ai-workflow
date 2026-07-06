@@ -105,6 +105,9 @@ const VALID_NEXT_ACTIONS = [
   "commit-summary",
 ] as const;
 const MAX_ITERATIONS = 100;
+const TASK_ARTIFACT_FILENAME_MAX_CHARS = 240;
+const TASK_ARTIFACT_VERSION_DIGITS_BUDGET = 4;
+const TASK_ARTIFACT_HASH_CHARS = 8;
 const CODEX_BINARY_COMMAND = "codex";
 const CODEX_WORK_NODE_VERSION = "v20.20.2";
 const PROTECTED_WORKFLOW_BRANCHES = new Set([
@@ -2008,7 +2011,9 @@ const highlightTsxCodePreviewLine = (
     if (!plainText) {
       return;
     }
-    segments.push({ text: highlightPlainTsxCodePreviewText(plainText, isJsxLine) });
+    segments.push({
+      text: highlightPlainTsxCodePreviewText(plainText, isJsxLine),
+    });
     plainText = "";
   };
 
@@ -2133,7 +2138,9 @@ const formatWorkflowApprovalPreviewSummary = (
     return null;
   }
 
-  const sectionLines = (heading: (typeof approvalPreviewSectionHeadings)[number]) => {
+  const sectionLines = (
+    heading: (typeof approvalPreviewSectionHeadings)[number],
+  ) => {
     if (heading === "Next") {
       return nextSectionLines(sections.get("Next") ?? []);
     }
@@ -2227,8 +2234,7 @@ const formatWorkflowAgentSummary = (text: string, color = false): string => {
 const formatWorkflowApprovalPreviewOnly = (
   text: string,
   color = false,
-): string | null =>
-  formatWorkflowApprovalPreviewSummary(text.trimEnd(), color);
+): string | null => formatWorkflowApprovalPreviewSummary(text.trimEnd(), color);
 
 const formatSubagentApprovalPreviewMessages = (
   item: Record<string, unknown>,
@@ -2422,7 +2428,10 @@ const applyPatchVerificationFailureSummary = (
 
 const formatCodexStderrForTerminal = (text: string, color = false): string =>
   applyPatchVerificationFailureSummary(text, color) ??
-  text.replace(/(^|\n)(Reading additional input from stdin\.\.\.)(\r?\n|$)/g, '$1$2\n\n');
+  text.replace(
+    /(^|\n)(Reading additional input from stdin\.\.\.)(\r?\n|$)/g,
+    "$1$2\n\n",
+  );
 
 const stageStylesByPromptPath: Record<
   string,
@@ -3457,23 +3466,28 @@ const slugifyTaskWords = (value: string): string =>
     .replace(/^-+|-+$/g, "")
     .replace(/-{2,}/g, "-");
 
-const MAX_TASK_ARTIFACT_FILENAME_BYTES = 255;
-const TASK_ARTIFACT_VERSION_SUFFIX_RESERVED_BYTES = "-v999999.md".length;
-
-const taskArtifactWordsForFilename = (
+const taskArtifactWords = (
   taskId: string,
-  artifactWords: string,
+  taskName: string,
+  fallbackWords: string,
 ): string => {
-  const separatorBytes = 1;
-  const availableBytes =
-    MAX_TASK_ARTIFACT_FILENAME_BYTES -
-    Buffer.byteLength(taskId, "utf8") -
-    separatorBytes -
-    TASK_ARTIFACT_VERSION_SUFFIX_RESERVED_BYTES;
-  if (Buffer.byteLength(artifactWords, "utf8") <= availableBytes) {
-    return artifactWords;
+  const slug = slugifyTaskWords(taskName) || fallbackWords;
+  const reservedLength =
+    `${taskId}--v${"9".repeat(TASK_ARTIFACT_VERSION_DIGITS_BUDGET)}.md`.length;
+  const maxArtifactWordsLength = Math.max(
+    1,
+    TASK_ARTIFACT_FILENAME_MAX_CHARS - reservedLength,
+  );
+  if (slug.length <= maxArtifactWordsLength) {
+    return slug;
   }
-  return artifactWords.slice(0, Math.max(1, availableBytes)).replace(/-+$/g, "");
+  const hash = createHash("sha256")
+    .update(taskName)
+    .digest("hex")
+    .slice(0, TASK_ARTIFACT_HASH_CHARS);
+  const readableBudget = Math.max(0, maxArtifactWordsLength - hash.length - 1);
+  const readablePrefix = slug.slice(0, readableBudget).replace(/-+$/g, "");
+  return readablePrefix.length > 0 ? `${readablePrefix}-${hash}` : hash;
 };
 
 export const parsePlanTasks = (content: string): PlanTask[] => {
@@ -3494,12 +3508,11 @@ export const parsePlanTasks = (content: string): PlanTask[] => {
     seen.add(id);
     const name = match[2].trim();
     const words = id.replace(/^[0-9]{2}-/, "");
-    const artifactWords = slugifyTaskWords(name) || words;
     tasks.push({
       id,
       words,
       name,
-      artifactWords: taskArtifactWordsForFilename(id, artifactWords),
+      artifactWords: taskArtifactWords(id, name, words),
     });
   }
 
@@ -5134,10 +5147,7 @@ const extractCommitSummarySubject = (
   return fallback;
 };
 
-const extractSummaryLines = (
-  text: string,
-  fallback: string,
-): string[] => {
+const extractSummaryLines = (text: string, fallback: string): string[] => {
   const sharedSummary = formatWorkflowSharedSummary(text.trim());
   if (sharedSummary) {
     const sections = parseWorkflowSections(
@@ -5269,7 +5279,9 @@ const readCompletedTaskSavepoints = async ({
   rootDir: string;
   planName: string;
   tasks: PlanTask[];
-}): Promise<{ ok: true; completedTasks: CompletedTaskSavepoint[] } | Failure> => {
+}): Promise<
+  { ok: true; completedTasks: CompletedTaskSavepoint[] } | Failure
+> => {
   const completedTasks: CompletedTaskSavepoint[] = [];
   for (const task of tasks) {
     const artifactPath = await latestTaskArtifactRelativePath(
@@ -5297,7 +5309,11 @@ const readCompletedTaskSavepoints = async ({
       commitSha: commitSha || "(unknown)",
       commitMessage:
         markdownSectionText(content, "## Commit Message") || task.name,
-      summaryLines: markdownSectionBulletLines(content, "## Summary", task.name),
+      summaryLines: markdownSectionBulletLines(
+        content,
+        "## Summary",
+        task.name,
+      ),
       reviewResult:
         markdownSectionText(content, "## Review Result") || "pending",
       validationSummary:
@@ -5322,9 +5338,15 @@ const writeExecutionSummary = async ({
   completedTasks: CompletedTaskSavepoint[];
   finalStatus: "in-progress" | "completed";
 }): Promise<{ ok: true } | Failure> => {
-  const artifactPath = path.join(rootDir, executionSummaryRelativePath(planName));
+  const artifactPath = path.join(
+    rootDir,
+    executionSummaryRelativePath(planName),
+  );
   const completedByTaskId = new Map(
-    completedTasks.map((completedTask) => [completedTask.task.id, completedTask]),
+    completedTasks.map((completedTask) => [
+      completedTask.task.id,
+      completedTask,
+    ]),
   );
   const body = [
     "# Execution Summary",
@@ -5340,7 +5362,9 @@ const writeExecutionSummary = async ({
     "",
     ...tasks.flatMap((task) => {
       const completedTask = completedByTaskId.get(task.id);
-      const summaryLines = completedTask?.summaryLines ?? ["Pending savepoint."];
+      const summaryLines = completedTask?.summaryLines ?? [
+        "Pending savepoint.",
+      ];
       return [
         `### ${task.id}`,
         `- Commit: ${completedTask ? `\`${completedTask.commitSha}\`` : "pending"}`,
@@ -5630,9 +5654,7 @@ const readLatestNonPlanScopedReviewStopEvidence = async (
       continue;
     }
     return boundedInlineExcerpt(
-      entry.lastAgentMessageExcerpt ??
-        entry.stopExcerpt ??
-        entry.failureReason,
+      entry.lastAgentMessageExcerpt ?? entry.stopExcerpt ?? entry.failureReason,
     );
   }
   return undefined;
@@ -7359,10 +7381,15 @@ const readOtherFileOwnershipArtifacts = async (
       return parsed;
     }
     if (parsed.planPath !== currentPlanPath) {
-      const workflowPath = path.join(artifactsRoot, entry, 'state', 'workflow.json');
+      const workflowPath = path.join(
+        artifactsRoot,
+        entry,
+        "state",
+        "workflow.json",
+      );
       let artifact = parsed;
       try {
-        const workflowRaw = await readFile(workflowPath, 'utf8');
+        const workflowRaw = await readFile(workflowPath, "utf8");
         const workflow = parseThinPlanV2WorkflowState(
           JSON.parse(workflowRaw) as unknown,
           parsed.planPath,
@@ -7378,7 +7405,7 @@ const readOtherFileOwnershipArtifacts = async (
         };
       } catch (error) {
         const code = (error as NodeJS.ErrnoException).code;
-        if (code !== 'ENOENT') {
+        if (code !== "ENOENT") {
           return {
             ok: false,
             reason: `file ownership workflow artifact cannot be read: ${workflowPath}: ${String(error)}`,
@@ -7955,7 +7982,10 @@ const logFields = ({
     ["endingHeadSha", endingHeadSha],
     ...(commitProgress
       ? ([
-          ["commitProgress", `${commitProgress.completed}/${commitProgress.total}`],
+          [
+            "commitProgress",
+            `${commitProgress.completed}/${commitProgress.total}`,
+          ],
           ["commitProgressDescription", commitProgress.description],
         ] as Array<[string, string | number | undefined]>)
       : []),
@@ -8501,7 +8531,8 @@ export const runWorkflowRunner = async (
               rootDir,
               plan: parsedPlan,
               processRunner,
-              checkCompletedDirtyConflicts: route.promptPath === rel('.ai', 'prompts', 'execute-plan.md'),
+              checkCompletedDirtyConflicts:
+                route.promptPath === rel(".ai", "prompts", "execute-plan.md"),
               isIgnored: options.isIgnored,
             })
           : await refreshAndCheckFileOwnershipArtifact({
@@ -9232,8 +9263,10 @@ export const runWorkflowRunner = async (
           validationSummary:
             "See plan validation history and commit-summary stage output.",
           reviewResult: "Review accepted task for commit-summary.",
-          commitMessage:
-            extractCommitSummarySubject(result.stdout, selectedTask.name),
+          commitMessage: extractCommitSummarySubject(
+            result.stdout,
+            selectedTask.name,
+          ),
           nextTask,
         });
         if (!artifact.ok) {
