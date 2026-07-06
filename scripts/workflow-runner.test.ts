@@ -569,6 +569,31 @@ const codexSubagentStateLine = (message: string) =>
     },
   });
 
+const commitSummaryOutput = ({
+  planPath,
+  subject,
+  summaryLines,
+}: {
+  planPath: string;
+  subject: string;
+  summaryLines: string[];
+}) =>
+  [
+    "**Plan**",
+    `\`${planPath}\``,
+    "",
+    "**Summary**",
+    "* COMMIT CREATED",
+    "* All staged plan-owned files were committed.",
+    "",
+    "**Key Details**",
+    subject,
+    ...summaryLines.map((line) => `-- ${line}`),
+    "",
+    "**Next**",
+    "Status: `completed`",
+  ].join("\n");
+
 const codexCommandOutputLine = (text: string, command = "pnpm test") =>
   JSON.stringify({
     type: "item.completed",
@@ -1257,8 +1282,12 @@ test("commit-summary prompt creates one local completed commit and forbids auto-
 
   assert.match(prompt, /completed \+ commit-summary[\s\S]*create exactly one local git commit/);
   assert.match(prompt, /pnpm lint-staged/);
-  assert.match(prompt, /git commit -m "<generated message>"/);
-  assert.doesNotMatch(prompt, /git commit -m "<generated message>" -- <plan-owned paths>/);
+  assert.match(prompt, /git commit --cleanup=verbatim -F - <<'EOF'/);
+  assert.match(prompt, /<generated subject>/);
+  assert.match(prompt, /<generated body>/);
+  assert.match(prompt, /execution-summary\.md/);
+  assert.match(prompt, /sole writer[\s\S]*execution-summary\.md/i);
+  assert.doesNotMatch(prompt, /git commit -m "<generated message>"/);
   assert.match(prompt, /MUST NOT push/);
 });
 
@@ -3662,10 +3691,12 @@ test("commit-summary workflow prompt includes plan-scoped staging commands for p
     /git diff --staged --name-status -- apps\/web\/src\/simple\.ts 'docs\/plan notes\.md'/,
   );
   assert.match(prompt, /git diff --staged --name-status\n/);
-  assert.match(prompt, /git commit -m "<generated message>"/);
+  assert.match(prompt, /git commit --cleanup=verbatim -F - <<'EOF'/);
+  assert.match(prompt, /<generated subject>/);
+  assert.match(prompt, /<generated body>/);
   assert.doesNotMatch(
     prompt,
-    /git commit -m "<generated message>" -- apps\/web\/src\/simple\.ts 'docs\/plan notes\.md'/,
+    /git commit --cleanup=verbatim -F - <<'EOF' -- apps\/web\/src\/simple\.ts 'docs\/plan notes\.md'/,
   );
   assert.match(prompt, /non plan-scoped staged changes detected/);
   assert.match(prompt, /Do not stage \.ai files/);
@@ -3695,6 +3726,28 @@ test("workflow prompt includes task savepoint current task and aggregate-only co
   assert.match(taskPrompt, /Task Stage: implementing/);
   assert.match(taskPrompt, /Do not start another `\[task:\.\.\.\]` item/);
 
+  const commitPrompt = generateWorkflowPrompt({
+    promptPath: ".ai/prompts/commit-summary.md",
+    planPath: ".ai/plans/workflow-runner.md",
+    promptContent: "COMMIT SUMMARY PROMPT",
+    commitSummaryPaths: ["src/file.ts"],
+    taskContext: {
+      task: {
+        id: "01-backend-endpoints",
+        words: "backend-endpoints",
+        name: "Add backend endpoints",
+        artifactWords: "add-backend-endpoints",
+      },
+      stage: "committed",
+      artifactPath:
+        ".ai/artifacts/workflow-runner/tasks/01-backend-endpoints-add-backend-endpoints-v1.md",
+    },
+  });
+
+  assert.match(commitPrompt, /git commit --cleanup=verbatim -F - <<'EOF'/);
+  assert.match(commitPrompt, /execution-summary\.md/);
+  assert.doesNotMatch(commitPrompt, /Update \.ai\/artifacts\/<plan-name>\/execution-summary\.md/);
+
   const aggregatePrompt = generateWorkflowPrompt({
     promptPath: ".ai/prompts/commit-summary.md",
     planPath: ".ai/plans/workflow-runner.md",
@@ -3705,7 +3758,7 @@ test("workflow prompt includes task savepoint current task and aggregate-only co
 
   assert.match(aggregatePrompt, /Task savepoint aggregate summary:/);
   assert.match(aggregatePrompt, /Do not create a git commit/);
-  assert.doesNotMatch(aggregatePrompt, /git commit -m "<generated message>"/);
+  assert.doesNotMatch(aggregatePrompt, /git commit --cleanup=verbatim -F - <<'EOF'/);
 });
 
 test("review workflow prompt shell-quotes path-scoped diff commands", () => {
@@ -5210,8 +5263,33 @@ test("task savepoint mode commits each reviewed task, writes artifacts, logs tas
           const prompt = call.args.at(-1) ?? "";
           if (prompt.includes("Task savepoint aggregate summary")) {
             aggregateRuns += 1;
+            return { launched: true, stdout: "aggregate summary", stderr: "", exitCode: 0 };
           } else {
             taskCommitRuns += 1;
+            const outputs = [
+              commitSummaryOutput({
+                planPath: ".ai/plans/task-savepoints.md",
+                subject: "feat(api): add backend endpoints",
+                summaryLines: [
+                  "Added backend endpoints for support-ticket flows.",
+                  "Aligned the first savepoint with the reviewed task scope.",
+                ],
+              }),
+              commitSummaryOutput({
+                planPath: ".ai/plans/task-savepoints.md",
+                subject: "feat(web): add support ticket surface",
+                summaryLines: [
+                  "Added the web surface for the reviewed support-ticket task.",
+                  "Finished the second savepoint without staging unrelated files.",
+                ],
+              }),
+            ];
+            return {
+              launched: true,
+              stdout: outputs[Math.max(0, taskCommitRuns - 1)] ?? outputs[0],
+              stderr: "",
+              exitCode: 0,
+            };
           }
         }
         return { launched: true, stdout: "ok", stderr: "", exitCode: 0 };
@@ -5260,7 +5338,25 @@ test("task savepoint mode commits each reviewed task, writes artifacts, logs tas
       "utf8",
     );
     assert.match(firstArtifact, /## Commit SHA\s+abc1234/);
+    assert.match(firstArtifact, /## Commit Message\s+feat\(api\): add backend endpoints/);
+    assert.match(firstArtifact, /Added backend endpoints for support-ticket flows\./);
     assert.match(firstArtifact, /## Next Task\s+02-web-surface/);
+
+    const executionSummary = await readFile(
+      join(workspace.root, ".ai", "artifacts", "task-savepoints", "execution-summary.md"),
+      "utf8",
+    );
+    assert.match(executionSummary, /# Execution Summary/);
+    assert.match(executionSummary, /Completed savepoints: 2\/2/);
+    assert.match(executionSummary, /## Savepoints/);
+    assert.match(executionSummary, /### 01-backend-endpoints/);
+    assert.match(executionSummary, /Commit: `abc1234`/);
+    assert.match(executionSummary, /Added backend endpoints for support-ticket flows\./);
+    assert.match(executionSummary, /### 02-web-surface/);
+    assert.match(executionSummary, /Commit: `def5678`/);
+    assert.match(executionSummary, /Added the web surface for the reviewed support-ticket task\./);
+    assert.match(executionSummary, /## Final Rollup/);
+    assert.match(executionSummary, /Status: completed/);
 
     const log = await readFile(
       join(workspace.root, ".ai", "artifacts", "task-savepoints", "logs", "runner.log"),
