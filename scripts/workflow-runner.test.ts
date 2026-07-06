@@ -6389,6 +6389,7 @@ test("task savepoint mode commits each reviewed task, writes artifacts, logs tas
   }
 });
 
+<<<<<<< Updated upstream
 test("task savepoint artifacts use filenames within filesystem component limits for long task names", async () => {
   const workspace = await setupWorkspace();
   try {
@@ -6418,11 +6419,64 @@ test("task savepoint artifacts use filenames within filesystem component limits 
     const result = await runWorkflowRunner({
       planName: planArg("long-task-artifact"),
       rootDir: workspace.root,
+=======
+test("task savepoint mode resumes remaining tasks before commit-summary on rerun", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(
+      workspace.root,
+      "task-savepoint-resume",
+      planWithTaskSavepoints("completed", "commit-summary"),
+    );
+
+    const firstTaskArtifact = join(
+      workspace.root,
+      ".ai",
+      "artifacts",
+      "task-savepoint-resume",
+      "tasks",
+      "01-backend-endpoints-add-backend-endpoints-v1.md",
+    );
+    mkdirSync(dirname(firstTaskArtifact), { recursive: true });
+    writeFileSync(
+      firstTaskArtifact,
+      `# Task Savepoint: 01-backend-endpoints
+
+## Summary
+
+* Added backend endpoints for support-ticket flows.
+
+## Commit SHA
+
+abc1234
+
+## Commit Message
+
+feat(api): add backend endpoints
+`,
+      "utf8",
+    );
+
+    let executeRuns = 0;
+    let specReviewRuns = 0;
+    let taskCommitRuns = 0;
+    let aggregateRuns = 0;
+    const promptCalls: string[] = [];
+
+    const result = await runWorkflowRunner({
+      planName: planArg("task-savepoint-resume"),
+      rootDir: workspace.root,
+      console: collectConsole().console,
+>>>>>>> Stashed changes
       processRunner: async (call) => {
         if (call.command === "git" && call.args[0] === "rev-parse") {
           return {
             launched: true,
+<<<<<<< Updated upstream
             stdout: "abc1234\n",
+=======
+            stdout: "def5678\n",
+>>>>>>> Stashed changes
             stderr: "",
             exitCode: 0,
           };
@@ -6430,6 +6484,7 @@ test("task savepoint artifacts use filenames within filesystem component limits 
         if (call.command === "git") {
           return { launched: true, stdout: "", stderr: "", exitCode: 0 };
         }
+<<<<<<< Updated upstream
         if (call.promptPath === ".ai/prompts/execute-plan.md") {
           await writePlan(
             workspace.root,
@@ -6438,17 +6493,35 @@ test("task savepoint artifacts use filenames within filesystem component limits 
               .replace("active", "review")
               .replace("execute-plan", "review-plan"),
           );
+=======
+        promptCalls.push(call.promptPath);
+        if (call.promptPath === ".ai/prompts/execute-plan.md") {
+          executeRuns += 1;
+          const prompt = call.args.at(-1) ?? "";
+          assert.match(prompt, /Task ID: 02-web-surface/);
+          await writePlan(
+            workspace.root,
+            "task-savepoint-resume",
+            planWithTaskSavepoints("review", "review-plan"),
+          );
+          return { launched: true, stdout: "ok", stderr: "", exitCode: 0 };
+>>>>>>> Stashed changes
         }
         if (call.promptPath === ".ai/prompts/review-changes.md") {
           specReviewRuns += 1;
           writeWorkflowEventArtifactSync({
             root: workspace.root,
+<<<<<<< Updated upstream
             planName: "long-task-artifact",
+=======
+            planName: "task-savepoint-resume",
+>>>>>>> Stashed changes
             kind: "review-spec",
             version: specReviewRuns,
           });
           await writePlan(
             workspace.root,
+<<<<<<< Updated upstream
             "long-task-artifact",
             plan
               .replace("active", "review")
@@ -6462,19 +6535,42 @@ test("task savepoint artifacts use filenames within filesystem component limits 
                 }),
               ),
           );
+=======
+            "task-savepoint-resume",
+            planWithTaskSavepoints(
+              "review",
+              "review-plan",
+              legacyReviewHistorySection({
+                summary: "SPEC PASS",
+                evidence: `.ai/artifacts/task-savepoint-resume/events/review-spec-v${specReviewRuns}.md`,
+                decision: "review",
+                version: specReviewRuns,
+              }),
+            ),
+          );
+          return { launched: true, stdout: "ok", stderr: "", exitCode: 0 };
+>>>>>>> Stashed changes
         }
         if (call.promptPath === ".ai/prompts/review-quality.md") {
           await writePlan(
             workspace.root,
+<<<<<<< Updated upstream
             "long-task-artifact",
             plan
               .replace("active", "completed")
               .replace("execute-plan", "commit-summary"),
           );
+=======
+            "task-savepoint-resume",
+            planWithTaskSavepoints("completed", "commit-summary"),
+          );
+          return { launched: true, stdout: "ok", stderr: "", exitCode: 0 };
+>>>>>>> Stashed changes
         }
         if (call.promptPath === ".ai/prompts/commit-summary.md") {
           const prompt = call.args.at(-1) ?? "";
           if (prompt.includes("Task savepoint aggregate summary")) {
+<<<<<<< Updated upstream
             return {
               launched: true,
               stdout: "aggregate summary",
@@ -6494,6 +6590,20 @@ test("task savepoint artifacts use filenames within filesystem component limits 
               subject: subjects[Math.max(0, taskCommitRuns - 1)] ?? subjects[0],
               summaryLines: [
                 "Created support issues through the reviewed widget flow.",
+=======
+            aggregateRuns += 1;
+            return { launched: true, stdout: "aggregate summary", stderr: "", exitCode: 0 };
+          }
+          taskCommitRuns += 1;
+          assert.match(prompt, /Task ID: 02-web-surface/);
+          return {
+            launched: true,
+            stdout: commitSummaryOutput({
+              planPath: ".ai/plans/task-savepoint-resume.md",
+              subject: "feat(web): add support ticket surface",
+              summaryLines: [
+                "Added the web surface for the reviewed support-ticket task.",
+>>>>>>> Stashed changes
               ],
             }),
             stderr: "",
@@ -6505,6 +6615,7 @@ test("task savepoint artifacts use filenames within filesystem component limits 
     });
 
     assert.equal(result.success, true);
+<<<<<<< Updated upstream
     const taskFiles = await readdir(
       join(workspace.root, ".ai", "artifacts", "long-task-artifact", "tasks"),
     );
@@ -6515,6 +6626,257 @@ test("task savepoint artifacts use filenames within filesystem component limits 
     assert.equal(typeof longTaskFile, "string");
     assert.equal(Buffer.byteLength(longTaskFile, "utf8") <= 255, true);
     assert.match(longTaskFile, /-v1\.md$/);
+=======
+    assert.equal(executeRuns, 1);
+    assert.equal(taskCommitRuns, 1);
+    assert.equal(aggregateRuns, 1);
+    assert.equal(promptCalls[0], ".ai/prompts/execute-plan.md");
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("task savepoint mode reopens thin-plan-v2 without writing generated sections into the manifest", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writeThinPlanV2Artifacts(workspace.root, {
+      status: "completed",
+      nextAction: "commit-summary",
+      modified: ["src/artifact-state.ts"],
+      changedFiles: ["src/artifact-state.ts"],
+    });
+    await writePlan(
+      workspace.root,
+      "artifact-state",
+      thinPlanV2Manifest(
+        "completed",
+        "commit-summary",
+        `## Phases
+
+### Implementation
+
+* Objective: Complete artifact-state task savepoints.
+* Tasks:
+  1. [task:01-backend-endpoints] Add backend endpoints
+  2. [task:02-web-surface] Add web surface
+* Expected Outcome: Task savepoints complete.
+`,
+      ),
+    );
+
+    const firstTaskArtifact = join(
+      workspace.root,
+      ".ai",
+      "artifacts",
+      "artifact-state",
+      "tasks",
+      "01-backend-endpoints-add-backend-endpoints-v1.md",
+    );
+    mkdirSync(dirname(firstTaskArtifact), { recursive: true });
+    writeFileSync(
+      firstTaskArtifact,
+      `# Task Savepoint: 01-backend-endpoints
+
+## Summary
+
+* Added backend endpoints for artifact-state flows.
+
+## Commit SHA
+
+abc1234
+
+## Commit Message
+
+feat(api): add backend endpoints
+`,
+      "utf8",
+    );
+
+    let executeRuns = 0;
+    const result = await runWorkflowRunner({
+      planName: planArg("artifact-state"),
+      rootDir: workspace.root,
+      console: collectConsole().console,
+      processRunner: async (call) => {
+        if (call.command === "git") {
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
+        if (call.promptPath === ".ai/prompts/execute-plan.md") {
+          executeRuns += 1;
+          return {
+            launched: true,
+            stdout: "intentional stop after reopen",
+            stderr: "",
+            exitCode: 1,
+          };
+        }
+        return { launched: true, stdout: "ok", stderr: "", exitCode: 0 };
+      },
+    });
+
+    const manifest = await readFile(
+      join(workspace.root, ".ai", "plans", "artifact-state.md"),
+      "utf8",
+    );
+    const workflow = JSON.parse(
+      await readFile(
+        join(
+          workspace.root,
+          ".ai",
+          "artifacts",
+          "artifact-state",
+          "state",
+          "workflow.json",
+        ),
+        "utf8",
+      ),
+    );
+
+    assert.equal(result.success, false);
+    assert.equal(executeRuns, 1);
+    assert.doesNotMatch(manifest, /^## Implementation Map$/m);
+    assert.doesNotMatch(manifest, /^## Files \(MANDATORY\)$/m);
+    assert.match(manifest, /## Status\n\nactive/);
+    assert.match(manifest, /## Next Action\n\nexecute-plan/);
+    assert.equal(workflow.status, "active");
+    assert.equal(workflow.nextAction, "execute-plan");
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("task savepoint mode recovers missing task artifact from existing task commit", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(
+      workspace.root,
+      "task-savepoint-missing-artifact",
+      planWithTaskSavepoints("completed", "commit-summary"),
+    );
+
+    let executeRuns = 0;
+    let taskCommitRuns = 0;
+    let aggregateRuns = 0;
+    const promptCalls: string[] = [];
+
+    const result = await runWorkflowRunner({
+      planName: planArg("task-savepoint-missing-artifact"),
+      rootDir: workspace.root,
+      console: collectConsole().console,
+      processRunner: async (call) => {
+        if (call.command === "git" && call.args[0] === "log") {
+          return {
+            launched: true,
+            stdout: [
+              "abc1234abc1234abc1234abc1234abc1234",
+              "feat(api): add backend endpoints",
+              "",
+              "Plan",
+              "task-savepoint-missing-artifact",
+              "",
+              "Task ID",
+              "01-backend-endpoints",
+            ].join("\n"),
+            stderr: "",
+            exitCode: 0,
+          };
+        }
+        if (call.command === "git" && call.args[0] === "rev-parse") {
+          return {
+            launched: true,
+            stdout: "def5678\n",
+            stderr: "",
+            exitCode: 0,
+          };
+        }
+        if (call.command === "git") {
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
+        promptCalls.push(call.promptPath);
+        if (call.promptPath === ".ai/prompts/execute-plan.md") {
+          executeRuns += 1;
+          const prompt = call.args.at(-1) ?? "";
+          assert.match(prompt, /Task ID: 02-web-surface/);
+          await writePlan(
+            workspace.root,
+            "task-savepoint-missing-artifact",
+            planWithTaskSavepoints("review", "review-plan"),
+          );
+          return { launched: true, stdout: "ok", stderr: "", exitCode: 0 };
+        }
+        if (call.promptPath === ".ai/prompts/review-changes.md") {
+          writeWorkflowEventArtifactSync({
+            root: workspace.root,
+            planName: "task-savepoint-missing-artifact",
+            kind: "review-spec",
+            version: 1,
+          });
+          await writePlan(
+            workspace.root,
+            "task-savepoint-missing-artifact",
+            planWithTaskSavepoints(
+              "review",
+              "review-plan",
+              legacyReviewHistorySection({
+                summary: "SPEC PASS",
+                evidence:
+                  ".ai/artifacts/task-savepoint-missing-artifact/events/review-spec-v1.md",
+                decision: "review",
+              }),
+            ),
+          );
+          return { launched: true, stdout: "ok", stderr: "", exitCode: 0 };
+        }
+        if (call.promptPath === ".ai/prompts/review-quality.md") {
+          await writePlan(
+            workspace.root,
+            "task-savepoint-missing-artifact",
+            planWithTaskSavepoints("completed", "commit-summary"),
+          );
+          return { launched: true, stdout: "ok", stderr: "", exitCode: 0 };
+        }
+        if (call.promptPath === ".ai/prompts/commit-summary.md") {
+          const prompt = call.args.at(-1) ?? "";
+          if (prompt.includes("Task savepoint aggregate summary")) {
+            aggregateRuns += 1;
+            return { launched: true, stdout: "aggregate summary", stderr: "", exitCode: 0 };
+          }
+          taskCommitRuns += 1;
+          assert.match(prompt, /Task ID: 02-web-surface/);
+          return {
+            launched: true,
+            stdout: commitSummaryOutput({
+              planPath: ".ai/plans/task-savepoint-missing-artifact.md",
+              subject: "feat(web): add support ticket surface",
+              summaryLines: [
+                "Added the web surface for the reviewed support-ticket task.",
+              ],
+            }),
+            stderr: "",
+            exitCode: 0,
+          };
+        }
+        return { launched: true, stdout: "ok", stderr: "", exitCode: 0 };
+      },
+    });
+
+    assert.equal(result.success, true);
+    assert.equal(executeRuns, 1);
+    assert.equal(taskCommitRuns, 1);
+    assert.equal(aggregateRuns, 1);
+    assert.equal(promptCalls[0], ".ai/prompts/execute-plan.md");
+
+    const taskFiles = await readdir(
+      join(
+        workspace.root,
+        ".ai",
+        "artifacts",
+        "task-savepoint-missing-artifact",
+        "tasks",
+      ),
+    );
+    assert.match(taskFiles.join("\n"), /01-backend-endpoints-/);
+>>>>>>> Stashed changes
   } finally {
     await workspace.cleanup();
   }

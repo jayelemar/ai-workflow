@@ -5255,6 +5255,75 @@ ${nextTask ? nextTask.id : "(none)"}
   }
 };
 
+const readHeadTaskCommit = async ({
+  rootDir,
+  planName,
+  planPath,
+  task,
+  processRunner,
+}: {
+  rootDir: string;
+  planName: string;
+  planPath: string;
+  task: PlanTask;
+  processRunner: ProcessRunner;
+}): Promise<
+  { ok: true; commit?: { sha: string; message: string } } | Failure
+> => {
+  const result = await processRunner({
+    command: "git",
+    args: ["log", "-1", "--format=%H%n%B"],
+    cwd: rootDir,
+    input: "",
+    promptPath: "git-head-task-commit",
+  }).catch(
+    (error): ProcessResult => ({
+      launched: false,
+      stdout: "",
+      stderr: "",
+      error: String(error),
+    }),
+  );
+
+  if (!result.launched || result.exitCode !== 0) {
+    return { ok: true };
+  }
+
+  const lines = result.stdout.split(/\r?\n/);
+  const sha = lines.shift()?.trim();
+  const message = lines.join("\n").trim();
+  if (
+    !sha ||
+    !message.includes(task.id) ||
+    (!message.includes(planName) && !message.includes(planPath))
+  ) {
+    return { ok: true };
+  }
+
+  return {
+    ok: true,
+    commit: {
+      sha,
+      message,
+    },
+  };
+};
+
+const nextTaskAfter = async (
+  rootDir: string,
+  planName: string,
+  tasks: PlanTask[],
+  currentTask: PlanTask,
+): Promise<PlanTask | undefined> => {
+  const currentIndex = tasks.findIndex((task) => task.id === currentTask.id);
+  for (const task of tasks.slice(currentIndex + 1)) {
+    if (!(await taskCompleted(rootDir, planName, task))) {
+      return task;
+    }
+  }
+  return undefined;
+};
+
 const markdownSectionText = (content: string, heading: string): string =>
   trimBlankLines(planSectionLines(content, heading)).join("\n").trim();
 
@@ -5560,13 +5629,67 @@ const replaceSectionValueInPlan = (
 const reopenPlanForNextTask = async (
   plan: ParsedPlan,
 ): Promise<{ ok: true } | Failure> => {
+  const baseContent =
+    plan.thinPlanContract === "thin-plan-v2"
+      ? plan.manifestContent
+      : plan.content;
   const nextContent = replaceSectionValueInPlan(
-    replaceSectionValueInPlan(plan.content, "## Status", "active"),
+    replaceSectionValueInPlan(baseContent, "## Status", "active"),
     "## Next Action",
     "execute-plan",
   );
+  let workflowStateUpdate:
+    | { absolutePath: string; content: string }
+    | undefined;
+  if (plan.thinPlanContract === "thin-plan-v2") {
+    const rootDir = path.dirname(path.dirname(path.dirname(plan.absolutePlanPath)));
+    const workflowPath = thinPlanV2ArtifactPath(
+      plan.planName,
+      "state",
+      "workflow.json",
+    );
+    const workflowJson = await readJsonArtifact(rootDir, workflowPath);
+    if (isFailure(workflowJson)) {
+      return workflowJson;
+    }
+    const workflow = parseThinPlanV2WorkflowState(
+      workflowJson,
+      plan.planPath,
+      workflowPath,
+    );
+    if (isFailure(workflow)) {
+      return workflow;
+    }
+    const workflowRecord = asRecord(workflowJson);
+    if (!workflowRecord) {
+      return {
+        ok: false,
+        reason: `thin-plan-v2 workflow state is malformed: ${workflowPath}`,
+      };
+    }
+    workflowStateUpdate = {
+      absolutePath: path.join(rootDir, workflowPath),
+      content: `${JSON.stringify(
+        {
+          ...workflowRecord,
+          status: "active",
+          nextAction: "execute-plan",
+          updatedAt: new Date().toISOString(),
+        },
+        null,
+        2,
+      )}\n`,
+    };
+  }
   try {
     await writeFile(plan.absolutePlanPath, nextContent, "utf8");
+    if (workflowStateUpdate) {
+      await writeFile(
+        workflowStateUpdate.absolutePath,
+        workflowStateUpdate.content,
+        "utf8",
+      );
+    }
     return { ok: true };
   } catch (error) {
     return {
@@ -8338,6 +8461,93 @@ export const runWorkflowRunner = async (
           description: selectedTask?.name ?? "task commits complete",
         }
       : undefined;
+    if (
+      taskSavepointMode &&
+      route.promptPath === rel(".ai", "prompts", "commit-summary.md") &&
+      selectedTask &&
+      completedTaskCommits === 0 &&
+      !currentTaskContext
+    ) {
+      const recoveredCommit = await readHeadTaskCommit({
+        rootDir,
+        planName: parsedPlan.planName,
+        planPath: parsedPlan.planPath,
+        task: selectedTask,
+        processRunner,
+      });
+      if (!recoveredCommit.ok) {
+        return await finishFailure(recoveredCommit.reason);
+      }
+      if (recoveredCommit.commit) {
+        const parsedPaths = await parseCommitSummaryPaths(
+          rootDir,
+          parsedPlan.content,
+          options.isIgnored,
+        );
+        if (!parsedPaths.ok) {
+          return await finishFailure(
+            `commit summary file scope invalid: ${parsedPaths.reason}`,
+          );
+        }
+        const artifactPath = await nextTaskArtifactRelativePath(
+          rootDir,
+          parsedPlan.planName,
+          selectedTask,
+        );
+        const artifact = await writeTaskArtifact({
+          rootDir,
+          planName: parsedPlan.planName,
+          planPath: parsedPlan.planPath,
+          context: {
+            task: selectedTask,
+            stage: "committed",
+            artifactPath,
+            commitSha: recoveredCommit.commit.sha.slice(0, 9),
+          },
+          changedFiles: parsedPaths.paths,
+          summaryLines: [
+            "Recovered the task savepoint artifact from the existing local commit.",
+          ],
+          validationSummary: "Recovered from existing task commit metadata.",
+          reviewResult: "Recovered after commit-summary artifact interruption.",
+          commitMessage: extractCommitSummarySubject(
+            recoveredCommit.commit.message,
+            selectedTask.name,
+          ),
+          nextTask: await nextTaskAfter(
+            rootDir,
+            parsedPlan.planName,
+            planTasks,
+            selectedTask,
+          ),
+        });
+        if (!artifact.ok) {
+          return await finishFailure(artifact.reason);
+        }
+        continue;
+      }
+    }
+    if (
+      taskSavepointMode &&
+      route.promptPath === rel(".ai", "prompts", "commit-summary.md") &&
+      selectedTask &&
+      completedTaskCommits > 0 &&
+      !currentTaskContext
+    ) {
+      const reopened = await reopenPlanForNextTask(parsedPlan);
+      if (!reopened.ok) {
+        return await finishFailure(reopened.reason);
+      }
+      const nextParsed = await parsePlan({
+        planName: planArgument,
+        rootDir,
+      });
+      if (!nextParsed.ok) {
+        return await finishFailure(nextParsed.reason);
+      }
+      parsedPlan = nextParsed;
+      continue;
+    }
     if (!selectedTask) {
       currentTaskContext = undefined;
     }
