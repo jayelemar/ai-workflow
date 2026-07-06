@@ -55,7 +55,7 @@ type CodexExecutionConfig = {
 };
 
 export const WORKFLOW_RUNNER_CODEX_PROFILE: CodexProfile =
-  "codex-work" as const;
+  "codex-work6598" as const;
 const CODEX_PROFILE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 
 const PLAN_VALIDATOR_PROMPT_PATH = ".ai/prompts/plan-validator.md";
