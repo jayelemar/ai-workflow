@@ -4970,25 +4970,55 @@ const existingTaskArtifactVersions = async (
   return artifacts.map((artifact) => artifact.version);
 };
 
+const taskArtifactCommitSha = (content: string): string | undefined => {
+  const lines = content.split(/\r?\n/);
+  const headingIndex = lines.findIndex(
+    (line) => line.trim() === "## Commit SHA",
+  );
+  if (headingIndex === -1) {
+    return undefined;
+  }
+
+  const valueLines: string[] = [];
+  for (const line of lines.slice(headingIndex + 1)) {
+    if (line.trim().startsWith("## ")) {
+      break;
+    }
+    const trimmed = line.trim();
+    if (trimmed.length > 0) {
+      valueLines.push(trimmed);
+    }
+  }
+
+  const sha = valueLines.join(" ").trim();
+  if (!sha || sha === "(pending)" || sha === "(unknown)") {
+    return undefined;
+  }
+  return /^[a-f0-9]{7,40}$/i.test(sha) ? sha : undefined;
+};
+
 const taskCompleted = async (
   rootDir: string,
   planName: string,
   task: PlanTask,
 ): Promise<boolean> => {
-  const taskDir = path.join(rootDir, taskArtifactsRelativeDir(planName));
-  let entries: string[];
-  try {
-    entries = await readdir(taskDir);
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code === "ENOENT") {
-      return false;
-    }
-    throw error;
-  }
-  return entries.some(
-    (entry) => entry.startsWith(`${task.id}-`) && entry.endsWith(".md"),
+  const artifactEntries = await existingTaskArtifactEntries(
+    rootDir,
+    planName,
+    task,
   );
+  for (const artifact of artifactEntries) {
+    const artifactPath = path.join(
+      rootDir,
+      taskArtifactsRelativeDir(planName),
+      artifact.entry,
+    );
+    const content = await readFile(artifactPath, "utf8");
+    if (taskArtifactCommitSha(content)) {
+      return true;
+    }
+  }
+  return false;
 };
 
 const nextIncompleteTask = async (

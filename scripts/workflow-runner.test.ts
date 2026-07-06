@@ -6728,6 +6728,80 @@ feat(api): add backend endpoints
   }
 });
 
+test("task savepoint mode does not treat artifact without commit SHA as complete", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(
+      workspace.root,
+      "task-savepoint-uncommitted-artifact",
+      planWithTaskSavepoints("review", "review-plan"),
+    );
+
+    const firstTaskArtifact = join(
+      workspace.root,
+      ".ai",
+      "artifacts",
+      "task-savepoint-uncommitted-artifact",
+      "tasks",
+      "01-backend-endpoints-v1.md",
+    );
+    mkdirSync(dirname(firstTaskArtifact), { recursive: true });
+    writeFileSync(
+      firstTaskArtifact,
+      `# Task Savepoint: 01-backend-endpoints
+
+## Summary
+
+* Backend endpoints are ready for review but not committed.
+`,
+      "utf8",
+    );
+
+    let reviewPrompt = "";
+    const result = await runWorkflowRunner({
+      planName: planArg("task-savepoint-uncommitted-artifact"),
+      rootDir: workspace.root,
+      processRunner: async (call) => {
+        if (call.command === "git") {
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
+        if (call.promptPath === ".ai/prompts/review-changes.md") {
+          reviewPrompt = call.args.at(-1) ?? "";
+          return {
+            launched: true,
+            stdout: codexAgentMessageLine(
+              "STOP: review intentionally paused for assertion",
+            ),
+            stderr: "",
+            exitCode: 0,
+          };
+        }
+        return { launched: true, stdout: "ok", stderr: "", exitCode: 0 };
+      },
+    });
+
+    assert.equal(result.success, false);
+    assert.match(reviewPrompt, /Task ID: 01-backend-endpoints/);
+    assert.doesNotMatch(reviewPrompt, /Task ID: 02-web-surface/);
+
+    const currentTask = await readFile(
+      join(
+        workspace.root,
+        ".ai",
+        "artifacts",
+        "task-savepoint-uncommitted-artifact",
+        "state",
+        "current-task.md",
+      ),
+      "utf8",
+    );
+    assert.match(currentTask, /Task ID: 01-backend-endpoints/);
+    assert.match(currentTask, /Commit SHA: \(pending\)/);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
 test("task savepoint mode reopens thin-plan-v2 without writing generated sections into the manifest", async () => {
   const workspace = await setupWorkspace();
   try {
@@ -11066,9 +11140,12 @@ test("workflow runner leaves a blank line between commit progress and streamed l
     await writePlan(
       workspace.root,
       "task-savepoint-spacing",
-      planWithTaskSavepoints("completed", "commit-summary"),
+      planWithTaskSavepoints("active", "execute-plan"),
     );
     let output = "";
+    let specReviewRuns = 0;
+    let taskCommitRuns = 0;
+    const shas = ["abc1234", "def5678"];
     const result = await runWorkflowRunner({
       planName: planArg("task-savepoint-spacing"),
       rootDir: workspace.root,
@@ -11088,28 +11165,109 @@ test("workflow runner leaves a blank line between commit progress and streamed l
           output += chunk;
         },
       },
-      processRunner: runnerReturning(
-        {
+      processRunner: async (call) => {
+        if (call.command === "git" && call.args[0] === "rev-parse") {
+          return {
+            launched: true,
+            stdout: `${shas[Math.max(0, taskCommitRuns - 1)]}\n`,
+            stderr: "",
+            exitCode: 0,
+          };
+        }
+        if (call.command === "git") {
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
+        if (call.command === CODEX_COMMAND) {
+          call.onStderr?.("Reading additional input from stdin...\n");
+          call.onStdout?.(
+            `${JSON.stringify({ type: "thread.started", thread_id: "thread_123" })}\n${JSON.stringify({ type: "turn.started" })}\n`,
+          );
+        }
+        if (call.promptPath === ".ai/prompts/execute-plan.md") {
+          await writePlan(
+            workspace.root,
+            "task-savepoint-spacing",
+            planWithTaskSavepoints("review", "review-plan"),
+          );
+          return { launched: true, stdout: "ok", stderr: "", exitCode: 0 };
+        }
+        if (call.promptPath === ".ai/prompts/review-changes.md") {
+          specReviewRuns += 1;
+          writeWorkflowEventArtifactSync({
+            root: workspace.root,
+            planName: "task-savepoint-spacing",
+            kind: "review-spec",
+            version: specReviewRuns,
+          });
+          await writePlan(
+            workspace.root,
+            "task-savepoint-spacing",
+            planWithTaskSavepoints(
+              "review",
+              "review-plan",
+              legacyReviewHistorySection({
+                summary: "SPEC PASS",
+                evidence: `.ai/artifacts/task-savepoint-spacing/events/review-spec-v${specReviewRuns}.md`,
+                decision: "review",
+                version: specReviewRuns,
+              }),
+            ),
+          );
+          return { launched: true, stdout: "ok", stderr: "", exitCode: 0 };
+        }
+        if (call.promptPath === ".ai/prompts/review-quality.md") {
+          await writePlan(
+            workspace.root,
+            "task-savepoint-spacing",
+            planWithTaskSavepoints("completed", "commit-summary"),
+          );
+          return { launched: true, stdout: "ok", stderr: "", exitCode: 0 };
+        }
+        if (call.promptPath === ".ai/prompts/commit-summary.md") {
+          const prompt = call.args.at(-1) ?? "";
+          if (prompt.includes("Task savepoint aggregate summary")) {
+            return {
+              launched: true,
+              stdout: "aggregate summary",
+              stderr: "",
+              exitCode: 0,
+            };
+          }
+          taskCommitRuns += 1;
+          const outputs = [
+            commitSummaryOutput({
+              planPath: ".ai/plans/task-savepoint-spacing.md",
+              subject: "feat(api): add backend endpoints",
+              summaryLines: [
+                "Added backend endpoints for support-ticket flows.",
+              ],
+            }),
+            commitSummaryOutput({
+              planPath: ".ai/plans/task-savepoint-spacing.md",
+              subject: "feat(web): add support ticket surface",
+              summaryLines: ["Added the web surface for support-ticket flows."],
+            }),
+          ];
+          return {
+            launched: true,
+            stdout: outputs[Math.max(0, taskCommitRuns - 1)] ?? outputs[0],
+            stderr: "",
+            exitCode: 0,
+          };
+        }
+        return {
           launched: true,
           stdout: `${JSON.stringify({ type: "thread.started", thread_id: "thread_123" })}\n${JSON.stringify({ type: "turn.started" })}\n`,
           stderr: "Reading additional input from stdin...\n",
           exitCode: 0,
-        },
-        (call) => {
-          if (call.command === CODEX_COMMAND) {
-            call.onStderr?.("Reading additional input from stdin...\n");
-            call.onStdout?.(
-              `${JSON.stringify({ type: "thread.started", thread_id: "thread_123" })}\n${JSON.stringify({ type: "turn.started" })}\n`,
-            );
-          }
-        },
-      ),
+        };
+      },
     });
 
     assert.equal(result.success, true, result.success ? "" : result.reason);
     assert.match(
       output,
-      /\[0\/2\] Add backend endpoints\n\nReading additional input from stdin\.\.\.\n\n\[codex\] thread started thread_123\n\n\[codex\] turn started\n\nSUCCESS/,
+      /\[0\/2\] Add backend endpoints\n\nReading additional input from stdin\.\.\.\n\n\[codex\] thread started thread_123\n\n\[codex\] turn started[\s\S]*SUCCESS/,
     );
   } finally {
     await workspace.cleanup();
