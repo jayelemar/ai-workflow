@@ -212,7 +212,7 @@ when a workflow companion spec belongs elsewhere, such as
 Canonical lifecycle:
 
 ```text
-spec -> user-journey artifact -> plan -> runner
+spec -> user-journey artifact -> plan -> sync artifacts -> validator/runner
 ```
 
 Normal end-to-end flow:
@@ -221,7 +221,8 @@ Normal end-to-end flow:
 2. Create a user-journey artifact for user-facing work.
 3. Create a plan.
 4. Choose a post-plan path.
-5. Let plan `Status` and `Next Action` drive every later stage.
+5. Let the runner sync plan artifacts, then let plan `Status` and
+   `Next Action` drive every later stage.
 
 ### Create A Spec
 
@@ -286,6 +287,10 @@ the draft:
 - STOP only when those checks still cannot be satisfied without inventing
   behavior beyond the spec
 
+New draft plans start at `draft + sync-plan-artifacts`. The default runner
+reconciles the plan, spec, user-journey artifact, implementation map, and
+thin-plan-v2 state before moving to validation.
+
 ### Choose A Post-Plan Path
 
 You have two options:
@@ -332,6 +337,7 @@ plan `Status` and `Next Action`.
 
 Common stages:
 
+- `draft + sync-plan-artifacts`
 - `draft + plan-validator`
 - `draft + fix-plan`
 - `approved + execute-plan`
@@ -345,6 +351,7 @@ Default stage routing:
 
 | Stage | Model | Reasoning |
 | --- | --- | --- |
+| `sync-plan-artifacts` | `gpt-5.4` | `medium` |
 | `plan-validator` | `gpt-5.4` | `high` |
 | `fix-plan` | `gpt-5.4` | `medium` |
 | `execute-plan` | `gpt-5.5` | `high` |

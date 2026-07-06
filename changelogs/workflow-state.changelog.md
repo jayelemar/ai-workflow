@@ -1,5 +1,12 @@
 # Workflow State Instruction Changelog
 
+## v1.10 — 2026-07-06
+
+* Added `sync-plan-artifacts` as the automatic `draft` next action for new
+  plans before `plan-validator`.
+* Documented the sync loop, allowed artifact-only scope, and compatibility for
+  existing `draft + plan-validator` plans.
+
 ## v1.9 — 2026-07-02
 
 * Added a thin-plan-v2 state parity rule requiring prompts to update and reread both the plan manifest and `workflow.json` after every state transition.

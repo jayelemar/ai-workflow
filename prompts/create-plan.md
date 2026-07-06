@@ -26,6 +26,16 @@ Apply the superpowers advisory guidance for analysis and edge-case checks.
 
 Generate a complete implementation plan using the provided spec.
 
+New draft plans MUST start at:
+
+- Status = draft
+- Next Action = sync-plan-artifacts
+
+This is the `draft + sync-plan-artifacts` state.
+
+The workflow runner performs `sync-plan-artifacts` after plan creation and
+before `plan-validator`.
+
 ---
 
 ## Template Usage (MANDATORY)
@@ -291,7 +301,7 @@ Write `.ai/artifacts/<plan-name>/state/workflow.json` with:
 The initial `workflow.json` MUST use:
 
 - `status`: `draft`
-- `nextAction`: `plan-validator`
+- `nextAction`: `sync-plan-artifacts`
 - `latest`: `{}`
 - `history`: `[]`
 - `unresolvedBlockers`: `[]`
