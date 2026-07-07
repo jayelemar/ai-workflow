@@ -55,6 +55,10 @@ Return only:
 ```text
 Feature Name (percentage%)
 
+Pre-Execution
+--Completed plan-specific outcome 1.
+--Completed plan-specific outcome 2.
+
 Commit <short_sha>
 --Completed item 1.
 --Completed item 2.
@@ -67,12 +71,21 @@ Rules:
 
 * Use the plan name as the feature name, rewritten in simple title case.
 * Keep exactly one header line.
+* Include a `Pre-Execution` group when completed spec, planning, artifact sync,
+  validation, fix-plan, or approval work exists before completed task commits.
 * Use `Commit <short_sha>` group labels for completed task savepoints in completion order.
 * Use the saved short commit SHA from the completed task savepoint, such as `Commit 2450d85`.
 * Use two hyphens before each completed item.
 * Include only completed work.
 * Include every meaningful completed item. There is no maximum bullet count.
+* Pre-execution bullets must name actual business or product outcomes from the
+  specific plan, spec, artifacts, or event summaries.
+* Do not use generic workflow bullets such as "created the implementation plan"
+  or "validated the plan" unless the plan itself is the deliverable.
 * Preserve existing completed commit groups when refreshing the file.
+* Preserve the existing `Pre-Execution` group when it still reflects completed
+  pre-execution work, and rewrite it only when the current plan evidence shows a
+  more specific completed outcome.
 * Add only missing completed commit groups when new task savepoints exist.
 * Do not include headings, notes, explanations, markdown fences, or extra text.
 
@@ -131,6 +144,7 @@ Use:
 * simple non-technical wording
 * short, specific bullets
 * business-facing outcomes
+* plan-specific nouns and outcomes so the summary clearly belongs to the current feature
 
 Avoid:
 
@@ -141,6 +155,7 @@ Avoid:
 * implementation details
 * workflow counters
 * internal stage names
+* generic process-only wording that could apply to any plan
 
 Mention those only when they are important to business status.
 
@@ -171,9 +186,12 @@ If `.ai/artifacts/<plan-name>/boss-summary.md` already exists:
 
 * preserve completed `Commit <short_sha>` groups that still correspond to completed task
   savepoints.
+* preserve or refresh the `Pre-Execution` group so it contains only completed,
+  plan-specific pre-execution outcomes.
 * rewrite the single header with the latest percentage.
 * append any missing completed task groups.
 * do not duplicate the header.
+* do not duplicate the `Pre-Execution` group.
 * do not duplicate an existing `Commit <short_sha>` group.
 
 If the file does not exist, create it.
@@ -190,6 +208,12 @@ Output:
 
 ```text
 Market Research Competitive Gap Upgrade (12%)
+
+Pre-Execution
+--Defined how Market Research should avoid unsupported competitor claims.
+--Set the evidence rules for competitor summaries, benchmarks, and confidence levels.
+--Planned safer dashboard display for upgraded Market Research results.
+--Reviewed and refined the plan until it was approved for execution.
 
 Commit 2450d85
 --Prepared the upgrade plan for stronger competitor research.
