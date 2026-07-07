@@ -3166,6 +3166,41 @@ test("codex live output formatter shows only output metadata for failed command 
   );
 });
 
+test("codex live output formatter summarizes failed inline tsx commands without raw script bodies", () => {
+  const inlineScript =
+    "import { DocumentContentGeneratorService } from './src/documents/document-content-generator.service'; const secret = 'raw inline script body'; console.log(secret);";
+  const command = `/bin/bash -lc "pnpm --filter @gondoor/backend exec tsx -e \\"${inlineScript}\\""`;
+  const output = "AssertionError: expected benchmark to be suppressed\n";
+
+  const formatted = formatCodexJsonlEventForTerminal(
+    JSON.stringify({
+      type: "item.completed",
+      item: {
+        id: "item_command",
+        command,
+        type: "command_execution",
+        aggregated_output: output,
+        exit_code: 1,
+        status: "failed",
+      },
+    }),
+  );
+
+  assert.equal(
+    formatted,
+    [
+      "[failed] backend inline tsx check (exit 1)",
+      "  command: pnpm --filter @gondoor/backend exec tsx -e <inline script>",
+      "",
+      "",
+    ].join("\n"),
+  );
+  assert.doesNotMatch(formatted, /DocumentContentGeneratorService/);
+  assert.doesNotMatch(formatted, /raw inline script body/);
+  assert.doesNotMatch(formatted, /AssertionError/);
+  assert.doesNotMatch(formatted, /command output omitted from workflow log/);
+});
+
 test("codex live output formatter keeps failed Jest test output metadata-only", () => {
   const output = [
     "FAIL test/onboarding/document-content-generator.service.spec.ts (10.998 s)",
@@ -10462,9 +10497,16 @@ test("CLI failure output includes the stop reason and workflow log path", async 
       true,
     );
     assert.equal(
-      lines.includes(
-        "- Workflow log: .ai/artifacts/workflow-runner/logs/runner.log",
-      ),
+      lines.includes("- Workflow log:"),
+      true,
+    );
+    assert.equal(
+      lines.includes("  .ai/artifacts/workflow-runner/logs/runner.log"),
+      true,
+    );
+    assert.equal(lines.includes("- Failure details:"), true);
+    assert.equal(
+      lines.includes("  .ai/artifacts/workflow-runner/logs/failure.jsonl#L1"),
       true,
     );
   } finally {

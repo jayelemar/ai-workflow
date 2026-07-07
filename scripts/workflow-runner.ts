@@ -459,6 +459,7 @@ type CommandTerminalSummary = {
   details?: string[];
   silent?: boolean;
   failureLabel?: string;
+  failureCommand?: string;
 };
 type FailedTestCommandSummary = {
   label: "jest test" | "vitest test";
@@ -1419,6 +1420,7 @@ const commandTerminalSummary = (command: string): CommandTerminalSummary => {
 
   const tokens = firstCommandSegment(fullTokens);
   const executable = tokens[0];
+  const inlineTsxSummary = summarizeInlineTsxCommand(tokens);
   const filteredPnpmSummary = summarizeFilteredPnpmCommand(tokens);
   const vitestSummary = summarizeVitestRunCommand(tokens);
   const jestSummary = summarizeJestRunCommand(tokens);
@@ -1426,6 +1428,9 @@ const commandTerminalSummary = (command: string): CommandTerminalSummary => {
   const gitDiffSummary = summarizeGitDiffCommand(tokens);
   const planSectionReadSummary = summarizePlanSectionReadCommand(tokens);
 
+  if (inlineTsxSummary) {
+    return inlineTsxSummary;
+  }
   if (filteredPnpmSummary) {
     return filteredPnpmSummary;
   }
@@ -1569,7 +1574,44 @@ const summarizeFailedTestCommand = (
   return null;
 };
 
-const formatFailedCommandTerminalBlock = (text: string): string => {
+const summarizeInlineTsxCommand = (
+  tokens: string[],
+): CommandTerminalSummary | null => {
+  const tsxIndex = tokens.indexOf("tsx");
+  if (tsxIndex < 0 || tokens[tsxIndex + 1] !== "-e") {
+    return null;
+  }
+  if (!tokens.includes("exec")) {
+    return null;
+  }
+
+  const filterIndex = tokens.indexOf("--filter");
+  const packageName =
+    filterIndex >= 0 ? tokens[filterIndex + 1] : undefined;
+  const scopeLabel =
+    packageName === "@gondoor/backend"
+      ? "backend"
+      : packageName === "@gondoor/web"
+        ? "web"
+        : packageName?.replace(/^@gondoor\//, "") ?? "workspace";
+  const prefixTokens = tokens.slice(0, tsxIndex + 2);
+  return {
+    group: "Ran",
+    description: `${prefixTokens.join(" ")} <inline script>`,
+    failureLabel: `${scopeLabel} inline tsx check`,
+    failureCommand: `${prefixTokens.join(" ")} <inline script>`,
+  };
+};
+
+const formatFailedCommandTerminalBlockForCommand = (
+  command: string,
+  text: string,
+): string => {
+  const summary = commandTerminalSummary(command);
+  if (summary.failureCommand) {
+    return `\n  command: ${summary.failureCommand}\n`;
+  }
+
   const stats = terminalOutputStats(text);
   if (!stats) {
     return "";
@@ -2306,7 +2348,7 @@ const formatCommandTerminalOutput = (
   if (!stats) {
     return "";
   }
-  return formatFailedCommandTerminalBlock(stats.output);
+  return formatFailedCommandTerminalBlockForCommand(command, stats.output);
 };
 
 const formatTerminalEventBlock = (body: string): string =>
@@ -8581,6 +8623,7 @@ export const runWorkflowRunner = async (
   let internalPromptPathOverride: string | undefined;
   let carriedReviewStagingPaths: string[] | undefined;
   let carriedReviewStagingProcess: ReviewStagingProcess | undefined;
+  let latestFailureDebugPath: string | undefined;
   const markWorkflowLogCreated = (planName: string) => {
     workflowLogPath = rel(".ai", "artifacts", planName, "logs", "runner.log");
   };
@@ -8608,6 +8651,12 @@ export const runWorkflowRunner = async (
   };
   const elapsedLine = () =>
     `- Worked for ${formatWorkflowElapsedTime(Math.max(0, now() - runStartedAt))}`;
+  const logSpacedFailurePath = (label: string, value: string): true => {
+    logger.error("");
+    logger.error(`- ${label}:`);
+    logger.error(`  ${value}`);
+    return true;
+  };
   const releaseHeldWorkflowFileLocks = async (): Promise<
     string | undefined
   > => {
@@ -8634,11 +8683,27 @@ export const runWorkflowRunner = async (
     if (releaseFailure) {
       logger.error(`FAILED: ${releaseFailure}`);
     }
+    let loggedSpacedFailurePath = false;
     if (workflowLogPath) {
-      logger.error(`- Workflow log: ${workflowLogPath}`);
+      loggedSpacedFailurePath = logSpacedFailurePath(
+        "Workflow log",
+        workflowLogPath,
+      );
+    }
+    if (latestFailureDebugPath) {
+      loggedSpacedFailurePath = logSpacedFailurePath(
+        "Failure details",
+        latestFailureDebugPath,
+      );
     }
     if (tokenUsageLogPath) {
-      logger.error(`- Token usage ledger: ${tokenUsageLogPath}`);
+      loggedSpacedFailurePath = logSpacedFailurePath(
+        "Token usage ledger",
+        tokenUsageLogPath,
+      );
+    }
+    if (loggedSpacedFailurePath) {
+      logger.error("");
     }
     logger.error(elapsedLine());
     return failure(finalReason, completedIterations, exitCode);
@@ -8911,6 +8976,7 @@ export const runWorkflowRunner = async (
       if (!failureDebugResult.ok) {
         return await finishFailure(failureDebugResult.reason);
       }
+      latestFailureDebugPath = failureDebugResult.pointer;
       const logResult = await appendLog(
         rootDir,
         parsedPlan.planName,
@@ -9117,6 +9183,7 @@ export const runWorkflowRunner = async (
           if (!failureDebugResult.ok) {
             return await finishFailure(failureDebugResult.reason);
           }
+          latestFailureDebugPath = failureDebugResult.pointer;
           const logResult = await appendLog(
             rootDir,
             parsedPlan.planName,
@@ -9196,6 +9263,7 @@ export const runWorkflowRunner = async (
           if (!failureDebugResult.ok) {
             return await finishFailure(failureDebugResult.reason);
           }
+          latestFailureDebugPath = failureDebugResult.pointer;
           const logResult = await appendLog(
             rootDir,
             parsedPlan.planName,
@@ -9294,6 +9362,7 @@ export const runWorkflowRunner = async (
           if (!failureDebugResult.ok) {
             return await finishFailure(failureDebugResult.reason);
           }
+          latestFailureDebugPath = failureDebugResult.pointer;
           const logResult = await appendLog(
             rootDir,
             parsedPlan.planName,
@@ -9546,6 +9615,7 @@ export const runWorkflowRunner = async (
           return failureDebugResult;
         }
         failureDebugPath = failureDebugResult.pointer;
+        latestFailureDebugPath = failureDebugPath;
       }
 
       const logResult = await appendLog(
