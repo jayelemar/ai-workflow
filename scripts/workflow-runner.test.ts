@@ -904,6 +904,14 @@ test("workflow prompts define task savepoint execution, review, commit, and aggr
   assert.match(commitPrompt, /Task artifact path/);
 });
 
+test("progress-update prompt updates the boss summary artifact", async () => {
+  const prompt = await readFile(".ai/prompts/progress-update.md", "utf8");
+
+  assert.match(prompt, /\.ai\/artifacts\/<plan-name>\/boss-summary\.md/);
+  assert.match(prompt, /update/i);
+  assert.match(prompt, /single persisted/i);
+});
+
 test("plan-validator prompt fails user-facing flow steps without implementation and validation coverage", async () => {
   const prompt = await readWorkflowPrompt("plan-validator.md");
 
@@ -6433,6 +6441,32 @@ test("task savepoint mode commits each reviewed task, writes artifacts, logs tas
     );
     assert.match(executionSummary, /## Final Rollup/);
     assert.match(executionSummary, /Status: completed/);
+
+    const bossSummary = await readFile(
+      join(
+        workspace.root,
+        ".ai",
+        "artifacts",
+        "task-savepoints",
+        "boss-summary.md",
+      ),
+      "utf8",
+    );
+    assert.match(bossSummary, /^Task Savepoints \(\d+%\)\n\nCommit 1/m);
+    assert.match(
+      bossSummary,
+      /Commit 1\n--Added backend endpoints for support-ticket flows\.\n--Aligned the first savepoint with the reviewed task scope\./,
+    );
+    assert.match(
+      bossSummary,
+      /Commit 2\n--Added the web surface for the reviewed support-ticket task\.\n--Finished the second savepoint without staging unrelated files\./,
+    );
+    assert.equal(
+      [...bossSummary.matchAll(/^Task Savepoints \(\d+%\)$/gm)].length,
+      1,
+    );
+    assert.equal([...bossSummary.matchAll(/^Commit 1$/gm)].length, 1);
+    assert.equal([...bossSummary.matchAll(/^Commit 2$/gm)].length, 1);
 
     const log = await readFile(
       join(
@@ -12310,8 +12344,9 @@ test("review scope cleanup receives prior non-plan-scoped STOP evidence", async 
     writeFileSync(
       join(failureLogDir, "failure.jsonl"),
       `${JSON.stringify({
+        timestamp: "2026-07-07T04:09:32.718Z",
         failureKind: "codex-stop",
-        failureReason: "non plan-scoped changes detected.",
+        failureReason: "STOP",
         promptPath: ".ai/prompts/review-changes.md",
         lastAgentMessageExcerpt:
           "STOP: non plan-scoped changes detected. Path-scoped staged diff includes unrelated e2e hunks: dynamic Supabase env/auth storage setup, 2FA route mock, and /login heading change.",
@@ -12398,6 +12433,153 @@ test("review scope cleanup receives prior non-plan-scoped STOP evidence", async 
     );
     assert.match(cleanupCall?.args.join("\n") ?? "", /dynamic Supabase env/);
     assert.match(cleanupCall?.args.join("\n") ?? "", /2FA route mock/);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("review scope cleanup ignores prior non-plan-scoped STOP evidence after newer execution evidence", async () => {
+  const workspace = await setupWorkspace();
+  const planName = "review-scope-cleanup-after-execution";
+  try {
+    await writePlan(
+      workspace.root,
+      planName,
+      planWithFileScope("review", "review-plan", {
+        modified: ["e2e/support-issue-widget.spec.ts"],
+      }),
+    );
+    const failureLogDir = join(
+      workspace.root,
+      ".ai",
+      "artifacts",
+      planName,
+      "logs",
+    );
+    mkdirSync(failureLogDir, { recursive: true });
+    writeFileSync(
+      join(failureLogDir, "failure.jsonl"),
+      `${JSON.stringify({
+        timestamp: "2000-01-01T00:00:00.000Z",
+        failureKind: "codex-stop",
+        failureReason: "non plan-scoped changes detected.",
+        promptPath: ".ai/prompts/review-changes.md",
+        lastAgentMessageExcerpt:
+          "STOP: non plan-scoped changes detected. Path-scoped staged diff includes unrelated e2e hunks: dynamic Supabase env/auth storage setup, 2FA route mock, and /login heading change.",
+      })}\n`,
+    );
+    writeWorkflowEventArtifactSync({
+      root: workspace.root,
+      planName,
+      kind: "execution",
+      version: 1,
+    });
+    await writeArtifactStateFile(
+      workspace.root,
+      planName,
+      "workflow.json",
+      `${JSON.stringify(
+        {
+          planPath: `.ai/plans/${planName}.md`,
+          status: "review",
+          nextAction: "review-plan",
+          latest: {
+            execution: {
+              version: 1,
+              result: "PASS",
+              summary: "Execution remediated the prior review STOP.",
+              evidence: `.ai/artifacts/${planName}/events/execution-v1.md`,
+            },
+          },
+          history: [`.ai/artifacts/${planName}/events/execution-v1.md`],
+          unresolvedBlockers: [],
+          updatedAt: "2026-07-07T00:00:00.000Z",
+        },
+        null,
+        2,
+      )}\n`,
+    );
+
+    const calls: Parameters<ProcessRunner>[0][] = [];
+    const result = await runWorkflowRunner({
+      planName: planArg(planName),
+      rootDir: workspace.root,
+      processRunner: async (call) => {
+        calls.push(call);
+        if (call.command === "git" && call.args[0] === "diff") {
+          return {
+            launched: true,
+            stdout: [
+              "diff --git a/e2e/support-issue-widget.spec.ts b/e2e/support-issue-widget.spec.ts",
+              "index 1111111..2222222 100644",
+              "--- a/e2e/support-issue-widget.spec.ts",
+              "+++ b/e2e/support-issue-widget.spec.ts",
+              "@@ -1,0 +2,1 @@",
+              '+const supportIssueWidget = "scoped";',
+            ].join("\n"),
+            stderr: "",
+            exitCode: 0,
+          };
+        }
+        if (call.command === "git") {
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
+        if (call.promptPath === ".ai/prompts/scope-cleanup.md") {
+          return {
+            launched: true,
+            stdout: codexAgentMessageLine(JSON.stringify({ action: "keep" })),
+            stderr: "",
+            exitCode: 0,
+          };
+        }
+        if (call.promptPath === ".ai/prompts/review-changes.md") {
+          writeWorkflowEventArtifactSync({
+            root: workspace.root,
+            planName,
+            kind: "review-spec",
+            version: 1,
+          });
+          await writePlan(
+            workspace.root,
+            planName,
+            planWithFileScope(
+              "review",
+              "review-plan",
+              {
+                modified: ["e2e/support-issue-widget.spec.ts"],
+              },
+              legacyReviewHistorySection({
+                summary: "SPEC PASS",
+                evidence: `.ai/artifacts/${planName}/events/review-spec-v1.md`,
+                decision: "review",
+              }),
+            ),
+          );
+        }
+        if (call.promptPath === ".ai/prompts/review-quality.md") {
+          await writePlan(
+            workspace.root,
+            planName,
+            planWithFileScope("completed", "commit-summary", {
+              modified: ["e2e/support-issue-widget.spec.ts"],
+            }),
+          );
+        }
+        return { launched: true, stdout: "summary", stderr: "", exitCode: 0 };
+      },
+    });
+
+    assert.equal(result.success, true);
+    const cleanupCall = calls.find(
+      (call) => call.promptPath === ".ai/prompts/scope-cleanup.md",
+    );
+    assert.ok(cleanupCall);
+    const cleanupPrompt = cleanupCall.args.join("\n");
+    assert.doesNotMatch(
+      cleanupPrompt,
+      /Previous non-plan-scoped review STOP evidence:/,
+    );
+    assert.doesNotMatch(cleanupPrompt, /dynamic Supabase env/);
   } finally {
     await workspace.cleanup();
   }

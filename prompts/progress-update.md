@@ -1,8 +1,11 @@
-# Daily Status Update
+# Progress Update
 
-Create a boss-friendly daily status update from a workflow plan.
+Create or refresh the boss-friendly status artifact for a workflow plan.
 
-This prompt does NOT modify files, code, workflow state, commits, or artifacts.
+This prompt updates `.ai/artifacts/<plan-name>/boss-summary.md`.
+
+It does NOT modify code, workflow state, commits, or technical workflow
+artifacts.
 
 ---
 
@@ -33,24 +36,43 @@ workflow artifacts cannot show what has been completed.
 
 ---
 
+## Artifact Output (MANDATORY)
+
+Write the status update to:
+
+`.ai/artifacts/<plan-name>/boss-summary.md`
+
+This is the single persisted boss-facing summary file for the plan.
+Do not create any other persisted boss-facing summary artifact.
+Return only the file contents after writing the file.
+
+---
+
 ## Output Format (MANDATORY)
 
 Return only:
 
 ```text
 Feature Name (percentage%)
+
+Commit 1
 --Completed item 1.
 --Completed item 2.
+
+Commit 2
 --Completed item 3.
 ```
 
 Rules:
 
 * Use the plan name as the feature name, rewritten in simple title case.
+* Keep exactly one header line.
+* Use `Commit N` group labels for completed task savepoints in completion order.
 * Use two hyphens before each completed item.
 * Include only completed work.
-* If fewer than three meaningful completed items exist, include only the true
-  completed items.
+* Include every meaningful completed item. There is no maximum bullet count.
+* Preserve existing completed commit groups when refreshing the file.
+* Add only missing completed commit groups when new task savepoints exist.
 * Do not include headings, notes, explanations, markdown fences, or extra text.
 
 ---
@@ -113,7 +135,7 @@ Avoid:
 
 * tests
 * files
-* commits
+* commit hashes
 * blockers
 * implementation details
 * workflow counters
@@ -142,6 +164,21 @@ base bullets only on completed work.
 
 ---
 
+## Existing Boss Summary Handling
+
+If `.ai/artifacts/<plan-name>/boss-summary.md` already exists:
+
+* preserve completed `Commit N` groups that still correspond to completed task
+  savepoints.
+* rewrite the single header with the latest percentage.
+* append any missing completed task groups.
+* do not duplicate the header.
+* do not duplicate an existing `Commit N` group.
+
+If the file does not exist, create it.
+
+---
+
 ## Example
 
 Input:
@@ -152,6 +189,8 @@ Output:
 
 ```text
 Market Research Competitive Gap Upgrade (12%)
+
+Commit 1
 --Prepared the upgrade plan for stronger competitor research.
 --Mapped the main areas for safer market evidence.
 --Refined the plan before feature work begins.

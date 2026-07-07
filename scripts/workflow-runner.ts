@@ -4924,6 +4924,9 @@ const taskArtifactsRelativeDir = (planName: string): string =>
 const executionSummaryRelativePath = (planName: string): string =>
   rel(".ai", "artifacts", planName, "execution-summary.md");
 
+const bossSummaryRelativePath = (planName: string): string =>
+  rel(".ai", "artifacts", planName, "boss-summary.md");
+
 const currentTaskRelativePath = (planName: string): string =>
   rel(".ai", "artifacts", planName, "state", "current-task.md");
 
@@ -5392,6 +5395,92 @@ const readCompletedTaskSavepoints = async ({
   return { ok: true, completedTasks };
 };
 
+const BOSS_SUMMARY_ACRONYMS = new Set([
+  "ai",
+  "api",
+  "db",
+  "id",
+  "rls",
+  "sse",
+  "ui",
+]);
+
+const titleCasePlanWord = (word: string): string =>
+  BOSS_SUMMARY_ACRONYMS.has(word.toLowerCase())
+    ? word.toUpperCase()
+    : `${word.charAt(0).toUpperCase()}${word.slice(1)}`;
+
+const planNameToTitle = (planName: string): string =>
+  planName.split(/[-_]+/).filter(Boolean).map(titleCasePlanWord).join(" ");
+
+const estimateBossSummaryPercent = ({
+  tasks,
+  completedTasks,
+  finalStatus,
+}: {
+  tasks: PlanTask[];
+  completedTasks: CompletedTaskSavepoint[];
+  finalStatus: "in-progress" | "completed";
+}): number => {
+  if (finalStatus === "completed" && completedTasks.length === tasks.length) {
+    return 100;
+  }
+  if (tasks.length === 0) {
+    return finalStatus === "completed" ? 100 : 25;
+  }
+  return Math.min(
+    95,
+    Math.max(25, 25 + Math.round((completedTasks.length / tasks.length) * 50)),
+  );
+};
+
+const formatBossSummaryBullet = (line: string): string =>
+  `--${line.replace(/^(?:--|[*-])\s+/, "").trim()}`;
+
+const writeBossSummary = async ({
+  rootDir,
+  planName,
+  tasks,
+  completedTasks,
+  finalStatus,
+}: {
+  rootDir: string;
+  planName: string;
+  tasks: PlanTask[];
+  completedTasks: CompletedTaskSavepoint[];
+  finalStatus: "in-progress" | "completed";
+}): Promise<{ ok: true } | Failure> => {
+  const artifactPath = path.join(rootDir, bossSummaryRelativePath(planName));
+  const percent = estimateBossSummaryPercent({
+    tasks,
+    completedTasks,
+    finalStatus,
+  });
+  const body = [
+    `${planNameToTitle(planName)} (${percent}%)`,
+    "",
+    ...completedTasks.flatMap((completedTask, index) => [
+      `Commit ${index + 1}`,
+      ...completedTask.summaryLines.map(formatBossSummaryBullet),
+      "",
+    ]),
+  ].join("\n");
+  try {
+    await mkdir(path.dirname(artifactPath), { recursive: true });
+    await writeFile(
+      artifactPath,
+      body.endsWith("\n") ? body : `${body}\n`,
+      "utf8",
+    );
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      reason: `boss summary cannot be written: ${String(error)}`,
+    };
+  }
+};
+
 const writeExecutionSummary = async ({
   rootDir,
   planName,
@@ -5745,6 +5834,58 @@ const appendFailureDebugLedger = async (
   }
 };
 
+const NON_PLAN_SCOPED_REVIEW_STOP_TEXT =
+  "non plan-scoped changes detected";
+
+const latestExecutionEvidenceMtimeMs = async (
+  rootDir: string,
+  planName: string,
+): Promise<number | undefined> => {
+  let workflowRaw: unknown;
+  try {
+    workflowRaw = JSON.parse(
+      await readFile(
+        path.join(rootDir, thinPlanV2ArtifactPath(planName, "state", "workflow.json")),
+        "utf8",
+      ),
+    ) as unknown;
+  } catch {
+    return undefined;
+  }
+
+  const workflow = asRecord(workflowRaw);
+  const latest = asRecord(workflow?.latest);
+  const execution = asRecord(latest?.execution);
+  const evidence = execution?.evidence;
+  if (typeof evidence !== "string" || path.isAbsolute(evidence)) {
+    return undefined;
+  }
+
+  try {
+    return (await stat(path.join(rootDir, evidence))).mtimeMs;
+  } catch {
+    return undefined;
+  }
+};
+
+const nonPlanScopedReviewStopEvidence = (
+  entry: Partial<WorkflowFailureDebugRecord>,
+): string | undefined => {
+  const evidenceText = [
+    entry.failureReason,
+    entry.stopExcerpt,
+    entry.lastAgentMessageExcerpt,
+  ]
+    .filter((value): value is string => typeof value === "string")
+    .join("\n");
+  if (!evidenceText.includes(NON_PLAN_SCOPED_REVIEW_STOP_TEXT)) {
+    return undefined;
+  }
+  const excerptSource =
+    entry.lastAgentMessageExcerpt ?? entry.stopExcerpt ?? entry.failureReason;
+  return excerptSource ? boundedInlineExcerpt(excerptSource) : undefined;
+};
+
 const readLatestNonPlanScopedReviewStopEvidence = async (
   rootDir: string,
   planName: string,
@@ -5763,6 +5904,10 @@ const readLatestNonPlanScopedReviewStopEvidence = async (
     return undefined;
   }
 
+  const executionMtimeMs = await latestExecutionEvidenceMtimeMs(
+    rootDir,
+    planName,
+  );
   const lines = content.split(/\r?\n/).filter(Boolean);
   for (const line of lines.reverse()) {
     let entry: Partial<WorkflowFailureDebugRecord>;
@@ -5773,14 +5918,24 @@ const readLatestNonPlanScopedReviewStopEvidence = async (
     }
     if (
       entry.promptPath !== REVIEW_CHANGES_PROMPT_PATH ||
-      entry.failureKind !== "codex-stop" ||
-      !entry.failureReason?.includes("non plan-scoped changes detected")
+      entry.failureKind !== "codex-stop"
     ) {
       continue;
     }
-    return boundedInlineExcerpt(
-      entry.lastAgentMessageExcerpt ?? entry.stopExcerpt ?? entry.failureReason,
-    );
+    const evidence = nonPlanScopedReviewStopEvidence(entry);
+    if (!evidence) {
+      continue;
+    }
+    const failureTimestampMs =
+      typeof entry.timestamp === "string" ? Date.parse(entry.timestamp) : NaN;
+    if (
+      typeof executionMtimeMs === "number" &&
+      Number.isFinite(failureTimestampMs) &&
+      executionMtimeMs > failureTimestampMs
+    ) {
+      return undefined;
+    }
+    return evidence;
   }
   return undefined;
 };
@@ -9606,6 +9761,16 @@ export const runWorkflowRunner = async (
         if (!executionSummary.ok) {
           return await finishFailure(executionSummary.reason);
         }
+        const bossSummary = await writeBossSummary({
+          rootDir,
+          planName: parsedPlan.planName,
+          tasks: planTasks,
+          completedTasks: completedTaskArtifacts.completedTasks,
+          finalStatus: "in-progress",
+        });
+        if (!bossSummary.ok) {
+          return await finishFailure(bossSummary.reason);
+        }
         const remainingTask = await nextIncompleteTask(
           rootDir,
           parsedPlan.planName,
@@ -9651,6 +9816,16 @@ export const runWorkflowRunner = async (
         });
         if (!executionSummary.ok) {
           return await finishFailure(executionSummary.reason);
+        }
+        const bossSummary = await writeBossSummary({
+          rootDir,
+          planName: parsedPlan.planName,
+          tasks: planTasks,
+          completedTasks: completedTaskArtifacts.completedTasks,
+          finalStatus: "completed",
+        });
+        if (!bossSummary.ok) {
+          return await finishFailure(bossSummary.reason);
         }
       }
       const snapshotResult = await syncWorkflowSnapshot(parsedPlan);
