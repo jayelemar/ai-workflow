@@ -54,12 +54,12 @@ type CodexExecutionConfig = {
   reasoning: ReasoningEffort;
 };
 
-// codex-work codex-work6598
 export const WORKFLOW_RUNNER_CODEX_PROFILE: CodexProfile =
   "codex-work6598" as const;
 const CODEX_PROFILE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 
 const PLAN_VALIDATOR_PROMPT_PATH = ".ai/prompts/plan-validator.md";
+const SYNC_PLAN_ARTIFACTS_PROMPT_PATH = ".ai/prompts/sync-plan-artifacts.md";
 const FIX_PLAN_PROMPT_PATH = ".ai/prompts/fix-plan.md";
 const EXECUTE_PLAN_PROMPT_PATH = ".ai/prompts/execute-plan.md";
 const UNBLOCK_PLAN_PROMPT_PATH = ".ai/prompts/unblock-plan.md";
@@ -70,6 +70,7 @@ const COMMIT_SUMMARY_PROMPT_PATH = ".ai/prompts/commit-summary.md";
 const SCOPE_CLEANUP_PROMPT_PATH = ".ai/prompts/scope-cleanup.md";
 
 const PROMPT_CODEX_EXECUTION_OVERRIDES: Record<string, CodexExecutionConfig> = {
+  [SYNC_PLAN_ARTIFACTS_PROMPT_PATH]: { model: "gpt-5.4", reasoning: "medium" },
   [PLAN_VALIDATOR_PROMPT_PATH]: { model: "gpt-5.4", reasoning: "high" },
   [FIX_PLAN_PROMPT_PATH]: { model: "gpt-5.4", reasoning: "medium" },
   [EXECUTE_PLAN_PROMPT_PATH]: { model: "gpt-5.5", reasoning: "high" },
@@ -94,6 +95,7 @@ const VALID_STATUSES = [
   "blocked",
 ] as const;
 const VALID_NEXT_ACTIONS = [
+  "sync-plan-artifacts",
   "plan-validator",
   "fix-plan",
   "execute-plan",
@@ -116,6 +118,7 @@ const SHARED_SKILL_ROOT = path.join(homedir(), ".codex-shared", "skills");
 const TERMINAL_FAILED_COMMAND_OUTPUT_LINE_LIMIT = 4;
 const TERMINAL_FAILED_COMMAND_OUTPUT_CHAR_LIMIT = 1000;
 const TERMINAL_FILE_DETAIL_LIMIT = 3;
+const TERMINAL_PROGRESS_DETAIL_LIMIT = 96;
 const STOP_REASON_EXCERPT_CHAR_LIMIT = 240;
 const ANSI_RESET = "\u001b[0m";
 const ANSI_SEQUENCE_PATTERN =
@@ -123,7 +126,6 @@ const ANSI_SEQUENCE_PATTERN =
 const WORKFLOW_RUNNER_USAGE = `Usage: pnpm exec tsx .ai/scripts/workflow-runner.ts [options] .ai/plans/<plan-name>.md
 
 Options:
-  --compact              Reduce terminal output; keep command details in logs
   --profile <name>       Use a Codex profile override
   --unblock-note <text>  Add operator context for unblock-plan
   -h, --help             Show this help message`;
@@ -244,7 +246,6 @@ type RunWorkflowOptions = {
   console?: ConsoleLike;
   outputStream?: OutputStream;
   streamOutput?: boolean;
-  compactOutput?: boolean;
   unblockNote?: string;
   isIgnored?: (relativePath: string) => Promise<boolean>;
   now?: () => number;
@@ -318,10 +319,20 @@ type CommitProgress = {
   description: string;
 };
 
+type CompletedTaskSavepoint = {
+  task: PlanTask;
+  artifactPath: string;
+  commitSha: string;
+  commitMessage: string;
+  summaryLines: string[];
+  reviewResult: string;
+  validationSummary: string;
+};
+
 type FileOwnershipArtifact = {
   planPath: string;
-  status: Status;
-  nextAction: NextAction;
+  status?: Status;
+  nextAction?: NextAction;
   owns: string[];
   released: string[];
   resolvedFiles: string[];
@@ -484,6 +495,40 @@ export const workflowFileLockPath = (
 ): string => {
   const digest = createHash("sha256").update(relativePath).digest("hex");
   return path.join(workflowFileLockDir(rootDir), `${digest}.json`);
+};
+
+const workflowFileUnlockPathHint = (planPath: string): string =>
+  `run this on the terminal:\npnpm workflow:unlock ${shellQuote(planPath)}`;
+
+const workflowFileOwnershipResetPathHint = (reason: string): string | null => {
+  const match =
+    /workflow file ownership conflict: .+ is already owned by (?<planPath>\.ai\/plans\/[^\s)]+\.md)/.exec(
+      reason,
+    );
+  const planPath = match?.groups?.planPath;
+  return planPath
+    ? `- Ownership reset command: rtk node .ai/scripts/reset-file-ownership.mjs ${shellQuote(planPath)} --force`
+    : null;
+};
+
+export const formatWorkflowOwnershipResetHint = (
+  hint: string,
+  color = false,
+): string => {
+  const prefix = "- Ownership reset command:";
+  if (!hint.startsWith(prefix)) {
+    return hint;
+  }
+
+  const command = hint.slice(prefix.length).trim();
+  const label = color
+    ? `${terminalLabelStyles.action}${prefix}${ANSI_RESET}`
+    : prefix;
+  const formattedCommand = color
+    ? `${terminalLabelStyles.action}${command}${ANSI_RESET}`
+    : command;
+
+  return `${label}\n  ${formattedCommand}`;
 };
 
 const zeroTokenUsageTotals: TokenUsageTotals = {
@@ -1809,6 +1854,341 @@ const formatWorkflowReviewSummary = (trimmedText: string): string | null => {
     .trimEnd();
 };
 
+const approvalPreviewSectionHeadings = [
+  "Plan",
+  "Summary",
+  "Key Details",
+  "Code Preview",
+  "Next",
+  "Waiting for Approval",
+] as const;
+
+const codePreviewAnsiStyles = {
+  comment: "\u001b[90m",
+  string: "\u001b[32m",
+  keyword: "\u001b[34m",
+  jsxTag: "\u001b[36m",
+  jsxAttribute: "\u001b[35m",
+  number: "\u001b[33m",
+} as const;
+
+type CodePreviewAnsiStyle = keyof typeof codePreviewAnsiStyles;
+
+type CodePreviewSegment = {
+  text: string;
+  style?: CodePreviewAnsiStyle;
+};
+
+const tsxCodePreviewKeywords = [
+  "abstract",
+  "as",
+  "async",
+  "await",
+  "boolean",
+  "break",
+  "case",
+  "catch",
+  "class",
+  "const",
+  "continue",
+  "default",
+  "do",
+  "else",
+  "enum",
+  "export",
+  "extends",
+  "false",
+  "finally",
+  "for",
+  "from",
+  "function",
+  "if",
+  "implements",
+  "import",
+  "in",
+  "interface",
+  "keyof",
+  "let",
+  "never",
+  "new",
+  "null",
+  "number",
+  "of",
+  "private",
+  "protected",
+  "public",
+  "readonly",
+  "return",
+  "satisfies",
+  "static",
+  "string",
+  "switch",
+  "throw",
+  "true",
+  "try",
+  "type",
+  "typeof",
+  "undefined",
+  "unknown",
+  "var",
+  "void",
+  "while",
+] as const;
+
+const tsxCodePreviewKeywordPattern = new RegExp(
+  `\\b(?:${tsxCodePreviewKeywords.join("|")})\\b`,
+  "g",
+);
+
+const styledCodePreviewSegment = (
+  text: string,
+  style: CodePreviewAnsiStyle,
+): CodePreviewSegment => ({ text, style });
+
+const applyCodePreviewRule = (
+  segments: CodePreviewSegment[],
+  pattern: RegExp,
+  replacement: (match: RegExpExecArray) => CodePreviewSegment[],
+): CodePreviewSegment[] =>
+  segments.flatMap((segment) => {
+    if (segment.style) {
+      return [segment];
+    }
+
+    const output: CodePreviewSegment[] = [];
+    let lastIndex = 0;
+    pattern.lastIndex = 0;
+    for (
+      let match = pattern.exec(segment.text);
+      match;
+      match = pattern.exec(segment.text)
+    ) {
+      if (match.index > lastIndex) {
+        output.push({ text: segment.text.slice(lastIndex, match.index) });
+      }
+      output.push(...replacement(match));
+      lastIndex = match.index + match[0].length;
+      if (match[0].length === 0) {
+        pattern.lastIndex += 1;
+      }
+    }
+    if (lastIndex < segment.text.length) {
+      output.push({ text: segment.text.slice(lastIndex) });
+    }
+    return output;
+  });
+
+const renderCodePreviewSegments = (segments: CodePreviewSegment[]): string =>
+  segments
+    .map((segment) =>
+      segment.style
+        ? `${codePreviewAnsiStyles[segment.style]}${segment.text}${ANSI_RESET}`
+        : segment.text,
+    )
+    .join("");
+
+const highlightPlainTsxCodePreviewText = (
+  text: string,
+  isJsxLine: boolean,
+): string => {
+  let segments: CodePreviewSegment[] = [{ text }];
+  if (isJsxLine) {
+    segments = applyCodePreviewRule(
+      segments,
+      /(<\/?)([A-Za-z][\w.]*)/g,
+      (match) => [
+        { text: match[1] ?? "" },
+        styledCodePreviewSegment(match[2] ?? "", "jsxTag"),
+      ],
+    );
+    segments = applyCodePreviewRule(
+      segments,
+      /(\s)([A-Za-z_$][\w$:-]*)(?==)/g,
+      (match) => [
+        { text: match[1] ?? "" },
+        styledCodePreviewSegment(match[2] ?? "", "jsxAttribute"),
+      ],
+    );
+  }
+  segments = applyCodePreviewRule(
+    segments,
+    tsxCodePreviewKeywordPattern,
+    (match) => [styledCodePreviewSegment(match[0], "keyword")],
+  );
+  segments = applyCodePreviewRule(segments, /\b\d+(?:\.\d+)?\b/g, (match) => [
+    styledCodePreviewSegment(match[0], "number"),
+  ]);
+  return renderCodePreviewSegments(segments);
+};
+
+type TsxCodePreviewHighlightState = {
+  inBlockComment: boolean;
+};
+
+const highlightTsxCodePreviewLine = (
+  line: string,
+  state: TsxCodePreviewHighlightState,
+): string => {
+  const isJsxLine = /<\/?[A-Za-z][\w.]*/.test(line);
+  const segments: CodePreviewSegment[] = [];
+  let plainText = "";
+  let index = 0;
+
+  const flushPlainText = () => {
+    if (!plainText) {
+      return;
+    }
+    segments.push({
+      text: highlightPlainTsxCodePreviewText(plainText, isJsxLine),
+    });
+    plainText = "";
+  };
+
+  while (index < line.length) {
+    if (state.inBlockComment) {
+      flushPlainText();
+      const endIndex = line.indexOf("*/", index);
+      const commentEnd = endIndex >= 0 ? endIndex + 2 : line.length;
+      segments.push(
+        styledCodePreviewSegment(line.slice(index, commentEnd), "comment"),
+      );
+      state.inBlockComment = endIndex < 0;
+      index = commentEnd;
+      continue;
+    }
+
+    if (line.startsWith("//", index)) {
+      flushPlainText();
+      segments.push(styledCodePreviewSegment(line.slice(index), "comment"));
+      break;
+    }
+    if (line.startsWith("/*", index) || line.startsWith("{/*", index)) {
+      flushPlainText();
+      const openerLength = line.startsWith("{/*", index) ? 3 : 2;
+      const endIndex = line.indexOf("*/", index + openerLength);
+      const commentEnd =
+        endIndex >= 0
+          ? endIndex + (line.startsWith("*/}", endIndex) ? 3 : 2)
+          : line.length;
+      segments.push(
+        styledCodePreviewSegment(line.slice(index, commentEnd), "comment"),
+      );
+      state.inBlockComment = endIndex < 0;
+      index = commentEnd;
+      continue;
+    }
+
+    const char = line[index];
+    if (char === '"' || char === "'" || char === "`") {
+      flushPlainText();
+      const quote = char;
+      let endIndex = index + 1;
+      while (endIndex < line.length) {
+        if (line[endIndex] === "\\") {
+          endIndex += 2;
+          continue;
+        }
+        if (line[endIndex] === quote) {
+          endIndex += 1;
+          break;
+        }
+        endIndex += 1;
+      }
+      segments.push(
+        styledCodePreviewSegment(line.slice(index, endIndex), "string"),
+      );
+      index = endIndex;
+      continue;
+    }
+
+    plainText += char;
+    index += 1;
+  }
+
+  flushPlainText();
+  return renderCodePreviewSegments(segments);
+};
+
+const codePreviewFenceLanguage = (line: string): string | null => {
+  const match = line.match(/^```([A-Za-z0-9_-]*)\s*$/);
+  return match ? (match[1] ?? "").toLowerCase() : null;
+};
+
+const formatCodePreviewLines = (lines: string[], color: boolean): string[] => {
+  if (!color) {
+    return trimBlankLines(lines);
+  }
+
+  const output: string[] = [];
+  let activeFenceLanguage: string | null = null;
+  let highlightState: TsxCodePreviewHighlightState = {
+    inBlockComment: false,
+  };
+
+  for (const line of trimBlankLines(lines)) {
+    const fenceLanguage = codePreviewFenceLanguage(line);
+    if (fenceLanguage !== null) {
+      activeFenceLanguage = activeFenceLanguage === null ? fenceLanguage : null;
+      highlightState = { inBlockComment: false };
+      output.push(line);
+      continue;
+    }
+
+    output.push(
+      activeFenceLanguage === "ts" || activeFenceLanguage === "tsx"
+        ? highlightTsxCodePreviewLine(line, highlightState)
+        : line,
+    );
+  }
+
+  return output;
+};
+
+const formatWorkflowApprovalPreviewSummary = (
+  trimmedText: string,
+  color = false,
+): string | null => {
+  if (
+    !trimmedText.includes("**Summary**") ||
+    !trimmedText.includes("APPROVAL REQUIRED") ||
+    !trimmedText.includes("**Code Preview**")
+  ) {
+    return null;
+  }
+
+  const sections = parseWorkflowSections(
+    trimmedText,
+    workflowSummarySectionHeading,
+  );
+  const summaryLines = trimBlankLines(sections.get("Summary") ?? []);
+  if (!summaryLines.some((line) => line.includes("APPROVAL REQUIRED"))) {
+    return null;
+  }
+
+  const sectionLines = (
+    heading: (typeof approvalPreviewSectionHeadings)[number],
+  ) => {
+    if (heading === "Next") {
+      return nextSectionLines(sections.get("Next") ?? []);
+    }
+    if (heading === "Code Preview") {
+      return formatCodePreviewLines(sections.get("Code Preview") ?? [], color);
+    }
+    return trimBlankLines(sections.get(heading) ?? []);
+  };
+
+  return approvalPreviewSectionHeadings
+    .map((heading): WorkflowSummarySection => [heading, sectionLines(heading)])
+    .filter(hasWorkflowSummaryLines)
+    .flatMap(([heading, lines], index) => [
+      ...(index > 0 ? [""] : []),
+      `**${heading}**`,
+      ...lines,
+    ])
+    .join("\n")
+    .trimEnd();
+};
+
 const formatSharedKeyDetails = (lines: string[]): string[] => {
   const keyDetails = trimBlankLines(lines).filter((line) => {
     const trimmed = line.trim();
@@ -1868,13 +2248,49 @@ const formatWorkflowSharedSummary = (trimmedText: string): string | null => {
     .trimEnd();
 };
 
-const formatWorkflowAgentSummary = (text: string): string => {
+const formatWorkflowAgentSummary = (text: string, color = false): string => {
   const trimmedText = text.trimEnd();
   return (
+    formatWorkflowApprovalPreviewSummary(trimmedText, color) ??
     formatWorkflowReviewSummary(trimmedText) ??
     formatWorkflowSharedSummary(trimmedText) ??
     trimmedText
   );
+};
+
+const compactTerminalProgressDetail = (detail: string): string => {
+  const normalized = detail.replace(/\s+/g, " ").trim();
+  if (normalized.length <= TERMINAL_PROGRESS_DETAIL_LIMIT) {
+    return normalized;
+  }
+
+  const shortened = normalized
+    .slice(0, TERMINAL_PROGRESS_DETAIL_LIMIT - 3)
+    .replace(/\s+\S*$/, "")
+    .trimEnd();
+  return `${shortened || normalized.slice(0, TERMINAL_PROGRESS_DETAIL_LIMIT - 3)}...`;
+};
+
+const formatWorkflowApprovalPreviewOnly = (
+  text: string,
+  color = false,
+): string | null => formatWorkflowApprovalPreviewSummary(text.trimEnd(), color);
+
+const formatSubagentApprovalPreviewMessages = (
+  item: Record<string, unknown>,
+  color = false,
+): string[] => {
+  const agentsStates = Array.isArray(item.agents_states)
+    ? item.agents_states
+    : [];
+  return agentsStates
+    .map((state) => {
+      const message = asRecord(state)?.message;
+      return typeof message === "string"
+        ? formatWorkflowApprovalPreviewOnly(message, color)
+        : null;
+    })
+    .filter((message): message is string => Boolean(message));
 };
 
 const formatCommandTerminalOutput = (
@@ -2051,7 +2467,11 @@ const applyPatchVerificationFailureSummary = (
 };
 
 const formatCodexStderrForTerminal = (text: string, color = false): string =>
-  applyPatchVerificationFailureSummary(text, color) ?? text;
+  applyPatchVerificationFailureSummary(text, color) ??
+  text.replace(
+    /(^|\n)(Reading additional input from stdin\.\.\.)(\r?\n|$)/g,
+    "$1$2\n\n",
+  );
 
 const stageStylesByPromptPath: Record<
   string,
@@ -2059,6 +2479,10 @@ const stageStylesByPromptPath: Record<
 > = {
   [rel(".ai", "prompts", "plan-validator.md")]: {
     label: "VALIDATE",
+    colorCode: "\u001b[37;45m",
+  },
+  [rel(".ai", "prompts", "sync-plan-artifacts.md")]: {
+    label: "SYNC ARTIFACTS",
     colorCode: "\u001b[37;45m",
   },
   [rel(".ai", "prompts", "fix-plan.md")]: {
@@ -2134,14 +2558,15 @@ export const formatWorkflowProgressLine = ({
   const formattedProgressPrefix = color
     ? `${stage.colorCode}${progressPrefix}${ANSI_RESET}`
     : progressPrefix;
-  return `${formattedProgressPrefix}\n${status} -> ${nextAction}\nmodel: ${model} | reasoning: ${reasoning}`;
+  return `\n\n${formattedProgressPrefix}\n${status} -> ${nextAction}\nmodel: ${model} | reasoning: ${reasoning}\n`;
 };
 
 export const formatCommitProgressLine = ({
   completed,
   total,
   description,
-}: CommitProgress): string => `[${completed}/${total}] ${description}`;
+}: CommitProgress): string =>
+  `[${completed}/${total}] ${compactTerminalProgressDetail(description)}`;
 
 export const WORKFLOW_WAIT_NOTICE_INTERVAL_MS = 120_000;
 
@@ -2334,7 +2759,17 @@ export const formatCodexJsonlEventForTerminal = (
     const text = toDisplayString(item?.text);
     return text
       ? formatTerminalEventBlock(
-          `${formatTerminalLabel("[agent]", "agent", color)}\n${formatWorkflowAgentSummary(text)}`,
+          `${formatTerminalLabel("[agent]", "agent", color)}\n${formatWorkflowAgentSummary(text, color)}`,
+        )
+      : "";
+  }
+  if (itemType === "collab_tool_call") {
+    const previewMessages = item
+      ? formatSubagentApprovalPreviewMessages(item, color)
+      : [];
+    return previewMessages.length > 0
+      ? formatTerminalEventBlock(
+          `${formatTerminalLabel("[agent]", "agent", color)}\n${previewMessages.join("\n\n")}`,
         )
       : "";
   }
@@ -2775,7 +3210,7 @@ const formatStopReason = (
   `${codexExecLabel} output contained STOP${excerpt ? `: ${excerpt}` : ""}`;
 
 const REVIEW_ENTRY_STAGED_WORK_REASON_PREFIX =
-  "review blocked before review-plan because staged files already exist; finish pending staged work or another review first";
+  "review blocked before review-plan because staged files already exist; human may manually unstage them, then rerun workflow-runner so it owns review staging";
 
 const classifyFailureForLog = (reason: string): FailureMetadataLogFields => {
   const stopMatch =
@@ -2810,7 +3245,7 @@ const classifyFailureForLog = (reason: string): FailureMetadataLogFields => {
       failureKind: "review-entry-staged-work",
       failureReason: reason,
       nextSuggestedAction:
-        "finish or unstage existing staged work before starting review-plan, then rerun workflow-runner",
+        "human may manually unstage existing staged work before starting review-plan, then rerun workflow-runner",
     };
   }
   if (
@@ -3008,6 +3443,7 @@ const codexExecArgs = ({
 };
 
 const promptRoutes: Record<string, string> = {
+  "draft|sync-plan-artifacts": SYNC_PLAN_ARTIFACTS_PROMPT_PATH,
   "draft|plan-validator": PLAN_VALIDATOR_PROMPT_PATH,
   "draft|fix-plan": FIX_PLAN_PROMPT_PATH,
   "approved|execute-plan": EXECUTE_PLAN_PROMPT_PATH,
@@ -3020,6 +3456,7 @@ const promptRoutes: Record<string, string> = {
 };
 
 const promptActionLabels: Record<string, string> = {
+  [rel(".ai", "prompts", "sync-plan-artifacts.md")]: "Sync artifacts",
   [rel(".ai", "prompts", "plan-validator.md")]: "Validate",
   [rel(".ai", "prompts", "fix-plan.md")]: "Fix",
   [rel(".ai", "prompts", "execute-plan.md")]: "Execute",
@@ -3062,14 +3499,6 @@ const planSectionLines = (content: string, heading: string): string[] => {
   return collected;
 };
 
-const slugifyTaskWords = (value: string): string =>
-  value
-    .toLowerCase()
-    .replace(/`[^`]*`/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .replace(/-{2,}/g, "-");
-
 export const parsePlanTasks = (content: string): PlanTask[] => {
   const tasks: PlanTask[] = [];
   const seen = new Set<string>();
@@ -3092,7 +3521,7 @@ export const parsePlanTasks = (content: string): PlanTask[] => {
       id,
       words,
       name,
-      artifactWords: slugifyTaskWords(name) || words,
+      artifactWords: words,
     });
   }
 
@@ -3748,10 +4177,6 @@ type ThinPlanV2FilesState = {
   changedFiles: string[];
   released: string[];
   headSha: string;
-  workflow?: {
-    status?: string;
-    nextAction?: string;
-  };
 };
 
 const thinPlanV2ArtifactPath = (
@@ -3845,7 +4270,6 @@ const parseThinPlanV2FilesState = (
       reason: `thin-plan-v2 files state is malformed: ${artifactPath}`,
     };
   }
-  const workflow = asRecord(record?.workflow);
   return {
     created,
     modified,
@@ -3853,16 +4277,6 @@ const parseThinPlanV2FilesState = (
     changedFiles,
     released,
     headSha,
-    workflow: workflow
-      ? {
-          status:
-            typeof workflow.status === "string" ? workflow.status : undefined,
-          nextAction:
-            typeof workflow.nextAction === "string"
-              ? workflow.nextAction
-              : undefined,
-        }
-      : undefined,
   };
 };
 
@@ -4409,7 +4823,11 @@ pnpm lint-staged
 git add --all -- ${shellPathspecs(commitSummaryPaths)}
 git diff --staged --name-status -- ${shellPathspecs(commitSummaryPaths)}
 git diff --staged --name-status
-git commit -m "<generated message>"
+git commit --cleanup=verbatim -F - <<'EOF'
+<generated subject>
+
+<generated body>
+EOF
 
 Do not stage .ai files. Do not stage unrelated paths as commit candidates.
 Before committing, the full staged path list must contain only paths from the plan-owned implementation list above.
@@ -4430,6 +4848,7 @@ Task savepoint rules:
 - Work only on the current task above.
 - Do not start another \`[task:...]\` item in the same run.
 - Keep \`.ai/\` artifacts out of git commits.
+- The runner owns .ai/artifacts/<plan-name>/execution-summary.md; do not edit it directly.
 - If this stage cannot complete for the current task, output \`STOP\` and keep the same current task active for remediation.
 `
     : "";
@@ -4441,6 +4860,7 @@ Task savepoint aggregate summary:
 All named plan tasks already have task artifacts under ${taskArtifactsRelativeDir(
           path.posix.basename(planPath, ".md"),
         )}.
+The runner refreshes .ai/artifacts/<plan-name>/execution-summary.md from those task artifacts after this stage.
 Do not create a git commit in this aggregate summary stage.
 Verify no remaining plan-owned changes exist, then summarize the task commits and artifacts.
 `
@@ -4465,6 +4885,7 @@ The previous stage exceeded token thresholds.
 `
       : "";
   const subAgentGuidance = [
+    rel(".ai", "prompts", "sync-plan-artifacts.md"),
     rel(".ai", "prompts", "plan-validator.md"),
     rel(".ai", "prompts", "fix-plan.md"),
     rel(".ai", "prompts", "execute-plan.md"),
@@ -4473,7 +4894,11 @@ The previous stage exceeded token thresholds.
     rel(".ai", "prompts", "fix-review.md"),
     rel(".ai", "prompts", "reopen-plan.md"),
   ].includes(promptPath)
-    ? "\nuse sub-agents"
+    ? `
+use sub-agents
+Codex sub-agent spawn compatibility:
+- For a full-history fork, omit \`agent_type\`, \`model\`, and \`reasoning_effort\`; those fields are inherited from the parent.
+- If a different \`agent_type\`, \`model\`, or \`reasoning_effort\` is required, spawn without a full-history fork.`
     : "";
 
   return `Use ${promptPath}
@@ -4529,17 +4954,28 @@ const appendLog = async (
 const taskArtifactsRelativeDir = (planName: string): string =>
   rel(".ai", "artifacts", planName, "tasks");
 
+const executionSummaryRelativePath = (planName: string): string =>
+  rel(".ai", "artifacts", planName, "execution-summary.md");
+
+const bossSummaryRelativePath = (planName: string): string =>
+  rel(".ai", "artifacts", planName, "boss-summary.md");
+
 const currentTaskRelativePath = (planName: string): string =>
   rel(".ai", "artifacts", planName, "state", "current-task.md");
 
-const taskArtifactFilePrefix = (task: PlanTask): string =>
-  `${task.id}-${task.artifactWords}-v`;
+const taskArtifactFilePrefix = (task: PlanTask): string => {
+  const suffix =
+    task.artifactWords && task.artifactWords !== task.words
+      ? `-${task.artifactWords}`
+      : "";
+  return `${task.id}${suffix}-v`;
+};
 
-const existingTaskArtifactVersions = async (
+const existingTaskArtifactEntries = async (
   rootDir: string,
   planName: string,
   task: PlanTask,
-): Promise<number[]> => {
+): Promise<{ entry: string; version: number }[]> => {
   const taskDir = path.join(rootDir, taskArtifactsRelativeDir(planName));
   let entries: string[];
   try {
@@ -4551,17 +4987,61 @@ const existingTaskArtifactVersions = async (
     }
     throw error;
   }
-  const prefix = taskArtifactFilePrefix(task);
+  const artifactPattern = new RegExp(
+    `^${escapeRegExp(task.id)}(?:-.+)?-v([1-9][0-9]*)\\.md$`,
+  );
   return entries
     .map((entry) => {
-      if (!entry.startsWith(prefix) || !entry.endsWith(".md")) {
+      const match = entry.match(artifactPattern);
+      if (!match) {
         return undefined;
       }
-      const version = Number(entry.slice(prefix.length, -".md".length));
-      return Number.isInteger(version) && version > 0 ? version : undefined;
+      const version = Number(match[1]);
+      return Number.isInteger(version) && version > 0
+        ? { entry, version }
+        : undefined;
     })
-    .filter((version): version is number => typeof version === "number")
-    .sort((a, b) => a - b);
+    .filter(
+      (artifact): artifact is { entry: string; version: number } =>
+        artifact !== undefined,
+    )
+    .sort((a, b) => a.version - b.version);
+};
+
+const existingTaskArtifactVersions = async (
+  rootDir: string,
+  planName: string,
+  task: PlanTask,
+): Promise<number[]> => {
+  const artifacts = await existingTaskArtifactEntries(rootDir, planName, task);
+  return artifacts.map((artifact) => artifact.version);
+};
+
+const taskArtifactCommitSha = (content: string): string | undefined => {
+  const lines = content.split(/\r?\n/);
+  const headingIndex = lines.findIndex(
+    (line) => line.trim() === "## Commit SHA",
+  );
+  if (headingIndex === -1) {
+    return undefined;
+  }
+
+  const valueLines: string[] = [];
+  for (const line of lines.slice(headingIndex + 1)) {
+    if (line.trim().startsWith("## ")) {
+      break;
+    }
+    const trimmed = line.trim();
+    if (trimmed.length > 0) {
+      valueLines.push(trimmed);
+    }
+  }
+
+  const sha = valueLines.join(" ").trim();
+  if (!sha || sha === "(pending)" || sha === "(unknown)") {
+    return undefined;
+  }
+  return /^[a-f0-9]{7,40}$/i.test(sha) ? sha : undefined;
 };
 
 const taskCompleted = async (
@@ -4569,20 +5049,23 @@ const taskCompleted = async (
   planName: string,
   task: PlanTask,
 ): Promise<boolean> => {
-  const taskDir = path.join(rootDir, taskArtifactsRelativeDir(planName));
-  let entries: string[];
-  try {
-    entries = await readdir(taskDir);
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code === "ENOENT") {
-      return false;
-    }
-    throw error;
-  }
-  return entries.some(
-    (entry) => entry.startsWith(`${task.id}-`) && entry.endsWith(".md"),
+  const artifactEntries = await existingTaskArtifactEntries(
+    rootDir,
+    planName,
+    task,
   );
+  for (const artifact of artifactEntries) {
+    const artifactPath = path.join(
+      rootDir,
+      taskArtifactsRelativeDir(planName),
+      artifact.entry,
+    );
+    const content = await readFile(artifactPath, "utf8");
+    if (taskArtifactCommitSha(content)) {
+      return true;
+    }
+  }
+  return false;
 };
 
 const nextIncompleteTask = async (
@@ -4607,8 +5090,21 @@ const nextTaskArtifactRelativePath = async (
   const nextVersion = (versions.at(-1) ?? 0) + 1;
   return rel(
     taskArtifactsRelativeDir(planName),
-    `${task.id}-${task.artifactWords}-v${nextVersion}.md`,
+    `${taskArtifactFilePrefix(task)}${nextVersion}.md`,
   );
+};
+
+const latestTaskArtifactRelativePath = async (
+  rootDir: string,
+  planName: string,
+  task: PlanTask,
+): Promise<string | undefined> => {
+  const artifacts = await existingTaskArtifactEntries(rootDir, planName, task);
+  const latestArtifact = artifacts.at(-1);
+  if (!latestArtifact) {
+    return undefined;
+  }
+  return rel(taskArtifactsRelativeDir(planName), latestArtifact.entry);
 };
 
 const formatTaskProgressLine = ({
@@ -4619,7 +5115,7 @@ const formatTaskProgressLine = ({
   task: PlanTask;
   stage: TaskStage;
   detail: string;
-}): string => `TASK ${task.id} | ${stage} | ${detail}`;
+}): string => `TASK ${task.id} | ${stage} | ${compactTerminalProgressDetail(detail)}`;
 
 const writeCurrentTaskPointer = async ({
   rootDir,
@@ -4658,12 +5154,72 @@ const writeCurrentTaskPointer = async ({
   }
 };
 
+const normalizeSummaryLine = (line: string): string =>
+  line.replace(/^(?:--|[*-])\s+/, "").trim();
+
+const extractCommitSummarySubject = (
+  text: string,
+  fallback: string,
+): string => {
+  const sharedSummary = formatWorkflowSharedSummary(text.trim());
+  if (sharedSummary) {
+    const sections = parseWorkflowSections(
+      sharedSummary,
+      workflowSummarySectionHeading,
+    );
+    const keyDetails = trimBlankLines(sections.get("Key Details") ?? []);
+    for (const line of keyDetails) {
+      const trimmed = line.trim();
+      if (trimmed.length === 0 || trimmed.startsWith("--")) {
+        continue;
+      }
+      return normalizeSummaryLine(trimmed);
+    }
+  }
+  return fallback;
+};
+
+const extractSummaryLines = (text: string, fallback: string): string[] => {
+  const sharedSummary = formatWorkflowSharedSummary(text.trim());
+  if (sharedSummary) {
+    const sections = parseWorkflowSections(
+      sharedSummary,
+      workflowSummarySectionHeading,
+    );
+    const keyDetailLines = trimBlankLines(sections.get("Key Details") ?? [])
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith("--"))
+      .map(normalizeSummaryLine)
+      .filter((line) => line.length > 0);
+    if (keyDetailLines.length > 0) {
+      return keyDetailLines;
+    }
+    const summaryLines = trimBlankLines(sections.get("Summary") ?? [])
+      .map((line) => line.replace(/^[*-]\s+/, "").trim())
+      .filter((line) => line.length > 0);
+    if (summaryLines.length > 0) {
+      return summaryLines;
+    }
+  }
+  const bulletLines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => /^[*-]\s+/.test(line))
+    .map((line) => line.replace(/^[*-]\s+/, "").trim())
+    .filter((line) => line.length > 0);
+  if (bulletLines.length > 0) {
+    return bulletLines.slice(0, 5);
+  }
+  return [fallback];
+};
+
 const writeTaskArtifact = async ({
   rootDir,
   planName,
   planPath,
   context,
   changedFiles,
+  summaryLines,
   validationSummary,
   reviewResult,
   commitMessage,
@@ -4674,6 +5230,7 @@ const writeTaskArtifact = async ({
   planPath: string;
   context: WorkflowTaskContext;
   changedFiles: string[];
+  summaryLines: string[];
   validationSummary: string;
   reviewResult: string;
   commitMessage: string;
@@ -4682,9 +5239,13 @@ const writeTaskArtifact = async ({
   const artifactPath = path.join(rootDir, context.artifactPath);
   const body = `# Task Savepoint: ${context.task.id}
 
-## Summary
+## Task Name
 
 ${context.task.name}
+
+## Summary
+
+${summaryLines.map((line) => `* ${line}`).join("\n")}
 
 ## Plan
 
@@ -4726,6 +5287,301 @@ ${nextTask ? nextTask.id : "(none)"}
     return {
       ok: false,
       reason: `task artifact cannot be written: ${String(error)}`,
+    };
+  }
+};
+
+const readHeadTaskCommit = async ({
+  rootDir,
+  planName,
+  planPath,
+  task,
+  processRunner,
+}: {
+  rootDir: string;
+  planName: string;
+  planPath: string;
+  task: PlanTask;
+  processRunner: ProcessRunner;
+}): Promise<
+  { ok: true; commit?: { sha: string; message: string } } | Failure
+> => {
+  const result = await processRunner({
+    command: "git",
+    args: ["log", "-1", "--format=%H%n%B"],
+    cwd: rootDir,
+    input: "",
+    promptPath: "git-head-task-commit",
+  }).catch(
+    (error): ProcessResult => ({
+      launched: false,
+      stdout: "",
+      stderr: "",
+      error: String(error),
+    }),
+  );
+
+  if (!result.launched || result.exitCode !== 0) {
+    return { ok: true };
+  }
+
+  const lines = result.stdout.split(/\r?\n/);
+  const sha = lines.shift()?.trim();
+  const message = lines.join("\n").trim();
+  if (
+    !sha ||
+    !message.includes(task.id) ||
+    (!message.includes(planName) && !message.includes(planPath))
+  ) {
+    return { ok: true };
+  }
+
+  return {
+    ok: true,
+    commit: {
+      sha,
+      message,
+    },
+  };
+};
+
+const nextTaskAfter = async (
+  rootDir: string,
+  planName: string,
+  tasks: PlanTask[],
+  currentTask: PlanTask,
+): Promise<PlanTask | undefined> => {
+  const currentIndex = tasks.findIndex((task) => task.id === currentTask.id);
+  for (const task of tasks.slice(currentIndex + 1)) {
+    if (!(await taskCompleted(rootDir, planName, task))) {
+      return task;
+    }
+  }
+  return undefined;
+};
+
+const markdownSectionText = (content: string, heading: string): string =>
+  trimBlankLines(planSectionLines(content, heading)).join("\n").trim();
+
+const markdownSectionBulletLines = (
+  content: string,
+  heading: string,
+  fallback: string,
+): string[] => {
+  const lines = trimBlankLines(planSectionLines(content, heading))
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .map((line) => line.replace(/^[*-]\s+/, "").trim())
+    .filter((line) => line.length > 0);
+  return lines.length > 0 ? lines : [fallback];
+};
+
+const readCompletedTaskSavepoints = async ({
+  rootDir,
+  planName,
+  tasks,
+}: {
+  rootDir: string;
+  planName: string;
+  tasks: PlanTask[];
+}): Promise<
+  { ok: true; completedTasks: CompletedTaskSavepoint[] } | Failure
+> => {
+  const completedTasks: CompletedTaskSavepoint[] = [];
+  for (const task of tasks) {
+    const artifactPath = await latestTaskArtifactRelativePath(
+      rootDir,
+      planName,
+      task,
+    );
+    if (!artifactPath) {
+      continue;
+    }
+    const absoluteArtifactPath = path.join(rootDir, artifactPath);
+    let content: string;
+    try {
+      content = await readFile(absoluteArtifactPath, "utf8");
+    } catch (error) {
+      return {
+        ok: false,
+        reason: `task artifact cannot be read: ${artifactPath}: ${String(error)}`,
+      };
+    }
+    const commitSha = markdownSectionText(content, "## Commit SHA");
+    completedTasks.push({
+      task,
+      artifactPath,
+      commitSha: commitSha || "(unknown)",
+      commitMessage:
+        markdownSectionText(content, "## Commit Message") || task.name,
+      summaryLines: markdownSectionBulletLines(
+        content,
+        "## Summary",
+        task.name,
+      ),
+      reviewResult:
+        markdownSectionText(content, "## Review Result") || "pending",
+      validationSummary:
+        markdownSectionText(content, "## Validation Evidence") || "pending",
+    });
+  }
+  return { ok: true, completedTasks };
+};
+
+const BOSS_SUMMARY_ACRONYMS = new Set([
+  "ai",
+  "api",
+  "db",
+  "id",
+  "rls",
+  "sse",
+  "ui",
+]);
+
+const titleCasePlanWord = (word: string): string =>
+  BOSS_SUMMARY_ACRONYMS.has(word.toLowerCase())
+    ? word.toUpperCase()
+    : `${word.charAt(0).toUpperCase()}${word.slice(1)}`;
+
+const planNameToTitle = (planName: string): string =>
+  planName.split(/[-_]+/).filter(Boolean).map(titleCasePlanWord).join(" ");
+
+export const estimateBossSummaryPercent = ({
+  tasks,
+  completedTasks,
+  finalStatus,
+}: {
+  tasks: PlanTask[];
+  completedTasks: CompletedTaskSavepoint[];
+  finalStatus: "in-progress" | "completed";
+}): number => {
+  if (finalStatus === "completed" && completedTasks.length === tasks.length) {
+    return 100;
+  }
+  if (tasks.length === 0) {
+    return finalStatus === "completed" ? 100 : 25;
+  }
+  if (completedTasks.length === tasks.length) {
+    return 92;
+  }
+  return Math.min(
+    75,
+    Math.max(25, 25 + Math.round((completedTasks.length / tasks.length) * 50)),
+  );
+};
+
+const formatBossSummaryBullet = (line: string): string =>
+  `--${line.replace(/^(?:--|[*-])\s+/, "").trim()}`;
+
+const writeBossSummary = async ({
+  rootDir,
+  planName,
+  tasks,
+  completedTasks,
+  finalStatus,
+}: {
+  rootDir: string;
+  planName: string;
+  tasks: PlanTask[];
+  completedTasks: CompletedTaskSavepoint[];
+  finalStatus: "in-progress" | "completed";
+}): Promise<{ ok: true } | Failure> => {
+  const artifactPath = path.join(rootDir, bossSummaryRelativePath(planName));
+  const percent = estimateBossSummaryPercent({
+    tasks,
+    completedTasks,
+    finalStatus,
+  });
+  const body = [
+    `${planNameToTitle(planName)} (${percent}%)`,
+    "",
+    ...completedTasks.flatMap((completedTask) => [
+      `Commit ${completedTask.commitSha}`,
+      ...completedTask.summaryLines.map(formatBossSummaryBullet),
+      "",
+    ]),
+  ].join("\n");
+  try {
+    await mkdir(path.dirname(artifactPath), { recursive: true });
+    await writeFile(
+      artifactPath,
+      body.endsWith("\n") ? body : `${body}\n`,
+      "utf8",
+    );
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      reason: `boss summary cannot be written: ${String(error)}`,
+    };
+  }
+};
+
+const writeExecutionSummary = async ({
+  rootDir,
+  planName,
+  planPath,
+  tasks,
+  completedTasks,
+  finalStatus,
+}: {
+  rootDir: string;
+  planName: string;
+  planPath: string;
+  tasks: PlanTask[];
+  completedTasks: CompletedTaskSavepoint[];
+  finalStatus: "in-progress" | "completed";
+}): Promise<{ ok: true } | Failure> => {
+  const artifactPath = path.join(
+    rootDir,
+    executionSummaryRelativePath(planName),
+  );
+  const completedByTaskId = new Map(
+    completedTasks.map((completedTask) => [
+      completedTask.task.id,
+      completedTask,
+    ]),
+  );
+  const body = [
+    "# Execution Summary",
+    "",
+    "## Plan",
+    planPath,
+    "",
+    "## Overall Status",
+    finalStatus === "completed" ? "Completed" : "In progress",
+    `Completed savepoints: ${completedTasks.length}/${tasks.length}`,
+    "",
+    "## Savepoints",
+    "",
+    ...tasks.flatMap((task) => {
+      const completedTask = completedByTaskId.get(task.id);
+      const summaryLines = completedTask?.summaryLines ?? [
+        "Pending savepoint.",
+      ];
+      return [
+        `### ${task.id}`,
+        `- Commit: ${completedTask ? `\`${completedTask.commitSha}\`` : "pending"}`,
+        "- Summary:",
+        ...summaryLines.map((line) => `  - ${line}`),
+        `- Review: ${completedTask?.reviewResult ?? "pending"}`,
+        `- Validation: ${completedTask?.validationSummary ?? "pending"}`,
+        "",
+      ];
+    }),
+    "## Final Rollup",
+    `- Status: ${finalStatus === "completed" ? "completed" : "pending"}`,
+    "- Notes: aggregate summary only, no additional git commit",
+    "",
+  ].join("\n");
+  try {
+    await mkdir(path.dirname(artifactPath), { recursive: true });
+    await writeFile(artifactPath, body, "utf8");
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      reason: `execution summary cannot be written: ${String(error)}`,
     };
   }
 };
@@ -4898,13 +5754,69 @@ const replaceSectionValueInPlan = (
 const reopenPlanForNextTask = async (
   plan: ParsedPlan,
 ): Promise<{ ok: true } | Failure> => {
+  const baseContent =
+    plan.thinPlanContract === "thin-plan-v2"
+      ? plan.manifestContent
+      : plan.content;
   const nextContent = replaceSectionValueInPlan(
-    replaceSectionValueInPlan(plan.content, "## Status", "active"),
+    replaceSectionValueInPlan(baseContent, "## Status", "active"),
     "## Next Action",
     "execute-plan",
   );
+  let workflowStateUpdate:
+    | { absolutePath: string; content: string }
+    | undefined;
+  if (plan.thinPlanContract === "thin-plan-v2") {
+    const rootDir = path.dirname(
+      path.dirname(path.dirname(plan.absolutePlanPath)),
+    );
+    const workflowPath = thinPlanV2ArtifactPath(
+      plan.planName,
+      "state",
+      "workflow.json",
+    );
+    const workflowJson = await readJsonArtifact(rootDir, workflowPath);
+    if (isFailure(workflowJson)) {
+      return workflowJson;
+    }
+    const workflow = parseThinPlanV2WorkflowState(
+      workflowJson,
+      plan.planPath,
+      workflowPath,
+    );
+    if (isFailure(workflow)) {
+      return workflow;
+    }
+    const workflowRecord = asRecord(workflowJson);
+    if (!workflowRecord) {
+      return {
+        ok: false,
+        reason: `thin-plan-v2 workflow state is malformed: ${workflowPath}`,
+      };
+    }
+    workflowStateUpdate = {
+      absolutePath: path.join(rootDir, workflowPath),
+      content: `${JSON.stringify(
+        {
+          ...workflowRecord,
+          status: "active",
+          nextAction: "execute-plan",
+          updatedAt: new Date().toISOString(),
+        },
+        null,
+        2,
+      )}\n`,
+    };
+  }
   try {
     await writeFile(plan.absolutePlanPath, nextContent, "utf8");
+    if (workflowStateUpdate) {
+      await writeFile(
+        workflowStateUpdate.absolutePath,
+        workflowStateUpdate.content,
+        "utf8",
+      );
+    }
     return { ok: true };
   } catch (error) {
     return {
@@ -4956,6 +5868,112 @@ const appendFailureDebugLedger = async (
       reason: `workflow failure debug log cannot be created or appended: ${String(error)}`,
     };
   }
+};
+
+const NON_PLAN_SCOPED_REVIEW_STOP_TEXT =
+  "non plan-scoped changes detected";
+
+const latestExecutionEvidenceMtimeMs = async (
+  rootDir: string,
+  planName: string,
+): Promise<number | undefined> => {
+  let workflowRaw: unknown;
+  try {
+    workflowRaw = JSON.parse(
+      await readFile(
+        path.join(rootDir, thinPlanV2ArtifactPath(planName, "state", "workflow.json")),
+        "utf8",
+      ),
+    ) as unknown;
+  } catch {
+    return undefined;
+  }
+
+  const workflow = asRecord(workflowRaw);
+  const latest = asRecord(workflow?.latest);
+  const execution = asRecord(latest?.execution);
+  const evidence = execution?.evidence;
+  if (typeof evidence !== "string" || path.isAbsolute(evidence)) {
+    return undefined;
+  }
+
+  try {
+    return (await stat(path.join(rootDir, evidence))).mtimeMs;
+  } catch {
+    return undefined;
+  }
+};
+
+const nonPlanScopedReviewStopEvidence = (
+  entry: Partial<WorkflowFailureDebugRecord>,
+): string | undefined => {
+  const evidenceText = [
+    entry.failureReason,
+    entry.stopExcerpt,
+    entry.lastAgentMessageExcerpt,
+  ]
+    .filter((value): value is string => typeof value === "string")
+    .join("\n");
+  if (!evidenceText.includes(NON_PLAN_SCOPED_REVIEW_STOP_TEXT)) {
+    return undefined;
+  }
+  const excerptSource =
+    entry.lastAgentMessageExcerpt ?? entry.stopExcerpt ?? entry.failureReason;
+  return excerptSource ? boundedInlineExcerpt(excerptSource) : undefined;
+};
+
+const readLatestNonPlanScopedReviewStopEvidence = async (
+  rootDir: string,
+  planName: string,
+): Promise<string | undefined> => {
+  let content: string;
+  try {
+    content = await readFile(
+      failureDebugLedgerAbsolutePath(rootDir, planName),
+      "utf8",
+    );
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "ENOENT") {
+      return undefined;
+    }
+    return undefined;
+  }
+
+  const executionMtimeMs = await latestExecutionEvidenceMtimeMs(
+    rootDir,
+    planName,
+  );
+  const lines = content.split(/\r?\n/).filter(Boolean);
+  for (const line of lines.reverse()) {
+    let entry: Partial<WorkflowFailureDebugRecord>;
+    try {
+      entry = JSON.parse(line) as Partial<WorkflowFailureDebugRecord>;
+    } catch {
+      continue;
+    }
+    if (
+      entry.promptPath !== REVIEW_CHANGES_PROMPT_PATH ||
+      entry.failureKind !== "codex-stop"
+    ) {
+      continue;
+    }
+    const evidence = nonPlanScopedReviewStopEvidence(entry);
+    if (!evidence) {
+      continue;
+    }
+    const failureTimestampMs =
+      typeof entry.timestamp === "string" ? Date.parse(entry.timestamp) : NaN;
+    if (
+      typeof executionMtimeMs === "number" &&
+      Number.isFinite(failureTimestampMs) &&
+      executionMtimeMs > failureTimestampMs
+    ) {
+      return undefined;
+    }
+    return evidence;
+  }
+  return undefined;
 };
 
 const tokenUsageLedgerRelativePath = (planName: string): string =>
@@ -6067,6 +7085,7 @@ export const generateScopeCleanupPrompt = ({
   paths,
   diff,
   mode,
+  previousNonPlanScopedStopEvidence,
 }: {
   promptContent: string;
   planPath: string;
@@ -6075,6 +7094,7 @@ export const generateScopeCleanupPrompt = ({
   paths: string[];
   diff: string;
   mode: "review" | "commit-summary";
+  previousNonPlanScopedStopEvidence?: string;
 }): string => `Use ${SCOPE_CLEANUP_PROMPT_PATH} to clean staged scope for ${mode}.
 
 Support prompt content:
@@ -6098,6 +7118,7 @@ ${specPaths.length > 0 ? specPaths.map((specPath) => `- ${specPath}`).join("\n")
 Plan-owned staged paths:
 ${paths.map((stagingPath) => `- ${stagingPath}`).join("\n")}
 
+${previousNonPlanScopedStopEvidence ? `Previous non-plan-scoped review STOP evidence:\n${previousNonPlanScopedStopEvidence}\n\nUse this reviewer evidence to identify hunks that must be unstaged before review runs again.\n\n` : ""}\
 Path-scoped staged diff:
 ${diff}
 `;
@@ -6133,6 +7154,13 @@ const runScopeCleanupForPaths = async ({
     return;
   }
 
+  const previousNonPlanScopedStopEvidence =
+    mode === "review"
+      ? await readLatestNonPlanScopedReviewStopEvidence(
+          rootDir,
+          path.posix.basename(planPath, ".md"),
+        )
+      : undefined;
   const cleanupPrompt = generateScopeCleanupPrompt({
     promptContent: prompt.content,
     planPath,
@@ -6143,6 +7171,7 @@ const runScopeCleanupForPaths = async ({
     paths,
     diff,
     mode,
+    previousNonPlanScopedStopEvidence,
   });
   const executionConfig = codexExecutionConfig(SCOPE_CLEANUP_PROMPT_PATH);
   const result = await processRunner({
@@ -6210,6 +7239,59 @@ const parseCommitSummaryPaths = async (
     ok: false,
     reason: parsed.reason.replace(/review staging/g, "commit summary"),
   };
+};
+
+const parseThinPlanV2CommitSummaryPaths = async (
+  rootDir: string,
+  planName: string,
+  isIgnored?: (relativePath: string) => Promise<boolean>,
+): Promise<ReviewStagingResult> => {
+  const filesPath = thinPlanV2ArtifactPath(planName, "state", "files.json");
+  const filesRaw = await readJsonArtifact(rootDir, filesPath);
+  if (isFailure(filesRaw)) {
+    return filesRaw;
+  }
+  const files = parseThinPlanV2FilesState(filesRaw, filesPath);
+  if (isFailure(files)) {
+    return files;
+  }
+
+  const ignored =
+    isIgnored ??
+    ((relativePath: string) => defaultIsIgnored(rootDir, relativePath));
+  const released = new Set(files.released);
+  const paths: string[] = [];
+  for (const changedFile of files.changedFiles) {
+    if (changedFile.startsWith(".ai/") || released.has(changedFile)) {
+      continue;
+    }
+    if (!(await ignored(changedFile))) {
+      paths.push(changedFile);
+    }
+  }
+
+  const unique = uniquePaths(paths);
+  if (unique.length === 0) {
+    return {
+      ok: false,
+      reason: "all commit summary paths are git-ignored",
+    };
+  }
+
+  return { ok: true, paths: unique };
+};
+
+export const parseCommitSummaryPathsForPlan = async (
+  rootDir: string,
+  plan: ParsedPlan,
+  isIgnored?: (relativePath: string) => Promise<boolean>,
+): Promise<ReviewStagingResult> => {
+  if (plan.thinPlanContract === "thin-plan-v2") {
+    return parseThinPlanV2CommitSummaryPaths(rootDir, plan.planName, isIgnored);
+  }
+
+  const parsed = await parseCommitSummaryPaths(rootDir, plan.content, isIgnored);
+  return parsed;
 };
 
 const verifyCommitSummaryPathsClean = async (
@@ -6500,10 +7582,6 @@ const parseFileOwnershipArtifact = (
   const updatedAt = record?.updatedAt;
   if (
     typeof planPath !== "string" ||
-    typeof status !== "string" ||
-    !isStatus(status) ||
-    typeof nextAction !== "string" ||
-    !isNextAction(nextAction) ||
     !owns ||
     !released ||
     !resolvedFiles ||
@@ -6516,11 +7594,25 @@ const parseFileOwnershipArtifact = (
       reason: `file ownership artifact is malformed: ${artifactPath}`,
     };
   }
+  const hasLegacyWorkflowState =
+    status !== undefined || nextAction !== undefined;
+  if (
+    hasLegacyWorkflowState &&
+    (typeof status !== "string" ||
+      !isStatus(status) ||
+      typeof nextAction !== "string" ||
+      !isNextAction(nextAction))
+  ) {
+    return {
+      ok: false,
+      reason: `file ownership artifact is malformed: ${artifactPath}`,
+    };
+  }
 
   return {
     planPath,
-    status,
-    nextAction,
+    status: hasLegacyWorkflowState ? status : undefined,
+    nextAction: hasLegacyWorkflowState ? nextAction : undefined,
     owns,
     released,
     resolvedFiles,
@@ -6584,8 +7676,6 @@ const refreshCurrentFileOwnershipArtifact = async ({
   );
   const artifact: FileOwnershipArtifact = {
     planPath: plan.planPath,
-    status: plan.status,
-    nextAction: plan.nextAction,
     owns: ownershipScope.entries,
     released: released.paths,
     resolvedFiles,
@@ -6644,6 +7734,29 @@ const readOtherFileOwnershipArtifacts = async (
 
   const artifacts: FileOwnershipArtifact[] = [];
   for (const entry of entries) {
+    const otherPlanPath = rel(".ai", "plans", `${entry}.md`);
+    try {
+      const otherPlanContent = await readFile(
+        path.join(rootDir, otherPlanPath),
+        "utf8",
+      );
+      const extractedStatus = extractSectionValue(otherPlanContent, "## Status");
+      if (extractedStatus !== null) {
+        const rawStatus = normalizeWorkflowStateValue(extractedStatus);
+        if (isStatus(rawStatus) && rawStatus === "draft") {
+          continue;
+        }
+      }
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== "ENOENT") {
+        return {
+          ok: false,
+          reason: `plan file cannot be read: ${otherPlanPath}: ${String(error)}`,
+        };
+      }
+    }
+
     const artifactPath = path.join(
       artifactsRoot,
       entry,
@@ -6668,7 +7781,44 @@ const readOtherFileOwnershipArtifacts = async (
       return parsed;
     }
     if (parsed.planPath !== currentPlanPath) {
-      artifacts.push(parsed);
+      const workflowPath = path.join(
+        artifactsRoot,
+        entry,
+        "state",
+        "workflow.json",
+      );
+      let artifact = parsed;
+      try {
+        const workflowRaw = await readFile(workflowPath, "utf8");
+        const workflow = parseThinPlanV2WorkflowState(
+          JSON.parse(workflowRaw) as unknown,
+          parsed.planPath,
+          path.relative(rootDir, workflowPath),
+        );
+        if (isFailure(workflow)) {
+          return workflow;
+        }
+        artifact = {
+          ...parsed,
+          status: workflow.status,
+          nextAction: workflow.nextAction,
+        };
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code !== "ENOENT") {
+          return {
+            ok: false,
+            reason: `file ownership workflow artifact cannot be read: ${workflowPath}: ${String(error)}`,
+          };
+        }
+        if (!artifact.status || !artifact.nextAction) {
+          return {
+            ok: false,
+            reason: `file ownership workflow artifact cannot be read: ${workflowPath}: missing canonical workflow state`,
+          };
+        }
+      }
+      artifacts.push(artifact);
     }
   }
 
@@ -6692,10 +7842,12 @@ const detectFileOwnershipArtifactConflict = async ({
   rootDir,
   current,
   changedFiles,
+  dirtyFiles = changedFiles,
 }: {
   rootDir: string;
   current: FileOwnershipArtifact;
   changedFiles: string[];
+  dirtyFiles?: string[];
 }): Promise<{ ok: true } | Failure> => {
   const otherArtifacts = await readOtherFileOwnershipArtifacts(
     rootDir,
@@ -6706,14 +7858,20 @@ const detectFileOwnershipArtifactConflict = async ({
   }
 
   const currentFiles = new Set(current.resolvedFiles);
-  const dirtyFiles = new Set(changedFiles);
+  const dirtyFileSet = new Set(dirtyFiles);
   for (const other of otherArtifacts.artifacts) {
+    if (!other.status || !other.nextAction) {
+      return {
+        ok: false,
+        reason: `file ownership artifact is missing canonical workflow state: ${other.planPath}`,
+      };
+    }
     const otherFiles = effectiveArtifactResolvedFiles(other, changedFiles);
     const conflictingFiles =
       other.status === "completed" && other.nextAction === "commit-summary"
         ? otherFiles.filter(
             (filePath) =>
-              currentFiles.has(filePath) && dirtyFiles.has(filePath),
+              currentFiles.has(filePath) && dirtyFileSet.has(filePath),
           )
         : blockingOwnershipStatuses.has(other.status)
           ? otherFiles.filter((filePath) => currentFiles.has(filePath))
@@ -6788,10 +7946,14 @@ const refreshAndCheckFileOwnershipArtifact = async ({
 const readThinPlanV2FileOwnershipPreflight = async ({
   rootDir,
   plan,
+  processRunner,
+  checkCompletedDirtyConflicts,
   isIgnored,
 }: {
   rootDir: string;
   plan: ParsedPlan;
+  processRunner: ProcessRunner;
+  checkCompletedDirtyConflicts: boolean;
   isIgnored?: (relativePath: string) => Promise<boolean>;
 }): Promise<FileOwnershipPreflight | Failure> => {
   const fileOwnershipPath = thinPlanV2ArtifactPath(
@@ -6823,11 +7985,20 @@ const readThinPlanV2FileOwnershipPreflight = async ({
   if (isFailure(files)) {
     return files;
   }
+  let dirtyFiles: string[] | undefined;
+  if (checkCompletedDirtyConflicts) {
+    const changed = await readGitChangedFiles(rootDir, processRunner);
+    if (!changed.ok) {
+      return changed;
+    }
+    dirtyFiles = changed.paths;
+  }
 
   const conflict = await detectFileOwnershipArtifactConflict({
     rootDir,
     current: artifact,
     changedFiles: files.changedFiles,
+    dirtyFiles,
   });
   if (!conflict.ok) {
     return conflict;
@@ -7117,11 +8288,15 @@ const acquireWorkflowFileOwnershipForPaths = async ({
         break;
       }
       if (isProcessAlive(existing.pid)) {
+        const unlockHint =
+          existing.planPath === planPath
+            ? `\n\n${workflowFileUnlockPathHint(planPath)}`
+            : "";
         const releaseFailure = await releaseAttemptLocks();
         return (
           releaseFailure ?? {
             ok: false,
-            reason: `workflow file ownership conflict: ${ownedPath} is already owned by ${existing.planPath} (pid ${existing.pid})`,
+            reason: `workflow file ownership conflict: ${ownedPath} is already owned by ${existing.planPath} (pid ${existing.pid})${unlockHint}`,
           }
         );
       }
@@ -7219,7 +8394,10 @@ const logFields = ({
     ["endingHeadSha", endingHeadSha],
     ...(commitProgress
       ? ([
-          ["commitProgress", `${commitProgress.completed}/${commitProgress.total}`],
+          [
+            "commitProgress",
+            `${commitProgress.completed}/${commitProgress.total}`,
+          ],
           ["commitProgressDescription", commitProgress.description],
         ] as Array<[string, string | number | undefined]>)
       : []),
@@ -7275,6 +8453,18 @@ const transitionAllowed = (
   previous: ParsedPlan,
   next: ParsedPlan,
 ): { ok: true } | Failure => {
+  if (promptPath === SYNC_PLAN_ARTIFACTS_PROMPT_PATH) {
+    const allowedDraftValidator =
+      next.status === "draft" && next.nextAction === "plan-validator";
+    const allowedDraftSync =
+      next.status === "draft" && next.nextAction === "sync-plan-artifacts";
+    if (!allowedDraftValidator && !allowedDraftSync) {
+      return {
+        ok: false,
+        reason: `sync-plan-artifacts may only hand off to draft + plan-validator or remain draft + sync-plan-artifacts, got ${next.status} + ${next.nextAction}`,
+      };
+    }
+  }
   if (promptPath === rel(".ai", "prompts", "execute-plan.md")) {
     const allowedReview =
       next.status === "review" && next.nextAction === "review-plan";
@@ -7358,7 +8548,6 @@ export const runWorkflowRunner = async (
     return success("workflow runner help", 0);
   }
   const planArgument = options.planName ?? cliArgs.planArgument;
-  const compactOutput = options.compactOutput ?? cliArgs.compactOutput;
   const codexProfile =
     options.codexProfile ??
     cliArgs.codexProfile ??
@@ -7374,7 +8563,7 @@ export const runWorkflowRunner = async (
   const processRunner = options.processRunner ?? defaultProcessRunner;
   const now = options.now ?? Date.now;
   const timestamp = options.timestamp ?? (() => new Date().toISOString());
-  const streamOutput = compactOutput ? false : (options.streamOutput ?? true);
+  const streamOutput = options.streamOutput ?? true;
   const outputStream = options.outputStream ?? {
     stdout: (chunk: string) => process.stdout.write(chunk),
     stderr: (chunk: string) => process.stderr.write(chunk),
@@ -7431,10 +8620,17 @@ export const runWorkflowRunner = async (
     exitCode = 1,
   ): Promise<RunnerResult> => {
     const releaseFailure = await releaseHeldWorkflowFileLocks();
-    const finalReason = releaseFailure
-      ? `${reason}; ${releaseFailure}`
+    const ownershipResetHint = workflowFileOwnershipResetPathHint(reason);
+    const reasonWithHint = ownershipResetHint
+      ? `${reason}\n${ownershipResetHint}`
       : reason;
+    const finalReason = releaseFailure
+      ? `${reasonWithHint}; ${releaseFailure}`
+      : reasonWithHint;
     logger.error(`FAILED: ${reason}`);
+    if (ownershipResetHint) {
+      logger.error(formatWorkflowOwnershipResetHint(ownershipResetHint, colorOutput));
+    }
     if (releaseFailure) {
       logger.error(`FAILED: ${releaseFailure}`);
     }
@@ -7560,6 +8756,93 @@ export const runWorkflowRunner = async (
           description: selectedTask?.name ?? "task commits complete",
         }
       : undefined;
+    if (
+      taskSavepointMode &&
+      route.promptPath === rel(".ai", "prompts", "commit-summary.md") &&
+      selectedTask &&
+      completedTaskCommits === 0 &&
+      !currentTaskContext
+    ) {
+      const recoveredCommit = await readHeadTaskCommit({
+        rootDir,
+        planName: parsedPlan.planName,
+        planPath: parsedPlan.planPath,
+        task: selectedTask,
+        processRunner,
+      });
+      if (!recoveredCommit.ok) {
+        return await finishFailure(recoveredCommit.reason);
+      }
+      if (recoveredCommit.commit) {
+        const parsedPaths = await parseCommitSummaryPathsForPlan(
+          rootDir,
+          parsedPlan,
+          options.isIgnored,
+        );
+        if (!parsedPaths.ok) {
+          return await finishFailure(
+            `commit summary file scope invalid: ${parsedPaths.reason}`,
+          );
+        }
+        const artifactPath = await nextTaskArtifactRelativePath(
+          rootDir,
+          parsedPlan.planName,
+          selectedTask,
+        );
+        const artifact = await writeTaskArtifact({
+          rootDir,
+          planName: parsedPlan.planName,
+          planPath: parsedPlan.planPath,
+          context: {
+            task: selectedTask,
+            stage: "committed",
+            artifactPath,
+            commitSha: recoveredCommit.commit.sha.slice(0, 9),
+          },
+          changedFiles: parsedPaths.paths,
+          summaryLines: [
+            "Recovered the task savepoint artifact from the existing local commit.",
+          ],
+          validationSummary: "Recovered from existing task commit metadata.",
+          reviewResult: "Recovered after commit-summary artifact interruption.",
+          commitMessage: extractCommitSummarySubject(
+            recoveredCommit.commit.message,
+            selectedTask.name,
+          ),
+          nextTask: await nextTaskAfter(
+            rootDir,
+            parsedPlan.planName,
+            planTasks,
+            selectedTask,
+          ),
+        });
+        if (!artifact.ok) {
+          return await finishFailure(artifact.reason);
+        }
+        continue;
+      }
+    }
+    if (
+      taskSavepointMode &&
+      route.promptPath === rel(".ai", "prompts", "commit-summary.md") &&
+      selectedTask &&
+      completedTaskCommits > 0 &&
+      !currentTaskContext
+    ) {
+      const reopened = await reopenPlanForNextTask(parsedPlan);
+      if (!reopened.ok) {
+        return await finishFailure(reopened.reason);
+      }
+      const nextParsed = await parsePlan({
+        planName: planArgument,
+        rootDir,
+      });
+      if (!nextParsed.ok) {
+        return await finishFailure(nextParsed.reason);
+      }
+      parsedPlan = nextParsed;
+      continue;
+    }
     if (!selectedTask) {
       currentTaskContext = undefined;
     }
@@ -7688,7 +8971,11 @@ export const runWorkflowRunner = async (
         }),
       );
       if (commitProgress) {
-        logger.log(formatCommitProgressLine(commitProgress));
+        logger.log(
+          streamOutput
+            ? `${formatCommitProgressLine(commitProgress)}\n`
+            : formatCommitProgressLine(commitProgress),
+        );
       }
       progressLogged = true;
     };
@@ -7748,6 +9035,9 @@ export const runWorkflowRunner = async (
           ? await readThinPlanV2FileOwnershipPreflight({
               rootDir,
               plan: parsedPlan,
+              processRunner,
+              checkCompletedDirtyConflicts:
+                route.promptPath === rel(".ai", "prompts", "execute-plan.md"),
               isIgnored: options.isIgnored,
             })
           : await refreshAndCheckFileOwnershipArtifact({
@@ -8065,9 +9355,9 @@ export const runWorkflowRunner = async (
       }
     }
     if (route.promptPath === rel(".ai", "prompts", "commit-summary.md")) {
-      const parsedPaths = await parseCommitSummaryPaths(
+      const parsedPaths = await parseCommitSummaryPathsForPlan(
         rootDir,
-        parsedPlan.content,
+        parsedPlan,
         options.isIgnored,
       );
       if (!parsedPaths.ok) {
@@ -8474,15 +9764,47 @@ export const runWorkflowRunner = async (
           planPath: parsedPlan.planPath,
           context: currentTaskContext,
           changedFiles: commitSummaryPaths ?? [],
+          summaryLines: extractSummaryLines(result.stdout, selectedTask.name),
           validationSummary:
             "See plan validation history and commit-summary stage output.",
           reviewResult: "Review accepted task for commit-summary.",
-          commitMessage:
-            compactCapturedOutputForLog(result.stdout) || "(not captured)",
+          commitMessage: extractCommitSummarySubject(
+            result.stdout,
+            selectedTask.name,
+          ),
           nextTask,
         });
         if (!artifact.ok) {
           return await finishFailure(artifact.reason);
+        }
+        const completedTaskArtifacts = await readCompletedTaskSavepoints({
+          rootDir,
+          planName: parsedPlan.planName,
+          tasks: planTasks,
+        });
+        if (!completedTaskArtifacts.ok) {
+          return await finishFailure(completedTaskArtifacts.reason);
+        }
+        const executionSummary = await writeExecutionSummary({
+          rootDir,
+          planName: parsedPlan.planName,
+          planPath: parsedPlan.planPath,
+          tasks: planTasks,
+          completedTasks: completedTaskArtifacts.completedTasks,
+          finalStatus: "in-progress",
+        });
+        if (!executionSummary.ok) {
+          return await finishFailure(executionSummary.reason);
+        }
+        const bossSummary = await writeBossSummary({
+          rootDir,
+          planName: parsedPlan.planName,
+          tasks: planTasks,
+          completedTasks: completedTaskArtifacts.completedTasks,
+          finalStatus: "in-progress",
+        });
+        if (!bossSummary.ok) {
+          return await finishFailure(bossSummary.reason);
         }
         const remainingTask = await nextIncompleteTask(
           rootDir,
@@ -8509,6 +9831,37 @@ export const runWorkflowRunner = async (
           content: await readFile(parsedPlan.absolutePlanPath, "utf8"),
         };
         continue;
+      }
+      if (taskSavepointAggregateSummary) {
+        const completedTaskArtifacts = await readCompletedTaskSavepoints({
+          rootDir,
+          planName: parsedPlan.planName,
+          tasks: planTasks,
+        });
+        if (!completedTaskArtifacts.ok) {
+          return await finishFailure(completedTaskArtifacts.reason);
+        }
+        const executionSummary = await writeExecutionSummary({
+          rootDir,
+          planName: parsedPlan.planName,
+          planPath: parsedPlan.planPath,
+          tasks: planTasks,
+          completedTasks: completedTaskArtifacts.completedTasks,
+          finalStatus: "completed",
+        });
+        if (!executionSummary.ok) {
+          return await finishFailure(executionSummary.reason);
+        }
+        const bossSummary = await writeBossSummary({
+          rootDir,
+          planName: parsedPlan.planName,
+          tasks: planTasks,
+          completedTasks: completedTaskArtifacts.completedTasks,
+          finalStatus: "completed",
+        });
+        if (!bossSummary.ok) {
+          return await finishFailure(bossSummary.reason);
+        }
       }
       const snapshotResult = await syncWorkflowSnapshot(parsedPlan);
       if (!snapshotResult.ok) {
@@ -8548,6 +9901,26 @@ export const runWorkflowRunner = async (
         return await finishFailure(snapshotResult.reason);
       }
       return await finishNonterminalRouteOutcome(nonterminalOutcome);
+    }
+
+    if (
+      isSpecReviewPrompt(route.promptPath) &&
+      updated.status === "review" &&
+      updated.nextAction === "review-plan"
+    ) {
+      carriedReviewStagingPaths = reviewStagingPaths;
+      carriedReviewStagingProcess = staging;
+      const logResult = await appendIterationLog(undefined, updated);
+      if (!logResult.ok) {
+        return await finishFailure(logResult.reason);
+      }
+      const snapshotResult = await syncWorkflowSnapshot(updated);
+      if (!snapshotResult.ok) {
+        return await finishFailure(snapshotResult.reason);
+      }
+      internalPromptPathOverride = REVIEW_QUALITY_PROMPT_PATH;
+      parsedPlan = updated;
+      continue;
     }
 
     if (updated.content === previousContent) {
@@ -8610,29 +9983,6 @@ export const runWorkflowRunner = async (
       if (!snapshotResult.ok) {
         return await finishFailure(snapshotResult.reason);
       }
-      const reviewSummary = extractLatestReviewSummary(updated.content);
-      const reason = reviewSummary.summary
-        ? `${path.basename(route.promptPath, ".md")} routed plan back to active + execute-plan: ${reviewSummary.summary}`
-        : `${path.basename(route.promptPath, ".md")} routed plan back to active + execute-plan`;
-      return await finishFailure(reason);
-    }
-
-    if (
-      isSpecReviewPrompt(route.promptPath) &&
-      updated.status === "review" &&
-      updated.nextAction === "review-plan"
-    ) {
-      carriedReviewStagingPaths = reviewStagingPaths;
-      carriedReviewStagingProcess = staging;
-      const logResult = await appendIterationLog(undefined, updated);
-      if (!logResult.ok) {
-        return await finishFailure(logResult.reason);
-      }
-      const snapshotResult = await syncWorkflowSnapshot(updated);
-      if (!snapshotResult.ok) {
-        return await finishFailure(snapshotResult.reason);
-      }
-      internalPromptPathOverride = REVIEW_QUALITY_PROMPT_PATH;
       parsedPlan = updated;
       continue;
     }

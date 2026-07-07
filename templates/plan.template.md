@@ -20,7 +20,7 @@ draft
 
 ## Next Action
 
-plan-validator
+sync-plan-artifacts
 
 ---
 

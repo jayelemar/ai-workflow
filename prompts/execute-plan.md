@@ -268,12 +268,14 @@ If required execution or bugfix work needs a file outside the current plan-owned
 * If the file is owned by another active plan, treat this as a `plan dependency`, not as a generic file-scope failure.
 * Do NOT keep executing both plans in parallel.
 * Update the current plan to `Status = blocked` and `Next Action = unblock-plan`.
-* Add a blocker with:
+* Create an execution event artifact that records a blocker with:
   * `Type: plan dependency`
   * the required file path
   * the owner plan path
   * evidence that the file is owned by another active plan
   * the required action: complete the owner plan or release the shared file ownership
+* Update `.ai/artifacts/<plan-name>/state/workflow.json` with `status: "blocked"`, `nextAction: "unblock-plan"`, `latest.execution`, appended `history`, and `unresolvedBlockers`.
+* MUST NOT add inline `## Blockers` to thin-plan-v2 manifests.
 * STOP.
 
 If no owner plan path can be identified:
@@ -361,11 +363,7 @@ blocked
 
 unblock-plan
 
-2. add:
-
-## Blockers
-
-### Blocker N
+2. create an execution event artifact with the blocker details:
 
 * Type:
 * Description:
@@ -375,7 +373,11 @@ unblock-plan
 * Evidence:
 * Next Step:
 
-3. STOP
+3. update `.ai/artifacts/<plan-name>/state/workflow.json` with runner-readable thin-plan-v2 state: preserve `planPath`, set `status` to `blocked`, set `nextAction` to `unblock-plan`, write compact `latest.execution`, append the execution artifact path to `history`, set `unresolvedBlockers` to active blocker strings, and refresh `updatedAt`.
+
+4. MUST NOT add inline `## Blockers` to thin-plan-v2 manifests.
+
+5. STOP
 
 ---
 
@@ -460,12 +462,14 @@ Update the plan with:
 
 Update artifacts with:
 
-* created, modified, deleted, changedFiles, released, headSha, and workflow state in `.ai/artifacts/<plan-name>/state/files.json`
+* created, modified, deleted, changedFiles, released, and headSha in `.ai/artifacts/<plan-name>/state/files.json`
 * blockers encountered, validation results, latest event pointers under `latest`, and compact event path history in `.ai/artifacts/<plan-name>/state/workflow.json`
 * ownership changes and releases in `.ai/artifacts/<plan-name>/state/file-ownership.json`
 * deviations and evidence in event artifacts under `.ai/artifacts/<plan-name>/events/`
 
 Reconcile `.ai/artifacts/<plan-name>/state/files.json` after implementation to the actual created, modified, and deleted plan-owned paths before moving to `Status = review`. `files.json` is the changed-file inventory for review and commit, not the ownership authority.
+
+Do not write workflow `status` or `nextAction` into `files.json` or `file-ownership.json`. Workflow state belongs only in the plan manifest and `.ai/artifacts/<plan-name>/state/workflow.json`.
 
 Keep workflow state entries concise: compact summary, one state field, and evidence pointer only.
 Detailed validation evidence belongs in `.ai/artifacts/<plan-name>/events/validation-vX.md`, with only the latest validation pointer under `latest.validation` in `.ai/artifacts/<plan-name>/state/workflow.json`.

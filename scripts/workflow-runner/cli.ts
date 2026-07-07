@@ -14,7 +14,6 @@ export type ParsedRunnerCliArgs =
       ok: true;
       help?: false;
       planArgument: string;
-      compactOutput: boolean;
       codexProfile?: string;
       unblockNote?: string;
     }
@@ -23,7 +22,6 @@ export type ParsedRunnerCliArgs =
 const rel = (...segments: string[]) => segments.join('/');
 
 export const parseRunnerCliArgs = (argv: string[] = []): ParsedRunnerCliArgs => {
-  let compactOutput = false;
   let codexProfile: string | undefined;
   let unblockNote: string | undefined;
   let planArgument = '';
@@ -35,13 +33,6 @@ export const parseRunnerCliArgs = (argv: string[] = []): ParsedRunnerCliArgs => 
         return { ok: false, reason: `${arg} cannot be combined with other workflow runner arguments` };
       }
       return { ok: true, help: true };
-    }
-    if (arg === '--compact') {
-      if (index !== 0 || planArgument) {
-        return { ok: false, reason: '--compact must appear before the plan argument' };
-      }
-      compactOutput = true;
-      continue;
     }
     if (arg === '--unblock-note') {
       const note = argv[index + 1];
@@ -74,7 +65,6 @@ export const parseRunnerCliArgs = (argv: string[] = []): ParsedRunnerCliArgs => 
     ok: true,
     help: false,
     planArgument,
-    compactOutput,
     codexProfile,
     unblockNote,
   };

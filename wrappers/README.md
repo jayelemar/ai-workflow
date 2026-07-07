@@ -14,7 +14,7 @@ For cloning, installation, publishing, runner setup, and troubleshooting, use
 Canonical lifecycle:
 
 ```text
-spec -> user-journey artifact -> plan -> runner
+spec -> user-journey artifact -> plan -> sync artifacts -> validator/runner
 ```
 
 1. Create a spec:
@@ -27,10 +27,14 @@ spec -> user-journey artifact -> plan -> runner
    - Skip this manual step when using `.ai/wrappers/create-plan.md`; it creates
      or regenerates the user-journey artifact automatically for user-facing
      work before writing the plan.
+   - `create-plan` also auto-preflights `.ai/artifacts/<plan-name>/implementation-map.md`,
+     savepoint validity, and spec-required behavior ownership before it returns
+     a draft plan.
    - Skip for non-user-facing work; the plan records `N/A: <concrete reason>`.
 3. Create a plan:
    - Use `.ai/wrappers/create-plan.md`
-4. Use one post-plan path:
+4. Use one post-plan path. The default runner first performs
+   `sync-plan-artifacts`, then continues to validation.
 
 Default runner path:
 
@@ -75,8 +79,8 @@ pnpm exec tsx .ai/scripts/workflow-runner.ts --compact .ai/plans/<plan-name>.md
 - Install and publish the workflow using the setup steps in `.ai/README.md`.
 - Manual prompting is supported for spec generation and plan creation.
 - After a plan exists, the workflow runner remains the default path for
-  `execute-plan`, `review-changes`, `unblock-plan`, `reopen-plan`, and
-  `commit-summary`.
+  `sync-plan-artifacts`, `plan-validator`, `fix-plan`, `execute-plan`,
+  `review-changes`, `unblock-plan`, `reopen-plan`, and `commit-summary`.
 - `preview-before-apply` is available only through explicit prompt-file
   invocation; it is not a keyword-triggered workflow mode.
 - `preview-before-apply` is a manual post-plan controller, not an

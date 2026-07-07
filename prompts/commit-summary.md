@@ -19,6 +19,8 @@ In task savepoint mode, the runner may inject either:
 
 When `Task savepoint aggregate summary` is present, do NOT create a git commit. Verify no remaining plan-owned changes exist and summarize the task commits/artifacts only.
 
+The runner is the sole writer for `.ai/artifacts/<plan-name>/execution-summary.md`. You may reference that runner-owned artifact path when needed, but do NOT write or edit it directly in this prompt.
+
 ---
 
 ## Instruction Loading
@@ -82,7 +84,7 @@ Use the completed commit rules below.
 
 ## Commit Message Rules
 
-Generate exactly one commit message.
+For every allowed git commit, generate exactly one conventional-commit subject line.
 
 Format:
 
@@ -114,17 +116,39 @@ fix(auth): correct token refresh handling
 
 refactor(payment): simplify invoice calculation flow
 
-### Task Savepoint Commit Body
+### Commit Body Rules
 
-When `Task savepoint current task` is present, the commit message MUST include a body with:
+For every created commit, generate:
 
-* Plan name
-* Task ID
-* Task words
-* Changed files
-* Validation summary
-* Review result
-* Task artifact path
+* one conventional-commit subject line
+* one concise GitHub-readable body
+
+Use this exact command shape:
+
+```bash
+git commit --cleanup=verbatim -F - <<'EOF'
+<generated subject>
+
+<generated body>
+EOF
+```
+
+Body rules:
+
+* 1-3 short paragraphs or 2-4 bullets.
+* Explain what changed and why it matters.
+* Mention important validation in one sentence only when useful.
+* Do not include workflow metadata such as plan name, task ID, task words, task artifact path, changed-file inventory, runner stage names, or `.ai/` artifact paths.
+* Do not paste long file lists. The diff already records changed files.
+* Do not include sections named `Plan`, `Task ID`, `Task words`, `Task artifact path`, `Changed files`, `Validation summary`, or `Review result`.
+
+Allowed body example:
+
+```text
+Connects the issue widget to real support-ticket creation, including inline validation, attachment rollback handling, draft cleanup, and navigation to the created ticket.
+
+Validated with lint-staged before commit.
+```
 
 ---
 
@@ -198,7 +222,7 @@ Use:
 * runner-injected path-scoped second `git add --all -- <plan-owned paths>`
 * runner-injected path-scoped `git diff --staged --name-status -- <plan-owned paths>`
 * full `git diff --staged --name-status` to confirm the staged set contains only plan-owned paths
-* `git commit -m "<generated message>"`
+* the exact multiline `git commit --cleanup=verbatim -F - <<'EOF'` flow with `<generated subject>` and `<generated body>`
 
 Do NOT use repository-wide `git add --all`.
 
@@ -235,9 +259,10 @@ If `Task savepoint aggregate summary` is present:
 
 1. Do not run `git add`.
 2. Do not run `git commit`.
-3. Verify no remaining plan-owned changes exist.
-4. Summarize the task commit SHAs and artifact paths.
-5. MUST NOT push.
+3. Do not write `.ai/artifacts/<plan-name>/execution-summary.md`; the runner refreshes it after this stage.
+4. Verify no remaining plan-owned changes exist.
+5. Summarize the task commit SHAs and artifact paths.
+6. MUST NOT push.
 
 Otherwise:
 
@@ -246,15 +271,22 @@ Otherwise:
 3. Stage the same runner-injected plan-owned paths again, because lint-staged tasks may modify files after the first add.
 4. Inspect the staged diff and confirm every staged path is in the runner-injected plan-owned path list.
 5. If any staged path is outside the runner-injected path list, output `STOP` with reason `non plan-scoped staged changes detected` and do not commit.
-6. Generate exactly one commit message using the commit message rules.
+6. Generate exactly one conventional-commit subject line and one structured multiline body using the commit message rules.
 7. Create exactly one local git commit using:
 
-git commit -m "<generated message>"
+```bash
+git commit --cleanup=verbatim -F - <<'EOF'
+<generated subject>
+
+<generated body>
+EOF
+```
 
 8. MUST NOT push.
 9. If `pnpm lint-staged` or `git commit` fails, output `STOP` and state the failure.
-10. After the commit succeeds, read the commit SHA and current branch.
-11. Output the created commit SHA, branch, commit message, and user-facing summary.
+10. Do not write `.ai/artifacts/<plan-name>/execution-summary.md`; the runner refreshes it from completed task artifacts after each task savepoint commit.
+11. After the commit succeeds, read the commit SHA and current branch.
+12. Output the created commit SHA, branch, commit subject, and user-facing summary.
 
 Rules:
 

@@ -47,6 +47,8 @@ If not provided:
 
 Review MUST be performed using only the runner-injected staged paths for the current plan. For thin-plan-v2 plans, the runner stages paths from `.ai/artifacts/<plan-name>/state/files.json` and checks `.ai/artifacts/<plan-name>/state/file-ownership.json`; legacy thin-plan-v1 plans may still use inline file sections.
 
+Workflow-runner owns review staging. When review fails and routes back to execution, remediation must tell the operator or next execution agent to fix the working tree and leave files unstaged, then rerun workflow-runner. Do not tell the operator to stage or restage review fixes; pre-staged files block the next review entry.
+
 Use the path-scoped staged diff command injected by `workflow-runner.ts`:
 
 git diff --staged -- <plan-owned paths>

@@ -1,5 +1,5 @@
-Version: 1.9
-Last Updated: 2026-07-02
+Version: 1.10
+Last Updated: 2026-07-06
 
 # Workflow State Instructions
 
@@ -11,6 +11,7 @@ Define the canonical plan workflow state machine: plan statuses, next actions, a
 
 - `.ai/templates/plan.template.md`
 - `.ai/prompts/create-plan.md`
+- `.ai/prompts/sync-plan-artifacts.md`
 - `.ai/prompts/plan-validator.md`
 - `.ai/prompts/fix-plan.md`
 - `.ai/prompts/execute-plan.md`
@@ -29,6 +30,7 @@ Define the canonical plan workflow state machine: plan statuses, next actions, a
 Thin-plan-v2 state parity:
 
 * The plan manifest `## Status` and `## Next Action` values and `.ai/artifacts/<plan-name>/state/workflow.json` `status` and `nextAction` values are one logical state.
+* Do not duplicate workflow `status` or `nextAction` in `.ai/artifacts/<plan-name>/state/files.json` or `.ai/artifacts/<plan-name>/state/file-ownership.json`; those files are inventory and ownership sidecars only.
 * Any workflow prompt that updates either location MUST update both locations before final output.
 * After every state transition, the prompt MUST reread both locations and verify the values match.
 * If the values do not match, repair the mismatch before final output; if repair is not possible, STOP with the exact mismatch.
@@ -46,6 +48,7 @@ Allowed Status Values:
 
 Allowed Next Action Values:
 
+* sync-plan-artifacts
 * plan-validator
 * fix-plan
 * execute-plan
@@ -57,6 +60,8 @@ Allowed Next Action Values:
 Allowed Status Transitions:
 
 draft
+→ sync-plan-artifacts
+→ plan-validator
 → draft
 → approved
 
@@ -89,7 +94,8 @@ reopening
 Status → Next Action Mapping
 
 draft
-→ plan-validator
+→ sync-plan-artifacts for new plans created by `create-plan`
+→ plan-validator for existing draft plans that already passed artifact sync or predate this stage
 
 approved
 → execute-plan
@@ -108,6 +114,29 @@ reopening
 
 completed
 → commit-summary
+
+---
+
+Sync Plan Artifacts Loop
+
+Artifact sync completed:
+
+Status = draft
+Next Action = plan-validator
+
+Artifact sync found an unresolved spec gap, artifact inconsistency, or product decision:
+
+Status = draft
+Next Action = sync-plan-artifacts
+
+Artifact sync rules:
+
+* `sync-plan-artifacts` is valid only as `draft + sync-plan-artifacts`
+* The prompt MUST reconcile the plan manifest and `.ai/artifacts/<plan-name>/state/workflow.json`
+* The prompt may create or repair only plan-owned `.ai/plans/<plan-name>.md` and `.ai/artifacts/<plan-name>/...` files
+* The prompt MUST NOT edit application code, tests, migrations, generated files, or non-plan-owned artifacts
+* Validation begins only after artifact sync transitions to `draft + plan-validator`
+* Existing plans already at `draft + plan-validator` remain valid and must not be migrated solely for this stage
 
 ---
 

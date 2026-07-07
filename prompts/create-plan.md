@@ -26,6 +26,16 @@ Apply the superpowers advisory guidance for analysis and edge-case checks.
 
 Generate a complete implementation plan using the provided spec.
 
+New draft plans MUST start at:
+
+- Status = draft
+- Next Action = sync-plan-artifacts
+
+This is the `draft + sync-plan-artifacts` state.
+
+The workflow runner performs `sync-plan-artifacts` after plan creation and
+before `plan-validator`.
+
 ---
 
 ## Template Usage (MANDATORY)
@@ -109,6 +119,40 @@ For non-user-facing work:
 - in `.ai/artifacts/<plan-name>/implementation-map.md`, write exactly `N/A: <concrete reason>`
 - the reason must explain why the change does not affect a screen, route, workflow, visible state, or user-triggered API behavior
 - this is the only allowed `N/A` value in generated implementation-map artifacts
+
+---
+
+## User-Facing Plan Authoring Preflight (MANDATORY)
+
+For user-facing work, run this preflight in order before finalizing the draft:
+
+1. validate or regenerate `user-journey.md`
+2. derive or repair `implementation-map.md` from every user-flow and acceptance-scenario action
+3. write plan phases
+4. run a mandatory self-check
+5. revise the plan/artifacts in place if the self-check finds gaps
+
+Auto-correct when possible. STOP only when the preflight still cannot satisfy these rules.
+
+The mandatory self-check MUST verify:
+
+- each `[task:..]` chunk can pass, be reviewed, and be committed independently
+- no lifecycle-only or red-test-only savepoints remain
+- each spec-required behavior, especially visible validation and failure-state behavior, is assigned to a concrete task
+- each implementation-map row has implementation and validation coverage
+
+If a savepoint is invalid:
+
+- rewrite or remove invalid task savepoints
+- rewrite lifecycle-only or red-test-only chunks into independently passable subsystem or behavior chunks
+- remove task IDs entirely when the work is really one final-commit fix
+
+If the implementation map or phase ownership is under-scoped:
+
+- repair missing user-action rows before finalizing phases
+- expand task ownership until every spec-required behavior and every implementation-map row is covered
+
+STOP only when the preflight still cannot satisfy these rules without inventing behavior beyond the spec.
 
 ---
 
@@ -216,6 +260,7 @@ Rules:
 - The tests entry must identify validation coverage for the action.
 - Every user action in `## User Flows` and `## Acceptance Scenarios` of the flow artifact must appear in this mapping.
 - The mapping must not include actions that do not appear in the flow artifact.
+- Build or repair this artifact before finalizing `## Phases` for user-facing work.
 
 For non-user-facing work, write exactly `N/A: <concrete reason>` in `implementation-map.md`.
 
@@ -237,11 +282,12 @@ Write `.ai/artifacts/<plan-name>/state/files.json` with:
 - `changedFiles`
 - `released`
 - `headSha`
-- workflow state
 
 The `created`, `modified`, `deleted`, `changedFiles`, and `released` fields MUST be string arrays. Do not use legacy aliases such as `createdFiles`, `modifiedFiles`, or `deletedFiles`.
 
 This artifact is the review and commit changed-file inventory. It should list the expected created, modified, and deleted file paths inferred from the request, spec, and codebase. It is reconciled after implementation by `execute-plan` from actual git changes.
+
+Do not write workflow state into `files.json`. Workflow state belongs only in the plan manifest and `workflow.json`.
 
 Write `.ai/artifacts/<plan-name>/state/workflow.json` with:
 
@@ -256,26 +302,26 @@ Write `.ai/artifacts/<plan-name>/state/workflow.json` with:
 The initial `workflow.json` MUST use:
 
 - `status`: `draft`
-- `nextAction`: `plan-validator`
+- `nextAction`: `sync-plan-artifacts`
 - `latest`: `{}`
 - `history`: `[]`
 - `unresolvedBlockers`: `[]`
 
 Do not use legacy aliases such as `latestEvent`, `latestValidation`, `latestReview`, or `compactHistory`.
 
-Write `.ai/artifacts/<plan-name>/state/file-ownership.json` with the planning-time ownership boundary and current workflow state.
+Write `.ai/artifacts/<plan-name>/state/file-ownership.json` with the planning-time ownership boundary.
 
 It MUST be valid JSON with exactly the runner-required ownership fields:
 
 - `planPath`: string
-- `status`: allowed workflow status string
-- `nextAction`: allowed workflow next-action string
 - `owns`: string array of repo-relative exact file paths or directory globs ending in `/**`
 - `released`: string array; use `[]` during initial plan creation
 - `resolvedFiles`: string array of concrete repo-relative files expected to be changed by the plan
 - `changedFiles`: string array matching the initial expected changed-file inventory from `files.json`
 - `headSha`: current `git rev-parse HEAD` string
 - `updatedAt`: ISO timestamp string
+
+Do not write `status` or `nextAction` into `file-ownership.json`. Workflow state belongs only in the plan manifest and `workflow.json`.
 
 Write `.ai/artifacts/<plan-name>/state/context.md` with an initial runner context snapshot.
 

@@ -145,11 +145,13 @@ Do NOT:
 
 If the blocker is resolved:
 
-* mark the resolved blocker with `* Status: resolved`
-* append evidence under the blocker or under a new `## Unblock History` entry
+* create `.ai/artifacts/<plan-name>/events/unblock-vX.md` with the resolved blocker evidence
+* update `.ai/artifacts/<plan-name>/state/workflow.json` with `latest.unblock`, appended `history`, and remaining `unresolvedBlockers`
 * preserve unresolved blockers
 * keep file ownership unchanged unless the blocker evidence proves the plan already owns the needed files
 * keep fixes traceable to the blocker
+* MUST NOT add inline `## Blockers` to thin-plan-v2 manifests
+* MUST NOT add inline `## Unblock History` to thin-plan-v2 manifests
 
 If any unresolved execution blocker remains:
 
@@ -175,29 +177,28 @@ execute-plan
 
 ---
 
-## Unblock History (MANDATORY)
-
-Append the next sequential unblock entry.
+## Unblock Artifact State (MANDATORY)
 
 Before updating the plan, create `.ai/artifacts/<plan-name>/events/unblock-vX.md` with `# Unblock vX`, `## Summary`, and `## Evidence`.
 
-If the plan already contains `## Unblock History`, append only:
+Then update `.ai/artifacts/<plan-name>/state/workflow.json` with runner-readable thin-plan-v2 state:
 
-### Unblock vX
-
-* Summary:
-* Evidence: .ai/artifacts/<plan-name>/events/unblock-vX.md
-* Decision: active | blocked
+* preserve `planPath`
+* set `status` and `nextAction`
+* write compact `version`, `result`, `summary`, and `evidence` fields under `latest.unblock`
+* append `.ai/artifacts/<plan-name>/events/unblock-vX.md` to `history`
+* set `unresolvedBlockers` to active blocker strings, or `[]` when none remain
+* refresh `updatedAt`
 
 Rules:
 
 * Every unblock run that changes the plan MUST append a new entry
 * MUST NOT overwrite previous unblock entries
 * Unblock versions MUST be sequential
-* Unblock History entries may contain only `Summary`, `Decision`, and `Evidence`
+* `latest.unblock` may contain only compact `version`, `result`, `summary`, and `evidence`
 * Put resolved blocker lists, remaining blocker lists, and detailed unblock reasoning in the unblock artifact
-* MUST NOT duplicate the `## Unblock History` heading when it already exists
-* MUST create `## Unblock History` only if the section is missing
+* MUST NOT add inline `## Blockers` to thin-plan-v2 manifests
+* MUST NOT add inline `## Unblock History` to thin-plan-v2 manifests
 
 ---
 

@@ -85,7 +85,8 @@ Allowed entry states:
 IF Status == draft:
 
 * keep `Status = draft`
-* require `Next Action = plan-validator` or `Next Action = fix-plan`
+* require `Next Action = sync-plan-artifacts`, `Next Action = plan-validator`,
+  or `Next Action = fix-plan`
 * enter the draft preflight loop
 
 IF Status == approved:
@@ -112,6 +113,7 @@ IF Status == draft:
 
 Allowed:
 
+* sync-plan-artifacts
 * plan-validator
 * fix-plan
 
@@ -134,8 +136,8 @@ IF `Next Action` != execute-plan:
 ## Draft Preflight Loop (MANDATORY)
 
 If the input plan is `draft`, mirror the workflow runner semantics for
-`plan-validator.md` and `fix-plan.md` until one of these terminal conditions is
-reached:
+`sync-plan-artifacts.md`, `plan-validator.md`, and `fix-plan.md` until one of
+these terminal conditions is reached:
 
 * the plan becomes `approved`
 * a real blocking issue requires `STOP`
@@ -143,8 +145,15 @@ reached:
 Loop rules:
 
 * follow the plan's current `Status` and `Next Action` after each preflight update
+* use `sync-plan-artifacts.md` only when the plan is `draft + sync-plan-artifacts`
 * use `plan-validator.md` only when the plan is `draft + plan-validator`
 * use `fix-plan.md` only when the plan is `draft + fix-plan`
+* apply the same artifact sync handling as the runner path:
+  * sync may create or repair only plan-owned `.ai/plans/<plan-name>.md` and
+    `.ai/artifacts/<plan-name>/...` files
+  * sync success transitions to `draft + plan-validator`
+  * unresolved artifact or product-decision blockers remain
+    `draft + sync-plan-artifacts` and MUST output `STOP`
 * apply the same spec-origin handling as the runner path:
   * `MINOR SPEC REPAIR` may update only the exact allowed spec file and sections
   * plan-only overreach, omissions, file-scope issues, or reusable codebase contracts should be fixed without escalating to the user
@@ -217,7 +226,10 @@ Rules:
 * lead with the file path and a short change map before showing code
 * prefer fenced code blocks using the real file language such as `tsx`, `ts`, `js`, `jsx`, `sql`, `css`, or `md`
 * show surrounding code so the operator can see where the change lands in the file, similar to an in-place editor view
-* use short inline markers such as `// new`, `// changed`, or `/* new */` only where they help pinpoint the exact edited lines
+* add visible comments that are minimal, meaningful preview comments next to changed lines or blocks when showing preview code so the edits are easier to see
+* prefer one concise explanatory comment per changed block over repeated line-by-line labels
+* avoid marker-only comments such as `// new`, `// changed`, `/* new */`, or `<!-- changed -->` unless no clearer short comment exists
+* remove preview-only comments before applying the actual file unless the operator explicitly asks to keep them
 * it is acceptable to collapse unrelated unchanged sections with concise placeholders such as `...rest of code`
 * do not include raw diff output or patch text unless the operator explicitly asks to see it
 
