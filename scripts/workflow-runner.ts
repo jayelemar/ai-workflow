@@ -118,6 +118,7 @@ const SHARED_SKILL_ROOT = path.join(homedir(), ".codex-shared", "skills");
 const TERMINAL_FAILED_COMMAND_OUTPUT_LINE_LIMIT = 4;
 const TERMINAL_FAILED_COMMAND_OUTPUT_CHAR_LIMIT = 1000;
 const TERMINAL_FILE_DETAIL_LIMIT = 3;
+const TERMINAL_PROGRESS_DETAIL_LIMIT = 96;
 const STOP_REASON_EXCERPT_CHAR_LIMIT = 240;
 const ANSI_RESET = "\u001b[0m";
 const ANSI_SEQUENCE_PATTERN =
@@ -125,7 +126,6 @@ const ANSI_SEQUENCE_PATTERN =
 const WORKFLOW_RUNNER_USAGE = `Usage: pnpm exec tsx .ai/scripts/workflow-runner.ts [options] .ai/plans/<plan-name>.md
 
 Options:
-  --compact              Reduce terminal output; keep command details in logs
   --profile <name>       Use a Codex profile override
   --unblock-note <text>  Add operator context for unblock-plan
   -h, --help             Show this help message`;
@@ -246,7 +246,6 @@ type RunWorkflowOptions = {
   console?: ConsoleLike;
   outputStream?: OutputStream;
   streamOutput?: boolean;
-  compactOutput?: boolean;
   unblockNote?: string;
   isIgnored?: (relativePath: string) => Promise<boolean>;
   now?: () => number;
@@ -2259,6 +2258,19 @@ const formatWorkflowAgentSummary = (text: string, color = false): string => {
   );
 };
 
+const compactTerminalProgressDetail = (detail: string): string => {
+  const normalized = detail.replace(/\s+/g, " ").trim();
+  if (normalized.length <= TERMINAL_PROGRESS_DETAIL_LIMIT) {
+    return normalized;
+  }
+
+  const shortened = normalized
+    .slice(0, TERMINAL_PROGRESS_DETAIL_LIMIT - 3)
+    .replace(/\s+\S*$/, "")
+    .trimEnd();
+  return `${shortened || normalized.slice(0, TERMINAL_PROGRESS_DETAIL_LIMIT - 3)}...`;
+};
+
 const formatWorkflowApprovalPreviewOnly = (
   text: string,
   color = false,
@@ -2546,14 +2558,15 @@ export const formatWorkflowProgressLine = ({
   const formattedProgressPrefix = color
     ? `${stage.colorCode}${progressPrefix}${ANSI_RESET}`
     : progressPrefix;
-  return `${formattedProgressPrefix}\n${status} -> ${nextAction}\nmodel: ${model} | reasoning: ${reasoning}\n`;
+  return `\n\n${formattedProgressPrefix}\n${status} -> ${nextAction}\nmodel: ${model} | reasoning: ${reasoning}\n`;
 };
 
 export const formatCommitProgressLine = ({
   completed,
   total,
   description,
-}: CommitProgress): string => `[${completed}/${total}] ${description}`;
+}: CommitProgress): string =>
+  `[${completed}/${total}] ${compactTerminalProgressDetail(description)}`;
 
 export const WORKFLOW_WAIT_NOTICE_INTERVAL_MS = 120_000;
 
@@ -5102,7 +5115,7 @@ const formatTaskProgressLine = ({
   task: PlanTask;
   stage: TaskStage;
   detail: string;
-}): string => `TASK ${task.id} | ${stage} | ${detail}`;
+}): string => `TASK ${task.id} | ${stage} | ${compactTerminalProgressDetail(detail)}`;
 
 const writeCurrentTaskPointer = async ({
   rootDir,
@@ -8535,7 +8548,6 @@ export const runWorkflowRunner = async (
     return success("workflow runner help", 0);
   }
   const planArgument = options.planName ?? cliArgs.planArgument;
-  const compactOutput = options.compactOutput ?? cliArgs.compactOutput;
   const codexProfile =
     options.codexProfile ??
     cliArgs.codexProfile ??
@@ -8551,7 +8563,7 @@ export const runWorkflowRunner = async (
   const processRunner = options.processRunner ?? defaultProcessRunner;
   const now = options.now ?? Date.now;
   const timestamp = options.timestamp ?? (() => new Date().toISOString());
-  const streamOutput = compactOutput ? false : (options.streamOutput ?? true);
+  const streamOutput = options.streamOutput ?? true;
   const outputStream = options.outputStream ?? {
     stdout: (chunk: string) => process.stdout.write(chunk),
     stderr: (chunk: string) => process.stderr.write(chunk),

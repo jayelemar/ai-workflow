@@ -3234,7 +3234,7 @@ test("workflow progress formatter adds readable stage labels with optional color
       reasoning: "high",
       color: false,
     }),
-    "[1/100] STAGE EXECUTE\nactive -> execute-plan\nmodel: gpt-5.5 | reasoning: high\n",
+    "\n\n[1/100] STAGE EXECUTE\nactive -> execute-plan\nmodel: gpt-5.5 | reasoning: high\n",
   );
 
   assert.equal(
@@ -3248,7 +3248,7 @@ test("workflow progress formatter adds readable stage labels with optional color
       reasoning: "xhigh",
       color: true,
     }),
-    "\u001b[37;45m[2/100] STAGE REVIEW\u001b[0m\nreview -> review-plan\nmodel: gpt-5.5 | reasoning: xhigh\n",
+    "\n\n\u001b[37;45m[2/100] STAGE REVIEW\u001b[0m\nreview -> review-plan\nmodel: gpt-5.5 | reasoning: xhigh\n",
   );
 });
 
@@ -7259,10 +7259,11 @@ ${extra}`,
 
     let reviewRuns = 0;
     let taskCommitRuns = 0;
+    const output = collectConsole();
     const result = await runWorkflowRunner({
       planName: planArg("task-savepoint-long-name"),
       rootDir: workspace.root,
-      console: collectConsole().console,
+      console: output.console,
       processRunner: async (call) => {
         if (call.command === "git" && call.args[0] === "rev-parse") {
           return {
@@ -7359,6 +7360,29 @@ ${extra}`,
       "02-web-surface-v1.md",
     ]);
     assert.ok(taskFiles.every((file) => file.length <= 255));
+
+    const consoleOutput = output.lines.join("\n");
+    assert.match(
+      consoleOutput,
+      /TASK 01-backend-prompt-search-guidance \| implementing \| Goal update only the prompt search planning savepoint so it owns prompt wording and prompt\.\.\./,
+    );
+    assert.doesNotMatch(
+      consoleOutput,
+      /without claiming generator enforced semantics/,
+    );
+
+    const firstTaskArtifact = await readFile(
+      join(
+        workspace.root,
+        ".ai",
+        "artifacts",
+        "task-savepoint-long-name",
+        "tasks",
+        "01-backend-prompt-search-guidance-v1.md",
+      ),
+      "utf8",
+    );
+    assert.match(firstTaskArtifact, new RegExp(longTaskName));
   } finally {
     await workspace.cleanup();
   }
@@ -10169,84 +10193,7 @@ test("workflow runner releases file ownership locks after success and blocked ou
   }
 });
 
-test("compact CLI mode parses the plan argument and reports the workflow log path", async () => {
-  const workspace = await setupWorkspace();
-  try {
-    await writePlan(
-      workspace.root,
-      "workflow-runner",
-      planWith("completed", "commit-summary"),
-    );
-    const { lines, console } = collectConsole();
-    let streamedStdout = "";
-    let streamedStderr = "";
-    const result = await runWorkflowRunner({
-      argv: ["--compact", ".ai/plans/workflow-runner.md"],
-      rootDir: workspace.root,
-      console,
-      outputStream: {
-        stdout: (chunk) => {
-          streamedStdout += chunk;
-        },
-        stderr: (chunk) => {
-          streamedStderr += chunk;
-        },
-      },
-      processRunner: async (call) => {
-        if (call.command === "git" && call.args[0] === "status") {
-          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
-        }
-        const rawStdout = `${codexCommandStartedLine("git status --short")}\n${codexCommandOutputLine(
-          " M src/file.ts\n",
-          "git status --short",
-        )}\n`;
-        call.onStdout?.(rawStdout);
-        call.onStderr?.("live stderr\n");
-        return {
-          launched: true,
-          stdout: rawStdout,
-          stderr: "captured stderr",
-          exitCode: 0,
-        };
-      },
-    });
-
-    assert.equal(result.success, true);
-    assert.equal(streamedStdout, "");
-    assert.equal(streamedStderr, "");
-    assert.match(
-      lines.join("\n"),
-      /\[1\/100\] STAGE SUMMARY\ncompleted -> commit-summary\nmodel: gpt-5\.3-codex-spark \| reasoning: medium/,
-    );
-    assert.equal(lines.includes("SUCCESS"), true);
-    assert.equal(
-      lines.includes(
-        "- Workflow log: .ai/artifacts/workflow-runner/logs/runner.log",
-      ),
-      true,
-    );
-
-    const log = await readFile(
-      join(
-        workspace.root,
-        ".ai",
-        "artifacts",
-        "workflow-runner",
-        "logs",
-        "runner.log",
-      ),
-      "utf8",
-    );
-    assert.match(log, /stdout: omitted \d+ bytes, \d+ lines/);
-    assert.match(log, /stderr: omitted \d+ bytes, 1 lines/);
-    assert.doesNotMatch(log, /\{"type":"item.started"/);
-    assert.doesNotMatch(log, /captured stderr/);
-  } finally {
-    await workspace.cleanup();
-  }
-});
-
-test(`compact CLI validation failures stop before ${CODEX_EXEC_LABEL}`, async () => {
+test(`removed compact CLI mode stops before ${CODEX_EXEC_LABEL}`, async () => {
   const workspace = await setupWorkspace();
   try {
     const processCalls: Parameters<ProcessRunner>[0][] = [];
@@ -10255,35 +10202,27 @@ test(`compact CLI validation failures stop before ${CODEX_EXEC_LABEL}`, async ()
       return { launched: true, stdout: "", stderr: "", exitCode: 0 };
     };
 
-    const missingPlan = await runWorkflowRunner({
+    const compactFlag = await runWorkflowRunner({
       argv: ["--compact"],
       rootDir: workspace.root,
       processRunner,
     });
-    assert.equal(missingPlan.success, false);
-    assert.match(missingPlan.reason, /plan name is required/);
+    assert.equal(compactFlag.success, false);
+    assert.match(compactFlag.reason, /unknown workflow runner flag: --compact/);
 
-    const invalidPath = await runWorkflowRunner({
+    const compactWithPlan = await runWorkflowRunner({
       argv: ["--compact", "workflow-runner.md"],
       rootDir: workspace.root,
       processRunner,
     });
-    assert.equal(invalidPath.success, false);
-    assert.match(invalidPath.reason, /plan argument/);
-
-    const misplacedCompact = await runWorkflowRunner({
-      argv: [".ai/plans/workflow-runner.md", "--compact"],
-      rootDir: workspace.root,
-      processRunner,
-    });
-    assert.equal(misplacedCompact.success, false);
+    assert.equal(compactWithPlan.success, false);
     assert.match(
-      misplacedCompact.reason,
-      /--compact must appear before the plan argument/,
+      compactWithPlan.reason,
+      /unknown workflow runner flag: --compact/,
     );
 
     const missingUnblockNote = await runWorkflowRunner({
-      argv: ["--compact", ".ai/plans/workflow-runner.md", "--unblock-note"],
+      argv: [".ai/plans/workflow-runner.md", "--unblock-note"],
       rootDir: workspace.root,
       processRunner,
     });
@@ -10291,7 +10230,7 @@ test(`compact CLI validation failures stop before ${CODEX_EXEC_LABEL}`, async ()
     assert.match(missingUnblockNote.reason, /--unblock-note requires a value/);
 
     const missingCodexProfile = await runWorkflowRunner({
-      argv: ["--compact", ".ai/plans/workflow-runner.md", "--profile"],
+      argv: [".ai/plans/workflow-runner.md", "--profile"],
       rootDir: workspace.root,
       processRunner,
     });
@@ -10300,7 +10239,6 @@ test(`compact CLI validation failures stop before ${CODEX_EXEC_LABEL}`, async ()
 
     const invalidCodexProfile = await runWorkflowRunner({
       argv: [
-        "--compact",
         "--profile",
         "../codex-personal",
         ".ai/plans/workflow-runner.md",
@@ -10344,7 +10282,7 @@ test("workflow runner --help prints usage without launching Codex", async () => 
       output.join("\n"),
       /Usage: pnpm exec tsx \.ai\/scripts\/workflow-runner\.ts/,
     );
-    assert.match(output.join("\n"), /--compact/);
+    assert.doesNotMatch(output.join("\n"), /--compact/);
     assert.deepEqual(errors, []);
     assert.equal(processCalls.length, 0);
   } finally {
@@ -10489,7 +10427,7 @@ test("workflow runner fails closed when git branch cannot be determined", async 
   }
 });
 
-test("compact CLI failure output includes the stop reason and workflow log path", async () => {
+test("CLI failure output includes the stop reason and workflow log path", async () => {
   const workspace = await setupWorkspace();
   try {
     await writePlan(
@@ -10499,7 +10437,7 @@ test("compact CLI failure output includes the stop reason and workflow log path"
     );
     const { lines, console } = collectConsole();
     const result = await runWorkflowRunner({
-      argv: ["--compact", ".ai/plans/workflow-runner.md"],
+      argv: [".ai/plans/workflow-runner.md"],
       rootDir: workspace.root,
       console,
       processRunner: runnerReturning({
