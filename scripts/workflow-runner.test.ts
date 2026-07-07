@@ -1127,6 +1127,27 @@ test("sync-plan-artifacts prompt defines the pre-validator artifact sync contrac
   assert.match(prompt, /draft \+ sync-plan-artifacts/);
 });
 
+test("preview-before-apply prompt accepts draft artifact sync before validation", async () => {
+  const prompt = await readWorkflowPrompt("preview-before-apply.prompt.md");
+
+  assert.match(prompt, /sync-plan-artifacts/);
+  assert.match(prompt, /Next Action = sync-plan-artifacts/);
+  assert.match(prompt, /draft \+ sync-plan-artifacts/);
+  assert.match(prompt, /sync-plan-artifacts\.md/);
+  assert.match(prompt, /plan-validator\.md/);
+  assert.match(prompt, /fix-plan\.md/);
+});
+
+test("preview-before-apply prompt requires visible comments for changed preview code", async () => {
+  const prompt = await readWorkflowPrompt("preview-before-apply.prompt.md");
+
+  assert.match(prompt, /visible comments/i);
+  assert.match(prompt, /changed lines or blocks/i);
+  assert.match(prompt, /easier to see/i);
+  assert.match(prompt, /minimal, meaningful preview comments/i);
+  assert.match(prompt, /avoid marker-only comments/i);
+});
+
 test("fix-plan prompt forbids unclassified or unresolved major spec-origin edits", async () => {
   const prompt = await readWorkflowPrompt("fix-plan.md");
 
