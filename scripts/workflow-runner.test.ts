@@ -359,6 +359,25 @@ const writeFileOwnershipArtifact = async (
   return artifactPath;
 };
 
+const writeArtifactStateFile = async (
+  root: string,
+  planName: string,
+  fileName: string,
+  content: string,
+) => {
+  const artifactPath = join(
+    root,
+    ".ai",
+    "artifacts",
+    planName,
+    "state",
+    fileName,
+  );
+  mkdirSync(dirname(artifactPath), { recursive: true });
+  await writeFile(artifactPath, content, "utf8");
+  return artifactPath;
+};
+
 const writeThinPlanV2Artifacts = async (
   root: string,
   overrides: Partial<{
@@ -8986,6 +9005,10 @@ test("workflow runner stops before execution when another active ownership artif
     assert.match(result.reason, /workflow file ownership conflict/);
     assert.match(result.reason, /\.ai\/plans\/other-plan\.md/);
     assert.match(result.reason, /apps\/web\/src\/shared\.ts/);
+    assert.match(
+      result.reason,
+      /rtk node \.ai\/scripts\/reset-file-ownership\.mjs \.ai\/plans\/other-plan\.md --force/,
+    );
     assert.equal(
       calls.some((call) => call.command === CODEX_COMMAND),
       false,
@@ -9005,6 +9028,238 @@ test("workflow runner stops before execution when another active ownership artif
       ),
     );
     assert.deepEqual(artifact.resolvedFiles, ["apps/web/src/shared.ts"]);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("workflow runner ignores malformed ownership artifacts from another draft plan", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(
+      workspace.root,
+      "current-plan",
+      planWithFileScope(
+        "active",
+        "execute-plan",
+        {
+          modified: ["apps/web/src/shared.ts"],
+        },
+        ownershipScopeSection(["apps/web/src/shared.ts"]),
+      ),
+    );
+    await writePlan(
+      workspace.root,
+      "other-plan",
+      planWith("draft", "sync-plan-artifacts"),
+    );
+    await writeArtifactStateFile(
+      workspace.root,
+      "other-plan",
+      "file-ownership.json",
+      '{ "tasks": [] }\n',
+    );
+
+    const calls: Parameters<ProcessRunner>[0][] = [];
+    const result = await runWorkflowRunner({
+      argv: [".ai/plans/current-plan.md"],
+      rootDir: workspace.root,
+      processRunner: async (call) => {
+        calls.push(call);
+        if (call.command === "git" && call.args[0] === "status") {
+          return {
+            launched: true,
+            stdout: " M apps/web/src/shared.ts\n",
+            stderr: "",
+            exitCode: 0,
+          };
+        }
+        if (call.command === "git" && call.args[0] === "rev-parse") {
+          return {
+            launched: true,
+            stdout: "headsha\n",
+            stderr: "",
+            exitCode: 0,
+          };
+        }
+        if (call.promptPath === ".ai/prompts/execute-plan.md") {
+          await writePlan(
+            workspace.root,
+            "current-plan",
+            planWithFileScope(
+              "blocked",
+              "unblock-plan",
+              {
+                modified: ["apps/web/src/shared.ts"],
+              },
+              ownershipScopeSection(["apps/web/src/shared.ts"]),
+            ),
+          );
+        }
+        return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+      },
+    });
+
+    assert.equal(result.success, false);
+    assert.match(result.reason, /plan blocked after execute-plan/);
+    assert.equal(
+      calls.some((call) => call.command === CODEX_COMMAND),
+      true,
+    );
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("workflow runner ignores malformed workflow state from another draft plan", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(
+      workspace.root,
+      "current-plan",
+      planWithFileScope(
+        "active",
+        "execute-plan",
+        {
+          modified: ["apps/web/src/shared.ts"],
+        },
+        ownershipScopeSection(["apps/web/src/shared.ts"]),
+      ),
+    );
+    await writePlan(
+      workspace.root,
+      "other-plan",
+      planWith("draft", "sync-plan-artifacts"),
+    );
+    await writeFileOwnershipArtifact(workspace.root, "other-plan", {
+      planPath: ".ai/plans/other-plan.md",
+      owns: ["apps/web/src/shared.ts"],
+      released: [],
+      resolvedFiles: ["apps/web/src/shared.ts"],
+      changedFiles: ["apps/web/src/shared.ts"],
+      headSha: "otherhead",
+      updatedAt: "2026-06-04T00:00:00.000Z",
+    });
+    await writeArtifactStateFile(
+      workspace.root,
+      "other-plan",
+      "workflow.json",
+      '{ "status": "draft", "nextAction": "sync-plan-artifacts" }\n',
+    );
+
+    const calls: Parameters<ProcessRunner>[0][] = [];
+    const result = await runWorkflowRunner({
+      argv: [".ai/plans/current-plan.md"],
+      rootDir: workspace.root,
+      processRunner: async (call) => {
+        calls.push(call);
+        if (call.command === "git" && call.args[0] === "status") {
+          return {
+            launched: true,
+            stdout: " M apps/web/src/shared.ts\n",
+            stderr: "",
+            exitCode: 0,
+          };
+        }
+        if (call.command === "git" && call.args[0] === "rev-parse") {
+          return {
+            launched: true,
+            stdout: "headsha\n",
+            stderr: "",
+            exitCode: 0,
+          };
+        }
+        if (call.promptPath === ".ai/prompts/execute-plan.md") {
+          await writePlan(
+            workspace.root,
+            "current-plan",
+            planWithFileScope(
+              "blocked",
+              "unblock-plan",
+              {
+                modified: ["apps/web/src/shared.ts"],
+              },
+              ownershipScopeSection(["apps/web/src/shared.ts"]),
+            ),
+          );
+        }
+        return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+      },
+    });
+
+    assert.equal(result.success, false);
+    assert.match(result.reason, /plan blocked after execute-plan/);
+    assert.equal(
+      calls.some((call) => call.command === CODEX_COMMAND),
+      true,
+    );
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("workflow runner still blocks malformed ownership artifacts from another active plan", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(
+      workspace.root,
+      "current-plan",
+      planWithFileScope(
+        "active",
+        "execute-plan",
+        {
+          modified: ["apps/web/src/shared.ts"],
+        },
+        ownershipScopeSection(["apps/web/src/shared.ts"]),
+      ),
+    );
+    await writePlan(
+      workspace.root,
+      "other-plan",
+      planWith("active", "execute-plan"),
+    );
+    await writeArtifactStateFile(
+      workspace.root,
+      "other-plan",
+      "file-ownership.json",
+      '{ "tasks": [] }\n',
+    );
+
+    const calls: Parameters<ProcessRunner>[0][] = [];
+    const result = await runWorkflowRunner({
+      argv: [".ai/plans/current-plan.md"],
+      rootDir: workspace.root,
+      processRunner: async (call) => {
+        calls.push(call);
+        if (call.command === "git" && call.args[0] === "status") {
+          return {
+            launched: true,
+            stdout: " M apps/web/src/shared.ts\n",
+            stderr: "",
+            exitCode: 0,
+          };
+        }
+        if (call.command === "git" && call.args[0] === "rev-parse") {
+          return {
+            launched: true,
+            stdout: "headsha\n",
+            stderr: "",
+            exitCode: 0,
+          };
+        }
+        return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+      },
+    });
+
+    assert.equal(result.success, false);
+    assert.match(
+      result.reason,
+      /workflow file ownership scope invalid: file ownership artifact is malformed/,
+    );
+    assert.equal(
+      calls.some((call) => call.command === CODEX_COMMAND),
+      false,
+    );
   } finally {
     await workspace.cleanup();
   }

@@ -501,6 +501,17 @@ export const workflowFileLockPath = (
 const workflowFileUnlockPathHint = (planPath: string): string =>
   `run this on the terminal:\npnpm workflow:unlock ${shellQuote(planPath)}`;
 
+const workflowFileOwnershipResetPathHint = (reason: string): string | null => {
+  const match =
+    /workflow file ownership conflict: .+ is already owned by (?<planPath>\.ai\/plans\/[^\s)]+\.md)/.exec(
+      reason,
+    );
+  const planPath = match?.groups?.planPath;
+  return planPath
+    ? `- Ownership reset command: rtk node .ai/scripts/reset-file-ownership.mjs ${shellQuote(planPath)} --force`
+    : null;
+};
+
 const zeroTokenUsageTotals: TokenUsageTotals = {
   inputTokens: 0,
   cachedInputTokens: 0,
@@ -7532,6 +7543,29 @@ const readOtherFileOwnershipArtifacts = async (
 
   const artifacts: FileOwnershipArtifact[] = [];
   for (const entry of entries) {
+    const otherPlanPath = rel(".ai", "plans", `${entry}.md`);
+    try {
+      const otherPlanContent = await readFile(
+        path.join(rootDir, otherPlanPath),
+        "utf8",
+      );
+      const extractedStatus = extractSectionValue(otherPlanContent, "## Status");
+      if (extractedStatus !== null) {
+        const rawStatus = normalizeWorkflowStateValue(extractedStatus);
+        if (isStatus(rawStatus) && rawStatus === "draft") {
+          continue;
+        }
+      }
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== "ENOENT") {
+        return {
+          ok: false,
+          reason: `plan file cannot be read: ${otherPlanPath}: ${String(error)}`,
+        };
+      }
+    }
+
     const artifactPath = path.join(
       artifactsRoot,
       entry,
@@ -8396,10 +8430,17 @@ export const runWorkflowRunner = async (
     exitCode = 1,
   ): Promise<RunnerResult> => {
     const releaseFailure = await releaseHeldWorkflowFileLocks();
-    const finalReason = releaseFailure
-      ? `${reason}; ${releaseFailure}`
+    const ownershipResetHint = workflowFileOwnershipResetPathHint(reason);
+    const reasonWithHint = ownershipResetHint
+      ? `${reason}\n${ownershipResetHint}`
       : reason;
+    const finalReason = releaseFailure
+      ? `${reasonWithHint}; ${releaseFailure}`
+      : reasonWithHint;
     logger.error(`FAILED: ${reason}`);
+    if (ownershipResetHint) {
+      logger.error(ownershipResetHint);
+    }
     if (releaseFailure) {
       logger.error(`FAILED: ${releaseFailure}`);
     }
