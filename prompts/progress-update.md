@@ -55,11 +55,11 @@ Return only:
 ```text
 Feature Name (percentage%)
 
-Commit 1
+Commit <short_sha>
 --Completed item 1.
 --Completed item 2.
 
-Commit 2
+Commit <short_sha>
 --Completed item 3.
 ```
 
@@ -67,7 +67,8 @@ Rules:
 
 * Use the plan name as the feature name, rewritten in simple title case.
 * Keep exactly one header line.
-* Use `Commit N` group labels for completed task savepoints in completion order.
+* Use `Commit <short_sha>` group labels for completed task savepoints in completion order.
+* Use the saved short commit SHA from the completed task savepoint, such as `Commit 2450d85`.
 * Use two hyphens before each completed item.
 * Include only completed work.
 * Include every meaningful completed item. There is no maximum bullet count.
@@ -135,7 +136,7 @@ Avoid:
 
 * tests
 * files
-* commit hashes
+* commit hashes inside bullet text
 * blockers
 * implementation details
 * workflow counters
@@ -168,12 +169,12 @@ base bullets only on completed work.
 
 If `.ai/artifacts/<plan-name>/boss-summary.md` already exists:
 
-* preserve completed `Commit N` groups that still correspond to completed task
+* preserve completed `Commit <short_sha>` groups that still correspond to completed task
   savepoints.
 * rewrite the single header with the latest percentage.
 * append any missing completed task groups.
 * do not duplicate the header.
-* do not duplicate an existing `Commit N` group.
+* do not duplicate an existing `Commit <short_sha>` group.
 
 If the file does not exist, create it.
 
@@ -190,7 +191,7 @@ Output:
 ```text
 Market Research Competitive Gap Upgrade (12%)
 
-Commit 1
+Commit 2450d85
 --Prepared the upgrade plan for stronger competitor research.
 --Mapped the main areas for safer market evidence.
 --Refined the plan before feature work begins.

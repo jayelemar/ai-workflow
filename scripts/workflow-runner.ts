@@ -512,6 +512,26 @@ const workflowFileOwnershipResetPathHint = (reason: string): string | null => {
     : null;
 };
 
+export const formatWorkflowOwnershipResetHint = (
+  hint: string,
+  color = false,
+): string => {
+  const prefix = "- Ownership reset command:";
+  if (!hint.startsWith(prefix)) {
+    return hint;
+  }
+
+  const command = hint.slice(prefix.length).trim();
+  const label = color
+    ? `${terminalLabelStyles.action}${prefix}${ANSI_RESET}`
+    : prefix;
+  const formattedCommand = color
+    ? `${terminalLabelStyles.action}${command}${ANSI_RESET}`
+    : command;
+
+  return `${label}\n  ${formattedCommand}`;
+};
+
 const zeroTokenUsageTotals: TokenUsageTotals = {
   inputTokens: 0,
   cachedInputTokens: 0,
@@ -5413,7 +5433,7 @@ const titleCasePlanWord = (word: string): string =>
 const planNameToTitle = (planName: string): string =>
   planName.split(/[-_]+/).filter(Boolean).map(titleCasePlanWord).join(" ");
 
-const estimateBossSummaryPercent = ({
+export const estimateBossSummaryPercent = ({
   tasks,
   completedTasks,
   finalStatus,
@@ -5428,8 +5448,11 @@ const estimateBossSummaryPercent = ({
   if (tasks.length === 0) {
     return finalStatus === "completed" ? 100 : 25;
   }
+  if (completedTasks.length === tasks.length) {
+    return 92;
+  }
   return Math.min(
-    95,
+    75,
     Math.max(25, 25 + Math.round((completedTasks.length / tasks.length) * 50)),
   );
 };
@@ -5459,8 +5482,8 @@ const writeBossSummary = async ({
   const body = [
     `${planNameToTitle(planName)} (${percent}%)`,
     "",
-    ...completedTasks.flatMap((completedTask, index) => [
-      `Commit ${index + 1}`,
+    ...completedTasks.flatMap((completedTask) => [
+      `Commit ${completedTask.commitSha}`,
       ...completedTask.summaryLines.map(formatBossSummaryBullet),
       "",
     ]),
@@ -8594,7 +8617,7 @@ export const runWorkflowRunner = async (
       : reasonWithHint;
     logger.error(`FAILED: ${reason}`);
     if (ownershipResetHint) {
-      logger.error(ownershipResetHint);
+      logger.error(formatWorkflowOwnershipResetHint(ownershipResetHint, colorOutput));
     }
     if (releaseFailure) {
       logger.error(`FAILED: ${releaseFailure}`);
