@@ -18,9 +18,11 @@ import {
   createWorkflowWaitNotice,
   formatCommitProgressLine,
   formatCodexJsonlEventForTerminal,
+  formatWorkflowOwnershipResetHint,
   formatWorkflowElapsedTime,
   formatWorkflowProgressLine,
   formatWorkflowWaitLine,
+  estimateBossSummaryPercent,
   generateWorkflowPrompt,
   analyzeTokenUsageLedger,
   processStdioForInput,
@@ -910,6 +912,17 @@ test("progress-update prompt updates the boss summary artifact", async () => {
   assert.match(prompt, /\.ai\/artifacts\/<plan-name>\/boss-summary\.md/);
   assert.match(prompt, /update/i);
   assert.match(prompt, /single persisted/i);
+  assert.match(prompt, /Commit <short_sha>/);
+});
+
+test("boss summary percent uses review range when all savepoints are committed", () => {
+  const percent = estimateBossSummaryPercent({
+    tasks: [{ id: "01-db" }, { id: "02-ui" }] as never,
+    completedTasks: [{}, {}] as never,
+    finalStatus: "in-progress",
+  });
+
+  assert.equal(percent, 92);
 });
 
 test("plan-validator prompt fails user-facing flow steps without implementation and validation coverage", async () => {
@@ -3309,6 +3322,26 @@ test("workflow elapsed time formatter uses compact human-readable units", () => 
   assert.equal(formatWorkflowElapsedTime(12_345), "12s");
   assert.equal(formatWorkflowElapsedTime(1_315_000), "21m 55s");
   assert.equal(formatWorkflowElapsedTime(3_845_000), "1h 04m 05s");
+});
+
+test("workflow ownership reset hint formatter makes the command scannable and blue", () => {
+  const hint =
+    "- Ownership reset command: rtk node .ai/scripts/reset-file-ownership.mjs .ai/plans/support-ticket-sub-issues.md --force";
+
+  assert.equal(
+    formatWorkflowOwnershipResetHint(hint, false),
+    [
+      "- Ownership reset command:",
+      "  rtk node .ai/scripts/reset-file-ownership.mjs .ai/plans/support-ticket-sub-issues.md --force",
+    ].join("\n"),
+  );
+  assert.equal(
+    formatWorkflowOwnershipResetHint(hint, true),
+    [
+      "\u001b[34m- Ownership reset command:\u001b[0m",
+      "  \u001b[34mrtk node .ai/scripts/reset-file-ownership.mjs .ai/plans/support-ticket-sub-issues.md --force\u001b[0m",
+    ].join("\n"),
+  );
 });
 
 test("workflow ANSI color detection respects terminal and environment controls", () => {
@@ -6473,21 +6506,21 @@ test("task savepoint mode commits each reviewed task, writes artifacts, logs tas
       ),
       "utf8",
     );
-    assert.match(bossSummary, /^Task Savepoints \(\d+%\)\n\nCommit 1/m);
+    assert.match(bossSummary, /^Task Savepoints \(\d+%\)\n\nCommit abc1234/m);
     assert.match(
       bossSummary,
-      /Commit 1\n--Added backend endpoints for support-ticket flows\.\n--Aligned the first savepoint with the reviewed task scope\./,
+      /Commit abc1234\n--Added backend endpoints for support-ticket flows\.\n--Aligned the first savepoint with the reviewed task scope\./,
     );
     assert.match(
       bossSummary,
-      /Commit 2\n--Added the web surface for the reviewed support-ticket task\.\n--Finished the second savepoint without staging unrelated files\./,
+      /Commit def5678\n--Added the web surface for the reviewed support-ticket task\.\n--Finished the second savepoint without staging unrelated files\./,
     );
     assert.equal(
       [...bossSummary.matchAll(/^Task Savepoints \(\d+%\)$/gm)].length,
       1,
     );
-    assert.equal([...bossSummary.matchAll(/^Commit 1$/gm)].length, 1);
-    assert.equal([...bossSummary.matchAll(/^Commit 2$/gm)].length, 1);
+    assert.equal([...bossSummary.matchAll(/^Commit abc1234$/gm)].length, 1);
+    assert.equal([...bossSummary.matchAll(/^Commit def5678$/gm)].length, 1);
 
     const log = await readFile(
       join(
