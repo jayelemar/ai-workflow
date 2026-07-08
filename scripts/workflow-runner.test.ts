@@ -41,6 +41,10 @@ import {
   parsePlanTasks,
   type ProcessRunner,
 } from "./workflow-runner.ts";
+import {
+  collectWorkflowThresholdWarnings,
+  exceedsWorkflowTokenThresholds,
+} from "./workflow-runner/token-warnings.ts";
 
 type Workspace = {
   root: string;
@@ -4021,8 +4025,8 @@ test("guarded workflow prompts add generic token guardrails after a prior token 
       planPath: ".ai/plans/workflow-runner.md",
       promptContent: "WORKFLOW PROMPT",
       workflowTokenGuardrail: {
-        stageInputTokens: 2_100_000,
-        stageUncachedInputTokens: 150_000,
+        stageInputTokens: 1_100_000,
+        stageUncachedInputTokens: 80_000,
       },
     });
 
@@ -4053,13 +4057,59 @@ test("unguarded workflow prompts do not add generic token guardrails after a pri
     planPath: ".ai/plans/workflow-runner.md",
     promptContent: "PLAN VALIDATOR PROMPT",
     workflowTokenGuardrail: {
-      stageInputTokens: 2_100_000,
-      stageUncachedInputTokens: 150_000,
+      stageInputTokens: 1_100_000,
+      stageUncachedInputTokens: 80_000,
     },
   });
 
   assert.doesNotMatch(prompt, /Workflow token guardrail:/);
   assert.doesNotMatch(prompt, /Execute token guardrail:/);
+});
+
+test("workflow token thresholds use lowered strict warning boundaries", () => {
+  assert.equal(
+    exceedsWorkflowTokenThresholds({
+      stageInputTokens: 1_000_000,
+      stageUncachedInputTokens: 75_000,
+    }),
+    false,
+  );
+  assert.equal(
+    exceedsWorkflowTokenThresholds({
+      stageInputTokens: 1_000_001,
+      stageUncachedInputTokens: 75_000,
+    }),
+    true,
+  );
+  assert.equal(
+    exceedsWorkflowTokenThresholds({
+      stageInputTokens: 1_000_000,
+      stageUncachedInputTokens: 75_001,
+    }),
+    true,
+  );
+  assert.deepEqual(
+    collectWorkflowThresholdWarnings({
+      planByteSize: 1,
+      latestTokenUsage: {
+        stageInputTokens: 1_000_000,
+        stageUncachedInputTokens: 75_000,
+      },
+    }),
+    [],
+  );
+  assert.deepEqual(
+    collectWorkflowThresholdWarnings({
+      planByteSize: 1,
+      latestTokenUsage: {
+        stageInputTokens: 1_000_001,
+        stageUncachedInputTokens: 75_000,
+      },
+    }),
+    [
+      "Stage token usage is high; the next guarded workflow stage will use snapshot-first guidance.",
+    ],
+  );
 });
 
 test("workflow prompt includes ai-workflow instructions for .ai-owned plan files", () => {
@@ -8386,7 +8436,7 @@ test("high token stages log one short advisory warning while keeping token usage
       processRunner: runnerReturning({
         launched: true,
         stdout: turnCompletedUsageDetailLine({
-          inputTokens: 2_000_100,
+          inputTokens: 1_100_100,
           cachedInputTokens: 50,
           outputTokens: 90,
           reasoningOutputTokens: 30,
@@ -8416,8 +8466,8 @@ test("high token stages log one short advisory warning while keeping token usage
       "utf8",
     );
     assert.match(snapshot, /## Latest Token Usage Summary/);
-    assert.match(snapshot, /Stage Input Tokens: 2000100/);
-    assert.match(snapshot, /Stage Uncached Input Tokens: 2000050/);
+    assert.match(snapshot, /Stage Input Tokens: 1100100/);
+    assert.match(snapshot, /Stage Uncached Input Tokens: 1100050/);
     assert.match(snapshot, /Stage Output Tokens: 90/);
     assert.doesNotMatch(snapshot, /## Threshold Warnings/);
 
@@ -8463,12 +8513,12 @@ test("high-token prior stages add generic guardrail guidance to execute prompts"
         timestamp: "2026-06-29T00:00:00.000Z",
         iteration: 3,
         promptPath: ".ai/prompts/review-changes.md",
-        stageInputTokens: 2_100_000,
-        stageCachedInputTokens: 1_950_000,
-        stageUncachedInputTokens: 150_000,
+        stageInputTokens: 1_100_000,
+        stageCachedInputTokens: 1_020_000,
+        stageUncachedInputTokens: 80_000,
         stageOutputTokens: 800,
-        stageTotalTokens: 2_100_800,
-        totalTokens: 2_100_800,
+        stageTotalTokens: 1_100_800,
+        totalTokens: 1_100_800,
       })}\n`,
       "utf8",
     );
@@ -8531,12 +8581,12 @@ test("high-token prior stages add generic guardrail guidance to review prompts",
         timestamp: "2026-06-29T00:00:00.000Z",
         iteration: 3,
         promptPath: ".ai/prompts/execute-plan.md",
-        stageInputTokens: 2_100_000,
-        stageCachedInputTokens: 1_950_000,
-        stageUncachedInputTokens: 150_000,
+        stageInputTokens: 1_100_000,
+        stageCachedInputTokens: 1_020_000,
+        stageUncachedInputTokens: 80_000,
         stageOutputTokens: 800,
-        stageTotalTokens: 2_100_800,
-        totalTokens: 2_100_800,
+        stageTotalTokens: 1_100_800,
+        totalTokens: 1_100_800,
       })}\n`,
       "utf8",
     );
@@ -8636,12 +8686,12 @@ test("high-token prior stages add generic guardrail guidance to review-quality p
         timestamp: "2026-06-29T00:00:00.000Z",
         iteration: 3,
         promptPath: ".ai/prompts/review-changes.md",
-        stageInputTokens: 2_100_000,
-        stageCachedInputTokens: 1_950_000,
-        stageUncachedInputTokens: 150_000,
+        stageInputTokens: 1_100_000,
+        stageCachedInputTokens: 1_020_000,
+        stageUncachedInputTokens: 80_000,
         stageOutputTokens: 800,
-        stageTotalTokens: 2_100_800,
-        totalTokens: 2_100_800,
+        stageTotalTokens: 1_100_800,
+        totalTokens: 1_100_800,
       })}\n`,
       "utf8",
     );
@@ -8710,12 +8760,12 @@ test("high-token prior stages add generic guardrail guidance to fix-plan prompts
         timestamp: "2026-06-29T00:00:00.000Z",
         iteration: 3,
         promptPath: ".ai/prompts/plan-validator.md",
-        stageInputTokens: 2_100_000,
-        stageCachedInputTokens: 1_950_000,
-        stageUncachedInputTokens: 150_000,
+        stageInputTokens: 1_100_000,
+        stageCachedInputTokens: 1_020_000,
+        stageUncachedInputTokens: 80_000,
         stageOutputTokens: 800,
-        stageTotalTokens: 2_100_800,
-        totalTokens: 2_100_800,
+        stageTotalTokens: 1_100_800,
+        totalTokens: 1_100_800,
       })}\n`,
       "utf8",
     );
@@ -8786,12 +8836,12 @@ test("high-token prior stages do not add generic guardrail guidance to unguarded
         timestamp: "2026-06-29T00:00:00.000Z",
         iteration: 3,
         promptPath: ".ai/prompts/execute-plan.md",
-        stageInputTokens: 2_100_000,
-        stageCachedInputTokens: 1_950_000,
-        stageUncachedInputTokens: 150_000,
+        stageInputTokens: 1_100_000,
+        stageCachedInputTokens: 1_020_000,
+        stageUncachedInputTokens: 80_000,
         stageOutputTokens: 800,
-        stageTotalTokens: 2_100_800,
-        totalTokens: 2_100_800,
+        stageTotalTokens: 1_100_800,
+        totalTokens: 1_100_800,
       })}\n`,
       "utf8",
     );
@@ -8842,8 +8892,8 @@ test("equal-threshold, malformed latest, and non-finite latest ledgers do not ad
         timestamp: "2026-06-29T00:00:00.000Z",
         iteration: 3,
         promptPath: ".ai/prompts/review-changes.md",
-        stageInputTokens: 2_000_000,
-        stageUncachedInputTokens: 100_000,
+        stageInputTokens: 1_000_000,
+        stageUncachedInputTokens: 75_000,
       })}\n`,
     },
     {
@@ -8852,8 +8902,8 @@ test("equal-threshold, malformed latest, and non-finite latest ledgers do not ad
         timestamp: "2026-06-29T00:00:00.000Z",
         iteration: 2,
         promptPath: ".ai/prompts/review-changes.md",
-        stageInputTokens: 2_100_000,
-        stageUncachedInputTokens: 150_000,
+        stageInputTokens: 1_100_000,
+        stageUncachedInputTokens: 80_000,
       })}\nnot-json\n`,
     },
     {
