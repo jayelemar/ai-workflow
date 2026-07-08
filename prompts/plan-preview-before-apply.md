@@ -5,7 +5,7 @@ active plans when the operator wants preview-gated execution writes.
 
 It has two internal phases:
 
-1. draft preflight validation/fix
+1. draft artifact sync and bounded validation preflight
 2. preview-gated execution
 
 It does NOT replace the workflow runner default.
@@ -83,8 +83,7 @@ Allowed entry states:
 IF Status == draft:
 
 * keep `Status = draft`
-* require `Next Action = sync-plan-artifacts`, `Next Action = plan-validator`,
-  or `Next Action = fix-plan`
+* require `Next Action = sync-plan-artifacts` or `Next Action = plan-validator`
 * enter the draft preflight loop
 
 IF Status == approved:
@@ -113,7 +112,6 @@ Allowed:
 
 * sync-plan-artifacts
 * plan-validator
-* fix-plan
 
 IF `Next Action` is any other value:
 
@@ -134,8 +132,8 @@ IF `Next Action` != execute-plan:
 ## Draft Preflight Loop (MANDATORY)
 
 If the input plan is `draft`, mirror the workflow runner semantics for
-`sync-plan-artifacts.md`, `plan-validator.md`, and `fix-plan.md` until one of
-these terminal conditions is reached:
+`sync-plan-artifacts.md` and `plan-validator.md` until one of these terminal
+conditions is reached:
 
 * the plan becomes `approved`
 * a real blocking issue requires `STOP`
@@ -145,18 +143,18 @@ Loop rules:
 * follow the plan's current `Status` and `Next Action` after each preflight update
 * use `sync-plan-artifacts.md` only when the plan is `draft + sync-plan-artifacts`
 * use `plan-validator.md` only when the plan is `draft + plan-validator`
-* use `fix-plan.md` only when the plan is `draft + fix-plan`
 * apply the same artifact sync handling as the runner path:
   * sync may create or repair only plan-owned `.ai/plans/<plan-name>.md` and
     `.ai/artifacts/<plan-name>/...` files
   * sync success transitions to `draft + plan-validator`
   * unresolved artifact or product-decision blockers remain
     `draft + sync-plan-artifacts` and MUST output `STOP`
-* apply the same spec-origin handling as the runner path:
+* apply the same bounded validator preflight handling as the runner path:
   * `MINOR SPEC REPAIR` may update only the exact allowed spec file and sections
   * plan-only overreach, omissions, file-scope issues, or reusable codebase contracts should be fixed without escalating to the user
   * `MAJOR SPEC DECISION REQUIRED`, missing user authority, or any non-fixable blocker MUST output `STOP`
-* keep validation findings, plan edits, and allowed spec repairs aligned with the latest validation artifact/history
+  * unresolved blockers after one bounded repair pass remain `draft + plan-validator`
+* keep validation findings, plan edits, and allowed spec repairs aligned with the latest validation artifact
 * once the plan becomes `approved`, continue in the same invocation by transitioning to `active + execute-plan`
 
 Preflight write rules:
@@ -284,7 +282,7 @@ trail under:
 
 During `draft` preflight:
 
-* keep `.ai/artifacts/<plan-name>/state/workflow.json` current through the normal `plan-validator` / `fix-plan` loop
+* keep `.ai/artifacts/<plan-name>/state/workflow.json` current through artifact sync and the bounded `plan-validator` preflight
 * keep any allowed plan/spec repairs traceable to the latest validation findings
 * do not use the execution diff approval gate for those preflight plan/spec writes
 * refresh the workflow context snapshot after each plan update so later review-compatible stages read current state

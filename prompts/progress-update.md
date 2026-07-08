@@ -72,7 +72,7 @@ Rules:
 * Use the plan name as the feature name, rewritten in simple title case.
 * Keep exactly one header line.
 * Include a `Pre-Execution` group when completed spec, planning, artifact sync,
-  validation, fix-plan, or approval work exists before completed task commits.
+  bounded validation preflight, or approval work exists before completed task commits.
 * Use `Commit <short_sha>` group labels for completed task savepoints in completion order.
 * Use the saved short commit SHA from the completed task savepoint, such as `Commit 2450d85`.
 * Use two hyphens before each completed item.
@@ -102,8 +102,7 @@ Count these as real progress:
 * planning
 * artifact creation
 * artifact syncing
-* validation
-* fix-plan work
+* validation and bounded preflight repair work
 * implementation
 * review
 * final validation
@@ -116,7 +115,7 @@ Stage ranges:
 * Spec / Requirements: 1-5%
 * Plan Drafting: 5-10%
 * Artifact Creation / Syncing: 8-15%
-* Plan Validation / Fix Plan: 10-20%
+* Plan Validation / Bounded Preflight: 10-20%
 * Approved / Ready for Implementation: 20-25%
 * Implementation Started: 25-40%
 * Implementation In Progress: 40-75%
@@ -167,7 +166,6 @@ Use these mappings when estimating progress:
 
 * `draft + sync-plan-artifacts`: artifact creation or syncing range
 * `draft + plan-validator`: plan validation range
-* `draft + fix-plan`: plan validation / fix-plan range
 * `approved` before execution starts: approved / ready range
 * `active` with the first task in progress: implementation started range
 * `active` with some completed tasks: implementation in progress range

@@ -59,8 +59,8 @@ Plan:
 
 Plan preview rules:
 
-- `draft` plans self-run the `plan-validator` / `fix-plan` loop until they
-  either STOP on a real blocker or become ready for execution.
+- `draft` plans self-run artifact sync plus bounded `plan-validator` preflight
+  until they either STOP on a real blocker or become ready for execution.
 - `approved` and `active` plans enter execution immediately.
 - The non-test diff approval gate starts only when execution is about to write
   a non-test file.
@@ -91,7 +91,7 @@ pnpm exec tsx .ai/scripts/workflow-runner.ts --compact .ai/plans/<plan-name>.md
 - Install and publish the workflow using the setup steps in `.ai/README.md`.
 - Manual prompting is supported for spec generation and plan creation.
 - After a plan exists, the workflow runner remains the default path for
-  `sync-plan-artifacts`, `plan-validator`, `fix-plan`, `execute-plan`,
+  `sync-plan-artifacts`, `plan-validator`, `execute-plan`,
   `review-changes`, `unblock-plan`, `reopen-plan`, and `commit-summary`.
 - `plan-preview-before-apply` and `manual-preview` are available only through
   explicit prompt-file invocation; they are not keyword-triggered workflow

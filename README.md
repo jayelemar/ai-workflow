@@ -339,7 +339,6 @@ Common stages:
 
 - `draft + sync-plan-artifacts`
 - `draft + plan-validator`
-- `draft + fix-plan`
 - `approved + execute-plan`
 - `active + execute-plan`
 - `review + review-plan`
@@ -353,7 +352,6 @@ Default stage routing:
 | --- | --- | --- |
 | `sync-plan-artifacts` | `gpt-5.4` | `medium` |
 | `plan-validator` | `gpt-5.4` | `high` |
-| `fix-plan` | `gpt-5.4` | `medium` |
 | `execute-plan` | `gpt-5.4` | `high` |
 | `unblock-plan` | `gpt-5.4` | `medium` |
 | `review-changes` | `gpt-5.5` | `xhigh` |
@@ -474,8 +472,8 @@ Plan:
 
 Behavior:
 
-- `draft` plans run the same `plan-validator` / `fix-plan` preflight loop that
-  the runner uses
+- `draft` plans run artifact sync plus the same bounded `plan-validator`
+  preflight that the runner uses
 - `approved` plans transition into `active + execute-plan` in the same
   invocation
 - `active` plans resume the current execution step

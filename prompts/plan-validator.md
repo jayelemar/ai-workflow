@@ -14,6 +14,7 @@ Ensure the plan is:
 * complete
 * executable
 * free of assumptions
+* repaired once for bounded plan defects or explicitly minor spec defects before approval
 
 ---
 
@@ -23,10 +24,14 @@ Read:
 
 * `.codex/AGENTS.md`
 * `.ai/instructions/shared/workflow-state.md`
+* runner-owned context snapshot `.ai/artifacts/<plan-name>/state/context.md` as the primary current-state source
 * the plan file
 * the repo-relative `*.spec.md` path(s) listed under the plan's `## Spec` section (if any)
 * `.ai/artifacts/<plan-name>/user-journey.md` when the plan is user-facing
 * relevant codebase files named by the spec or plan when contract, shape, rendering, or file-scope questions must be resolved from existing implementation evidence
+
+Read the full plan only when exact validation or bounded repair edits require
+it or the context snapshot is insufficient. Do not load full historical sections unless the snapshot is insufficient.
 
 ---
 
@@ -80,6 +85,63 @@ Validate:
 * completeness of phases
 * alignment with spec
 * clarity of execution
+
+---
+
+## Bounded Preflight Repair Pass (MANDATORY)
+
+This prompt owns validation and the single allowed pre-execution repair pass.
+There is no separate plan-fixing stage.
+
+After identifying validation findings, perform at most one bounded repair pass
+before deciding whether to approve or stop.
+
+Allowed repairs:
+
+* plan-only overreach that can be removed without changing required behavior
+* omitted spec-required coverage that can be added to the plan without a new product decision
+* file-scope or validation-scope narrowing back to the spec
+* replacing invented plan behavior with an existing compatible codebase contract
+* `MINOR SPEC REPAIR` findings that meet the rules below
+* task savepoint repairs that keep the same behavior scope
+
+Spec edits are allowed ONLY for `MINOR SPEC REPAIR` findings and only when the
+repair is already decided by the existing spec.
+
+When a minor spec repair is allowed:
+
+1. edit only the named spec file and named spec section(s)
+2. make only the exact repair permitted by this validation pass
+3. do not add new behavior, changed business logic, product decisions, API/data-shape decisions, or edge-case rules
+4. update the plan only if needed to align with the repaired spec text
+
+After repairs, rerun the same authoring preflight used by `create-plan`.
+
+Do not limit repairs to patching only the cited lines when the plan artifacts
+or task boundaries are still invalid.
+
+Preflight steps:
+
+1. re-read the spec, `user-journey.md`, and `implementation-map.md`
+2. repair missing action rows and under-scoped behavior ownership
+3. rewrite bad task savepoints into coherent subsystem/behavior chunks
+4. remove task IDs when the work is really one final-commit fix
+5. re-check that every implementation-map row has implementation and validation coverage and that each spec-required behavior is owned by a concrete task
+
+Preflight constraints:
+
+* one bounded repair pass only
+* keep the same behavior scope
+* any repair must not require new behavior
+* do not introduce new product behavior
+* do not edit the spec outside allowed minor repairs
+* stop instead of repairing anything that must require new behavior or user authority
+
+If any blocker remains after the bounded repair pass:
+
+→ output `STOP`
+→ keep Status = draft
+→ keep Next Action = plan-validator
 
 ---
 
@@ -209,8 +271,8 @@ Rules:
 * Run the Codebase Contract Resolution check before using this classification.
 * If the issue cannot be classified with confidence as `MINOR SPEC REPAIR`, classify it as `MAJOR SPEC DECISION REQUIRED`.
 * `MINOR SPEC REPAIR` MUST NOT introduce behavior that is not already decided in the existing spec.
-* `MINOR SPEC REPAIR` MUST identify the exact spec file and exact section(s) that `fix-plan` is allowed to repair.
-* `MAJOR SPEC DECISION REQUIRED` MUST output `STOP`, state the required user decision, and must not transition to `fix-plan`.
+* `MINOR SPEC REPAIR` MUST identify the exact spec file and exact section(s) that this prompt is allowed to repair.
+* `MAJOR SPEC DECISION REQUIRED` MUST output `STOP` and state the required user decision.
 
 `MAJOR SPEC DECISION REQUIRED` does NOT apply when:
 
@@ -223,17 +285,58 @@ Rules:
 
 If minor spec repairs are detected:
 
-→ keep plan in `draft`
-→ set `Next Action` to `fix-plan`
-→ append validation history
-→ list the exact spec file and section(s) that `fix-plan` is allowed to repair
+→ run one bounded repair pass if the repair is allowed
+→ otherwise output `STOP`
+→ keep Status = draft
+→ keep Next Action = plan-validator
+→ list the exact spec file and section(s) that this prompt is allowed to repair
 
 If major spec decisions are detected:
 
 → output `STOP`
 → state the required user decision
-→ do not update the plan state
-→ do not transition to `fix-plan`
+→ keep Status = draft
+→ keep Next Action = plan-validator
+
+---
+
+## Codebase Reclassification Check (MANDATORY)
+
+Before stopping on `MAJOR SPEC DECISION REQUIRED`, inspect the relevant existing codebase files named by the spec or plan.
+
+If a finding can be resolved by any of the following, treat it as a fixable plan issue and continue:
+
+* removing behavior the plan invented beyond the spec
+* narrowing file scope or validation scope back to the spec
+* reusing an existing codebase contract/type/rendering path that already exists in spec-scoped files
+* replacing an invented data shape/API contract with an existing compatible contract already present in the codebase
+* adding spec-required coverage that the plan omitted
+* reusing an existing sibling contract for a new spec-required section of an existing document/API surface
+* including a supporting type/contract file only because an in-scope owner file needs that already-decided shape carried through existing code
+
+Rules:
+
+* This reclassification does NOT allow spec edits unless the finding is explicitly `MINOR SPEC REPAIR`.
+* This reclassification does NOT allow new product behavior.
+* This reclassification is allowed only when the plan can be corrected without asking the user to choose between multiple valid product behaviors.
+* Reusing an existing sibling item contract is allowed when it does not add behavior beyond the spec and the reused contract already represents the same kind of item in that document/API surface.
+* Adding a supporting type/contract file to the plan is allowed when the file only mirrors a spec-required shape that must flow through an already in-scope owner file.
+* when applicable, replace invented plan behavior with the existing compatible codebase contract instead of asking for a new spec decision
+
+If a finding is marked `MAJOR SPEC DECISION REQUIRED`, STOP only when the issue still requires user authority after this codebase reclassification check.
+
+If a spec-origin finding is unclassified:
+
+→ STOP (`major or unclassified spec issue requires user decision before plan can be fixed`)
+→ STOP (`unclassified spec issue requires user decision before validation can approve`)
+
+If a `MINOR SPEC REPAIR` finding lacks exact allowed spec sections:
+
+→ STOP (`minor spec repair requires exact allowed spec sections`)
+
+If a `MINOR SPEC REPAIR` would require behavior not already decided in the existing spec:
+
+→ STOP (`minor spec repair cannot introduce undecided behavior`)
 
 ---
 
@@ -360,14 +463,17 @@ Rules:
 * Event artifacts must not include full raw stdout/stderr bodies, full raw diffs, or raw Codex event streams.
 * Update `.ai/artifacts/<plan-name>/state/workflow.json` with runner-readable thin-plan-v2 state:
   * `planPath`: the exact repo-relative plan path, for example `.ai/plans/<plan-name>.md`
-  * `status`: `draft` when validation needs fixes, or `approved` when validation passes
-  * `nextAction`: `fix-plan` when validation needs fixes, or `execute-plan` when validation passes
+  * `status`: `draft` when validation stops after the bounded repair pass, or `approved` when validation passes
+  * `nextAction`: `plan-validator` when validation stops after the bounded repair pass, or `execute-plan` when validation passes
+  * valid stop state: Status = draft and Next Action = plan-validator
+  * valid approval state: Status = approved and Next Action = execute-plan
   * `latest`: object containing `validation` with compact `version`, `result`, `summary`, and `evidence` fields for the validation artifact just created
   * `history`: array of event artifact paths, including the validation artifact just created
   * `unresolvedBlockers`: array; use `[]` for ordinary validation failures
   * `updatedAt`: current ISO timestamp
 * Do not use legacy top-level aliases such as `latestValidationSummary`, `latestValidationResult`, `latestValidationEvidence`, or `compactHistoryPointer`; the runner only reads the nested thin-plan-v2 sidecar fields above.
 * The plan manifest MUST NOT contain inline `## Validation History`
+* The workflow sidecar state must match the plan manifest before final output
 
 ---
 
@@ -378,24 +484,30 @@ IF any `MAJOR SPEC DECISION REQUIRED` issues exist:
 * output `STOP`
 * state the exact user decision required
 * plan MUST NOT be approved
-* plan MUST NOT transition to `fix-plan`
+* plan MUST remain `draft + plan-validator`
 
-Do not update:
+Update or keep:
 
 ## Status
 
-Do not update:
+draft
+
+Update or keep:
 
 ## Next Action
+
+plan-validator
 
 ---
 
 IF any `MINOR SPEC REPAIR` issues exist and NO `MAJOR SPEC DECISION REQUIRED` issues exist:
 
-* plan MUST NOT be approved
-* plan MUST remain in the validation loop
+* perform the bounded repair pass if the repair is allowed
+* after repair, rerun validation inside this prompt
+* if any blocker remains, output `STOP`
+* if no blocker remains, continue to the approval route
 
-update plan:
+If stopping, update or keep plan:
 
 ## Status
 
@@ -403,23 +515,18 @@ draft
 
 ## Next Action
 
-fix-plan
-
-append:
-
-### Validation vX
-
-* Summary: minor spec repair required
-* Result: NEEDS FIX
-* Evidence: .ai/artifacts/<plan-name>/events/validation-vX.md
+plan-validator
 
 ---
 
 IF any CRITICAL issues exist and NO `MAJOR SPEC DECISION REQUIRED` issues exist and NO `MINOR SPEC REPAIR` issues exist:
 
-* plan MUST NOT be approved
+* perform the bounded repair pass if the issue is repairable without new behavior
+* after repair, rerun validation inside this prompt
+* if any blocker remains, output `STOP`
+* if no blocker remains, continue to the approval route
 
-update plan:
+If stopping, update or keep plan:
 
 ## Status
 
@@ -427,15 +534,7 @@ draft
 
 ## Next Action
 
-fix-plan
-
-append:
-
-### Validation vX
-
-* Summary: plan requires fixes before approval
-* Result: NEEDS FIX
-* Evidence: .ai/artifacts/<plan-name>/events/validation-vX.md
+plan-validator
 
 ---
 
@@ -451,13 +550,8 @@ approved
 
 execute-plan
 
-append:
-
-### Validation vX
-
-* Summary: plan is approved for execution
-* Result: APPROVED
-* Evidence: .ai/artifacts/<plan-name>/events/validation-vX.md
+write the validation event artifact and update
+`.ai/artifacts/<plan-name>/state/workflow.json` with the approval evidence.
 
 ---
 
@@ -490,7 +584,7 @@ Status:
 
 Next Action:
 
-* fix-plan
+* plan-validator
 * execute-plan
 
 IF any CRITICAL issues exist and NO `MAJOR SPEC DECISION REQUIRED` issues exist and NO `MINOR SPEC REPAIR` issues exist:
@@ -499,7 +593,7 @@ Status:
 draft
 
 Next Action:
-fix-plan
+plan-validator
 
 ---
 

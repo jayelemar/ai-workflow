@@ -1,7 +1,7 @@
 # Token Usage Optimization Reference
 
 Created: 2026-07-08
-Last Updated: 2026-07-08
+Last Updated: 2026-07-09
 
 ## Purpose
 
@@ -72,7 +72,7 @@ workflow:
 | --- | ---: | ---: | ---: | ---: |
 | `execute-plan` | 3 | 4.16M | 5.86M | 12.5M |
 | `plan-validator` | 8 | 1.35M | 1.65M | 10.9M |
-| `fix-plan` | 7 | 0.64M | 0.92M | 4.5M |
+| `fix-plan` (legacy, now folded into validator preflight) | 7 | 0.64M | 0.92M | 4.5M |
 | `review-changes` | 3 | 1.31M | 1.51M | 4.0M |
 | `review-quality` | 1 | 1.45M | 1.45M | 1.5M |
 | `sync-plan-artifacts` | 1 | 0.81M | 0.81M | 0.8M |
@@ -87,7 +87,7 @@ workflow:
 | `review-changes` | 50 | 2.23M | 3.71M | 112.0M |
 | `review-quality` | 14 | 2.94M | 4.34M | 41.4M |
 | `plan-validator` | 5 | 1.82M | 2.10M | 9.2M |
-| `fix-plan` | 4 | 1.04M | 1.13M | 4.2M |
+| `fix-plan` (legacy, now folded into validator preflight) | 4 | 1.04M | 1.13M | 4.2M |
 
 The plan, spec, implementation map, and current-state snapshot are not the main
 problem by themselves. The main cost comes from repeatedly reloading them across
@@ -111,8 +111,8 @@ Expected behavior:
 - Context is carried in the same session instead of rehydrated through separate
   workflow stages.
 - Optional review can be requested later, but native `/plan` alone does not
-  impose a plan-validator, fix-plan, artifact-sync, two-stage review, or
-  subagent tree.
+  impose artifact sync, bounded plan-validator preflight, two-stage review, or
+  a subagent tree.
 
 Estimated cost profile:
 
@@ -139,8 +139,8 @@ Expected behavior:
 - The runner starts separate `codex exec` stages.
 - Each stage receives a workflow prompt, active context packet, plan path,
   selected instructions, and stage-specific requirements.
-- Draft plans can pass through `sync-plan-artifacts`, `plan-validator`, and
-  `fix-plan`.
+- Draft plans can pass through `sync-plan-artifacts` and one bounded
+  `plan-validator` preflight.
 - Implementation can pass through `execute-plan`, `review-changes`,
   `review-quality`, `scope-cleanup`, and `commit-summary`.
 
@@ -236,7 +236,8 @@ Default decision:
 
 Problem:
 
-- Harness planning uses plan validation and fix-plan loops.
+- Harness planning used to split validation and repair across separate fresh
+  stages.
 - Superpowers can add brainstorming and plan-writing workflows.
 - Native `/plan` may already have created an implementation plan.
 
@@ -359,7 +360,7 @@ Replacement:
 | Rank | Recommendation | Expected Savings | Tradeoff |
 | ---: | --- | --- | --- |
 | 1 | Stop combining harness review with Superpowers subagent review by default | High | Less layered review |
-| 2 | Collapse `plan-validator` and `fix-plan` loops into one bounded preflight | High | Fewer automatic repair attempts |
+| 2 | Collapse validation and repair into one bounded `plan-validator` preflight | High | Fewer automatic repair attempts |
 | 3 | Merge `review-changes` and `review-quality` for routine tasks | High | Less separation between spec and quality review |
 | 4 | Use native `/plan` for small and medium tasks | High | Less workflow bookkeeping |
 | 5 | Remove always-on Superpowers injection from harness stages | High | Skills become opt-in or task-triggered |
@@ -369,9 +370,9 @@ Replacement:
 | 9 | Shorten duplicated workflow rules across prompts | Medium | More reliance on shared references |
 | 10 | Keep hooks absent or minimal | Low | None; hooks were not a current cost driver |
 
-Priority 2 is on hold. Keep `plan-validator` and `fix-plan` separate until
-there is enough measurement data showing that a combined bounded preflight can
-preserve repair quality without increasing failed execution handoffs.
+Priority 2 is implemented. Draft validation now uses one bounded
+`plan-validator` preflight so plan repair stays available without repeated
+fresh-stage context rehydration.
 
 ## Recommended Default Policy
 

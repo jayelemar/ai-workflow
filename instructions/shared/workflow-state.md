@@ -1,5 +1,5 @@
-Version: 1.10
-Last Updated: 2026-07-06
+Version: 1.11
+Last Updated: 2026-07-09
 
 # Workflow State Instructions
 
@@ -13,7 +13,6 @@ Define the canonical plan workflow state machine: plan statuses, next actions, a
 - `.ai/prompts/create-plan.md`
 - `.ai/prompts/sync-plan-artifacts.md`
 - `.ai/prompts/plan-validator.md`
-- `.ai/prompts/fix-plan.md`
 - `.ai/prompts/execute-plan.md`
 - `.ai/prompts/unblock-plan.md`
 - `.ai/prompts/review-changes.md`
@@ -50,7 +49,6 @@ Allowed Next Action Values:
 
 * sync-plan-artifacts
 * plan-validator
-* fix-plan
 * execute-plan
 * unblock-plan
 * review-plan
@@ -140,26 +138,26 @@ Artifact sync rules:
 
 ---
 
-Validation Loop
+Validation Preflight
 
-Validation failed:
+Validation stopped after bounded repair pass:
 
 Status = draft
-Next Action = fix-plan
+Next Action = plan-validator
 
 Validation passed:
 
 Status = approved
 Next Action = execute-plan
 
----
+Validation rules:
 
-Fix Plan Loop
-
-Fix completed:
-
-Status = draft
-Next Action = plan-validator
+* `plan-validator` is valid only as `draft + plan-validator`
+* The prompt may perform one bounded repair pass for plan defects and explicitly allowed minor spec repairs
+* The prompt MUST NOT introduce new behavior, make major spec decisions, or continue repairing after the bounded pass
+* If a major spec decision, unresolved blocker, or non-repairable issue remains, the prompt MUST output `STOP` and keep `draft + plan-validator`
+* The only successful validation handoff is `approved + execute-plan`
+* Existing plans at `draft + fix-plan` are invalid and require manual reset to `draft + plan-validator` if the operator wants to rerun validation
 
 ---
 

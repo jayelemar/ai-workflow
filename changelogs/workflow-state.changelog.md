@@ -1,5 +1,13 @@
 # Workflow State Instruction Changelog
 
+## v1.11 — 2026-07-09
+
+* Removed `fix-plan` as a supported next action and documented existing
+  `draft + fix-plan` plans as invalid until manually reset.
+* Collapsed draft validation repair into one bounded `plan-validator` preflight
+  that either approves `approved + execute-plan` or stops at
+  `draft + plan-validator`.
+
 ## v1.10 — 2026-07-06
 
 * Added `sync-plan-artifacts` as the automatic `draft` next action for new

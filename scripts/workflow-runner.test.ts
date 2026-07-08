@@ -54,7 +54,6 @@ type Workspace = {
 const PROMPTS = {
   "sync-plan-artifacts.md": "SYNC PLAN ARTIFACTS PROMPT",
   "plan-validator.md": "PLAN VALIDATOR PROMPT",
-  "fix-plan.md": "FIX PLAN PROMPT",
   "execute-plan.md": "EXECUTE PLAN PROMPT",
   "unblock-plan.md": "UNBLOCK PLAN PROMPT",
   "review-changes.md": "REVIEW CHANGES PROMPT",
@@ -751,7 +750,6 @@ const compactEvidencePromptNames = [
   "review-changes.md",
   "review-quality.md",
   "plan-validator.md",
-  "fix-plan.md",
   "plan-preview-before-apply.md",
 ] as const;
 
@@ -1101,18 +1099,18 @@ test("plan-validator prompt classifies spec-origin findings as minor repairs or 
   assert.match(prompt, /anything that requires user authority/);
 });
 
-test("plan-validator prompt requires major spec decisions to STOP without routing to fix-plan", async () => {
+test("plan-validator prompt requires major spec decisions to STOP without approving", async () => {
   const prompt = await readWorkflowPrompt("plan-validator.md");
 
   assert.match(
     prompt,
-    /`MAJOR SPEC DECISION REQUIRED` MUST output `STOP`, state the required user decision, and must not transition to `fix-plan`/,
+    /`MAJOR SPEC DECISION REQUIRED` MUST output `STOP` and state the required user decision/,
   );
   assert.match(
     prompt,
     /IF any `MAJOR SPEC DECISION REQUIRED` issues exist:[\s\S]*output `STOP`/,
   );
-  assert.match(prompt, /plan MUST NOT transition to `fix-plan`/);
+  assert.match(prompt, /plan MUST NOT be approved/);
 });
 
 test("plan-validator prompt excludes spec issue routes from generic critical routing", async () => {
@@ -1124,34 +1122,34 @@ test("plan-validator prompt excludes spec issue routes from generic critical rou
   );
 });
 
-test("fix-plan prompt allows spec edits only for latest minor spec repair validation findings", async () => {
-  const prompt = await readWorkflowPrompt("fix-plan.md");
+test("plan-validator prompt allows only bounded minor spec repairs during preflight", async () => {
+  const prompt = await readWorkflowPrompt("plan-validator.md");
 
   assert.match(
     prompt,
-    /spec-origin issues from the latest validation entry marked exactly `MINOR SPEC REPAIR`/,
+    /`MINOR SPEC REPAIR` applies ONLY to:/,
   );
   assert.match(
     prompt,
-    /modify the spec unless the latest validation finding is marked exactly `MINOR SPEC REPAIR`/,
+    /Spec edits are allowed ONLY for `MINOR SPEC REPAIR` findings/i,
   );
   assert.match(
     prompt,
-    /Spec edits are allowed ONLY when the latest validation history entry points to an evidence artifact/,
+    /one bounded repair pass/i,
   );
   assert.match(
     prompt,
-    /edit only the named spec file and named spec section\(s\) from the latest validation artifact/,
+    /edit only the named spec file and named spec section\(s\)/i,
   );
-  assert.match(prompt, /return to `draft \+ plan-validator`/);
+  assert.match(prompt, /must not require new behavior/i);
 });
 
-test("fix-plan prompt reruns the same authoring preflight after applying validation findings", async () => {
-  const prompt = await readWorkflowPrompt("fix-plan.md");
+test("plan-validator prompt runs the same authoring preflight before approval", async () => {
+  const prompt = await readWorkflowPrompt("plan-validator.md");
 
   assert.match(
     prompt,
-    /after applying the latest validation findings, rerun the same authoring preflight used by `?create-plan`?/i,
+    /same authoring preflight used by `?create-plan`?/i,
   );
   assert.match(
     prompt,
@@ -1169,19 +1167,21 @@ test("fix-plan prompt reruns the same authoring preflight after applying validat
     prompt,
     /remove task IDs when the work is really one final-commit fix/i,
   );
-  assert.match(prompt, /do not limit fixes to patching only the cited lines/i);
+  assert.match(prompt, /do not limit repairs to patching only the cited lines/i);
 });
 
-test("fix-plan prompt updates thin-plan workflow sidecar when transitioning state", async () => {
-  const prompt = await readWorkflowPrompt("fix-plan.md");
+test("plan-validator prompt updates thin-plan workflow sidecar when bounded preflight stops or approves", async () => {
+  const prompt = await readWorkflowPrompt("plan-validator.md");
 
   assert.match(
     prompt,
     /Update `\.ai\/artifacts\/<plan-name>\/state\/workflow\.json`/,
   );
   assert.match(prompt, /`planPath`/);
-  assert.match(prompt, /`status` = `draft`/);
-  assert.match(prompt, /`nextAction` = `plan-validator`/);
+  assert.match(prompt, /Status\s*=\s*draft/);
+  assert.match(prompt, /Next Action\s*=\s*plan-validator/);
+  assert.match(prompt, /Status\s*=\s*approved/);
+  assert.match(prompt, /Next Action\s*=\s*execute-plan/);
   assert.match(prompt, /`latest`/);
   assert.match(prompt, /`history`/);
   assert.match(prompt, /`unresolvedBlockers`/);
@@ -1247,7 +1247,7 @@ test("plan-preview-before-apply prompt accepts draft artifact sync before valida
   assert.match(prompt, /draft \+ sync-plan-artifacts/);
   assert.match(prompt, /sync-plan-artifacts\.md/);
   assert.match(prompt, /plan-validator\.md/);
-  assert.match(prompt, /fix-plan\.md/);
+  assert.doesNotMatch(prompt, /fix-plan\.md/);
 });
 
 test("manual-preview prompt supports standalone manual use without plan state", async () => {
@@ -1272,8 +1272,8 @@ test("manual-preview prompt requires visible comments for changed preview code",
   assert.match(prompt, /avoid marker-only comments/i);
 });
 
-test("fix-plan prompt forbids unclassified or unresolved major spec-origin edits", async () => {
-  const prompt = await readWorkflowPrompt("fix-plan.md");
+test("plan-validator prompt forbids unclassified or unresolved major spec-origin edits", async () => {
+  const prompt = await readWorkflowPrompt("plan-validator.md");
 
   assert.match(
     prompt,
@@ -1281,11 +1281,11 @@ test("fix-plan prompt forbids unclassified or unresolved major spec-origin edits
   );
   assert.match(
     prompt,
-    /If the latest validation finding is marked `MAJOR SPEC DECISION REQUIRED`, STOP only when the issue still requires user authority after this codebase reclassification check\./,
+    /If a finding is marked `MAJOR SPEC DECISION REQUIRED`, STOP only when the issue still requires user authority after this codebase reclassification check\./,
   );
   assert.match(
     prompt,
-    /If a spec-origin validation finding is unclassified:[\s\S]*STOP/,
+    /If a spec-origin finding is unclassified:[\s\S]*STOP/,
   );
   assert.match(
     prompt,
@@ -1327,8 +1327,8 @@ test("plan-validator prompt reuses existing codebase contracts before escalating
   );
 });
 
-test("fix-plan prompt allows codebase-backed reclassification without spec edits", async () => {
-  const prompt = await readWorkflowPrompt("fix-plan.md");
+test("plan-validator prompt allows codebase-backed reclassification without spec edits", async () => {
+  const prompt = await readWorkflowPrompt("plan-validator.md");
 
   assert.match(prompt, /## Codebase Reclassification Check \(MANDATORY\)/);
   assert.match(prompt, /removing behavior the plan invented beyond the spec/);
@@ -2193,7 +2193,7 @@ test("codex live output formatter condenses shared non-review summaries without 
     "* Kept thin-plan history and event artifacts unchanged.",
     "",
     "**Key Details**",
-    "* Updated prompt output templates for validator, fix-plan, fix-review, reopen-plan, and unblock-plan.",
+    "* Updated prompt output templates for validator, fix-review, reopen-plan, and unblock-plan.",
     "* Preserved review-changes as the only stage-specific terminal schema.",
     "",
     "**Next**",
@@ -2216,7 +2216,7 @@ test("codex live output formatter condenses shared non-review summaries without 
       "* Kept thin-plan history and event artifacts unchanged.",
       "",
       "**Key Details**",
-      "* Updated prompt output templates for validator, fix-plan, fix-review, reopen-plan, and unblock-plan.",
+      "* Updated prompt output templates for validator, fix-review, reopen-plan, and unblock-plan.",
       "* Preserved review-changes as the only stage-specific terminal schema.",
       "",
       "**Next**",
@@ -3906,7 +3906,6 @@ test("generates manual workflow prompts for every prompt action", () => {
       "SYNC PLAN ARTIFACTS PROMPT",
     ],
     [".ai/prompts/plan-validator.md", "Validate", "PLAN VALIDATOR PROMPT"],
-    [".ai/prompts/fix-plan.md", "Fix", "FIX PLAN PROMPT"],
     [".ai/prompts/execute-plan.md", "Execute", "EXECUTE PLAN PROMPT"],
     [".ai/prompts/unblock-plan.md", "Unblock", "UNBLOCK PLAN PROMPT"],
     [".ai/prompts/review-changes.md", "Review", "REVIEW CHANGES PROMPT"],
@@ -4002,7 +4001,6 @@ test("non-review prompts use the shared terminal output contract", async () => {
   const prompts = await Promise.all([
     readWorkflowPrompt("sync-plan-artifacts.md"),
     readWorkflowPrompt("plan-validator.md"),
-    readWorkflowPrompt("fix-plan.md"),
     readWorkflowPrompt("execute-plan.md"),
     readWorkflowPrompt("fix-review.md"),
     readWorkflowPrompt("reopen-plan.md"),
@@ -4019,13 +4017,13 @@ test("non-review prompts use the shared terminal output contract", async () => {
     assert.match(prompt, /Next Action:/);
   }
 
-  assert.match(prompts[3], /\*\*Validation\*\*/);
-  assert.match(prompts[7], /single conventional-commit subject line/i);
+  assert.match(prompts[2], /\*\*Validation\*\*/);
+  assert.match(prompts[6], /single conventional-commit subject line/i);
   assert.match(
-    prompts[7],
+    prompts[6],
     /short user-facing summary list prefixed with `--`/i,
   );
-  assert.match(prompts[7], /do not include a branch line/i);
+  assert.match(prompts[6], /do not include a branch line/i);
 });
 
 test("superpowers prompt describes analysis as advisory guidance, not a missing skill", async () => {
@@ -4098,7 +4096,7 @@ test("workflow prompt injects active context packet with current prompt, plan, s
 
 test("guarded workflow prompts add generic token guardrails after a prior token spike", () => {
   for (const promptPath of [
-    ".ai/prompts/fix-plan.md",
+    ".ai/prompts/plan-validator.md",
     ".ai/prompts/execute-plan.md",
     ".ai/prompts/review-changes.md",
     ".ai/prompts/review-quality.md",
@@ -4136,9 +4134,9 @@ test("guarded workflow prompts add generic token guardrails after a prior token 
 
 test("unguarded workflow prompts do not add generic token guardrails after a prior token spike", () => {
   const prompt = generateWorkflowPrompt({
-    promptPath: ".ai/prompts/plan-validator.md",
+    promptPath: ".ai/prompts/sync-plan-artifacts.md",
     planPath: ".ai/plans/workflow-runner.md",
-    promptContent: "PLAN VALIDATOR PROMPT",
+    promptContent: "SYNC PLAN ARTIFACTS PROMPT",
     workflowTokenGuardrail: {
       stageInputTokens: 1_100_000,
       stageUncachedInputTokens: 80_000,
@@ -4439,7 +4437,7 @@ execute-plan
 
 test("workflow prompts tell agents to use the snapshot first and avoid full historical plan loads", async () => {
   const promptPaths = [
-    ".ai/prompts/fix-plan.md",
+    ".ai/prompts/plan-validator.md",
     ".ai/prompts/execute-plan.md",
     ".ai/prompts/review-changes.md",
     ".ai/prompts/review-quality.md",
@@ -4502,7 +4500,7 @@ test("workflow docs describe baseline snapshot-first guidance and retain token u
   assert.match(optimizationRecord, /Baseline Snapshot-First/i);
   assert.match(optimizationRecord, /token-usage\.jsonl/);
   assert.match(optimizationRecord, /measurement data/i);
-  assert.match(optimizationRecord, /Priority 2.*on hold/is);
+  assert.match(optimizationRecord, /Priority 2.*implemented/is);
 });
 
 test("scope cleanup prompt references the snapshot and paths instead of inlining full plan or spec content", () => {
@@ -5031,7 +5029,7 @@ test("parsePlan rejects thin-plan-v2 manifest and workflow sidecar state mismatc
   try {
     await writeThinPlanV2Artifacts(workspace.root, {
       status: "draft",
-      nextAction: "fix-plan",
+      nextAction: "sync-plan-artifacts",
     });
     await writePlan(
       workspace.root,
@@ -5903,14 +5901,6 @@ test("routes only spec-defined executable pairs and sends blocked plans through 
         "high",
       ],
       [
-        "draft-fix",
-        "draft",
-        "fix-plan",
-        ".ai/prompts/fix-plan.md",
-        "gpt-5.4",
-        "medium",
-      ],
-      [
         "approved-execute",
         "approved",
         "execute-plan",
@@ -6050,6 +6040,20 @@ test("routes only spec-defined executable pairs and sends blocked plans through 
     });
     assert.equal(undefinedPair.success, false);
     assert.match(undefinedPair.reason, /undefined status\/next action pair/);
+
+    await writePlan(workspace.root, "unsupported-fix", planWith("draft", "fix-plan"));
+    const unsupportedFix = await runWorkflowRunner({
+      planName: planArg("unsupported-fix"),
+      rootDir: workspace.root,
+      processRunner: runnerReturning({
+        launched: true,
+        stdout: "",
+        stderr: "",
+        exitCode: 0,
+      }),
+    });
+    assert.equal(unsupportedFix.success, false);
+    assert.match(unsupportedFix.reason, /unknown next action value: fix-plan/);
 
     await writePlan(
       workspace.root,
@@ -8985,7 +8989,7 @@ test("high-token prior stages add generic guardrail guidance to review-quality p
   }
 });
 
-test("high-token prior stages add generic guardrail guidance to fix-plan prompts", async () => {
+test("high-token prior stages add generic guardrail guidance to plan-validator prompts", async () => {
   const workspace = await setupWorkspace();
   try {
     writeWorkflowEventArtifactSync({
@@ -8999,7 +9003,7 @@ test("high-token prior stages add generic guardrail guidance to fix-plan prompts
       "workflow-runner",
       planWith(
         "draft",
-        "fix-plan",
+        "plan-validator",
         "## Validation History\n\n### Validation v1\n\n* Summary: Needs fix\n* Decision: draft\n* Evidence: .ai/artifacts/workflow-runner/events/validation-v1.md\n",
       ),
     );
@@ -9038,12 +9042,6 @@ test("high-token prior stages add generic guardrail guidance to fix-plan prompts
         { launched: true, stdout: "ok", stderr: "", exitCode: 0 },
         (call) => {
           calls.push(call);
-          if (call.promptPath === ".ai/prompts/fix-plan.md") {
-            writeFileSync(
-              join(workspace.root, ".ai", "plans", "workflow-runner.md"),
-              planWith("draft", "plan-validator"),
-            );
-          }
           if (call.promptPath === ".ai/prompts/plan-validator.md") {
             writeFileSync(
               join(workspace.root, ".ai", "plans", "workflow-runner.md"),
@@ -9060,12 +9058,12 @@ test("high-token prior stages add generic guardrail guidance to fix-plan prompts
       ),
     });
 
-    const fixCall = calls.find(
-      (call) => call.promptPath === ".ai/prompts/fix-plan.md",
+    const validatorCall = calls.find(
+      (call) => call.promptPath === ".ai/prompts/plan-validator.md",
     );
-    assert.ok(fixCall);
-    assert.match(fixCall.args[6], /Workflow token guardrail:/);
-    assert.doesNotMatch(fixCall.args[6], /Execute token guardrail:/);
+    assert.ok(validatorCall);
+    assert.match(validatorCall.args[6], /Workflow token guardrail:/);
+    assert.doesNotMatch(validatorCall.args[6], /Execute token guardrail:/);
   } finally {
     await workspace.cleanup();
   }
@@ -9077,7 +9075,7 @@ test("high-token prior stages do not add generic guardrail guidance to unguarded
     await writePlan(
       workspace.root,
       "workflow-runner",
-      planWith("draft", "plan-validator"),
+      planWith("draft", "sync-plan-artifacts"),
     );
     mkdirSync(
       join(workspace.root, ".ai", "artifacts", "workflow-runner", "logs"),
@@ -9114,7 +9112,7 @@ test("high-token prior stages do not add generic guardrail guidance to unguarded
         { launched: true, stdout: "ok", stderr: "", exitCode: 0 },
         (call) => {
           calls.push(call);
-          if (call.promptPath === ".ai/prompts/plan-validator.md") {
+          if (call.promptPath === ".ai/prompts/sync-plan-artifacts.md") {
             writeFileSync(
               join(workspace.root, ".ai", "plans", "workflow-runner.md"),
               planWith("approved", "execute-plan"),
@@ -9130,12 +9128,12 @@ test("high-token prior stages do not add generic guardrail guidance to unguarded
       ),
     });
 
-    const validatorCall = calls.find(
-      (call) => call.promptPath === ".ai/prompts/plan-validator.md",
+    const syncCall = calls.find(
+      (call) => call.promptPath === ".ai/prompts/sync-plan-artifacts.md",
     );
-    assert.ok(validatorCall);
-    assert.doesNotMatch(validatorCall.args[6], /Workflow token guardrail:/);
-    assert.doesNotMatch(validatorCall.args[6], /Execute token guardrail:/);
+    assert.ok(syncCall);
+    assert.doesNotMatch(syncCall.args[6], /Workflow token guardrail:/);
+    assert.doesNotMatch(syncCall.args[6], /Execute token guardrail:/);
   } finally {
     await workspace.cleanup();
   }
@@ -11686,7 +11684,11 @@ test("nonzero exits write command summaries and bounded stderr excerpts to the f
 test("iteration handling rereads changed plans, rejects unchanged plans, enforces max iterations, and succeeds after commit-summary", async () => {
   const workspace = await setupWorkspace();
   try {
-    await writePlan(workspace.root, "unchanged", planWith("draft", "fix-plan"));
+    await writePlan(
+      workspace.root,
+      "unchanged",
+      planWith("draft", "plan-validator"),
+    );
     const unchanged = await runWorkflowRunner({
       planName: planArg("unchanged"),
       rootDir: workspace.root,
@@ -11747,7 +11749,7 @@ test("iteration handling rereads changed plans, rejects unchanged plans, enforce
     assert.equal(terminal.success, true);
     assert.equal(terminalCodexLaunches, 4);
 
-    await writePlan(workspace.root, "max", planWith("draft", "fix-plan"));
+    await writePlan(workspace.root, "max", planWith("draft", "plan-validator"));
     let maxLaunches = 0;
     const maxed = await runWorkflowRunner({
       planName: planArg("max"),
@@ -11758,7 +11760,7 @@ test("iteration handling rereads changed plans, rejects unchanged plans, enforce
           maxLaunches += 1;
           writeFileSync(
             join(workspace.root, ".ai", "plans", "max.md"),
-            `${planWith("draft", "fix-plan")}\n${maxLaunches}`,
+            `${planWith("draft", "plan-validator")}\n${maxLaunches}`,
           );
         },
       ),
@@ -11781,6 +11783,62 @@ test("iteration handling rereads changed plans, rejects unchanged plans, enforce
   }
 });
 
+test("transition guards enforce bounded plan-validator preflight outcomes", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    const cases = [
+      ["validator-approves", "approved", "execute-plan", false],
+      ["validator-stops", "draft", "plan-validator", false],
+      ["validator-fix", "draft", "fix-plan", true],
+      ["validator-active", "active", "execute-plan", true],
+    ] as const;
+
+    for (const [name, status, nextAction, shouldFailTransition] of cases) {
+      await writePlan(workspace.root, name, planWith("draft", "plan-validator"));
+      const result = await runWorkflowRunner({
+        planName: planArg(name),
+        rootDir: workspace.root,
+        processRunner: runnerReturning(
+          {
+            launched: true,
+            stdout: name === "validator-stops" ? "STOP: needs decision" : "ok",
+            stderr: "",
+            exitCode: 0,
+          },
+          (call) => {
+            if (call.promptPath === ".ai/prompts/plan-validator.md") {
+              writeFileSync(
+                join(workspace.root, ".ai", "plans", `${name}.md`),
+                `${planWith(status, nextAction)}\n${name}`,
+              );
+              return;
+            }
+            if (call.promptPath === ".ai/prompts/execute-plan.md") {
+              writeFileSync(
+                join(workspace.root, ".ai", "plans", `${name}.md`),
+                planWith("blocked", "unblock-plan"),
+              );
+            }
+          },
+        ),
+      });
+
+      if (shouldFailTransition) {
+        assert.equal(result.success, false, name);
+        assert.match(
+          result.reason,
+          /plan-validator may only hand off|unknown next action value: fix-plan/,
+        );
+      } else if (name === "validator-stops") {
+        assert.equal(result.success, false, name);
+        assert.match(result.reason, /STOP: needs decision/);
+      }
+    }
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
 test("transition guards enforce execute-plan and review-changes handoffs", async () => {
   const workspace = await setupWorkspace();
   try {
@@ -11788,7 +11846,7 @@ test("transition guards enforce execute-plan and review-changes handoffs", async
       ["exec-review", "review", "review-plan", false],
       ["exec-blocked", "blocked", "execute-plan", false],
       ["exec-completed", "completed", "commit-summary", true],
-      ["exec-other", "draft", "fix-plan", true],
+      ["exec-other", "draft", "plan-validator", true],
     ] as const;
     for (const [
       name,
