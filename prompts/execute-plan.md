@@ -331,7 +331,7 @@ The artifact must include:
 
 ## Evidence
 
-<commands, outputs, files changed, or blockers that support the plan entry>
+<compact evidence: command, result, evidence path, file/change summary, short excerpt only when needed, blocker/risk note, or deferred validation note>
 ```
 
 Then update `.ai/artifacts/<plan-name>/state/workflow.json` with runner-readable thin-plan-v2 state: preserve `planPath`, set `status` and `nextAction`, write the compact execution event under `latest.execution`, append the execution artifact path to `history`, set `unresolvedBlockers` to active blocker strings or `[]`, and refresh `updatedAt`.
@@ -339,7 +339,10 @@ Then update `.ai/artifacts/<plan-name>/state/workflow.json` with runner-readable
 Wording rules:
 
 * Workflow event state may contain only compact summary, state/result/decision, and evidence pointer fields.
-* Put command output, detailed file notes, blocker explanations, validation output, and reasoning in the artifact.
+* Event artifacts use compact evidence by default: record the command, result, evidence path, file/change summary, a short excerpt only when needed, and any blocker, risk, or deferred validation note.
+* Keep correctness-critical blocker explanations, validation failures, and file notes specific enough for review without pasting broad raw output.
+* Event artifacts must not include full raw stdout/stderr bodies, full raw diffs, or raw Codex event streams.
+* Do not use broad historical `.ai/artifacts/**` searches for execution evidence; open exact current-plan event artifacts only when the snapshot or workflow state points to them and specific evidence is needed.
 * Do not record reasoning narration, wait-state updates, or artifact body text in the plan manifest.
 * Artifact state updates should state what changed, what was validated, and remaining action.
 

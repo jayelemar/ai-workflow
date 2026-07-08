@@ -16,10 +16,14 @@ Read:
 
 * `.codex/AGENTS.md`
 * `.ai/instructions/shared/workflow-state.md`
+* runner-owned context snapshot `.ai/artifacts/<plan-name>/state/context.md` as the primary current-state source
 * the repo-relative `*.spec.md` path(s) listed under the plan's `## Spec` section (if any)
 * Active Context Packet instruction files selected from `.ai/instructions/index.md`
 * the plan file
 
+Read the full plan only when exact plan edits are required or the snapshot is insufficient.
+Do not load full historical sections unless the snapshot is insufficient.
+Preserve exact unblock evidence reads for unresolved blockers, owner-plan evidence, workflow state, event evidence, user-provided unblock evidence, and file ownership releases.
 Use the runner-provided Active Context Packet and index-selected instruction files only. Do not broadly load `.ai/instructions/**`.
 
 Load:
@@ -50,6 +54,8 @@ Use blocker-resolution evidence from:
 * unresolved blockers in `.ai/artifacts/<plan-name>/state/workflow.json`
 * the user's current request
 * documented runtime or validation evidence in `.ai/artifacts/<plan-name>/events/`
+
+These unresolved blockers, owner-plan evidence, workflow state, and event evidence remain correctness-critical inputs even when the context snapshot is available.
 
 Manual browser validation evidence MUST include:
 

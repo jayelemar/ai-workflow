@@ -16,10 +16,14 @@ Read:
 
 * `.codex/AGENTS.md`
 * `.ai/instructions/shared/workflow-state.md`
+* runner-owned context snapshot `.ai/artifacts/<plan-name>/state/context.md` as the primary current-state source
 * the repo-relative `*.spec.md` path(s) listed under the plan's `## Spec` section (if any)
 * Active Context Packet instruction files selected from `.ai/instructions/index.md`
 * the plan file
 
+Read the full plan only when exact plan edits are required or the snapshot is insufficient.
+Do not load full historical sections unless the snapshot is insufficient.
+Preserve exact reopen findings, workflow state, event evidence, user-provided findings, and issue-report reads required to avoid unsafe reopen transitions.
 Use the runner-provided Active Context Packet and index-selected instruction files only. Do not broadly load `.ai/instructions/**`.
 
 Load:
@@ -50,6 +54,8 @@ Use the latest bug findings from one of:
 * the latest review pointer and unresolved blockers in `.ai/artifacts/<plan-name>/state/workflow.json`
 * review/reopen evidence under `.ai/artifacts/<plan-name>/events/`
 * a clearly referenced issue report in the plan
+
+These reopen findings, workflow state, and event evidence remain correctness-critical inputs even when the context snapshot is available.
 
 If no concrete findings exist:
 

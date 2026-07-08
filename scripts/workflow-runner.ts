@@ -55,7 +55,7 @@ type CodexExecutionConfig = {
 };
 
 export const WORKFLOW_RUNNER_CODEX_PROFILE: CodexProfile =
-  "codex-work6598" as const;
+  "codex-work" as const;
 const CODEX_PROFILE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 
 const PLAN_VALIDATOR_PROMPT_PATH = ".ai/prompts/plan-validator.md";
@@ -73,7 +73,7 @@ const PROMPT_CODEX_EXECUTION_OVERRIDES: Record<string, CodexExecutionConfig> = {
   [SYNC_PLAN_ARTIFACTS_PROMPT_PATH]: { model: "gpt-5.4", reasoning: "medium" },
   [PLAN_VALIDATOR_PROMPT_PATH]: { model: "gpt-5.4", reasoning: "high" },
   [FIX_PLAN_PROMPT_PATH]: { model: "gpt-5.4", reasoning: "medium" },
-  [EXECUTE_PLAN_PROMPT_PATH]: { model: "gpt-5.5", reasoning: "high" },
+  [EXECUTE_PLAN_PROMPT_PATH]: { model: "gpt-5.4", reasoning: "high" },
   [UNBLOCK_PLAN_PROMPT_PATH]: { model: "gpt-5.4", reasoning: "medium" },
   [REVIEW_CHANGES_PROMPT_PATH]: { model: "gpt-5.5", reasoning: "xhigh" },
   [REVIEW_QUALITY_PROMPT_PATH]: { model: "gpt-5.5", reasoning: "xhigh" },
@@ -331,6 +331,7 @@ type FileOwnershipArtifact = {
   changedFiles: string[];
   headSha: string;
   updatedAt: string;
+  migratedFromLegacy?: boolean;
 };
 type FileOwnershipPreflight = {
   hasOwnershipScope: boolean;
@@ -5149,6 +5150,35 @@ const nextTaskArtifactRelativePath = async (
   );
 };
 
+const currentTaskArtifactRelativePath = async (
+  rootDir: string,
+  planName: string,
+  task: PlanTask,
+): Promise<string> => {
+  const artifacts = await existingTaskArtifactEntries(rootDir, planName, task);
+  for (const artifact of artifacts.slice().reverse()) {
+    const artifactPath = path.join(
+      rootDir,
+      taskArtifactsRelativeDir(planName),
+      artifact.entry,
+    );
+    let content: string;
+    try {
+      content = await readFile(artifactPath, "utf8");
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === "ENOENT") {
+        continue;
+      }
+      throw error;
+    }
+    if (!taskArtifactCommitSha(content)) {
+      return rel(taskArtifactsRelativeDir(planName), artifact.entry);
+    }
+  }
+  return await nextTaskArtifactRelativePath(rootDir, planName, task);
+};
+
 const latestTaskArtifactRelativePath = async (
   rootDir: string,
   planName: string,
@@ -5192,6 +5222,50 @@ const readableTaskProgressDescription = (task: PlanTask): string => {
     return `${baseName} ${taskWords}`;
   }
   return `${baseName} for ${taskWords}`;
+};
+
+const writeTaskStageArtifact = async ({
+  rootDir,
+  planPath,
+  context,
+}: {
+  rootDir: string;
+  planPath: string;
+  context: WorkflowTaskContext;
+}): Promise<{ ok: true } | Failure> => {
+  const artifactPath = path.join(rootDir, context.artifactPath);
+  const body = `# Task Savepoint: ${context.task.id}
+
+## Task Name
+
+${context.task.name}
+
+## Plan
+
+${planPath}
+
+## Stage
+
+${context.stage}
+
+## Commit SHA
+
+${context.commitSha ?? "(pending)"}
+
+## Task Artifact
+
+${context.artifactPath}
+`;
+  try {
+    await mkdir(path.dirname(artifactPath), { recursive: true });
+    await writeFile(artifactPath, body, "utf8");
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      reason: `task stage artifact cannot be written: ${String(error)}`,
+    };
+  }
 };
 
 const writeCurrentTaskPointer = async ({
@@ -5482,11 +5556,14 @@ const readCompletedTaskSavepoints = async ({
         reason: `task artifact cannot be read: ${artifactPath}: ${String(error)}`,
       };
     }
-    const commitSha = markdownSectionText(content, "## Commit SHA");
+    const commitSha = taskArtifactCommitSha(content);
+    if (!commitSha) {
+      continue;
+    }
     completedTasks.push({
       task,
       artifactPath,
-      commitSha: commitSha || "(unknown)",
+      commitSha,
       commitMessage:
         markdownSectionText(content, "## Commit Message") || task.name,
       summaryLines: markdownSectionBulletLines(
@@ -7416,6 +7493,18 @@ const asStringArray = (value: unknown): string[] | undefined =>
     ? (value as string[])
     : undefined;
 
+const canonicalFileOwnershipArtifact = (
+  artifact: FileOwnershipArtifact,
+): FileOwnershipArtifact => ({
+  planPath: artifact.planPath,
+  owns: artifact.owns,
+  released: artifact.released,
+  resolvedFiles: artifact.resolvedFiles,
+  changedFiles: artifact.changedFiles,
+  headSha: artifact.headSha,
+  updatedAt: artifact.updatedAt,
+});
+
 const parseFileOwnershipArtifact = (
   raw: string,
   artifactPath: string,
@@ -7438,8 +7527,41 @@ const parseFileOwnershipArtifact = (
   const released = asStringArray(record?.released);
   const resolvedFiles = asStringArray(record?.resolvedFiles);
   const changedFiles = asStringArray(record?.changedFiles);
+  const legacyOwnedFiles = asStringArray(record?.ownedFiles);
+  const legacyReleasedFiles = asStringArray(record?.releasedFiles);
   const headSha = record?.headSha;
   const updatedAt = record?.updatedAt;
+  const hasLegacyShape = !owns && !!legacyOwnedFiles;
+  if (typeof planPath === "string" && hasLegacyShape) {
+    const hasLegacyWorkflowState =
+      status !== undefined || nextAction !== undefined;
+    if (
+      (hasLegacyWorkflowState &&
+        (typeof status !== "string" ||
+          !isStatus(status) ||
+          typeof nextAction !== "string" ||
+          !isNextAction(nextAction))) ||
+      (record?.releasedFiles !== undefined && !legacyReleasedFiles)
+    ) {
+      return {
+        ok: false,
+        reason: `file ownership artifact is malformed: ${artifactPath}`,
+      };
+    }
+
+    return {
+      planPath,
+      status: hasLegacyWorkflowState ? status : undefined,
+      nextAction: hasLegacyWorkflowState ? nextAction : undefined,
+      owns: legacyOwnedFiles,
+      released: legacyReleasedFiles ?? [],
+      resolvedFiles: resolvedFiles ?? [],
+      changedFiles: changedFiles ?? [],
+      headSha: typeof headSha === "string" ? headSha : "",
+      updatedAt: typeof updatedAt === "string" ? updatedAt : "",
+      migratedFromLegacy: true,
+    };
+  }
   if (
     typeof planPath !== "string" ||
     !owns ||
@@ -7662,6 +7784,7 @@ const readOtherFileOwnershipArtifacts = async (
           ...parsed,
           status: workflow.status,
           nextAction: workflow.nextAction,
+          updatedAt: parsed.updatedAt || workflow.updatedAt,
         };
       } catch (error) {
         const code = (error as NodeJS.ErrnoException).code;
@@ -7677,6 +7800,13 @@ const readOtherFileOwnershipArtifacts = async (
             reason: `file ownership workflow artifact cannot be read: ${workflowPath}: missing canonical workflow state`,
           };
         }
+      }
+      if (artifact.migratedFromLegacy) {
+        await writeFile(
+          artifactPath,
+          `${JSON.stringify(canonicalFileOwnershipArtifact(artifact), null, 2)}\n`,
+          "utf8",
+        );
       }
       artifacts.push(artifact);
     }
@@ -8738,7 +8868,7 @@ export const runWorkflowRunner = async (
       currentTaskContext = undefined;
     }
     const selectedTaskArtifactPath = selectedTask
-      ? await nextTaskArtifactRelativePath(
+      ? await currentTaskArtifactRelativePath(
           rootDir,
           parsedPlan.planName,
           selectedTask,
@@ -8763,6 +8893,14 @@ export const runWorkflowRunner = async (
         artifactPath: selectedTaskArtifactPath,
         commitSha,
       };
+      const artifact = await writeTaskStageArtifact({
+        rootDir,
+        planPath: parsedPlan.planPath,
+        context: currentTaskContext,
+      });
+      if (!artifact.ok) {
+        return artifact;
+      }
       const pointer = await writeCurrentTaskPointer({
         rootDir,
         planName: parsedPlan.planName,

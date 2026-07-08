@@ -11,6 +11,8 @@
 !/changelogs/security.changelog.md
 !/changelogs/testing.changelog.md
 !/changelogs/workflow-state.changelog.md
+!/docs/
+!/docs/**
 !/instructions/
 !/instructions/shared/
 !/instructions/shared/security.md

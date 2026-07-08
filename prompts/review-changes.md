@@ -321,6 +321,9 @@ Create `## Review History` only if the section is missing in a legacy thin-plan-
 
 Before updating the plan, create `.ai/artifacts/<plan-name>/events/review-spec-vX.md` with `# Review Spec vX`, `## Summary`, and `## Evidence`.
 Put all issue bullets, file references, remediation notes, missing validations, and unresolved risks in the review artifact.
+Review event artifacts use compact evidence: record the relevant command, result, evidence path, short excerpt only when needed, actionable issue bullets, file references, remediation notes, missing validations, and unresolved risk notes.
+Event artifacts must not include full raw stdout/stderr bodies, full raw diffs, or raw Codex event streams.
+Do not paste raw log dumps or full unscoped diffs into review artifacts; cite the path-scoped diff command and include only the small excerpt needed to prove the issue.
 Review state entries may contain only compact `Summary`, `Decision`, and `Evidence` pointer fields.
 Do not duplicate the `## Review History` heading in thin-plan-v2 manifests.
 

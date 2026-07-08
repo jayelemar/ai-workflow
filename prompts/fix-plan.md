@@ -14,11 +14,14 @@ Read:
 
 * `.codex/AGENTS.md`
 * `.ai/instructions/shared/workflow-state.md`
+* runner-owned context snapshot `.ai/artifacts/<plan-name>/state/context.md` as the primary current-state source
 * the plan file
 * the latest validation findings
 * the repo-relative `*.spec.md` path(s) listed under the plan's `## Spec` section (if any)
 * relevant codebase files named by the spec or plan when the latest validation finding questions contract, shape, rendering, or file scope
 
+Read the full plan only when exact plan edits are required or the snapshot is insufficient.
+Do not load full historical sections unless the snapshot is insufficient.
 If the runner provides a `Workflow token guardrail` note for this run, treat it as mandatory snapshot-first context-loading discipline while preserving required plan, validation findings, spec, and relevant codebase reads.
 
 ---
@@ -40,6 +43,10 @@ If not provided:
 Use the most recent validation result from:
 
 ## Validation History
+
+Use compact evidence from the latest validation event artifact: cite the exact evidence path, command, result, short excerpt only when needed, and any risk or deferred validation note.
+Event artifacts must not include full raw stdout/stderr bodies, full raw diffs, or raw Codex event streams.
+Do not paste validation evidence wholesale into the plan or workflow state updates; reference the artifact path and the relevant excerpt instead.
 
 If no validation findings exist:
 

@@ -381,14 +381,16 @@ The runner writes a hot-path context snapshot for each plan:
 .ai/artifacts/<plan-name>/state/context.md
 ```
 
-Prompts should use that snapshot as the primary current-state source. The full
-plan remains the source of truth for exact history and edits.
+Baseline snapshot-first guidance means runner-driven prompts should use that
+snapshot as the primary current-state source. The full plan remains the source
+of truth for exact history and edits, and prompts may open exact plan sections,
+event artifacts, workflow state, validation evidence, blocker evidence, or diffs
+when the snapshot is insufficient for correctness.
 
-When a prior stage spikes above the token thresholds, the runner applies
-stronger snapshot-first guidance only to the next `execute-plan` stage. That
-guidance still allows exact plan or event-file fallback when the snapshot is
-insufficient. `review-changes` stays more permissive so review quality is not
-reduced by over-aggressive token restrictions.
+Threshold crossings add stronger workflow token guardrail guidance for guarded
+stages. That escalation is prompt guidance, not a hard block, and it preserves
+required spec reads, path-scoped staged diffs, workflow state, validation
+evidence, blocker evidence, and other correctness-critical inputs.
 
 Snapshot sections are intentionally compact and stage-aligned. Expect:
 
@@ -439,10 +441,8 @@ Runner-owned runtime files are written under the plan artifact root:
 Token usage warnings are advisory only. They help surface oversized stages, but
 they do not stop an otherwise successful workflow stage from continuing.
 
-If a spike happened before an `execute-plan` run, the runner can use the latest
-`token-usage.jsonl` entry to add stricter snapshot-first guidance to that next
-execute stage. This is prompt guidance, not a hard block, and it does not apply
-the same way to `review-changes`.
+The `token-usage.jsonl` ledger is measurement data. Keep it compact and
+append-only so workflow changes can be evaluated instead of guessed.
 
 When the runner warns that a plan is too large, move bulky workflow detail into
 event artifacts and keep only bounded summaries plus exact `Evidence:` paths in

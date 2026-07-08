@@ -273,6 +273,10 @@ execute-plan
 
 2. create `.ai/artifacts/<plan-name>/events/review-quality-vX.md` with `# Review Quality vX`, `## Summary`, and `## Evidence`.
 
+Review event artifacts use compact evidence: record the relevant command, result, evidence path, short excerpt only when needed, actionable issue bullets, file references, remediation notes, missing validations, and unresolved risk or deferred validation notes.
+Event artifacts must not include full raw stdout/stderr bodies, full raw diffs, or raw Codex event streams.
+Do not paste raw log dumps or full unscoped diffs into review artifacts; cite the path-scoped diff command and include only the small excerpt needed to prove the issue.
+
 3. update `.ai/artifacts/<plan-name>/state/workflow.json` with `latest.reviewQuality`, mirror the compact quality-review result under `latest.review` for compatibility, append the quality-review artifact path to `history`, set `status`, `nextAction`, `unresolvedBlockers`, and refresh `updatedAt`.
 
 4. reread the plan manifest and `.ai/artifacts/<plan-name>/state/workflow.json`; verify both show `active + execute-plan` before final output.

@@ -355,6 +355,9 @@ Rules:
 * Validation versions MUST be sequential
 * MUST create `.ai/artifacts/<plan-name>/events/validation-vX.md` before updating the plan
 * The validation artifact MUST contain detailed critical issues, warnings, spec repair classifications, allowed spec repairs, recommendations, and evidence
+* Validation event artifacts use compact evidence for command data: record the command, result, evidence path, and a short excerpt only when needed, plus any risk or deferred validation note.
+* Preserve detailed critical issues and allowed spec repairs, but cite command evidence by exact path/excerpt instead of dumping raw logs.
+* Event artifacts must not include full raw stdout/stderr bodies, full raw diffs, or raw Codex event streams.
 * Update `.ai/artifacts/<plan-name>/state/workflow.json` with runner-readable thin-plan-v2 state:
   * `planPath`: the exact repo-relative plan path, for example `.ai/plans/<plan-name>.md`
   * `status`: `draft` when validation needs fixes, or `approved` when validation passes

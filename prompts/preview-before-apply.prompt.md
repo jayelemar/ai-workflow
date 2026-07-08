@@ -311,12 +311,14 @@ The artifact must include:
 
 ## Evidence
 
-<commands, outputs, files changed, approvals, blockers, or other proof>
+<compact evidence: command, result, evidence path, file/change summary, approval status or approval evidence path, short excerpt only when needed, blocker/risk note, or deferred validation note>
 ```
 
 Then update `.ai/artifacts/<plan-name>/state/workflow.json` with the matching execution event pointer:
 
 Use runner-readable thin-plan-v2 state: preserve `planPath`, set `status` and `nextAction`, write compact `summary`, `result`, and `evidence` fields under `latest.execution`, append the execution artifact path to `history`, preserve or update `unresolvedBlockers`, and refresh `updatedAt`.
+
+Execution event artifacts must not include full raw stdout/stderr bodies, full raw diffs, or raw Codex event streams.
 
 ### Validation Artifacts
 
@@ -338,12 +340,14 @@ The artifact must include:
 
 ## Evidence
 
-<commands run, result details, failures, or deferred-risk notes>
+<compact evidence: command, result, evidence path, short excerpt only when needed, failures, risk note, or deferred validation note>
 ```
 
 Then update `.ai/artifacts/<plan-name>/state/workflow.json` with the matching validation event pointer:
 
 Use runner-readable thin-plan-v2 state: preserve `planPath`, set `status` and `nextAction`, write compact `summary`, `result`, and `evidence` fields under `latest.validation`, append the validation artifact path to `history`, preserve or update `unresolvedBlockers`, and refresh `updatedAt`.
+
+Validation event artifacts must not include full raw stdout/stderr bodies, full raw diffs, or raw Codex event streams.
 
 ### Context Snapshot
 
