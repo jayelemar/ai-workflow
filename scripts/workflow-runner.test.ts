@@ -3391,7 +3391,7 @@ test("workflow elapsed time formatter uses compact human-readable units", () => 
   assert.equal(formatWorkflowElapsedTime(3_845_000), "1h 04m 05s");
 });
 
-test("workflow ownership reset hint formatter makes the command scannable and blue", () => {
+test("workflow ownership reset hint formatter makes the command copyable and green", () => {
   const hint =
     "- Ownership reset command: rtk node .ai/scripts/reset-file-ownership.mjs .ai/plans/support-ticket-sub-issues.md --force";
 
@@ -3399,14 +3399,14 @@ test("workflow ownership reset hint formatter makes the command scannable and bl
     formatWorkflowOwnershipResetHint(hint, false),
     [
       "- Ownership reset command:",
-      "  rtk node .ai/scripts/reset-file-ownership.mjs .ai/plans/support-ticket-sub-issues.md --force",
+      "rtk node .ai/scripts/reset-file-ownership.mjs .ai/plans/support-ticket-sub-issues.md --force",
     ].join("\n"),
   );
   assert.equal(
     formatWorkflowOwnershipResetHint(hint, true),
     [
       "\u001b[34m- Ownership reset command:\u001b[0m",
-      "  \u001b[34mrtk node .ai/scripts/reset-file-ownership.mjs .ai/plans/support-ticket-sub-issues.md --force\u001b[0m",
+      "\u001b[32mrtk node .ai/scripts/reset-file-ownership.mjs .ai/plans/support-ticket-sub-issues.md --force\u001b[0m",
     ].join("\n"),
   );
 });

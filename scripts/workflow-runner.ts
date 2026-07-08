@@ -284,14 +284,6 @@ type ScopeCleanupDecision = {
   action: "keep" | "unstage";
   patch?: string;
 };
-type StagedDiffHunk = {
-  filePath: string;
-  header: string;
-  text: string;
-  changedText: string;
-  hash: string;
-};
-
 type WorkflowFileLockMetadata = {
   planPath: string;
   pid: number;
@@ -526,10 +518,10 @@ export const formatWorkflowOwnershipResetHint = (
     ? `${terminalLabelStyles.action}${prefix}${ANSI_RESET}`
     : prefix;
   const formattedCommand = color
-    ? `${terminalLabelStyles.action}${command}${ANSI_RESET}`
+    ? `${terminalLabelStyles.diffAdded}${command}${ANSI_RESET}`
     : command;
 
-  return `${label}\n  ${formattedCommand}`;
+  return `${label}\n${formattedCommand}`;
 };
 
 const zeroTokenUsageTotals: TokenUsageTotals = {
@@ -5279,7 +5271,6 @@ const extractSummaryLines = (text: string, fallback: string): string[] => {
 
 const writeTaskArtifact = async ({
   rootDir,
-  planName,
   planPath,
   context,
   changedFiles,
@@ -5290,7 +5281,6 @@ const writeTaskArtifact = async ({
   nextTask,
 }: {
   rootDir: string;
-  planName: string;
   planPath: string;
   context: WorkflowTaskContext;
   changedFiles: string[];
@@ -6926,219 +6916,6 @@ const readCachedDiffForPaths = async (
 
   const diff = result.stdout.trim();
   return diff.length > 0 ? diff : undefined;
-};
-
-const diffGitHeaderPattern = /^diff --git a\/(.+) b\/(.+)$/;
-const diffHunkHeaderPattern = /^@@\s+.+\s+@@/;
-const hunkMarkerPattern = /`([^`\n]+)`/g;
-
-const extractStagedDiffHunks = (
-  diff: string,
-  scopedPaths: Set<string>,
-): StagedDiffHunk[] => {
-  const hunks: StagedDiffHunk[] = [];
-  let currentFile: string | undefined;
-  let currentHeader: string | undefined;
-  let currentLines: string[] = [];
-
-  const flush = () => {
-    if (!currentFile || !currentHeader || !scopedPaths.has(currentFile)) {
-      currentLines = [];
-      return;
-    }
-    const text = [currentHeader, ...currentLines].join("\n");
-    const changedText = currentLines
-      .filter((line) => line.startsWith("+") || line.startsWith("-"))
-      .join("\n");
-    hunks.push({
-      filePath: currentFile,
-      header: currentHeader,
-      text,
-      changedText,
-      hash: createHash("sha256").update(text).digest("hex").slice(0, 12),
-    });
-    currentLines = [];
-  };
-
-  for (const line of diff.split(/\r?\n/)) {
-    const fileMatch = line.match(diffGitHeaderPattern);
-    if (fileMatch) {
-      flush();
-      currentFile = fileMatch[2];
-      currentHeader = undefined;
-      continue;
-    }
-    if (!currentFile || !scopedPaths.has(currentFile)) {
-      continue;
-    }
-    if (
-      line.startsWith("+++ ") ||
-      line.startsWith("--- ") ||
-      line.startsWith("index ") ||
-      line.startsWith("new file mode ") ||
-      line.startsWith("deleted file mode ")
-    ) {
-      continue;
-    }
-
-    if (diffHunkHeaderPattern.test(line)) {
-      flush();
-      currentHeader = line;
-      currentLines = [];
-      continue;
-    }
-
-    if (!currentHeader) {
-      continue;
-    }
-    currentLines.push(line);
-  }
-  flush();
-
-  return hunks;
-};
-
-const normalizedOwnershipText = (value: string): string =>
-  value
-    .toLowerCase()
-    .replace(/[`*_]/g, (match) => (match === "_" ? "_" : " "))
-    .replace(/\s+/g, " ");
-
-const hunkOwnershipTextForFile = (
-  planContent: string,
-  filePath: string,
-): string | undefined => {
-  const lines = sectionLines(planContent, "## Hunk Ownership");
-  if (lines === null) {
-    return undefined;
-  }
-
-  const matchingSectionLines: string[] = [];
-  let sawFileSubsection = false;
-  let active = false;
-  for (const line of lines) {
-    const headingMatch = line.trim().match(/^###\s+(.+)$/);
-    if (headingMatch) {
-      sawFileSubsection = true;
-      active = headingMatch[1].trim() === filePath;
-      continue;
-    }
-    if (active) {
-      matchingSectionLines.push(line);
-    }
-  }
-
-  if (matchingSectionLines.length > 0) {
-    return matchingSectionLines.join("\n");
-  }
-  return sawFileSubsection ? "" : lines.join("\n");
-};
-
-const hunkOwnershipFilePaths = (planContent: string): string[] => {
-  const lines = sectionLines(planContent, "## Hunk Ownership");
-  if (lines === null) {
-    return [];
-  }
-  return lines
-    .map((line) =>
-      line
-        .trim()
-        .match(/^###\s+(.+)$/)?.[1]
-        ?.trim(),
-    )
-    .filter((value): value is string => Boolean(value));
-};
-
-const hunkOwnershipMarkers = (ownershipText: string): string[] => {
-  const markers: string[] = [];
-  for (const match of ownershipText.matchAll(hunkMarkerPattern)) {
-    const marker = match[1].trim();
-    if (marker.length > 0) {
-      markers.push(marker);
-    }
-  }
-  return uniquePaths(markers);
-};
-
-const stagedHunkCoveredByOwnership = (
-  hunk: StagedDiffHunk,
-  ownershipText: string,
-): boolean => {
-  const haystack = normalizedOwnershipText(ownershipText);
-  if (haystack.includes(normalizedOwnershipText(hunk.header))) {
-    return true;
-  }
-  if (haystack.includes(normalizedOwnershipText(`hunk:${hunk.hash}`))) {
-    return true;
-  }
-
-  const normalizedHunkText = normalizedOwnershipText(hunk.changedText);
-  for (const marker of hunkOwnershipMarkers(ownershipText)) {
-    if (normalizedHunkText.includes(normalizedOwnershipText(marker))) {
-      return true;
-    }
-  }
-  return false;
-};
-
-const verifySharedFileHunkOwnership = async ({
-  rootDir,
-  planContent,
-  paths,
-  processRunner,
-}: {
-  rootDir: string;
-  planContent: string;
-  paths: string[];
-  processRunner: ProcessRunner;
-}): Promise<{ ok: true } | Failure> => {
-  const sharedPaths = new Set(
-    hunkOwnershipFilePaths(planContent).filter((filePath) =>
-      paths.includes(filePath),
-    ),
-  );
-  if (sharedPaths.size === 0) {
-    return { ok: true };
-  }
-
-  const diff = await readCachedDiffForPaths(
-    rootDir,
-    [...sharedPaths],
-    processRunner,
-    {
-      unified: 12,
-      promptPath: "git-review-hunk-ownership-diff",
-    },
-  );
-  if (!diff) {
-    return { ok: true };
-  }
-
-  const hunks = extractStagedDiffHunks(diff, sharedPaths);
-  const missingByPath = new Map<string, string[]>();
-  for (const hunk of hunks) {
-    const ownershipText = hunkOwnershipTextForFile(planContent, hunk.filePath);
-    if (ownershipText && stagedHunkCoveredByOwnership(hunk, ownershipText)) {
-      continue;
-    }
-    const missing = missingByPath.get(hunk.filePath) ?? [];
-    missing.push(`${hunk.header} (hunk:${hunk.hash})`);
-    missingByPath.set(hunk.filePath, missing);
-  }
-
-  if (missingByPath.size === 0) {
-    return { ok: true };
-  }
-
-  const details = [...missingByPath.entries()]
-    .map(
-      ([filePath, missing]) => `${filePath}: ${missing.slice(0, 8).join(", ")}`,
-    )
-    .join("; ");
-  return {
-    ok: false,
-    reason: `review hunk ownership incomplete: add ## Hunk Ownership entries for shared-file hunks before review: ${details}`,
-  };
 };
 
 export const generateScopeCleanupPrompt = ({
@@ -8880,7 +8657,6 @@ export const runWorkflowRunner = async (
         );
         const artifact = await writeTaskArtifact({
           rootDir,
-          planName: parsedPlan.planName,
           planPath: parsedPlan.planPath,
           context: {
             task: selectedTask,
@@ -9861,7 +9637,6 @@ export const runWorkflowRunner = async (
         );
         const artifact = await writeTaskArtifact({
           rootDir,
-          planName: parsedPlan.planName,
           planPath: parsedPlan.planPath,
           context: currentTaskContext,
           changedFiles: commitSummaryPaths ?? [],
