@@ -3836,6 +3836,17 @@ const extractLatestReviewSummary = (
   };
 };
 
+const latestReviewIsSpecPass = (planContent: string): boolean => {
+  const latestReview = extractLatestReviewSummary(planContent);
+  const evidence = latestReview.evidence ?? "";
+  const summary = latestReview.summary ?? "";
+  return (
+    latestReview.decision === "review" &&
+    /(?:^|\/)review-spec-v\d+\.md$/i.test(evidence) &&
+    /\b(?:SPEC PASS|PASS)\b/i.test(summary)
+  );
+};
+
 const extractLatestReviewRemediationContext = (
   planContent: string,
 ): string[] => {
@@ -8588,9 +8599,16 @@ export const runWorkflowRunner = async (
   };
 
   while (true) {
+    const recoveredQualityReview =
+      !internalPromptPathOverride &&
+      parsedPlan.status === "review" &&
+      parsedPlan.nextAction === "review-plan" &&
+      latestReviewIsSpecPass(parsedPlan.content);
     const route = internalPromptPathOverride
       ? internalRouteForPromptPath(internalPromptPathOverride)
-      : routeFor(parsedPlan.status, parsedPlan.nextAction);
+      : recoveredQualityReview
+        ? internalRouteForPromptPath(REVIEW_QUALITY_PROMPT_PATH)
+        : routeFor(parsedPlan.status, parsedPlan.nextAction);
     internalPromptPathOverride = undefined;
     if (!route.executable) {
       return await finishFailure(route.reason);
@@ -9221,13 +9239,86 @@ export const runWorkflowRunner = async (
           !carriedReviewStagingPaths ||
           carriedReviewStagingPaths.length === 0
         ) {
-          return await finishFailure(
-            "quality review requires prior spec review staging paths",
+          const parsedPaths =
+            fileOwnershipPreflight?.hasOwnershipScope &&
+            fileOwnershipPreflight.reviewStagingPaths
+              ? fileOwnershipPreflight.reviewStagingPaths.length > 0
+                ? {
+                    ok: true as const,
+                    paths: fileOwnershipPreflight.reviewStagingPaths,
+                  }
+                : {
+                    ok: false as const,
+                    reason:
+                      "plan has no changed ownership files to stage for review",
+                  }
+              : await parseReviewStagingPaths({
+                  content: parsedPlan.content,
+                  rootDir,
+                  isIgnored:
+                    options.isIgnored ??
+                    ((relativePath) => defaultIsIgnored(rootDir, relativePath)),
+                });
+          if (!parsedPaths.ok) {
+            return await finishFailure(parsedPaths.reason);
+          }
+          logWorkflowProgress();
+          if (selectedTask) {
+            const taskStage = await setTaskStage({
+              stage: "reviewing",
+              detail: `staged ${parsedPaths.paths.length} ${
+                parsedPaths.paths.length === 1 ? "file" : "files"
+              }`,
+            });
+            if (!taskStage.ok) {
+              return await finishFailure(taskStage.reason);
+            }
+          }
+          const acquired = await acquireWorkflowFileOwnershipForPaths({
+            rootDir,
+            planPath: parsedPlan.planPath,
+            paths: parsedPaths.paths,
+            heldLockPaths: heldWorkflowFileLockPaths,
+            now: timestamp,
+          });
+          if (!acquired.ok) {
+            return await finishFailure(acquired.reason);
+          }
+          if (!selectedTask) {
+            logger.log(
+              `Staging ${parsedPaths.paths.length} plan-owned ${
+                parsedPaths.paths.length === 1 ? "file" : "files"
+              } for quality review...`,
+            );
+          }
+          const staged = await runReviewStagingForPaths(
+            rootDir,
+            parsedPaths.paths,
+            processRunner,
           );
+          if (!staged.ok) {
+            const cleanup = await cleanupReviewStagingPaths(parsedPaths.paths);
+            const stopReason = cleanup.ok
+              ? staged.reason
+              : `${staged.reason}; ${cleanup.reason}`;
+            return await finishFailure(stopReason);
+          }
+          await runScopeCleanupForPaths({
+            codexRuntime,
+            rootDir,
+            planPath: parsedPlan.planPath,
+            planContent: parsedPlan.content,
+            paths: staged.paths,
+            processRunner,
+            mode: "review",
+          });
+          reviewStagingPaths = staged.paths;
+          staging = staged.staging;
+        } else {
+          logWorkflowProgress();
+          reviewStagingPaths = carriedReviewStagingPaths;
+          staging = carriedReviewStagingProcess;
         }
-        logWorkflowProgress();
-        reviewStagingPaths = carriedReviewStagingPaths;
-        staging = carriedReviewStagingProcess;
       }
     }
     if (route.promptPath === rel(".ai", "prompts", "commit-summary.md")) {

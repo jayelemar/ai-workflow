@@ -12220,7 +12220,73 @@ test("review-plan stages plan-owned files normally when the repo has no pre-exis
   }
 });
 
-test("thin-plan-v2 spec review continues to quality when spec-pass sidecar is already current", async () => {
+test("review-plan rerun resumes quality review when spec review already passed", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    writeWorkflowEventArtifactSync({
+      root: workspace.root,
+      planName: "review-quality-resume",
+      kind: "review-spec",
+      version: 1,
+    });
+    await writePlan(
+      workspace.root,
+      "review-quality-resume",
+      planWith(
+        "review",
+        "review-plan",
+        legacyReviewHistorySection({
+          summary: "SPEC PASS",
+          evidence:
+            ".ai/artifacts/review-quality-resume/events/review-spec-v1.md",
+          decision: "review",
+        }),
+      ),
+    );
+    const calls: Parameters<ProcessRunner>[0][] = [];
+    const result = await runWorkflowRunner({
+      planName: planArg("review-quality-resume"),
+      rootDir: workspace.root,
+      processRunner: async (call) => {
+        calls.push(call);
+        if (call.command === "git") {
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
+        if (call.promptPath === ".ai/prompts/review-quality.md") {
+          await writePlan(
+            workspace.root,
+            "review-quality-resume",
+            planWith("completed", "commit-summary"),
+          );
+          return {
+            launched: true,
+            stdout: "quality review ok",
+            stderr: "",
+            exitCode: 0,
+          };
+        }
+        return {
+          launched: true,
+          stdout: "unexpected prompt",
+          stderr: "",
+          exitCode: 0,
+        };
+      },
+    });
+
+    assert.equal(result.success, true, result.success ? "" : result.reason);
+    assert.deepEqual(
+      calls
+        .filter((call) => call.command === CODEX_COMMAND)
+        .map((call) => call.promptPath),
+      [".ai/prompts/review-quality.md", ".ai/prompts/commit-summary.md"],
+    );
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("thin-plan-v2 review-plan rerun resumes quality when spec-pass sidecar is already current", async () => {
   const workspace = await setupWorkspace();
   try {
     await writeThinPlanV2Artifacts(workspace.root, {
@@ -12341,11 +12407,7 @@ test("thin-plan-v2 spec review continues to quality when spec-pass sidecar is al
       calls
         .filter((call) => call.command === CODEX_COMMAND)
         .map((call) => call.promptPath),
-      [
-        ".ai/prompts/review-changes.md",
-        ".ai/prompts/review-quality.md",
-        ".ai/prompts/commit-summary.md",
-      ],
+      [".ai/prompts/review-quality.md", ".ai/prompts/commit-summary.md"],
     );
   } finally {
     await workspace.cleanup();
