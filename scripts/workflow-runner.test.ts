@@ -752,7 +752,7 @@ const compactEvidencePromptNames = [
   "review-quality.md",
   "plan-validator.md",
   "fix-plan.md",
-  "preview-before-apply.prompt.md",
+  "plan-preview-before-apply.md",
 ] as const;
 
 const assertPromptContract = (
@@ -1239,8 +1239,8 @@ test("sync-plan-artifacts prompt defines the pre-validator artifact sync contrac
   assert.match(prompt, /draft \+ sync-plan-artifacts/);
 });
 
-test("preview-before-apply prompt accepts draft artifact sync before validation", async () => {
-  const prompt = await readWorkflowPrompt("preview-before-apply.prompt.md");
+test("plan-preview-before-apply prompt accepts draft artifact sync before validation", async () => {
+  const prompt = await readWorkflowPrompt("plan-preview-before-apply.md");
 
   assert.match(prompt, /sync-plan-artifacts/);
   assert.match(prompt, /Next Action = sync-plan-artifacts/);
@@ -1250,8 +1250,20 @@ test("preview-before-apply prompt accepts draft artifact sync before validation"
   assert.match(prompt, /fix-plan\.md/);
 });
 
-test("preview-before-apply prompt requires visible comments for changed preview code", async () => {
-  const prompt = await readWorkflowPrompt("preview-before-apply.prompt.md");
+test("manual-preview prompt supports standalone manual use without plan state", async () => {
+  const prompt = await readWorkflowPrompt("manual-preview.md");
+
+  assert.match(prompt, /standalone ad hoc work/i);
+  assert.match(prompt, /does not require a plan file/i);
+  assert.match(prompt, /does not read or update workflow state/i);
+  assert.match(prompt, /does not create or update .*\.ai\/artifacts/i);
+  assert.match(prompt, /contextual code preview/i);
+  assert.match(prompt, /wait for explicit operator approval/i);
+  assert.match(prompt, /does not update `## Status` or `## Next Action`/i);
+});
+
+test("manual-preview prompt requires visible comments for changed preview code", async () => {
+  const prompt = await readWorkflowPrompt("manual-preview.md");
 
   assert.match(prompt, /visible comments/i);
   assert.match(prompt, /changed lines or blocks/i);
@@ -5903,7 +5915,7 @@ test("routes only spec-defined executable pairs and sends blocked plans through 
         "approved",
         "execute-plan",
         ".ai/prompts/execute-plan.md",
-        "gpt-5.5",
+        "gpt-5.4",
         "high",
       ],
       [
@@ -5911,7 +5923,7 @@ test("routes only spec-defined executable pairs and sends blocked plans through 
         "active",
         "execute-plan",
         ".ai/prompts/execute-plan.md",
-        "gpt-5.5",
+        "gpt-5.4",
         "high",
       ],
       [

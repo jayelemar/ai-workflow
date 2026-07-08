@@ -1,4 +1,4 @@
-# Preview Before Apply (Manual Post-Plan Controller)
+# Plan Preview Before Apply
 
 This prompt defines an explicit manual post-plan path for draft, approved, or
 active plans when the operator wants preview-gated execution writes.
@@ -54,7 +54,7 @@ If not provided:
 This prompt is valid only when invoked explicitly as:
 
 ```text
-Use '.ai/prompts/preview-before-apply.prompt.md'
+Use '.ai/prompts/plan-preview-before-apply.md'
 ```
 
 Treat this as a manual post-plan controller. The normal default path after plan
@@ -67,8 +67,6 @@ pnpm exec tsx .ai/scripts/workflow-runner.ts .ai/plans/<plan-name>.md
 If the operator intends to use the normal review flow afterward, this manual
 execution path MUST keep the plan artifacts and workflow context snapshot
 compatible with `review-changes.md` and `review-quality.md`.
-
----
 
 ## State Validation (MANDATORY)
 
@@ -434,8 +432,6 @@ If validation finds more implementation work already covered by the plan:
 If validation cannot proceed because of a true blocker:
 
 * follow the blocked transition
-
----
 
 ## Output Contract
 

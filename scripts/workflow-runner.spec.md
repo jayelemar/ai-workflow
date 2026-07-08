@@ -2,17 +2,19 @@
 
 ## Goal
 
-Keep the workflow runner and the manual `preview-before-apply` path aligned so
-plans can reference repo-relative spec files consistently and manual preview can
-handle draft preflight plus preview-gated execution without drifting from the
-runner state machine.
+Keep the workflow runner and the manual `plan-preview-before-apply` path aligned
+so plans can reference repo-relative spec files consistently and manual preview
+can handle draft preflight plus preview-gated execution without drifting from
+the runner state machine.
 
 ## Current Behavior
 
 - The workflow runner already owns the canonical `plan-validator` / `fix-plan`
   loop for draft plans and the normal `execute-plan` -> `review-plan` flow.
-- The manual `preview-before-apply` prompt currently assumes execution-only
-  entry and only describes `approved` and `active` plans.
+- The manual `plan-preview-before-apply` prompt owns plan-bound preview work for
+  `draft`, `approved`, and `active` plans.
+- The `manual-preview` prompt owns standalone ad hoc preview work and does not
+  use plan state or workflow artifacts.
 - The runner currently extracts spec paths from plan `## Spec` only when they
   match `.ai/specs/...`, which excludes workflow companion specs that live
   elsewhere in the repository.
@@ -23,10 +25,14 @@ runner state machine.
 - `.ai/specs/` remains the default location for ordinary feature and bug specs.
 - `.ai/scripts/workflow-runner.spec.md` is a valid companion spec path for
   workflow-runner changes.
-- `preview-before-apply` acts as a manual post-plan controller:
+- `plan-preview-before-apply` acts as a manual post-plan controller:
   - `draft` runs the same validation/fix preflight loop the runner uses
   - `approved` and `active` enter execution immediately
   - the non-test diff approval gate begins only for execution writes
+- `manual-preview` acts as a standalone ad hoc helper:
+  - no plan file is required
+  - no workflow state or `.ai/artifacts` are updated
+  - the non-test diff approval gate still applies before writes
 - Draft preflight plan/spec repairs remain allowed without preview approval only
   when they follow existing `plan-validator` / `fix-plan` rules.
 
@@ -38,20 +44,23 @@ runner state machine.
 - IF a plan `## Spec` section contains `.ai/scripts/workflow-runner.spec.md`,
   THEN the runner MUST treat it the same way it treats `.ai/specs/...`
   companion specs for prompt injection and snapshots.
-- IF `preview-before-apply` is invoked with a `draft` plan, THEN it MUST loop
-  through `plan-validator` and `fix-plan` semantics until the plan either
+- IF `plan-preview-before-apply` is invoked with a `draft` plan, THEN it MUST
+  loop through `plan-validator` and `fix-plan` semantics until the plan either
   reaches `approved` or STOPs for a real blocker.
 - IF draft preflight detects a `MINOR SPEC REPAIR`, THEN only the exact allowed
   spec file and sections MAY be repaired without preview approval.
 - IF draft preflight detects a `MAJOR SPEC DECISION REQUIRED`, missing user
-  authority, or another non-fixable blocker, THEN `preview-before-apply` MUST
-  STOP before execution begins.
+  authority, or another non-fixable blocker, THEN `plan-preview-before-apply`
+  MUST STOP before execution begins.
 - IF the plan reaches `approved` during manual preflight, THEN the same
   invocation MUST transition into `active + execute-plan`.
-- IF execution is about to write a non-test file, THEN `preview-before-apply`
-  MUST show the exact diff and wait for explicit approval before applying it.
+- IF execution is about to write a non-test file, THEN
+  `plan-preview-before-apply` MUST show the exact diff and wait for explicit
+  approval before applying it.
 - IF the write is only to tests or test-only fixtures, THEN the execution
   preview gate MUST NOT apply.
+- IF `manual-preview` is invoked for ad hoc work, THEN it MUST NOT require a
+  plan file or update workflow state, plan status, or `.ai/artifacts`.
 
 ## Constraints
 
@@ -64,7 +73,8 @@ runner state machine.
 
 ## File Scope
 
-- `.ai/prompts/preview-before-apply.prompt.md`
+- `.ai/prompts/plan-preview-before-apply.md`
+- `.ai/prompts/manual-preview.md`
 - `.ai/scripts/workflow-runner.ts`
 - `.ai/scripts/workflow-runner.test.ts`
 - `.ai/instructions/ai-workflow.md`
@@ -80,6 +90,8 @@ runner state machine.
   `active` plans and documents the integrated preflight loop.
 - Operator docs describe direct preview invocation on `draft`, `approved`, or
   `active` plans and state that draft plans self-run validation/fix first.
+- Operator docs describe standalone manual preview invocation for ad hoc work
+  and state that it does not use plan state or `.ai/artifacts`.
 - The approval gate is documented as execution-only and not applicable to
   allowed draft-preflight plan/spec repairs.
 
@@ -87,5 +99,5 @@ runner state machine.
 
 - `pnpm exec prettier --check .ai/instructions .ai/changelogs .ai/wrappers .ai/README.md .ai/prompts`
 - `pnpm exec tsx --test .ai/scripts/workflow-runner.test.ts`
-- Manual inspection of `.ai/prompts/preview-before-apply.prompt.md` to confirm
+- Manual inspection of `.ai/prompts/plan-preview-before-apply.md` to confirm
   the draft preflight loop, STOP rules, and execution-only approval gate.

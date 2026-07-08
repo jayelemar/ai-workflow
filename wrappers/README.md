@@ -48,22 +48,34 @@ One-off Codex profile override:
 pnpm exec tsx .ai/scripts/workflow-runner.ts --profile codex-personal .ai/plans/<plan-name>.md
 ```
 
-Manual preview path:
+Plan preview path:
 
 ```text
-Use '.ai/prompts/preview-before-apply.prompt.md'
+Use '.ai/prompts/plan-preview-before-apply.md'
 
 Plan:
 .ai/plans/<plan-name>.md
 ```
 
-Manual preview rules:
+Plan preview rules:
 
 - `draft` plans self-run the `plan-validator` / `fix-plan` loop until they
   either STOP on a real blocker or become ready for execution.
 - `approved` and `active` plans enter execution immediately.
 - The non-test diff approval gate starts only when execution is about to write
   a non-test file.
+
+Standalone manual preview path:
+
+```text
+Use '.ai/prompts/manual-preview.md'
+
+Target:
+<describe the target files and requested change>
+```
+
+Standalone manual preview does not require plan state, does not create
+`.ai/artifacts`, and waits for explicit approval before non-test writes.
 
 Repeated review-remediation loops use the runner snapshot at `.ai/artifacts/<plan-name>/state/context.md` as the hot-path context. In particular, follow-up `execute-plan` runs should consume the snapshot's latest unresolved review findings first, while the live plan remains the source of truth for exact edits and history.
 That snapshot is intentionally compact: prefer its `## Summary`, `## Key Details`, `## Validation`, `## Review`, and `## Latest Review Remediation Context` sections before opening the full plan or event artifacts.
@@ -81,13 +93,15 @@ pnpm exec tsx .ai/scripts/workflow-runner.ts --compact .ai/plans/<plan-name>.md
 - After a plan exists, the workflow runner remains the default path for
   `sync-plan-artifacts`, `plan-validator`, `fix-plan`, `execute-plan`,
   `review-changes`, `unblock-plan`, `reopen-plan`, and `commit-summary`.
-- `preview-before-apply` is available only through explicit prompt-file
-  invocation; it is not a keyword-triggered workflow mode.
-- `preview-before-apply` is a manual post-plan controller, not an
+- `plan-preview-before-apply` and `manual-preview` are available only through
+  explicit prompt-file invocation; they are not keyword-triggered workflow
+  modes.
+- `plan-preview-before-apply` is a manual post-plan controller, not an
   execution-only helper.
-- `preview-before-apply` should keep execution/validation artifacts and the
-  workflow context snapshot current if you plan to use the normal review flow
-  afterward.
+- `manual-preview` is a standalone ad hoc helper, not a workflow stage.
+- `plan-preview-before-apply` should keep execution/validation artifacts and
+  the workflow context snapshot current if you plan to use the normal review
+  flow afterward.
 - If you manually invoke a runner-oriented post-plan workflow prompt anyway,
   you must supply the current plan, spec, snapshot, and routed instruction
   files yourself because those prompts are runner-oriented.

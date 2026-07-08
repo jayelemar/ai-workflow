@@ -296,7 +296,7 @@ thin-plan-v2 state before moving to validation.
 You have two options:
 
 - default runner path
-- manual `preview-before-apply` path
+- manual `plan-preview-before-apply` path
 
 ## Workflow Runner
 
@@ -354,7 +354,7 @@ Default stage routing:
 | `sync-plan-artifacts` | `gpt-5.4` | `medium` |
 | `plan-validator` | `gpt-5.4` | `high` |
 | `fix-plan` | `gpt-5.4` | `medium` |
-| `execute-plan` | `gpt-5.5` | `high` |
+| `execute-plan` | `gpt-5.4` | `high` |
 | `unblock-plan` | `gpt-5.4` | `medium` |
 | `review-changes` | `gpt-5.5` | `xhigh` |
 | `review-quality` | `gpt-5.5` | `xhigh` |
@@ -458,15 +458,15 @@ Non-review workflow stages share one terminal-facing output contract:
 
 `review-changes` remains the only specialized output shape.
 
-## Preview Before Apply
+## Plan Preview Before Apply
 
-Use this when you want exact non-test execution diffs previewed before they are
-written.
+Use this when you have a workflow plan and want exact non-test execution diffs
+previewed before they are written.
 
-Invoke it explicitly:
+Invoke it explicitly with a plan:
 
 ```text
-Use '.ai/prompts/preview-before-apply.prompt.md'
+Use '.ai/prompts/plan-preview-before-apply.md'
 
 Plan:
 .ai/plans/<plan-name>.md
@@ -484,17 +484,54 @@ Behavior:
 - test-only writes may proceed without the non-test approval gate
 - plan/spec repairs allowed during `draft` preflight do not require diff
   approval
+- review-compatible execution/validation artifacts and the workflow context
+  snapshot stay current when work will continue into review
 
 Use it when:
 
-- you want exact execution diffs before apply
-- you want manual approval per execution step
+- you want exact planned execution diffs before apply
+- you want manual approval per workflow step
 - you still want runner-compatible execution and validation artifacts
 
 Avoid it when:
 
 - you just want the default automated workflow loop
 - you do not need manual approval before non-test execution writes
+
+## Manual Preview
+
+Use this for standalone ad hoc work when you want a contextual code preview
+before non-test files are changed and you do not want to bind the work to a
+workflow plan.
+
+Invoke it explicitly:
+
+```text
+Use '.ai/prompts/manual-preview.md'
+
+Target:
+<describe the target files and requested change>
+```
+
+Behavior:
+
+- no plan file is required
+- workflow state, plan status, and `.ai/artifacts` are not read or updated
+- target files or requested behavior must be clear enough to prepare a
+  contextual code preview
+- non-test writes wait for explicit approval before apply
+- test-only writes and validation commands may proceed without the non-test
+  approval gate
+
+Use it when:
+
+- you want ad hoc manual work previewed without creating or updating a plan
+- you want a small prompt that does not load the planned workflow controller
+
+Avoid it when:
+
+- the work needs plan state, file ownership boundaries, or review-compatible
+  workflow artifacts
 
 ## Day-To-Day Commands
 
@@ -539,13 +576,20 @@ If the runner does not start:
 - confirm `pnpm exec tsx` resolves locally
 - confirm `.codex/AGENTS.md` exists and points at `.ai/AGENTS.md`
 
-If `preview-before-apply` behaves unexpectedly:
+If `plan-preview-before-apply` behaves unexpectedly:
 
 - confirm the prompt was invoked explicitly with
-  `Use '.ai/prompts/preview-before-apply.prompt.md'`
+  `Use '.ai/prompts/plan-preview-before-apply.md'`
 - confirm the plan is in `draft`, `approved`, or `active`
 - confirm the plan `## Spec` section points to valid repo-relative
   `*.spec.md` files
+
+If `manual-preview` behaves unexpectedly:
+
+- confirm the prompt was invoked explicitly with
+  `Use '.ai/prompts/manual-preview.md'`
+- confirm the request identifies target files or a concrete behavior to change
+- confirm no plan state or `.ai/artifacts` updates were expected
 
 If follow-up stages lose context:
 

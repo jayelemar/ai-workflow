@@ -19,6 +19,9 @@ The goal is not to prove one workflow is better in every case. The goal is to
 choose the cheapest workflow that still gives enough planning, execution, and
 review quality for the task risk.
 
+Treat `token-usage.jsonl` entries as measurement data: keep them compact,
+append-only, and useful for comparing workflow changes over time.
+
 ## Evidence Used
 
 Static files inspected:
@@ -365,6 +368,10 @@ Replacement:
 | 8 | Keep only rolling state plus latest event in normal prompts | Medium | Less inline history |
 | 9 | Shorten duplicated workflow rules across prompts | Medium | More reliance on shared references |
 | 10 | Keep hooks absent or minimal | Low | None; hooks were not a current cost driver |
+
+Priority 2 is on hold. Keep `plan-validator` and `fix-plan` separate until
+there is enough measurement data showing that a combined bounded preflight can
+preserve repair quality without increasing failed execution handoffs.
 
 ## Recommended Default Policy
 
