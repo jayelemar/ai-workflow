@@ -1,4 +1,4 @@
-Version: 1.11
+Version: 1.12
 Last Updated: 2026-07-09
 
 # Workflow State Instructions
@@ -218,6 +218,14 @@ Review implementation note:
 
 * Public entry remains `review + review-plan`.
 * The runner internally executes stage-1 spec review first, then stage-2 quality review.
+
+Review system boundary:
+
+* Public entry remains `review + review-plan`.
+* The harness review loop is the review system for runner-managed review.
+* The runner must not automatically add Superpowers subagent review.
+* This boundary does not add a status value, next-action value, or state
+  transition.
 * Only stage-2 quality review may approve `completed + commit-summary`.
 
 Completed `commit-summary` is the terminal safe-to-merge path. It creates the local plan-scoped commit and runner success represents that no further next action is required.

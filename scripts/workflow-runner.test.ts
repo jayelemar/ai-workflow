@@ -1429,6 +1429,22 @@ test("superpowers prompt does not require compact agent progress updates", async
   );
 });
 
+test("superpowers prompt keeps harness review subagents disabled", async () => {
+  const prompt = await readWorkflowPrompt("superpowers.md");
+
+  assert.match(prompt, /Harness Review Boundary/);
+  assert.match(prompt, /must not add Superpowers subagent review/i);
+});
+
+test("review prompts describe advisory-only Superpowers review", async () => {
+  for (const promptName of ["review-changes.md", "review-quality.md"]) {
+    const prompt = await readWorkflowPrompt(promptName);
+
+    assert.match(prompt, /advisory edge-case guidance/i);
+    assert.match(prompt, /must not spawn subagents/i);
+  }
+});
+
 test("create-plan prompt defines artifact state as the planning-time boundary", async () => {
   const prompt = await readWorkflowPrompt("create-plan.md");
 
@@ -4575,15 +4591,36 @@ test("workflow prompt pins superpower skills to the installed global skill root"
   );
 });
 
-test("workflow prompt includes Codex-compatible sub-agent spawn guidance", () => {
+test("review workflow prompts default to harness-only review without Superpowers subagents", () => {
+  for (const promptPath of [
+    ".ai/prompts/review-changes.md",
+    ".ai/prompts/review-quality.md",
+  ]) {
+    const prompt = generateWorkflowPrompt({
+      promptPath,
+      planPath: ".ai/plans/workflow-runner.md",
+      promptContent: "REVIEW PROMPT",
+      planContent: planWith("review", "review-plan"),
+    });
+
+    assert.match(prompt, /Harness review policy:/);
+    assert.match(prompt, /Do not run Superpowers subagent review/);
+    assert.doesNotMatch(prompt, /use sub-agents/i);
+    assert.doesNotMatch(prompt, /subagent-driven-development\/SKILL\.md/);
+    assert.doesNotMatch(prompt, /full-history fork/i);
+  }
+});
+
+test("non-review workflow prompts may still include Codex-compatible sub-agent guidance", () => {
   const prompt = generateWorkflowPrompt({
-    promptPath: ".ai/prompts/review-changes.md",
+    promptPath: ".ai/prompts/execute-plan.md",
     planPath: ".ai/plans/workflow-runner.md",
-    promptContent: "REVIEW CHANGES PROMPT",
-    planContent: planWith("review", "review-plan"),
+    promptContent: "EXECUTE PLAN PROMPT",
+    planContent: planWith("active", "execute-plan"),
   });
 
   assert.match(prompt, /use sub-agents/i);
+  assert.match(prompt, /subagent-driven-development\/SKILL\.md/);
   assert.match(prompt, /full-history fork/i);
   assert.match(prompt, /omit `agent_type`, `model`, and `reasoning_effort`/);
   assert.match(prompt, /spawn without a full-history fork/);

@@ -1,5 +1,11 @@
 # Workflow State Instruction Changelog
 
+## v1.12 — 2026-07-09
+
+* Documented the review system boundary: `review + review-plan` stays in the
+  existing harness review loop and must not automatically add Superpowers
+  subagent review.
+
 ## v1.11 — 2026-07-09
 
 * Removed `fix-plan` as a supported next action and documented existing

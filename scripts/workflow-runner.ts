@@ -67,6 +67,10 @@ const REVIEW_QUALITY_PROMPT_PATH = ".ai/prompts/review-quality.md";
 const REOPEN_PLAN_PROMPT_PATH = ".ai/prompts/reopen-plan.md";
 const COMMIT_SUMMARY_PROMPT_PATH = ".ai/prompts/commit-summary.md";
 const SCOPE_CLEANUP_PROMPT_PATH = ".ai/prompts/scope-cleanup.md";
+const REVIEW_PROMPT_PATHS = new Set([
+  REVIEW_CHANGES_PROMPT_PATH,
+  REVIEW_QUALITY_PROMPT_PATH,
+]);
 
 const PROMPT_CODEX_EXECUTION_OVERRIDES: Record<string, CodexExecutionConfig> = {
   [SYNC_PLAN_ARTIFACTS_PROMPT_PATH]: { model: "gpt-5.4", reasoning: "medium" },
@@ -4931,12 +4935,24 @@ The previous stage exceeded token thresholds.
 - This guardrail does not override required spec reads, path-scoped staged diff reads, latest validation evidence, workflow state reads, or other correctness-critical prompt inputs.
 `
       : "";
+  const promptIsReview = REVIEW_PROMPT_PATHS.has(promptPath);
+  const superpowerSkillExamples = [
+    `- ${path.join(SUPERPOWER_SKILL_ROOT, "using-superpowers", "SKILL.md")}`,
+    `- ${path.join(SUPERPOWER_SKILL_ROOT, "executing-plans", "SKILL.md")}`,
+    ...(promptIsReview
+      ? []
+      : [
+          `- ${path.join(
+            SUPERPOWER_SKILL_ROOT,
+            "subagent-driven-development",
+            "SKILL.md",
+          )}`,
+        ]),
+  ].join("\n");
   const subAgentGuidance = [
     rel(".ai", "prompts", "sync-plan-artifacts.md"),
     rel(".ai", "prompts", "plan-validator.md"),
     rel(".ai", "prompts", "execute-plan.md"),
-    rel(".ai", "prompts", "review-changes.md"),
-    rel(".ai", "prompts", "review-quality.md"),
     rel(".ai", "prompts", "fix-review.md"),
     rel(".ai", "prompts", "reopen-plan.md"),
   ].includes(promptPath)
@@ -4946,17 +4962,25 @@ Codex sub-agent spawn compatibility:
 - For a full-history fork, omit \`agent_type\`, \`model\`, and \`reasoning_effort\`; those fields are inherited from the parent.
 - If a different \`agent_type\`, \`model\`, or \`reasoning_effort\` is required, spawn without a full-history fork.`
     : "";
+  const reviewSuperpowersPolicy = promptIsReview
+    ? `
+Harness review policy:
+- Use the harness review prompt as the only review system for this stage.
+- Do not run Superpowers subagent review.
+- Do not load subagent-driven-development for review.
+- Do not spawn spec-review or code-quality review subagents.
+- Advisory edge-case reasoning from .ai/prompts/superpowers.md remains allowed without subagents.`
+    : "";
 
   return `Use ${promptPath}
 
 load: .ai/prompts/superpowers.md
 Superpower skill root: ${SUPERPOWER_SKILL_ROOT}
 When loading superpower skills, use this root, for example:
-- ${path.join(SUPERPOWER_SKILL_ROOT, "using-superpowers", "SKILL.md")}
-- ${path.join(SUPERPOWER_SKILL_ROOT, "executing-plans", "SKILL.md")}
-- ${path.join(SUPERPOWER_SKILL_ROOT, "subagent-driven-development", "SKILL.md")}
+${superpowerSkillExamples}
 Do not read superpower skills from ${SHARED_SKILL_ROOT}; that root contains separate shared/caveman skills only.
 Apply the superpowers advisory guidance for analysis and edge-case checks.${subAgentGuidance}
+${reviewSuperpowersPolicy}
 
 ${activeContextPacket({ promptPath, planPath, planContent, contextSnapshotPath })}
 ${workflowGuardrail}

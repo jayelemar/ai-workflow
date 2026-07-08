@@ -268,10 +268,9 @@ Cost:
 Replacement:
 
 - Use one review system per task.
+- Harness review is the review system for `review + review-plan`.
+- Do not inject Superpowers subagent review into harness review stages.
 - For routine changes, use one final review.
-- For high-risk harness work, keep a single combined harness review unless a
-  second review is justified by security, auth, data loss, migrations, or
-  cross-package behavior.
 
 ### Repeated Fresh Context Rehydration
 
@@ -359,7 +358,7 @@ Replacement:
 
 | Rank | Recommendation | Expected Savings | Tradeoff |
 | ---: | --- | --- | --- |
-| 1 | Stop combining harness review with Superpowers subagent review by default | High | Less layered review |
+| 1 | Stop combining harness review with Superpowers subagent review by default | Implemented high savings | Less layered review |
 | 2 | Collapse validation and repair into one bounded `plan-validator` preflight | High | Fewer automatic repair attempts |
 | 3 | Merge `review-changes` and `review-quality` for routine tasks | High | Less separation between spec and quality review |
 | 4 | Use native `/plan` for small and medium tasks | High | Less workflow bookkeeping |
@@ -373,6 +372,10 @@ Replacement:
 Priority 2 is implemented. Draft validation now uses one bounded
 `plan-validator` preflight so plan repair stays available without repeated
 fresh-stage context rehydration.
+
+Priority 1 is implemented. Harness review remains the review system for
+`review + review-plan`; Superpowers subagent review is not injected into the
+default runner review path.
 
 ## Recommended Default Policy
 

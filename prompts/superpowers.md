@@ -79,6 +79,25 @@ Avoid overuse:
 
 ---
 
+## Harness Review Boundary
+
+When a workflow runner stage is `review-changes` or `review-quality`,
+Superpowers must not add Superpowers subagent review.
+
+Allowed in harness review:
+
+* advisory edge-case reasoning
+* compact tradeoff notes
+* assumptions checks
+
+Not allowed in harness review:
+
+* loading `subagent-driven-development`
+* spawning spec-review or code-quality review subagents
+* treating Superpowers review as a second approval gate
+
+---
+
 ## Output Behavior
 
 Superpowers may:

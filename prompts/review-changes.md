@@ -28,7 +28,9 @@ Load:
 
 * `.ai/prompts/superpowers.md`
 
-Apply the superpowers advisory guidance for analysis and edge-case checks.
+Apply advisory edge-case guidance only.
+This harness review stage must not spawn subagents, load
+`subagent-driven-development`, or run a separate Superpowers review.
 
 ---
 

@@ -367,6 +367,9 @@ Notes:
   review) and `review-quality` (stage-2 quality review).
 - `review-changes` remains the main correctness gate, so both review stages
   keep the highest-quality model and reasoning tier.
+- Harness review does not run Superpowers subagent review. Additional review,
+  when desired, is a separate manual decision outside the default runner review
+  path.
 - `commit-summary` uses `gpt-5.3-codex-spark` because it is the cheapest
   low-risk stage: formatting the final commit subject and user-facing summary,
   not validating implementation correctness.
