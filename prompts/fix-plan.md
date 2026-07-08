@@ -19,6 +19,8 @@ Read:
 * the repo-relative `*.spec.md` path(s) listed under the plan's `## Spec` section (if any)
 * relevant codebase files named by the spec or plan when the latest validation finding questions contract, shape, rendering, or file scope
 
+If the runner provides a `Workflow token guardrail` note for this run, treat it as mandatory snapshot-first context-loading discipline while preserving required plan, validation findings, spec, and relevant codebase reads.
+
 ---
 
 ## Plan Input (MANDATORY)

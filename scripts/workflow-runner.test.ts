@@ -4009,41 +4009,56 @@ test("workflow prompt injects active context packet with current prompt, plan, s
   assert.match(prompt, /Plan-scoped diff boundary:/);
 });
 
-test("execute workflow prompt adds stricter token guardrails after a prior token spike", () => {
-  const prompt = generateWorkflowPrompt({
-    promptPath: ".ai/prompts/execute-plan.md",
-    planPath: ".ai/plans/workflow-runner.md",
-    promptContent: "EXECUTE PLAN PROMPT",
-    executeTokenGuardrail: {
-      stageInputTokens: 2_100_000,
-      stageUncachedInputTokens: 150_000,
-    },
-  });
+test("guarded workflow prompts add generic token guardrails after a prior token spike", () => {
+  for (const promptPath of [
+    ".ai/prompts/fix-plan.md",
+    ".ai/prompts/execute-plan.md",
+    ".ai/prompts/review-changes.md",
+    ".ai/prompts/review-quality.md",
+  ]) {
+    const prompt = generateWorkflowPrompt({
+      promptPath,
+      planPath: ".ai/plans/workflow-runner.md",
+      promptContent: "WORKFLOW PROMPT",
+      workflowTokenGuardrail: {
+        stageInputTokens: 2_100_000,
+        stageUncachedInputTokens: 150_000,
+      },
+    });
 
-  assert.match(prompt, /Execute token guardrail:/);
-  assert.match(prompt, /The previous stage exceeded token thresholds/i);
-  assert.match(prompt, /Use the snapshot as the default source/i);
-  assert.match(
-    prompt,
-    /Open the full plan or event artifacts only when exact detail is required/i,
-  );
-  assert.match(
-    prompt,
-    /Do not broadly load `\.ai\/artifacts\/\*\*` or full historical plan sections/i,
-  );
+    assert.match(prompt, /Workflow token guardrail:/);
+    assert.match(prompt, /The previous stage exceeded token thresholds/i);
+    assert.match(
+      prompt,
+      /\.ai\/artifacts\/workflow-runner\/state\/context\.md/,
+    );
+    assert.match(
+      prompt,
+      /Open exact plan sections or exact event artifacts only when needed/i,
+    );
+    assert.match(prompt, /Do not broadly load `\.ai\/artifacts\/\*\*`/i);
+    assert.match(prompt, /Do not load full historical plan sections/i);
+    assert.match(prompt, /required spec reads/i);
+    assert.match(prompt, /path-scoped staged diff reads/i);
+    assert.match(prompt, /latest validation evidence/i);
+    assert.match(prompt, /workflow state reads/i);
+    assert.match(prompt, /correctness-critical prompt inputs/i);
+    assert.doesNotMatch(prompt, /Execute token guardrail:/);
+  }
 });
 
-test("review workflow prompt does not add stricter execute token guardrails after a prior token spike", () => {
+test("unguarded workflow prompts do not add generic token guardrails after a prior token spike", () => {
   const prompt = generateWorkflowPrompt({
-    promptPath: ".ai/prompts/review-changes.md",
+    promptPath: ".ai/prompts/plan-validator.md",
     planPath: ".ai/plans/workflow-runner.md",
-    promptContent: "REVIEW CHANGES PROMPT",
-    executeTokenGuardrail: {
+    promptContent: "PLAN VALIDATOR PROMPT",
+    workflowTokenGuardrail: {
       stageInputTokens: 2_100_000,
       stageUncachedInputTokens: 150_000,
     },
   });
 
+  assert.doesNotMatch(prompt, /Workflow token guardrail:/);
   assert.doesNotMatch(prompt, /Execute token guardrail:/);
 });
 
@@ -6491,7 +6506,7 @@ test("task savepoint mode commits each reviewed task, writes artifacts, logs tas
       /TASK 01-backend-endpoints \| reviewing \| staged 1 file/,
     );
     const tokenWarningIndex = consoleOutput.indexOf(
-      "WARNING: Stage token usage is high; next execute-plan will use snapshot-first guidance.",
+      "WARNING: Stage token usage is high; the next guarded workflow stage will use snapshot-first guidance.",
     );
     const reviewStageIndex = consoleOutput.indexOf("[2/100] STAGE REVIEW");
     const reviewTaskIndex = consoleOutput.indexOf(
@@ -8423,7 +8438,7 @@ test("high token stages log one short advisory warning while keeping token usage
   }
 });
 
-test("high-token prior stages add stricter guardrail guidance only to the next execute prompt", async () => {
+test("high-token prior stages add generic guardrail guidance to execute prompts", async () => {
   const workspace = await setupWorkspace();
   try {
     await writePlan(
@@ -8480,17 +8495,18 @@ test("high-token prior stages add stricter guardrail guidance only to the next e
       (call) => call.promptPath === ".ai/prompts/execute-plan.md",
     );
     assert.ok(executeCall);
-    assert.match(executeCall.args[6], /Execute token guardrail:/);
+    assert.match(executeCall.args[6], /Workflow token guardrail:/);
     assert.match(
       executeCall.args[6],
       /previous stage exceeded token thresholds/i,
     );
+    assert.doesNotMatch(executeCall.args[6], /Execute token guardrail:/);
   } finally {
     await workspace.cleanup();
   }
 });
 
-test("high-token prior stages do not add stricter execute guardrail guidance to review prompts", async () => {
+test("high-token prior stages add generic guardrail guidance to review prompts", async () => {
   const workspace = await setupWorkspace();
   try {
     await writePlan(
@@ -8568,9 +8584,341 @@ test("high-token prior stages do not add stricter execute guardrail guidance to 
       (call) => call.promptPath === ".ai/prompts/review-changes.md",
     );
     assert.ok(reviewCall);
+    assert.match(reviewCall.args[6], /Workflow token guardrail:/);
     assert.doesNotMatch(reviewCall.args[6], /Execute token guardrail:/);
+    const qualityCall = calls.find(
+      (call) => call.promptPath === ".ai/prompts/review-quality.md",
+    );
+    assert.ok(qualityCall);
+    assert.doesNotMatch(qualityCall.args[6], /Workflow token guardrail:/);
+    assert.doesNotMatch(qualityCall.args[6], /Execute token guardrail:/);
   } finally {
     await workspace.cleanup();
+  }
+});
+
+test("high-token prior stages add generic guardrail guidance to review-quality prompts", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    writeWorkflowEventArtifactSync({
+      root: workspace.root,
+      planName: "workflow-runner",
+      kind: "review-spec",
+      version: 1,
+    });
+    await writePlan(
+      workspace.root,
+      "workflow-runner",
+      planWith(
+        "review",
+        "review-plan",
+        legacyReviewHistorySection({
+          summary: "SPEC PASS",
+          evidence: ".ai/artifacts/workflow-runner/events/review-spec-v1.md",
+          decision: "review",
+        }),
+      ),
+    );
+    mkdirSync(
+      join(workspace.root, ".ai", "artifacts", "workflow-runner", "logs"),
+      { recursive: true },
+    );
+    writeFileSync(
+      join(
+        workspace.root,
+        ".ai",
+        "artifacts",
+        "workflow-runner",
+        "logs",
+        "token-usage.jsonl",
+      ),
+      `${JSON.stringify({
+        timestamp: "2026-06-29T00:00:00.000Z",
+        iteration: 3,
+        promptPath: ".ai/prompts/review-changes.md",
+        stageInputTokens: 2_100_000,
+        stageCachedInputTokens: 1_950_000,
+        stageUncachedInputTokens: 150_000,
+        stageOutputTokens: 800,
+        stageTotalTokens: 2_100_800,
+        totalTokens: 2_100_800,
+      })}\n`,
+      "utf8",
+    );
+
+    const calls: Parameters<ProcessRunner>[0][] = [];
+    await runWorkflowRunner({
+      planName: planArg("workflow-runner"),
+      rootDir: workspace.root,
+      processRunner: runnerReturning(
+        { launched: true, stdout: "ok", stderr: "", exitCode: 0 },
+        (call) => {
+          calls.push(call);
+          if (call.promptPath === ".ai/prompts/review-quality.md") {
+            writeFileSync(
+              join(workspace.root, ".ai", "plans", "workflow-runner.md"),
+              planWith("completed", "commit-summary"),
+            );
+          }
+        },
+      ),
+    });
+
+    const qualityCall = calls.find(
+      (call) => call.promptPath === ".ai/prompts/review-quality.md",
+    );
+    assert.ok(qualityCall);
+    assert.match(qualityCall.args[6], /Workflow token guardrail:/);
+    assert.doesNotMatch(qualityCall.args[6], /Execute token guardrail:/);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("high-token prior stages add generic guardrail guidance to fix-plan prompts", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    writeWorkflowEventArtifactSync({
+      root: workspace.root,
+      planName: "workflow-runner",
+      kind: "validation",
+      version: 1,
+    });
+    await writePlan(
+      workspace.root,
+      "workflow-runner",
+      planWith(
+        "draft",
+        "fix-plan",
+        "## Validation History\n\n### Validation v1\n\n* Summary: Needs fix\n* Decision: draft\n* Evidence: .ai/artifacts/workflow-runner/events/validation-v1.md\n",
+      ),
+    );
+    mkdirSync(
+      join(workspace.root, ".ai", "artifacts", "workflow-runner", "logs"),
+      { recursive: true },
+    );
+    writeFileSync(
+      join(
+        workspace.root,
+        ".ai",
+        "artifacts",
+        "workflow-runner",
+        "logs",
+        "token-usage.jsonl",
+      ),
+      `${JSON.stringify({
+        timestamp: "2026-06-29T00:00:00.000Z",
+        iteration: 3,
+        promptPath: ".ai/prompts/plan-validator.md",
+        stageInputTokens: 2_100_000,
+        stageCachedInputTokens: 1_950_000,
+        stageUncachedInputTokens: 150_000,
+        stageOutputTokens: 800,
+        stageTotalTokens: 2_100_800,
+        totalTokens: 2_100_800,
+      })}\n`,
+      "utf8",
+    );
+
+    const calls: Parameters<ProcessRunner>[0][] = [];
+    await runWorkflowRunner({
+      planName: planArg("workflow-runner"),
+      rootDir: workspace.root,
+      processRunner: runnerReturning(
+        { launched: true, stdout: "ok", stderr: "", exitCode: 0 },
+        (call) => {
+          calls.push(call);
+          if (call.promptPath === ".ai/prompts/fix-plan.md") {
+            writeFileSync(
+              join(workspace.root, ".ai", "plans", "workflow-runner.md"),
+              planWith("draft", "plan-validator"),
+            );
+          }
+          if (call.promptPath === ".ai/prompts/plan-validator.md") {
+            writeFileSync(
+              join(workspace.root, ".ai", "plans", "workflow-runner.md"),
+              planWith("approved", "execute-plan"),
+            );
+          }
+          if (call.promptPath === ".ai/prompts/execute-plan.md") {
+            writeFileSync(
+              join(workspace.root, ".ai", "plans", "workflow-runner.md"),
+              planWith("blocked", "unblock-plan"),
+            );
+          }
+        },
+      ),
+    });
+
+    const fixCall = calls.find(
+      (call) => call.promptPath === ".ai/prompts/fix-plan.md",
+    );
+    assert.ok(fixCall);
+    assert.match(fixCall.args[6], /Workflow token guardrail:/);
+    assert.doesNotMatch(fixCall.args[6], /Execute token guardrail:/);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("high-token prior stages do not add generic guardrail guidance to unguarded prompts", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(
+      workspace.root,
+      "workflow-runner",
+      planWith("draft", "plan-validator"),
+    );
+    mkdirSync(
+      join(workspace.root, ".ai", "artifacts", "workflow-runner", "logs"),
+      { recursive: true },
+    );
+    writeFileSync(
+      join(
+        workspace.root,
+        ".ai",
+        "artifacts",
+        "workflow-runner",
+        "logs",
+        "token-usage.jsonl",
+      ),
+      `${JSON.stringify({
+        timestamp: "2026-06-29T00:00:00.000Z",
+        iteration: 3,
+        promptPath: ".ai/prompts/execute-plan.md",
+        stageInputTokens: 2_100_000,
+        stageCachedInputTokens: 1_950_000,
+        stageUncachedInputTokens: 150_000,
+        stageOutputTokens: 800,
+        stageTotalTokens: 2_100_800,
+        totalTokens: 2_100_800,
+      })}\n`,
+      "utf8",
+    );
+
+    const calls: Parameters<ProcessRunner>[0][] = [];
+    await runWorkflowRunner({
+      planName: planArg("workflow-runner"),
+      rootDir: workspace.root,
+      processRunner: runnerReturning(
+        { launched: true, stdout: "ok", stderr: "", exitCode: 0 },
+        (call) => {
+          calls.push(call);
+          if (call.promptPath === ".ai/prompts/plan-validator.md") {
+            writeFileSync(
+              join(workspace.root, ".ai", "plans", "workflow-runner.md"),
+              planWith("approved", "execute-plan"),
+            );
+          }
+          if (call.promptPath === ".ai/prompts/execute-plan.md") {
+            writeFileSync(
+              join(workspace.root, ".ai", "plans", "workflow-runner.md"),
+              planWith("blocked", "unblock-plan"),
+            );
+          }
+        },
+      ),
+    });
+
+    const validatorCall = calls.find(
+      (call) => call.promptPath === ".ai/prompts/plan-validator.md",
+    );
+    assert.ok(validatorCall);
+    assert.doesNotMatch(validatorCall.args[6], /Workflow token guardrail:/);
+    assert.doesNotMatch(validatorCall.args[6], /Execute token guardrail:/);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("equal-threshold, malformed latest, and non-finite latest ledgers do not add workflow guardrails", async () => {
+  const scenarios: Array<{
+    name: string;
+    ledger: string;
+  }> = [
+    {
+      name: "equal-threshold",
+      ledger: `${JSON.stringify({
+        timestamp: "2026-06-29T00:00:00.000Z",
+        iteration: 3,
+        promptPath: ".ai/prompts/review-changes.md",
+        stageInputTokens: 2_000_000,
+        stageUncachedInputTokens: 100_000,
+      })}\n`,
+    },
+    {
+      name: "malformed-latest",
+      ledger: `${JSON.stringify({
+        timestamp: "2026-06-29T00:00:00.000Z",
+        iteration: 2,
+        promptPath: ".ai/prompts/review-changes.md",
+        stageInputTokens: 2_100_000,
+        stageUncachedInputTokens: 150_000,
+      })}\nnot-json\n`,
+    },
+    {
+      name: "non-finite-latest",
+      ledger: `${JSON.stringify({
+        timestamp: "2026-06-29T00:00:00.000Z",
+        iteration: 3,
+        promptPath: ".ai/prompts/review-changes.md",
+        stageInputTokens: "many",
+        stageUncachedInputTokens: null,
+      })}\n`,
+    },
+  ];
+
+  for (const scenario of scenarios) {
+    const workspace = await setupWorkspace();
+    try {
+      await writePlan(
+        workspace.root,
+        scenario.name,
+        planWith("active", "execute-plan"),
+      );
+      mkdirSync(join(workspace.root, ".ai", "artifacts", scenario.name, "logs"), {
+        recursive: true,
+      });
+      writeFileSync(
+        join(
+          workspace.root,
+          ".ai",
+          "artifacts",
+          scenario.name,
+          "logs",
+          "token-usage.jsonl",
+        ),
+        scenario.ledger,
+        "utf8",
+      );
+
+      const calls: Parameters<ProcessRunner>[0][] = [];
+      await runWorkflowRunner({
+        planName: planArg(scenario.name),
+        rootDir: workspace.root,
+        processRunner: runnerReturning(
+          { launched: true, stdout: "ok", stderr: "", exitCode: 0 },
+          (call) => {
+            calls.push(call);
+            if (call.promptPath === ".ai/prompts/execute-plan.md") {
+              writeFileSync(
+                join(workspace.root, ".ai", "plans", `${scenario.name}.md`),
+                planWith("blocked", "unblock-plan"),
+              );
+            }
+          },
+        ),
+      });
+
+      const executeCall = calls.find(
+        (call) => call.promptPath === ".ai/prompts/execute-plan.md",
+      );
+      assert.ok(executeCall);
+      assert.doesNotMatch(executeCall.args[6], /Workflow token guardrail:/);
+      assert.doesNotMatch(executeCall.args[6], /Execute token guardrail:/);
+    } finally {
+      await workspace.cleanup();
+    }
   }
 });
 

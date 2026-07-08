@@ -374,7 +374,7 @@ type WorkflowContextSnapshotTokenUsage = {
   totalTokens?: number | null;
 };
 
-type ExecuteTokenGuardrail = {
+type WorkflowTokenGuardrail = {
   stageInputTokens?: number | null;
   stageUncachedInputTokens?: number | null;
 };
@@ -4783,6 +4783,16 @@ const isQualityReviewPrompt = (promptPath: string): boolean =>
 const isReviewPrompt = (promptPath: string): boolean =>
   isSpecReviewPrompt(promptPath) || isQualityReviewPrompt(promptPath);
 
+const WORKFLOW_TOKEN_GUARDED_PROMPT_PATHS = new Set([
+  FIX_PLAN_PROMPT_PATH,
+  EXECUTE_PLAN_PROMPT_PATH,
+  REVIEW_CHANGES_PROMPT_PATH,
+  REVIEW_QUALITY_PROMPT_PATH,
+]);
+
+const isWorkflowTokenGuardedPrompt = (promptPath: string): boolean =>
+  WORKFLOW_TOKEN_GUARDED_PROMPT_PATHS.has(promptPath);
+
 const readPrompt = async (
   rootDir: string,
   promptPath: string,
@@ -4812,7 +4822,7 @@ export const generateWorkflowPrompt = ({
   reviewStagingPaths = [],
   commitSummaryPaths = [],
   unblockNote,
-  executeTokenGuardrail,
+  workflowTokenGuardrail,
   taskContext,
   taskSavepointAggregateSummary = false,
 }: {
@@ -4824,7 +4834,7 @@ export const generateWorkflowPrompt = ({
   reviewStagingPaths?: string[];
   commitSummaryPaths?: string[];
   unblockNote?: string;
-  executeTokenGuardrail?: ExecuteTokenGuardrail;
+  workflowTokenGuardrail?: WorkflowTokenGuardrail;
   taskContext?: WorkflowTaskContext;
   taskSavepointAggregateSummary?: boolean;
 }): string => {
@@ -4917,16 +4927,16 @@ Unblock evidence note:
 ${unblockNote?.trim() ? unblockNote.trim() : "(none provided)"}
 `
       : "";
-  const executeGuardrail =
-    promptPath === rel(".ai", "prompts", "execute-plan.md") &&
-    executeTokenGuardrail
+  const workflowGuardrail =
+    isWorkflowTokenGuardedPrompt(promptPath) && workflowTokenGuardrail
       ? `
-Execute token guardrail:
+Workflow token guardrail:
 The previous stage exceeded token thresholds.
-- Use the snapshot as the default source for this run.
-- Open the full plan or event artifacts only when exact detail is required for the current task.
-- Do not broadly load \`.ai/artifacts/**\` or full historical plan sections.
-- If fallback context is needed, open only the exact plan section or exact event file needed for the current fix.
+- Use ${contextSnapshotPath} as the first current-state source for this run.
+- Open exact plan sections or exact event artifacts only when needed for the current fix, execution, or review.
+- Do not broadly load \`.ai/artifacts/**\`.
+- Do not load full historical plan sections unless the current fix, execution, or review needs exact detail.
+- This guardrail does not override required spec reads, path-scoped staged diff reads, latest validation evidence, workflow state reads, or other correctness-critical prompt inputs.
 `
       : "";
   const subAgentGuidance = [
@@ -4958,7 +4968,7 @@ Do not read superpower skills from ${SHARED_SKILL_ROOT}; that root contains sepa
 Apply the superpowers advisory guidance for analysis and edge-case checks.${subAgentGuidance}
 
 ${activeContextPacket({ promptPath, planPath, planContent, contextSnapshotPath })}
-${executeGuardrail}
+${workflowGuardrail}
 
 ${taskSavepointBoundary}${taskAggregateBoundary}
 
@@ -6134,25 +6144,23 @@ const readLatestTokenUsage = async (
       tokenUsageLedgerAbsolutePath(rootDir, planName),
       "utf8",
     );
-    const lines = content.trim().split(/\r?\n/).filter(Boolean).reverse();
-    for (const line of lines) {
-      try {
-        const parsed = asRecord(JSON.parse(line));
-        if (!parsed) {
-          continue;
-        }
-        return toWorkflowContextSnapshotTokenUsage(parsed);
-      } catch {
-        continue;
-      }
+    const lines = content.trim().split(/\r?\n/).filter(Boolean);
+    const latestLine = lines.at(-1);
+    if (!latestLine) {
+      return undefined;
+    }
+    try {
+      const parsed = asRecord(JSON.parse(latestLine));
+      return parsed ? toWorkflowContextSnapshotTokenUsage(parsed) : undefined;
+    } catch {
+      return undefined;
     }
   } catch {
     return undefined;
   }
-  return undefined;
 };
 
-const readExecuteTokenGuardrail = async ({
+const readWorkflowTokenGuardrail = async ({
   rootDir,
   planName,
   promptPath,
@@ -6160,8 +6168,8 @@ const readExecuteTokenGuardrail = async ({
   rootDir: string;
   planName: string;
   promptPath: string;
-}): Promise<ExecuteTokenGuardrail | undefined> => {
-  if (promptPath !== EXECUTE_PLAN_PROMPT_PATH) {
+}): Promise<WorkflowTokenGuardrail | undefined> => {
+  if (!isWorkflowTokenGuardedPrompt(promptPath)) {
     return undefined;
   }
 
@@ -9350,7 +9358,7 @@ export const runWorkflowRunner = async (
     if (!contextSnapshot.ok) {
       return await finishFailure(contextSnapshot.reason);
     }
-    const executeTokenGuardrail = await readExecuteTokenGuardrail({
+    const workflowTokenGuardrail = await readWorkflowTokenGuardrail({
       rootDir,
       planName: parsedPlan.planName,
       promptPath: route.promptPath,
@@ -9364,7 +9372,7 @@ export const runWorkflowRunner = async (
       reviewStagingPaths,
       commitSummaryPaths,
       unblockNote,
-      executeTokenGuardrail,
+      workflowTokenGuardrail,
       taskContext: currentTaskContext,
       taskSavepointAggregateSummary,
     });

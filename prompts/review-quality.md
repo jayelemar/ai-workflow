@@ -21,6 +21,7 @@ Read:
 Use the runner-provided Active Context Packet and index-selected instruction files only. Do not broadly load `.ai/instructions/**`.
 Read the full plan only when exact plan edits are required or the snapshot is insufficient.
 Do not load full historical sections unless the snapshot is insufficient.
+If the runner provides a `Workflow token guardrail` note for this run, honor it as mandatory snapshot-first discipline without overriding the runner-injected path-scoped staged diff source, required specs, latest validation evidence, workflow state, spec-review pass evidence, or other correctness-critical review inputs.
 
 Load:
 

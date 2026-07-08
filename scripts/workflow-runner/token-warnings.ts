@@ -43,7 +43,7 @@ export const collectWorkflowThresholdWarnings = ({
       latestTokenUsage.stageUncachedInputTokens > WORKFLOW_CONTEXT_STAGE_UNCACHED_WARNING_TOKENS)
   ) {
     warnings.push(
-      'Stage token usage is high; next execute-plan will use snapshot-first guidance.',
+      'Stage token usage is high; the next guarded workflow stage will use snapshot-first guidance.',
     );
   }
 
