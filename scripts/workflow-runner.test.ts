@@ -159,6 +159,30 @@ const planWithTaskSavepoints = (
 ${extra}`,
   );
 
+const planWithEllipsizedTaskSavepoints = (
+  status: string,
+  nextAction: string,
+  extra = "",
+) =>
+  planWithFileScope(
+    status,
+    nextAction,
+    {
+      modified: ["src/task-work.ts"],
+    },
+    `## Phases
+
+### Implementation
+
+* Objective: Complete task-savepoint work.
+* Tasks:
+  1. [task:01-option-management] Add and pass regression coverage in...
+  2. [task:02-web-surface] Add web surface
+* Expected Outcome: Task savepoints complete.
+
+${extra}`,
+  );
+
 const thinPlanV2Manifest = (
   status = "draft",
   nextAction = "plan-validator",
@@ -3295,6 +3319,14 @@ test("commit progress formatter reports milestone counters without changing stag
       description: "backend upload limits",
     }),
     "[0/5] backend upload limits",
+  );
+  assert.equal(
+    formatCommitProgressLine({
+      completed: 1,
+      total: 5,
+      description: "a".repeat(210),
+    }),
+    `[1/5] ${"a".repeat(197)}...`,
   );
 });
 
@@ -7424,7 +7456,7 @@ ${extra}`,
     const consoleOutput = output.lines.join("\n");
     assert.match(
       consoleOutput,
-      /TASK 01-backend-prompt-search-guidance \| implementing \| Goal update only the prompt search planning savepoint so it owns prompt wording and prompt\.\.\./,
+      /TASK 01-backend-prompt-search-guidance \| implementing \| Goal update only the prompt search planning savepoint so it owns prompt wording and prompt query assertions for preserving the existing market research section model source backed competitor\.\.\./,
     );
     assert.doesNotMatch(
       consoleOutput,
@@ -11616,6 +11648,59 @@ test("workflow runner leaves a blank line between commit progress and streamed l
     assert.match(
       output,
       /\[0\/2\] Add backend endpoints\n\nReading additional input from stdin\.\.\.\n\n\[codex\] thread started thread_123\n\n\[codex\] turn started[\s\S]*SUCCESS/,
+    );
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("task savepoint review output expands ellipsized goals and spaces task status before streamed live output", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(
+      workspace.root,
+      "task-savepoint-review-spacing",
+      planWithEllipsizedTaskSavepoints("review", "review-plan"),
+    );
+    let output = "";
+    const result = await runWorkflowRunner({
+      planName: planArg("task-savepoint-review-spacing"),
+      rootDir: workspace.root,
+      console: {
+        log: (message) => {
+          output += `${message}\n`;
+        },
+        error: (message) => {
+          output += `${message}\n`;
+        },
+      },
+      outputStream: {
+        stdout: (chunk) => {
+          output += chunk;
+        },
+        stderr: (chunk) => {
+          output += chunk;
+        },
+      },
+      processRunner: async (call) => {
+        if (call.command === "git") {
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
+        if (call.command === CODEX_COMMAND) {
+          call.onStderr?.("Reading additional input from stdin...\n");
+          call.onStdout?.(
+            `${JSON.stringify({ type: "thread.started", thread_id: "thread_review" })}\n`,
+          );
+          return { launched: true, stdout: "", stderr: "", exitCode: 1 };
+        }
+        return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+      },
+    });
+
+    assert.equal(result.success, false);
+    assert.match(
+      output,
+      /\[0\/2\] Add and pass regression coverage in option management\n\nTASK 01-option-management \| reviewing \| staged 1 file\n\nReading additional input from stdin\.\.\.\n\n\[codex\] thread started thread_review/,
     );
   } finally {
     await workspace.cleanup();

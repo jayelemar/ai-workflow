@@ -118,7 +118,7 @@ const SHARED_SKILL_ROOT = path.join(homedir(), ".codex-shared", "skills");
 const TERMINAL_FAILED_COMMAND_OUTPUT_LINE_LIMIT = 4;
 const TERMINAL_FAILED_COMMAND_OUTPUT_CHAR_LIMIT = 1000;
 const TERMINAL_FILE_DETAIL_LIMIT = 3;
-const TERMINAL_PROGRESS_DETAIL_LIMIT = 96;
+const TERMINAL_PROGRESS_DETAIL_LIMIT = 200;
 const STOP_REASON_EXCERPT_CHAR_LIMIT = 240;
 const ANSI_RESET = "\u001b[0m";
 const ANSI_SEQUENCE_PATTERN =
@@ -5159,6 +5159,28 @@ const formatTaskProgressLine = ({
   detail: string;
 }): string => `TASK ${task.id} | ${stage} | ${compactTerminalProgressDetail(detail)}`;
 
+const humanizeTaskWords = (words: string): string => words.replace(/-/g, " ");
+
+const readableTaskProgressDescription = (task: PlanTask): string => {
+  const normalizedName = task.name.replace(/\s+/g, " ").trim();
+  if (!normalizedName.endsWith("...")) {
+    return normalizedName;
+  }
+
+  const taskWords = humanizeTaskWords(task.words);
+  const baseName = normalizedName.replace(/\s*\.\.\.$/, "").trimEnd();
+  if (!baseName) {
+    return taskWords;
+  }
+  if (new RegExp(`\\b${escapeRegExp(taskWords)}\\b`, "i").test(baseName)) {
+    return baseName;
+  }
+  if (/\b(?:in|for|on|with|around|to|into|through|across|from|by)$/i.test(baseName)) {
+    return `${baseName} ${taskWords}`;
+  }
+  return `${baseName} for ${taskWords}`;
+};
+
 const writeCurrentTaskPointer = async ({
   rootDir,
   planName,
@@ -8818,7 +8840,9 @@ export const runWorkflowRunner = async (
       ? {
           completed: completedTaskCommits,
           total: planTasks.length,
-          description: selectedTask?.name ?? "task commits complete",
+          description: selectedTask
+            ? readableTaskProgressDescription(selectedTask)
+            : "task commits complete",
         }
       : undefined;
     if (
@@ -8947,7 +8971,12 @@ export const runWorkflowRunner = async (
       if (!pointer.ok) {
         return pointer;
       }
-      logger.log(formatTaskProgressLine({ task: selectedTask, stage, detail }));
+      const taskProgressLine = formatTaskProgressLine({
+        task: selectedTask,
+        stage,
+        detail,
+      });
+      logger.log(streamOutput ? `${taskProgressLine}\n` : taskProgressLine);
       return { ok: true };
     };
     const startingHeadSha = await workflowHeadSha(rootDir, processRunner);
