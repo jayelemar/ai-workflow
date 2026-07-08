@@ -6356,6 +6356,17 @@ test("task savepoint mode commits each reviewed task, writes artifacts, logs tas
             "task-savepoints",
             planWithTaskSavepoints("review", "review-plan"),
           );
+          return {
+            launched: true,
+            stdout: turnCompletedUsageDetailLine({
+              inputTokens: 2_100_000,
+              cachedInputTokens: 1_950_000,
+              outputTokens: 100,
+              reasoningOutputTokens: 20,
+            }),
+            stderr: "",
+            exitCode: 0,
+          };
         }
         if (call.promptPath === ".ai/prompts/review-changes.md") {
           specReviewRuns += 1;
@@ -6446,6 +6457,20 @@ test("task savepoint mode commits each reviewed task, writes artifacts, logs tas
     assert.match(
       consoleOutput,
       /TASK 01-backend-endpoints \| reviewing \| staged 1 file/,
+    );
+    const tokenWarningIndex = consoleOutput.indexOf(
+      "WARNING: Stage token usage is high; next execute-plan will use snapshot-first guidance.",
+    );
+    const reviewStageIndex = consoleOutput.indexOf("[2/100] STAGE REVIEW");
+    const reviewTaskIndex = consoleOutput.indexOf(
+      "TASK 01-backend-endpoints | reviewing | staged 1 file",
+    );
+    assert.ok(tokenWarningIndex >= 0);
+    assert.ok(reviewStageIndex > tokenWarningIndex);
+    assert.ok(reviewTaskIndex > reviewStageIndex);
+    assert.doesNotMatch(
+      consoleOutput,
+      /Staging 1 plan-owned file for review\.\.\./,
     );
     assert.match(
       consoleOutput,

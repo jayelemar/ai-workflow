@@ -9298,6 +9298,7 @@ export const runWorkflowRunner = async (
           markWorkflowLogCreated(parsedPlan.planName);
           return await finishFailure(parsedPaths.reason);
         }
+        logWorkflowProgress();
         if (selectedTask) {
           const taskStage = await setTaskStage({
             stage: "reviewing",
@@ -9319,12 +9320,13 @@ export const runWorkflowRunner = async (
         if (!acquired.ok) {
           return await finishFailure(acquired.reason);
         }
-        logWorkflowProgress();
-        logger.log(
-          `Staging ${parsedPaths.paths.length} plan-owned ${
-            parsedPaths.paths.length === 1 ? "file" : "files"
-          } for review...`,
-        );
+        if (!selectedTask) {
+          logger.log(
+            `Staging ${parsedPaths.paths.length} plan-owned ${
+              parsedPaths.paths.length === 1 ? "file" : "files"
+            } for review...`,
+          );
+        }
         const staged = await runReviewStagingForPaths(
           rootDir,
           parsedPaths.paths,
