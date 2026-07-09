@@ -1,4 +1,4 @@
-Version: 1.12
+Version: 1.13
 Last Updated: 2026-07-09
 
 # Workflow State Instructions
@@ -217,7 +217,8 @@ Next Action = commit-summary
 Review implementation note:
 
 * Public entry remains `review + review-plan`.
-* The runner internally executes stage-1 spec review first, then stage-2 quality review.
+* The runner executes one combined harness review through `.ai/prompts/review-changes.md`.
+* `.ai/prompts/review-quality.md` is a legacy resume path only for in-flight split reviews that already have stage-1 spec-pass evidence.
 
 Review system boundary:
 
@@ -226,7 +227,7 @@ Review system boundary:
 * The runner must not automatically add Superpowers subagent review.
 * This boundary does not add a status value, next-action value, or state
   transition.
-* Only stage-2 quality review may approve `completed + commit-summary`.
+* The combined harness review may approve `completed + commit-summary` or return to `active + execute-plan`.
 
 Completed `commit-summary` is the terminal safe-to-merge path. It creates the local plan-scoped commit and runner success represents that no further next action is required.
 

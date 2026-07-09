@@ -1,5 +1,11 @@
 # Workflow State Instruction Changelog
 
+## v1.13 — 2026-07-09
+
+* Replaced the normal split review loop with one combined harness review through
+  `review-changes`, while keeping `review-quality` as a legacy resume path for
+  in-flight split reviews with existing spec-pass evidence.
+
 ## v1.12 — 2026-07-09
 
 * Documented the review system boundary: `review + review-plan` stays in the

@@ -1642,39 +1642,39 @@ test("review-changes prompt treats required out-of-scope owner-plan fixes as dep
   assert.match(prompt, /Next Action = execute-plan/);
 });
 
-test("review-changes prompt leaves deferred external validation to stage-2 quality review", async () => {
+test("review-changes prompt owns deferred external validation and completed handoff", async () => {
   const prompt = await readWorkflowPrompt("review-changes.md");
 
-  assert.doesNotMatch(
+  assert.match(
     prompt,
-    /final validation requires deployed, manual, or external code/,
+    /final validation requires deployed, manual, or external code/i,
   );
-  assert.doesNotMatch(prompt, /deferred validation note/i);
-  assert.match(prompt, /## Status[\s\S]*review/);
-  assert.match(prompt, /## Next Action[\s\S]*review-plan/);
-  assert.match(prompt, /stage-2 quality review/i);
+  assert.match(prompt, /deferred validation note/i);
+  assert.match(prompt, /## Status[\s\S]*completed/);
+  assert.match(prompt, /## Next Action[\s\S]*commit-summary/);
 });
 
-test("review-changes prompt is stage-1 spec review and never hands off directly to commit-summary", async () => {
+test("review-changes prompt is the combined review and hands off directly to commit-summary", async () => {
   const prompt = await readWorkflowPrompt("review-changes.md");
 
-  assert.match(prompt, /spec review/i);
-  assert.match(prompt, /review-spec-vX/i);
-  assert.match(prompt, /latest\.reviewSpec/i);
-  assert.match(prompt, /runner-enforced stage-2 quality review/i);
-  assert.match(prompt, /Do not perform regression risk/i);
+  assert.match(prompt, /combined harness review/i);
+  assert.match(prompt, /review-vX/i);
+  assert.match(prompt, /latest\.review/i);
+  assert.doesNotMatch(prompt, /latest\.reviewSpec/i);
+  assert.doesNotMatch(prompt, /runner-enforced stage-2 quality review/i);
+  assert.match(prompt, /regression risk/i);
   assert.match(prompt, /maintainability/i);
   assert.match(
     prompt,
-    /IF NO CRITICAL issues:[\s\S]*Status[\s\S]*review[\s\S]*Next Action[\s\S]*review-plan/i,
+    /IF NO CRITICAL issues[\s\S]*Status[\s\S]*completed[\s\S]*Next Action[\s\S]*commit-summary/i,
   );
   assert.match(
     prompt,
-    /do not transition directly to `completed \+ commit-summary`/i,
+    /Review passed:[\s\S]*Status = completed[\s\S]*Next Action = commit-summary/i,
   );
 });
 
-test("review-quality prompt requires spec-pass evidence and owns deferred validation and completed handoff", async () => {
+test("review-quality prompt remains a legacy spec-pass resume path", async () => {
   const prompt = await readWorkflowPrompt("review-quality.md");
 
   assert.match(prompt, /quality review/i);
@@ -1682,6 +1682,7 @@ test("review-quality prompt requires spec-pass evidence and owns deferred valida
   assert.match(prompt, /latest\.reviewQuality/i);
   assert.match(prompt, /latest\.review/i);
   assert.match(prompt, /must not run unless stage-1 spec review passed/i);
+  assert.match(prompt, /legacy/i);
   assert.match(prompt, /regression risk/i);
   assert.match(prompt, /readability/i);
   assert.match(prompt, /maintainability/i);
@@ -6174,33 +6175,9 @@ test("review safe path routes to completed commit-summary and succeeds after pla
           writeWorkflowEventArtifactSync({
             root: workspace.root,
             planName: "safe-review",
-            kind: "review-spec",
+            kind: "review",
             version: 1,
           });
-          await writePlan(
-            workspace.root,
-            "safe-review",
-            planWithFileScope(
-              "review",
-              "review-plan",
-              {
-                modified: ["src/file.ts"],
-              },
-              legacyReviewHistorySection({
-                summary: "SPEC PASS",
-                evidence: ".ai/artifacts/safe-review/events/review-spec-v1.md",
-                decision: "review",
-              }),
-            ),
-          );
-          return {
-            launched: true,
-            stdout: "spec review ok",
-            stderr: "",
-            exitCode: 0,
-          };
-        }
-        if (call.promptPath === ".ai/prompts/review-quality.md") {
           await writePlan(
             workspace.root,
             "safe-review",
@@ -6210,7 +6187,7 @@ test("review safe path routes to completed commit-summary and succeeds after pla
           );
           return {
             launched: true,
-            stdout: "quality review ok",
+            stdout: "review ok",
             stderr: "",
             exitCode: 0,
           };
@@ -6227,7 +6204,6 @@ test("review safe path routes to completed commit-summary and succeeds after pla
       [
         ".ai/prompts/scope-cleanup.md",
         ".ai/prompts/review-changes.md",
-        ".ai/prompts/review-quality.md",
         ".ai/prompts/commit-summary.md",
       ],
     );
@@ -6274,47 +6250,6 @@ test("thin-plan-v2 review and commit-summary stage plan-owned paths from files.j
           return { launched: true, stdout: "", stderr: "", exitCode: 0 };
         }
         if (call.promptPath === ".ai/prompts/review-changes.md") {
-          await writeThinPlanV2Artifacts(workspace.root, {
-            status: "review",
-            nextAction: "review-plan",
-            modified: ["src/artifact-state.ts"],
-            changedFiles: ["src/artifact-state.ts"],
-            latest: {
-              validation: {
-                version: 2,
-                result: "PASS",
-                summary: "Required checks passed.",
-                evidence:
-                  ".ai/artifacts/artifact-state/events/validation-v2.md",
-              },
-              reviewSpec: {
-                version: 1,
-                summary: "SPEC PASS",
-                decision: "review",
-                evidence:
-                  ".ai/artifacts/artifact-state/events/review-spec-v1.md",
-              },
-              review: {
-                version: 1,
-                summary: "SPEC PASS",
-                decision: "review",
-                evidence:
-                  ".ai/artifacts/artifact-state/events/review-spec-v1.md",
-              },
-            },
-            history: [
-              ".ai/artifacts/artifact-state/events/validation-v2.md",
-              ".ai/artifacts/artifact-state/events/review-spec-v1.md",
-            ],
-          });
-          return {
-            launched: true,
-            stdout: "spec review ok",
-            stderr: "",
-            exitCode: 0,
-          };
-        }
-        if (call.promptPath === ".ai/prompts/review-quality.md") {
           await writePlan(
             workspace.root,
             "artifact-state",
@@ -6333,37 +6268,21 @@ test("thin-plan-v2 review and commit-summary stage plan-owned paths from files.j
                 evidence:
                   ".ai/artifacts/artifact-state/events/validation-v2.md",
               },
-              reviewSpec: {
-                version: 1,
-                summary: "SPEC PASS",
-                decision: "review",
-                evidence:
-                  ".ai/artifacts/artifact-state/events/review-spec-v1.md",
-              },
-              reviewQuality: {
-                version: 1,
-                summary: "SAFE",
-                decision: "completed",
-                evidence:
-                  ".ai/artifacts/artifact-state/events/review-quality-v1.md",
-              },
               review: {
                 version: 1,
                 summary: "SAFE",
                 decision: "completed",
-                evidence:
-                  ".ai/artifacts/artifact-state/events/review-quality-v1.md",
+                evidence: ".ai/artifacts/artifact-state/events/review-v1.md",
               },
             },
             history: [
               ".ai/artifacts/artifact-state/events/validation-v2.md",
-              ".ai/artifacts/artifact-state/events/review-spec-v1.md",
-              ".ai/artifacts/artifact-state/events/review-quality-v1.md",
+              ".ai/artifacts/artifact-state/events/review-v1.md",
             ],
           });
           return {
             launched: true,
-            stdout: "quality review ok",
+            stdout: "review ok",
             stderr: "",
             exitCode: 0,
           };
@@ -6379,7 +6298,6 @@ test("thin-plan-v2 review and commit-summary stage plan-owned paths from files.j
         .map((call) => call.promptPath),
       [
         ".ai/prompts/review-changes.md",
-        ".ai/prompts/review-quality.md",
         ".ai/prompts/commit-summary.md",
       ],
     );
@@ -6520,25 +6438,9 @@ test("workflow runner succeeds after review defers final browser validation to m
             writeWorkflowEventArtifactSync({
               root: workspace.root,
               planName: "browser-deferred",
-              kind: "review-spec",
+              kind: "review",
               version: 1,
             });
-            writeFileSync(
-              join(workspace.root, ".ai", "plans", "browser-deferred.md"),
-              planContent(
-                "review",
-                "review-plan",
-                legacyReviewHistorySection({
-                  summary: "SPEC PASS",
-                  evidence:
-                    ".ai/artifacts/browser-deferred/events/review-spec-v1.md",
-                  decision: "review",
-                }),
-              ),
-            );
-            return;
-          }
-          if (call.promptPath === ".ai/prompts/review-quality.md") {
             writeFileSync(
               join(workspace.root, ".ai", "plans", "browser-deferred.md"),
               planContent("completed", "commit-summary"),
@@ -6565,7 +6467,6 @@ test("workflow runner succeeds after review defers final browser validation to m
         ".ai/prompts/execute-plan.md",
         ".ai/prompts/scope-cleanup.md",
         ".ai/prompts/review-changes.md",
-        ".ai/prompts/review-quality.md",
         ".ai/prompts/commit-summary.md",
       ],
     );
@@ -6596,8 +6497,7 @@ test("task savepoint mode commits each reviewed task, writes artifacts, logs tas
     const output = collectConsole();
     const calls: Parameters<ProcessRunner>[0][] = [];
     let executeRuns = 0;
-    let specReviewRuns = 0;
-    let qualityReviewRuns = 0;
+    let reviewRuns = 0;
     let taskCommitRuns = 0;
     let aggregateRuns = 0;
     const shas = ["abc1234", "def5678"];
@@ -6639,30 +6539,13 @@ test("task savepoint mode commits each reviewed task, writes artifacts, logs tas
           };
         }
         if (call.promptPath === ".ai/prompts/review-changes.md") {
-          specReviewRuns += 1;
+          reviewRuns += 1;
           writeWorkflowEventArtifactSync({
             root: workspace.root,
             planName: "task-savepoints",
-            kind: "review-spec",
-            version: specReviewRuns,
+            kind: "review",
+            version: reviewRuns,
           });
-          await writePlan(
-            workspace.root,
-            "task-savepoints",
-            planWithTaskSavepoints(
-              "review",
-              "review-plan",
-              legacyReviewHistorySection({
-                summary: "SPEC PASS",
-                evidence: `.ai/artifacts/task-savepoints/events/review-spec-v${specReviewRuns}.md`,
-                decision: "review",
-                version: specReviewRuns,
-              }),
-            ),
-          );
-        }
-        if (call.promptPath === ".ai/prompts/review-quality.md") {
-          qualityReviewRuns += 1;
           await writePlan(
             workspace.root,
             "task-savepoints",
@@ -6713,8 +6596,7 @@ test("task savepoint mode commits each reviewed task, writes artifacts, logs tas
 
     assert.equal(result.success, true);
     assert.equal(executeRuns, 2);
-    assert.equal(specReviewRuns, 2);
-    assert.equal(qualityReviewRuns, 2);
+    assert.equal(reviewRuns, 2);
     assert.equal(taskCommitRuns, 2);
     assert.equal(aggregateRuns, 1);
 
@@ -6903,7 +6785,7 @@ test("task savepoint artifacts use task ID filenames for long task names", async
     );
     await writePlan(workspace.root, "long-task-artifact", plan);
 
-    let specReviewRuns = 0;
+    let reviewRuns = 0;
     let taskCommitRuns = 0;
     const result = await runWorkflowRunner({
       planName: planArg("long-task-artifact"),
@@ -6931,31 +6813,13 @@ test("task savepoint artifacts use task ID filenames for long task names", async
           return { launched: true, stdout: "ok", stderr: "", exitCode: 0 };
         }
         if (call.promptPath === ".ai/prompts/review-changes.md") {
-          specReviewRuns += 1;
+          reviewRuns += 1;
           writeWorkflowEventArtifactSync({
             root: workspace.root,
             planName: "long-task-artifact",
-            kind: "review-spec",
-            version: specReviewRuns,
+            kind: "review",
+            version: reviewRuns,
           });
-          await writePlan(
-            workspace.root,
-            "long-task-artifact",
-            plan
-              .replace("active", "review")
-              .replace("execute-plan", "review-plan")
-              .concat(
-                legacyReviewHistorySection({
-                  summary: "SPEC PASS",
-                  evidence:
-                    ".ai/artifacts/long-task-artifact/events/review-spec-v1.md",
-                  decision: "review",
-                }),
-              ),
-          );
-          return { launched: true, stdout: "ok", stderr: "", exitCode: 0 };
-        }
-        if (call.promptPath === ".ai/prompts/review-quality.md") {
           await writePlan(
             workspace.root,
             "long-task-artifact",
@@ -7060,7 +6924,7 @@ feat(api): add backend endpoints
     );
 
     let executeRuns = 0;
-    let specReviewRuns = 0;
+    let reviewRuns = 0;
     let taskCommitRuns = 0;
     let aggregateRuns = 0;
     const promptCalls: string[] = [];
@@ -7094,30 +6958,13 @@ feat(api): add backend endpoints
           return { launched: true, stdout: "ok", stderr: "", exitCode: 0 };
         }
         if (call.promptPath === ".ai/prompts/review-changes.md") {
-          specReviewRuns += 1;
+          reviewRuns += 1;
           writeWorkflowEventArtifactSync({
             root: workspace.root,
             planName: "task-savepoint-resume",
-            kind: "review-spec",
-            version: specReviewRuns,
+            kind: "review",
+            version: reviewRuns,
           });
-          await writePlan(
-            workspace.root,
-            "task-savepoint-resume",
-            planWithTaskSavepoints(
-              "review",
-              "review-plan",
-              legacyReviewHistorySection({
-                summary: "SPEC PASS",
-                evidence: `.ai/artifacts/task-savepoint-resume/events/review-spec-v${specReviewRuns}.md`,
-                decision: "review",
-                version: specReviewRuns,
-              }),
-            ),
-          );
-          return { launched: true, stdout: "ok", stderr: "", exitCode: 0 };
-        }
-        if (call.promptPath === ".ai/prompts/review-quality.md") {
           await writePlan(
             workspace.root,
             "task-savepoint-resume",
@@ -7539,26 +7386,9 @@ test("task savepoint mode recovers missing task artifact from existing task comm
           writeWorkflowEventArtifactSync({
             root: workspace.root,
             planName: "task-savepoint-missing-artifact",
-            kind: "review-spec",
+            kind: "review",
             version: 1,
           });
-          await writePlan(
-            workspace.root,
-            "task-savepoint-missing-artifact",
-            planWithTaskSavepoints(
-              "review",
-              "review-plan",
-              legacyReviewHistorySection({
-                summary: "SPEC PASS",
-                evidence:
-                  ".ai/artifacts/task-savepoint-missing-artifact/events/review-spec-v1.md",
-                decision: "review",
-              }),
-            ),
-          );
-          return { launched: true, stdout: "ok", stderr: "", exitCode: 0 };
-        }
-        if (call.promptPath === ".ai/prompts/review-quality.md") {
           await writePlan(
             workspace.root,
             "task-savepoint-missing-artifact",
@@ -7747,26 +7577,9 @@ ${extra}`,
           writeWorkflowEventArtifactSync({
             root: workspace.root,
             planName: "task-savepoint-long-name",
-            kind: "review-spec",
+            kind: "review",
             version: reviewRuns,
           });
-          await writePlan(
-            workspace.root,
-            "task-savepoint-long-name",
-            planContent(
-              "review",
-              "review-plan",
-              legacyReviewHistorySection({
-                summary: "SPEC PASS",
-                evidence: `.ai/artifacts/task-savepoint-long-name/events/review-spec-v${reviewRuns}.md`,
-                decision: "review",
-                version: reviewRuns,
-              }),
-            ),
-          );
-          return { launched: true, stdout: "ok", stderr: "", exitCode: 0 };
-        }
-        if (call.promptPath === ".ai/prompts/review-quality.md") {
           await writePlan(
             workspace.root,
             "task-savepoint-long-name",
@@ -8050,7 +7863,7 @@ test(`${CODEX_EXEC_LABEL} prompt contains selected prompt content and exact plan
       ),
     });
     assert.equal(result.success, false);
-    assert.equal(calls.length, 8);
+    assert.equal(calls.length, 7);
     assert.deepEqual(
       calls.map((call) => [call.command, call.args[0], call.promptPath]),
       [
@@ -8060,7 +7873,6 @@ test(`${CODEX_EXEC_LABEL} prompt contains selected prompt content and exact plan
         ["git", "diff", "git-scope-cleanup-diff"],
         [CODEX_COMMAND, "exec", ".ai/prompts/scope-cleanup.md"],
         [CODEX_COMMAND, "exec", ".ai/prompts/review-changes.md"],
-        [CODEX_COMMAND, "exec", ".ai/prompts/review-quality.md"],
         ["git", "restore", "git-review-unstage"],
       ],
     );
@@ -8123,7 +7935,6 @@ test(`${OVERRIDE_CODEX_EXEC_LABEL} override applies to launched codex commands a
         ".ai/prompts/execute-plan.md",
         ".ai/prompts/scope-cleanup.md",
         ".ai/prompts/review-changes.md",
-        ".ai/prompts/review-quality.md",
       ],
     );
     assert.equal(calls[0].command, OVERRIDE_CODEX_PROFILE);
@@ -8224,27 +8035,9 @@ test(`${CODEX_EXEC_LABEL} uses prompt-tier model and reasoning policy`, async ()
             writeWorkflowEventArtifactSync({
               root: workspace.root,
               planName: "workflow-runner",
-              kind: "review-spec",
+              kind: "review",
               version: 1,
             });
-            writeFileSync(
-              join(workspace.root, ".ai", "plans", "workflow-runner.md"),
-              planWith(
-                "review",
-                "review-plan",
-                legacyReviewHistorySection({
-                  summary: "SPEC PASS",
-                  evidence:
-                    ".ai/artifacts/workflow-runner/events/review-spec-v1.md",
-                  decision: "review",
-                }),
-              ),
-            );
-          }
-          if (
-            call.command === CODEX_COMMAND &&
-            call.promptPath === ".ai/prompts/review-quality.md"
-          ) {
             writeFileSync(
               join(workspace.root, ".ai", "plans", "workflow-runner.md"),
               planWith("completed", "commit-summary"),
@@ -8256,7 +8049,7 @@ test(`${CODEX_EXEC_LABEL} uses prompt-tier model and reasoning policy`, async ()
 
     assert.equal(result.success, true);
     const codexCalls = calls.filter((call) => call.command === CODEX_COMMAND);
-    assert.equal(codexCalls.length, 4);
+    assert.equal(codexCalls.length, 3);
     assert.deepEqual(codexCalls[0].args.slice(0, 6), [
       "exec",
       "--json",
@@ -8274,14 +8067,6 @@ test(`${CODEX_EXEC_LABEL} uses prompt-tier model and reasoning policy`, async ()
       'model_reasoning_effort="xhigh"',
     ]);
     assert.deepEqual(codexCalls[2].args.slice(0, 6), [
-      "exec",
-      "--json",
-      "--model",
-      "gpt-5.5",
-      "-c",
-      'model_reasoning_effort="xhigh"',
-    ]);
-    assert.deepEqual(codexCalls[3].args.slice(0, 6), [
       "exec",
       "--json",
       "--model",
@@ -8305,17 +8090,13 @@ test(`${CODEX_EXEC_LABEL} uses prompt-tier model and reasoning policy`, async ()
       codexCalls[1].args[6],
       /^Use \.ai\/prompts\/review-changes\.md/,
     );
-    assert.match(
-      codexCalls[2].args[6],
-      /^Use \.ai\/prompts\/review-quality\.md/,
-    );
-    assert.equal(codexCalls[3].args.includes("--add-dir"), true);
+    assert.equal(codexCalls[2].args.includes("--add-dir"), true);
     assert.equal(
-      codexCalls[3].args.includes(join(workspace.root, ".git")),
+      codexCalls[2].args.includes(join(workspace.root, ".git")),
       true,
     );
     assert.match(
-      codexCalls[3].args.at(-1) ?? "",
+      codexCalls[2].args.at(-1) ?? "",
       /^Use \.ai\/prompts\/commit-summary\.md/,
     );
 
@@ -8362,27 +8143,9 @@ test(`${CODEX_EXEC_LABEL} grants commit-summary explicit write access to .git`, 
             writeWorkflowEventArtifactSync({
               root: workspace.root,
               planName: "workflow-runner",
-              kind: "review-spec",
+              kind: "review",
               version: 1,
             });
-            writeFileSync(
-              join(workspace.root, ".ai", "plans", "workflow-runner.md"),
-              planWith(
-                "review",
-                "review-plan",
-                legacyReviewHistorySection({
-                  summary: "SPEC PASS",
-                  evidence:
-                    ".ai/artifacts/workflow-runner/events/review-spec-v1.md",
-                  decision: "review",
-                }),
-              ),
-            );
-          }
-          if (
-            call.command === CODEX_COMMAND &&
-            call.promptPath === ".ai/prompts/review-quality.md"
-          ) {
             writeFileSync(
               join(workspace.root, ".ai", "plans", "workflow-runner.md"),
               planWith("completed", "commit-summary"),
@@ -8904,24 +8667,9 @@ test("high-token prior stages add generic guardrail guidance to review prompts",
             writeWorkflowEventArtifactSync({
               root: workspace.root,
               planName: "workflow-runner",
-              kind: "review-spec",
+              kind: "review",
               version: 1,
             });
-            writeFileSync(
-              join(workspace.root, ".ai", "plans", "workflow-runner.md"),
-              planWith(
-                "review",
-                "review-plan",
-                legacyReviewHistorySection({
-                  summary: "SPEC PASS",
-                  evidence:
-                    ".ai/artifacts/workflow-runner/events/review-spec-v1.md",
-                  decision: "review",
-                }),
-              ),
-            );
-          }
-          if (call.promptPath === ".ai/prompts/review-quality.md") {
             writeFileSync(
               join(workspace.root, ".ai", "plans", "workflow-runner.md"),
               planWith("completed", "commit-summary"),
@@ -8937,12 +8685,6 @@ test("high-token prior stages add generic guardrail guidance to review prompts",
     assert.ok(reviewCall);
     assert.match(reviewCall.args[6], /Workflow token guardrail:/);
     assert.doesNotMatch(reviewCall.args[6], /Execute token guardrail:/);
-    const qualityCall = calls.find(
-      (call) => call.promptPath === ".ai/prompts/review-quality.md",
-    );
-    assert.ok(qualityCall);
-    assert.doesNotMatch(qualityCall.args[6], /Workflow token guardrail:/);
-    assert.doesNotMatch(qualityCall.args[6], /Execute token guardrail:/);
   } finally {
     await workspace.cleanup();
   }
@@ -9365,39 +9107,9 @@ test("token usage ledger accumulates totals across multiple workflow stages", as
           writeWorkflowEventArtifactSync({
             root: workspace.root,
             planName: "workflow-runner",
-            kind: "review-spec",
+            kind: "review",
             version: 1,
           });
-          await writePlan(
-            workspace.root,
-            "workflow-runner",
-            planWith(
-              "review",
-              "review-plan",
-              legacyReviewHistorySection({
-                summary: "SPEC PASS",
-                evidence:
-                  ".ai/artifacts/workflow-runner/events/review-spec-v1.md",
-                decision: "review",
-              }),
-            ),
-          );
-          return {
-            launched: true,
-            stdout: turnCompletedUsageDetailLine({
-              inputTokens: 100,
-              cachedInputTokens: 20,
-              outputTokens: 30,
-              reasoningOutputTokens: 10,
-            }),
-            stderr: "",
-            exitCode: 0,
-          };
-        }
-        if (
-          call.command === CODEX_COMMAND &&
-          call.promptPath === ".ai/prompts/review-quality.md"
-        ) {
           await writePlan(
             workspace.root,
             "workflow-runner",
@@ -9406,10 +9118,10 @@ test("token usage ledger accumulates totals across multiple workflow stages", as
           return {
             launched: true,
             stdout: turnCompletedUsageDetailLine({
-              inputTokens: 150,
-              cachedInputTokens: 30,
-              outputTokens: 35,
-              reasoningOutputTokens: 11,
+              inputTokens: 100,
+              cachedInputTokens: 20,
+              outputTokens: 30,
+              reasoningOutputTokens: 10,
             }),
             stderr: "",
             exitCode: 0,
@@ -9440,29 +9152,21 @@ test("token usage ledger accumulates totals across multiple workflow stages", as
       workspace.root,
       "workflow-runner",
     );
-    assert.equal(ledger.length, 3);
-    assert.equal(ledger[0]?.endingStatus, "review");
-    assert.equal(ledger[0]?.endingNextAction, "review-plan");
+    assert.equal(ledger.length, 2);
+    assert.equal(ledger[0]?.endingStatus, "completed");
+    assert.equal(ledger[0]?.endingNextAction, "commit-summary");
     assert.equal(ledger[0]?.inputTokens, 100);
     assert.equal(ledger[0]?.cachedInputTokens, 20);
     assert.equal(ledger[0]?.uncachedInputTokens, 80);
     assert.equal(ledger[0]?.outputTokens, 30);
     assert.equal(ledger[0]?.reasoningOutputTokens, 10);
     assert.equal(ledger[0]?.totalTokens, 130);
-    assert.equal(ledger[1]?.endingStatus, "completed");
-    assert.equal(ledger[1]?.endingNextAction, "commit-summary");
-    assert.equal(ledger[1]?.inputTokens, 250);
-    assert.equal(ledger[1]?.cachedInputTokens, 50);
-    assert.equal(ledger[1]?.uncachedInputTokens, 200);
-    assert.equal(ledger[1]?.outputTokens, 65);
-    assert.equal(ledger[1]?.reasoningOutputTokens, 21);
-    assert.equal(ledger[1]?.totalTokens, 315);
-    assert.equal(ledger[2]?.inputTokens, 450);
-    assert.equal(ledger[2]?.cachedInputTokens, 100);
-    assert.equal(ledger[2]?.uncachedInputTokens, 350);
-    assert.equal(ledger[2]?.outputTokens, 105);
-    assert.equal(ledger[2]?.reasoningOutputTokens, 33);
-    assert.equal(ledger[2]?.totalTokens, 555);
+    assert.equal(ledger[1]?.inputTokens, 300);
+    assert.equal(ledger[1]?.cachedInputTokens, 70);
+    assert.equal(ledger[1]?.uncachedInputTokens, 230);
+    assert.equal(ledger[1]?.outputTokens, 70);
+    assert.equal(ledger[1]?.reasoningOutputTokens, 22);
+    assert.equal(ledger[1]?.totalTokens, 370);
   } finally {
     await workspace.cleanup();
   }
@@ -10341,31 +10045,9 @@ test("workflow runner resolves ownership globs to actual changed files for revie
           writeWorkflowEventArtifactSync({
             root: workspace.root,
             planName: "glob-plan",
-            kind: "review-spec",
+            kind: "review",
             version: 1,
           });
-          await writePlan(
-            workspace.root,
-            "glob-plan",
-            planWithFileScope(
-              "review",
-              "review-plan",
-              {
-                modified: [
-                  "apps/admin/src/features/admin-ugc-templates/list.tsx",
-                ],
-              },
-              `${ownershipScopeSection(["apps/admin/src/features/admin-ugc-templates/**"])}${legacyReviewHistorySection(
-                {
-                  summary: "SPEC PASS",
-                  evidence: ".ai/artifacts/glob-plan/events/review-spec-v1.md",
-                  decision: "review",
-                },
-              )}`,
-            ),
-          );
-        }
-        if (call.promptPath === ".ai/prompts/review-quality.md") {
           await writePlan(
             workspace.root,
             "glob-plan",
@@ -11744,37 +11426,26 @@ test("iteration handling rereads changed plans, rejects unchanged plans, enforce
       "terminal",
       planWith("review", "review-plan"),
     );
-    let terminalCodexLaunches = 0;
+    let terminalWorkflowPrompts = 0;
     const terminal = await runWorkflowRunner({
       planName: planArg("terminal"),
       rootDir: workspace.root,
       processRunner: runnerReturning(
         { launched: true, stdout: "ok", stderr: "", exitCode: 0 },
         (call) => {
-          if (call.command === CODEX_COMMAND) {
-            terminalCodexLaunches += 1;
+          if (
+            call.promptPath === ".ai/prompts/review-changes.md" ||
+            call.promptPath === ".ai/prompts/commit-summary.md"
+          ) {
+            terminalWorkflowPrompts += 1;
           }
           if (call.promptPath === ".ai/prompts/review-changes.md") {
             writeWorkflowEventArtifactSync({
               root: workspace.root,
               planName: "terminal",
-              kind: "review-spec",
+              kind: "review",
               version: 1,
             });
-            writeFileSync(
-              join(workspace.root, ".ai", "plans", "terminal.md"),
-              planWith(
-                "review",
-                "review-plan",
-                legacyReviewHistorySection({
-                  summary: "SPEC PASS",
-                  evidence: ".ai/artifacts/terminal/events/review-spec-v1.md",
-                  decision: "review",
-                }),
-              ),
-            );
-          }
-          if (call.promptPath === ".ai/prompts/review-quality.md") {
             writeFileSync(
               join(workspace.root, ".ai", "plans", "terminal.md"),
               planWith("completed", "commit-summary"),
@@ -11784,7 +11455,7 @@ test("iteration handling rereads changed plans, rejects unchanged plans, enforce
       ),
     });
     assert.equal(terminal.success, true);
-    assert.equal(terminalCodexLaunches, 4);
+    assert.equal(terminalWorkflowPrompts, 2);
 
     await writePlan(workspace.root, "max", planWith("draft", "plan-validator"));
     let maxLaunches = 0;
@@ -11912,31 +11583,14 @@ test("transition guards enforce execute-plan and review-changes handoffs", async
               writeWorkflowEventArtifactSync({
                 root: workspace.root,
                 planName: name,
-                kind: "review-spec",
+                kind: "review",
                 version: 1,
               });
               writeFileSync(
                 join(workspace.root, ".ai", "plans", `${name}.md`),
-                planWith(
-                  "review",
-                  "review-plan",
-                  legacyReviewHistorySection({
-                    summary: "SPEC PASS",
-                    evidence: `.ai/artifacts/${name}/events/review-spec-v1.md`,
-                    decision: "review",
-                  }),
-                ),
-              );
-              return;
-            }
-            if (
-              name === "exec-review" &&
-              call.promptPath === ".ai/prompts/review-quality.md"
-            ) {
-              writeFileSync(
-                join(workspace.root, ".ai", "plans", `${name}.md`),
                 planWith("completed", "commit-summary"),
               );
+              return;
             }
           },
         ),
@@ -12029,24 +11683,9 @@ test("transition guards enforce execute-plan and review-changes handoffs", async
             writeWorkflowEventArtifactSync({
               root: workspace.root,
               planName: "review-completed",
-              kind: "review-spec",
+              kind: "review",
               version: 1,
             });
-            writeFileSync(
-              join(workspace.root, ".ai", "plans", "review-completed.md"),
-              planWith(
-                "review",
-                "review-plan",
-                legacyReviewHistorySection({
-                  summary: "SPEC PASS",
-                  evidence:
-                    ".ai/artifacts/review-completed/events/review-spec-v1.md",
-                  decision: "review",
-                }),
-              ),
-            );
-          }
-          if (call.promptPath === ".ai/prompts/review-quality.md") {
             writeFileSync(
               join(workspace.root, ".ai", "plans", "review-completed.md"),
               planWith("completed", "commit-summary"),
@@ -12072,29 +11711,9 @@ test("transition guards enforce execute-plan and review-changes handoffs", async
             writeWorkflowEventArtifactSync({
               root: workspace.root,
               planName: "review-deployment-validation",
-              kind: "review-spec",
+              kind: "review",
               version: 1,
             });
-            writeFileSync(
-              join(
-                workspace.root,
-                ".ai",
-                "plans",
-                "review-deployment-validation.md",
-              ),
-              planWith(
-                "review",
-                "review-plan",
-                legacyReviewHistorySection({
-                  summary: "SPEC PASS",
-                  evidence:
-                    ".ai/artifacts/review-deployment-validation/events/review-spec-v1.md",
-                  decision: "review",
-                }),
-              ),
-            );
-          }
-          if (call.promptPath === ".ai/prompts/review-quality.md") {
             writeFileSync(
               join(
                 workspace.root,
@@ -12397,7 +12016,7 @@ test("workflow runner leaves a blank line between commit progress and streamed l
       planWithTaskSavepoints("active", "execute-plan"),
     );
     let output = "";
-    let specReviewRuns = 0;
+    let reviewRuns = 0;
     let taskCommitRuns = 0;
     const shas = ["abc1234", "def5678"];
     const result = await runWorkflowRunner({
@@ -12446,30 +12065,13 @@ test("workflow runner leaves a blank line between commit progress and streamed l
           return { launched: true, stdout: "ok", stderr: "", exitCode: 0 };
         }
         if (call.promptPath === ".ai/prompts/review-changes.md") {
-          specReviewRuns += 1;
+          reviewRuns += 1;
           writeWorkflowEventArtifactSync({
             root: workspace.root,
             planName: "task-savepoint-spacing",
-            kind: "review-spec",
-            version: specReviewRuns,
+            kind: "review",
+            version: reviewRuns,
           });
-          await writePlan(
-            workspace.root,
-            "task-savepoint-spacing",
-            planWithTaskSavepoints(
-              "review",
-              "review-plan",
-              legacyReviewHistorySection({
-                summary: "SPEC PASS",
-                evidence: `.ai/artifacts/task-savepoint-spacing/events/review-spec-v${specReviewRuns}.md`,
-                decision: "review",
-                version: specReviewRuns,
-              }),
-            ),
-          );
-          return { launched: true, stdout: "ok", stderr: "", exitCode: 0 };
-        }
-        if (call.promptPath === ".ai/prompts/review-quality.md") {
           await writePlan(
             workspace.root,
             "task-savepoint-spacing",
@@ -13047,25 +12649,9 @@ test("review-plan stages plan-owned files normally when the repo has no pre-exis
           writeWorkflowEventArtifactSync({
             root: workspace.root,
             planName: "review-clean-entry",
-            kind: "review-spec",
+            kind: "review",
             version: 1,
           });
-          await writePlan(
-            workspace.root,
-            "review-clean-entry",
-            planWith(
-              "review",
-              "review-plan",
-              legacyReviewHistorySection({
-                summary: "SPEC PASS",
-                evidence:
-                  ".ai/artifacts/review-clean-entry/events/review-spec-v1.md",
-                decision: "review",
-              }),
-            ),
-          );
-        }
-        if (call.promptPath === ".ai/prompts/review-quality.md") {
           await writePlan(
             workspace.root,
             "review-clean-entry",
@@ -13084,7 +12670,6 @@ test("review-plan stages plan-owned files normally when the repo has no pre-exis
         ["git", "add", "git-staging"],
         ["git", "diff", "git-scope-cleanup-diff"],
         [CODEX_COMMAND, "exec", ".ai/prompts/review-changes.md"],
-        [CODEX_COMMAND, "exec", ".ai/prompts/review-quality.md"],
         [CODEX_COMMAND, "exec", ".ai/prompts/commit-summary.md"],
         ["git", "status", "git-commit-summary-clean-check"],
       ],
@@ -13348,28 +12933,9 @@ test("review staging auto-unstages unrelated hunks before review prompt runs", a
           writeWorkflowEventArtifactSync({
             root: workspace.root,
             planName: "review-scope-cleanup",
-            kind: "review-spec",
+            kind: "review",
             version: 1,
           });
-          await writePlan(
-            workspace.root,
-            "review-scope-cleanup",
-            planWithFileScope(
-              "review",
-              "review-plan",
-              {
-                modified: ["src/file.ts"],
-              },
-              legacyReviewHistorySection({
-                summary: "SPEC PASS",
-                evidence:
-                  ".ai/artifacts/review-scope-cleanup/events/review-spec-v1.md",
-                decision: "review",
-              }),
-            ),
-          );
-        }
-        if (call.promptPath === ".ai/prompts/review-quality.md") {
           await writePlan(
             workspace.root,
             "review-scope-cleanup",
@@ -13392,7 +12958,6 @@ test("review staging auto-unstages unrelated hunks before review prompt runs", a
         [CODEX_COMMAND, "exec", ".ai/prompts/scope-cleanup.md"],
         ["git", "apply", "git-scope-cleanup-unstage"],
         [CODEX_COMMAND, "exec", ".ai/prompts/review-changes.md"],
-        [CODEX_COMMAND, "exec", ".ai/prompts/review-quality.md"],
         [CODEX_COMMAND, "exec", ".ai/prompts/commit-summary.md"],
         ["git", "status", "git-commit-summary-clean-check"],
       ],
@@ -13469,28 +13034,9 @@ test("review scope cleanup receives prior non-plan-scoped STOP evidence", async 
           writeWorkflowEventArtifactSync({
             root: workspace.root,
             planName: "review-scope-cleanup-retry",
-            kind: "review-spec",
+            kind: "review",
             version: 1,
           });
-          await writePlan(
-            workspace.root,
-            "review-scope-cleanup-retry",
-            planWithFileScope(
-              "review",
-              "review-plan",
-              {
-                modified: ["e2e/support-issue-widget.spec.ts"],
-              },
-              legacyReviewHistorySection({
-                summary: "SPEC PASS",
-                evidence:
-                  ".ai/artifacts/review-scope-cleanup-retry/events/review-spec-v1.md",
-                decision: "review",
-              }),
-            ),
-          );
-        }
-        if (call.promptPath === ".ai/prompts/review-quality.md") {
           await writePlan(
             workspace.root,
             "review-scope-cleanup-retry",
@@ -13616,27 +13162,9 @@ test("review scope cleanup ignores prior non-plan-scoped STOP evidence after new
           writeWorkflowEventArtifactSync({
             root: workspace.root,
             planName,
-            kind: "review-spec",
+            kind: "review",
             version: 1,
           });
-          await writePlan(
-            workspace.root,
-            planName,
-            planWithFileScope(
-              "review",
-              "review-plan",
-              {
-                modified: ["e2e/support-issue-widget.spec.ts"],
-              },
-              legacyReviewHistorySection({
-                summary: "SPEC PASS",
-                evidence: `.ai/artifacts/${planName}/events/review-spec-v1.md`,
-                decision: "review",
-              }),
-            ),
-          );
-        }
-        if (call.promptPath === ".ai/prompts/review-quality.md") {
           await writePlan(
             workspace.root,
             planName,
@@ -13731,28 +13259,9 @@ test("review-plan does not require hunk ownership before review", async () => {
           writeWorkflowEventArtifactSync({
             root: workspace.root,
             planName: "review-shared-hunk-scope",
-            kind: "review-spec",
+            kind: "review",
             version: 1,
           });
-          await writePlan(
-            workspace.root,
-            "review-shared-hunk-scope",
-            planWithFileScope(
-              "review",
-              "review-plan",
-              {
-                modified: ["schema/openapi.generated.json"],
-              },
-              legacyReviewHistorySection({
-                summary: "SPEC PASS",
-                evidence:
-                  ".ai/artifacts/review-shared-hunk-scope/events/review-spec-v1.md",
-                decision: "review",
-              }),
-            ),
-          );
-        }
-        if (call.promptPath === ".ai/prompts/review-quality.md") {
           await writePlan(
             workspace.root,
             "review-shared-hunk-scope",
@@ -13999,13 +13508,23 @@ test(`review changes failure resumes execute-plan after unstaging review paths`,
   }
 });
 
-test(`review quality failure resumes execute-plan after unstaging review paths`, async () => {
+test(`legacy review quality failure resumes execute-plan after unstaging review paths`, async () => {
   const workspace = await setupWorkspace();
   try {
+    writeWorkflowEventArtifactSync({
+      root: workspace.root,
+      planName: "review-active",
+      kind: "review-spec",
+      version: 1,
+    });
     await writePlan(
       workspace.root,
       "review-active",
-      planWith("review", "review-plan"),
+      planWith(
+        "review",
+        "review-plan",
+        "\n## Review History\n\n### Review v1\n\n* Summary: SPEC PASS\n* Decision: review\n* Evidence: .ai/artifacts/review-active/events/review-spec-v1.md\n",
+      ),
     );
     const calls: Parameters<ProcessRunner>[0][] = [];
     const result = await runWorkflowRunner({
@@ -14015,31 +13534,6 @@ test(`review quality failure resumes execute-plan after unstaging review paths`,
         calls.push(call);
         if (call.command === "git") {
           return { launched: true, stdout: "", stderr: "", exitCode: 0 };
-        }
-        if (
-          call.command === CODEX_COMMAND &&
-          call.promptPath === ".ai/prompts/review-changes.md"
-        ) {
-          writeWorkflowEventArtifactSync({
-            root: workspace.root,
-            planName: "review-active",
-            kind: "review-spec",
-            version: 1,
-          });
-          writeFileSync(
-            join(workspace.root, ".ai", "plans", "review-active.md"),
-            planWith(
-              "review",
-              "review-plan",
-              "\n## Review History\n\n### Review v1\n\n* Summary: SPEC PASS\n* Decision: review\n* Evidence: .ai/artifacts/review-active/events/review-spec-v1.md\n",
-            ),
-          );
-          return {
-            launched: true,
-            stdout: "spec pass",
-            stderr: "",
-            exitCode: 0,
-          };
         }
         if (
           call.command === CODEX_COMMAND &&
@@ -14089,10 +13583,8 @@ test(`review quality failure resumes execute-plan after unstaging review paths`,
     assert.deepEqual(
       calls.map((call) => [call.command, call.args[0] ?? "", call.promptPath]),
       [
-        ["git", "diff", "git-pre-review-staged-check"],
         ["git", "add", "git-staging"],
         ["git", "diff", "git-scope-cleanup-diff"],
-        [CODEX_COMMAND, "exec", ".ai/prompts/review-changes.md"],
         [CODEX_COMMAND, "exec", ".ai/prompts/review-quality.md"],
         ["git", "restore", "git-review-unstage"],
         [CODEX_COMMAND, "exec", ".ai/prompts/execute-plan.md"],

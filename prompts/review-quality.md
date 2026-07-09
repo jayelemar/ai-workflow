@@ -1,7 +1,8 @@
-# Review Quality (Stage 2 Quality Review)
+# Review Quality (Legacy Stage 2 Quality Review)
 
-This prompt defines stage-2 quality review behavior only.
-It must not run unless stage-1 spec review already passed in the same `review + review-plan` workflow entry.
+This prompt is a legacy resume path for split-review workflows that already
+passed stage-1 spec review and are still at `review + review-plan`.
+New successful `review-changes.md` runs must not route here.
 
 ---
 

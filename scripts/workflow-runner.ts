@@ -8500,12 +8500,12 @@ const transitionAllowed = (
   if (promptPath === REVIEW_CHANGES_PROMPT_PATH) {
     const allowedActive =
       next.status === "active" && next.nextAction === "execute-plan";
-    const allowedReview =
-      next.status === "review" && next.nextAction === "review-plan";
-    if (!allowedActive && !allowedReview) {
+    const allowedCompleted =
+      next.status === "completed" && next.nextAction === "commit-summary";
+    if (!allowedActive && !allowedCompleted) {
       return {
         ok: false,
-        reason: `review-changes may only hand off to active + execute-plan or review + review-plan, got ${next.status} + ${next.nextAction}`,
+        reason: `review-changes may only hand off to active + execute-plan or completed + commit-summary, got ${next.status} + ${next.nextAction}`,
       };
     }
   }
@@ -8594,7 +8594,6 @@ export const runWorkflowRunner = async (
   const heldWorkflowFileLockPaths = new Set<string>();
   const emittedWorkflowWarnings = new Set<string>();
   let currentTaskContext: WorkflowTaskContext | undefined;
-  let internalPromptPathOverride: string | undefined;
   let carriedReviewStagingPaths: string[] | undefined;
   let carriedReviewStagingProcess: ReviewStagingProcess | undefined;
   let latestFailureDebugPath: string | undefined;
@@ -8764,16 +8763,12 @@ export const runWorkflowRunner = async (
 
   while (true) {
     const recoveredQualityReview =
-      !internalPromptPathOverride &&
       parsedPlan.status === "review" &&
       parsedPlan.nextAction === "review-plan" &&
       latestReviewIsSpecPass(parsedPlan.content);
-    const route = internalPromptPathOverride
-      ? internalRouteForPromptPath(internalPromptPathOverride)
-      : recoveredQualityReview
-        ? internalRouteForPromptPath(REVIEW_QUALITY_PROMPT_PATH)
-        : routeFor(parsedPlan.status, parsedPlan.nextAction);
-    internalPromptPathOverride = undefined;
+    const route = recoveredQualityReview
+      ? internalRouteForPromptPath(REVIEW_QUALITY_PROMPT_PATH)
+      : routeFor(parsedPlan.status, parsedPlan.nextAction);
     if (!route.executable) {
       return await finishFailure(route.reason);
     }
@@ -10040,26 +10035,6 @@ export const runWorkflowRunner = async (
         return await finishFailure(snapshotResult.reason);
       }
       return await finishNonterminalRouteOutcome(nonterminalOutcome);
-    }
-
-    if (
-      isSpecReviewPrompt(route.promptPath) &&
-      updated.status === "review" &&
-      updated.nextAction === "review-plan"
-    ) {
-      carriedReviewStagingPaths = reviewStagingPaths;
-      carriedReviewStagingProcess = staging;
-      const logResult = await appendIterationLog(undefined, updated);
-      if (!logResult.ok) {
-        return await finishFailure(logResult.reason);
-      }
-      const snapshotResult = await syncWorkflowSnapshot(updated);
-      if (!snapshotResult.ok) {
-        return await finishFailure(snapshotResult.reason);
-      }
-      internalPromptPathOverride = REVIEW_QUALITY_PROMPT_PATH;
-      parsedPlan = updated;
-      continue;
     }
 
     if (updated.content === previousContent) {

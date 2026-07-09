@@ -141,8 +141,9 @@ Expected behavior:
   selected instructions, and stage-specific requirements.
 - Draft plans can pass through `sync-plan-artifacts` and one bounded
   `plan-validator` preflight.
-- Implementation can pass through `execute-plan`, `review-changes`,
-  `review-quality`, `scope-cleanup`, and `commit-summary`.
+- Implementation can pass through `execute-plan`, combined `review-changes`,
+  `scope-cleanup`, and `commit-summary`. `review-quality` remains only as a
+  legacy resume path for in-flight split reviews.
 
 Estimated cost profile:
 
@@ -151,7 +152,7 @@ Estimated cost profile:
   implementation map, state snapshot, staged diff, validation evidence, and
   relevant code files.
 - Planning passes: at least 1 validation pass; can loop.
-- Review passes: usually 2 stages.
+- Review passes: usually 1 combined stage.
 - Subagents: optional, depending on prompt and task shape.
 - Token efficiency: expensive but sometimes justified for high-risk work.
 
@@ -257,7 +258,8 @@ Replacement:
 
 Problem:
 
-- Harness has `review-changes` and `review-quality`.
+- Harness used to run `review-changes` and `review-quality` as separate default
+  stages.
 - Superpowers subagent-driven development adds spec review and code-quality
   review per task.
 
@@ -268,7 +270,7 @@ Cost:
 Replacement:
 
 - Use one review system per task.
-- Harness review is the review system for `review + review-plan`.
+- Harness combined review is the review system for `review + review-plan`.
 - Do not inject Superpowers subagent review into harness review stages.
 - For routine changes, use one final review.
 
@@ -360,7 +362,7 @@ Replacement:
 | ---: | --- | --- | --- |
 | 1 | Stop combining harness review with Superpowers subagent review by default | Implemented high savings | Less layered review |
 | 2 | Collapse validation and repair into one bounded `plan-validator` preflight | High | Fewer automatic repair attempts |
-| 3 | Merge `review-changes` and `review-quality` for routine tasks | High | Less separation between spec and quality review |
+| 3 | Merge `review-changes` and `review-quality` for routine tasks | Implemented high savings | Less separation between spec and quality review |
 | 4 | Use native `/plan` for small and medium tasks | High | Less workflow bookkeeping |
 | 5 | Remove always-on Superpowers injection from harness stages | High | Skills become opt-in or task-triggered |
 | 6 | Gate `user-journey.md` and `implementation-map.md` generation | Medium-high | Less product traceability on small tasks |
@@ -372,6 +374,11 @@ Replacement:
 Priority 2 is implemented. Draft validation now uses one bounded
 `plan-validator` preflight so plan repair stays available without repeated
 fresh-stage context rehydration.
+
+Priority 3 is implemented. Normal `review + review-plan` entries now run one
+combined harness review and route directly to either `active + execute-plan` or
+`completed + commit-summary`; `review-quality` remains available only for
+legacy split-review resume.
 
 Priority 1 is implemented. Harness review remains the review system for
 `review + review-plan`; Superpowers subagent review is not injected into the

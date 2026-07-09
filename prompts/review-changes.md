@@ -1,7 +1,12 @@
-# Review Changes (Stage 1 Spec Review)
+# Review Changes (Combined Harness Review)
 
-This prompt defines stage-1 spec review behavior only.
-The runner enforces stage-2 quality review separately in the same `review + review-plan` workflow entry.
+This prompt defines the single default combined harness review for the
+runner-managed `review + review-plan` workflow entry.
+
+The review must validate spec correctness, user-journey coverage, validation
+evidence, regression risk, rule compliance, scope control, and code quality in
+one pass. It must not hand off to `review-quality.md` during normal successful
+review.
 
 ---
 
@@ -14,15 +19,20 @@ Read:
 * `.ai/instructions/shared/testing.md` before running, skipping, or classifying validation
 * the repo-relative `*.spec.md` path(s) listed under the plan's `## Spec` section (if any)
 * the `.ai/artifacts/<plan-name>/user-journey.md` file listed under `## User Journey Artifact` when the plan is user-facing
+* `.ai/artifacts/<plan-name>/implementation-map.md` when the plan is user-facing
 * runner-owned context snapshot `.ai/artifacts/<plan-name>/state/context.md` as the primary current-state source
 * Active Context Packet instruction files selected from `.ai/instructions/index.md`
 * the full plan file only when exact plan edits are required or the snapshot is insufficient
 
-Use the runner-provided Active Context Packet and index-selected instruction files only. Do not broadly load `.ai/instructions/**`.
-Read the full plan only when exact plan edits are required or the snapshot is insufficient.
+Use the runner-provided Active Context Packet and index-selected instruction
+files only. Do not broadly load `.ai/instructions/**`.
+Read the full plan only when exact plan edits are required or the snapshot is
+insufficient.
 Do not load full historical sections unless the snapshot is insufficient.
-If the runner provides a `Workflow token guardrail` note for this run, honor it as mandatory snapshot-first discipline without overriding the runner-injected path-scoped staged diff source, required specs, latest validation evidence, workflow state, or other correctness-critical review inputs.
-Spec review is fail-fast even after a prior token spike: use the snapshot first, but keep fallback access to the full plan or exact event files whenever needed for correctness.
+If the runner provides a `Workflow token guardrail` note for this run, honor it
+as mandatory snapshot-first discipline without overriding the runner-injected
+path-scoped staged diff source, required specs, latest validation evidence,
+workflow state, or other correctness-critical review inputs.
 
 Load:
 
@@ -40,15 +50,19 @@ This harness review stage must not spawn subagents, load
 
 If not provided:
 
-→ output `STOP`
-→ state blocking reason (`plan file is required`)
-→ do not proceed
+-> output `STOP`
+-> state blocking reason (`plan file is required`)
+-> do not proceed
 
 ---
 
 ## Diff Source (MANDATORY)
 
-Review MUST be performed using only the runner-injected staged paths for the current plan. For thin-plan-v2 plans, the runner stages paths from `.ai/artifacts/<plan-name>/state/files.json` and checks `.ai/artifacts/<plan-name>/state/file-ownership.json`; legacy thin-plan-v1 plans may still use inline file sections.
+Review MUST be performed using only the runner-injected staged paths for the
+current plan. For thin-plan-v2 plans, the runner stages paths from
+`.ai/artifacts/<plan-name>/state/files.json` and checks
+`.ai/artifacts/<plan-name>/state/file-ownership.json`; legacy thin-plan-v1
+plans may still use inline file sections.
 
 Workflow-runner owns review staging. When review fails and routes back to execution, remediation must tell the operator or next execution agent to fix the working tree and leave files unstaged, then rerun workflow-runner. Do not tell the operator to stage or restage review fixes; pre-staged files block the next review entry.
 
@@ -56,7 +70,8 @@ Use the path-scoped staged diff command injected by `workflow-runner.ts`:
 
 git diff --staged -- <plan-owned paths>
 
-Use the path-scoped staged summary command injected by `workflow-runner.ts` before the full diff when you only need file status:
+Use the path-scoped staged summary command injected by `workflow-runner.ts`
+before the full diff when you only need file status:
 
 git diff --staged --name-status -- <plan-owned paths>
 
@@ -64,7 +79,7 @@ Do NOT use bare `git diff --staged` as the primary review source.
 
 If the path-scoped staged diff is empty:
 
-→ STOP (`no staged changes to review`)
+-> STOP (`no staged changes to review`)
 
 If staged implementation paths do not match the expected changed-file inventory in `.ai/artifacts/<plan-name>/state/files.json`:
 
@@ -88,7 +103,7 @@ review
 
 IF Status != review:
 
-→ STOP (`plan must be in review state before reviewing`)
+-> STOP (`plan must be in review state before reviewing`)
 
 ---
 
@@ -102,7 +117,7 @@ review-plan
 
 IF Next Action != review-plan:
 
-→ STOP (`unexpected next action for review`)
+-> STOP (`unexpected next action for review`)
 
 ---
 
@@ -116,16 +131,18 @@ Verify:
 * no unrelated hunks are included inside the plan-owned files
 
 Ignore staged files outside the current plan path list.
-Do not unstage, reset, modify, or otherwise alter unrelated files outside the current plan path list.
+Do not unstage, reset, modify, or otherwise alter unrelated files outside the
+current plan path list.
 The runner may auto-unstage clearly unrelated staged hunks before review; review the remaining path-scoped staged diff only.
 
 If unrelated changes remain after runner cleanup inside the path-scoped diff:
 
-→ STOP (`non plan-scoped changes detected`)
+-> STOP (`non plan-scoped changes detected`)
 
 ### Cross-Plan Required Fixes
 
-If review finds that a required fix needs a file outside the current plan path list:
+If review finds that a required fix needs a file outside the current plan path
+list:
 
 * Determine whether that file is owned by another active plan or a live workflow-runner file lock.
 * If the file is owned by another active plan, classify the finding as `plan dependency`.
@@ -134,20 +151,24 @@ If review finds that a required fix needs a file outside the current plan path l
 * Do not expand the current review scope to include the other plan's file.
 * Set `Status = active` and `Next Action = execute-plan` so the next execution run can update the plan into a `plan dependency` blocker with `Status = blocked` and `Next Action = unblock-plan`.
 
-If the required fix needs a file outside the current plan path list and no owner plan can be identified:
+If the required fix needs a file outside the current plan path list and no owner
+plan can be identified:
 
-→ STOP (`file outside plan scope`)
+-> STOP (`file outside plan scope`)
 
 ### File Ownership Releases
 
-If the current plan contains `## File Ownership Releases` entries with `Status: transferred`:
+If the current plan contains `## File Ownership Releases` entries with
+`Status: transferred`:
 
 * treat those files as no longer owned by the releasing plan
 * reject the review for the releasing plan if the path-scoped diff includes a transferred file
 * do not approve, stage, or validate released-file hunks for the releasing plan
 * tell the operator to review the transferred file only under the `Released To` plan
 
-If review validates a release entry itself, confirm that `Released To`, `Status: transferred`, and evidence are present. Missing release evidence is a CRITICAL issue.
+If review validates a release entry itself, confirm that `Released To`,
+`Status: transferred`, and evidence are present. Missing release evidence is a
+CRITICAL issue.
 
 ---
 
@@ -158,7 +179,9 @@ If review validates a release entry itself, confirm that `Released To`, `Status:
 3. Path-scoped staged diff
 4. Plan (reference only)
 
-Spec remains authoritative. If the user-journey artifact conflicts with the spec, treat the spec as correct and mark the flow, plan, or implementation mismatch as a review issue.
+Spec remains authoritative. If the user-journey artifact conflicts with the
+spec, treat the spec as correct and mark the flow, plan, or implementation
+mismatch as a review issue.
 
 ---
 
@@ -172,7 +195,7 @@ If the runner injects `Task savepoint current task`:
 * verify the current task's validation evidence before approving it
 * do not review or approve future `[task:...]` items
 * if review fails, do not commit; set or keep `Status = active` and `Next Action = execute-plan`
-* if review passes, keep the plan at `review + review-plan`; the runner-enforced stage-2 quality review decides whether the current task may continue to `completed + commit-summary`
+* if review passes, route only the current task to `completed + commit-summary`
 
 Analyze:
 
@@ -196,13 +219,13 @@ If spec exists:
 
 If mismatch:
 
-→ mark as CRITICAL
-
----
+-> mark as CRITICAL
 
 ### 1a. User Journey Coverage (MANDATORY FOR USER-FACING PLANS)
 
-For user-facing plans, read `.ai/artifacts/<plan-name>/user-journey.md` and `.ai/artifacts/<plan-name>/implementation-map.md`, then compare them with the staged diff and validation evidence.
+For user-facing plans, read `.ai/artifacts/<plan-name>/user-journey.md` and
+`.ai/artifacts/<plan-name>/implementation-map.md`, then compare them with the
+staged diff and validation evidence.
 
 Check:
 
@@ -212,30 +235,59 @@ Check:
 * acceptance scenarios from the flow artifact have validation coverage through tests, focused checks, or explicit local evidence
 * `.ai/artifacts/<plan-name>/implementation-map.md` accurately points each user action to applicable UI route/component, API route, backend service/module, database/storage effect, and tests
 
-If a user-facing flow step lacks implementation coverage or validation coverage:
+If a user-facing flow step lacks implementation coverage or validation
+coverage:
 
-→ mark as CRITICAL
+-> mark as CRITICAL
 
-If the staged diff implements behavior not present in the spec or user-journey artifact:
+If the staged diff implements behavior not present in the spec or user-journey
+artifact:
 
-→ mark as CRITICAL
+-> mark as CRITICAL
 
 If the user-journey artifact conflicts with the spec:
 
-→ mark as CRITICAL and state that the spec remains authoritative
+-> mark as CRITICAL and state that the spec remains authoritative
 
----
+### 2. Regression Risk
 
-### 2. Scope Control
+Check:
 
-Ensure:
+* existing functionality impact
+* shared logic impact
+* breaking changes
 
-* no unrelated changes
-* no scope expansion
+If a regression risk is unacceptable or unmitigated:
 
----
+-> mark as CRITICAL
 
-### 3. Validation Coverage Against Intended Behavior
+### 3. Rule Compliance
+
+Validate against:
+
+* `.codex/AGENTS.md`
+* Active Context Packet instruction files selected from `.ai/instructions/index.md`
+
+If the staged diff violates repository rules or prompt contract requirements:
+
+-> mark as CRITICAL
+
+### 4. Code Quality
+
+Check:
+
+* readability
+* consistency
+* maintainability
+* justified complexity
+
+If the implementation is unsafe, confusing, or unjustifiably complex:
+
+-> mark as CRITICAL
+
+Actionable but low-risk improvements may be WARNING or SUGGESTION.
+
+### 5. Validation Sufficiency
 
 Check:
 
@@ -243,19 +295,20 @@ Check:
 * commands run
 * results recorded
 * acceptance coverage for the intended behavior
+* whether local proof is sufficient for the completed handoff
 
 Rules:
 
-* missing validation evidence for a claimed implemented behavior → WARNING
-* risky behavior change without validation evidence → CRITICAL
+* missing validation evidence for a claimed implemented behavior -> WARNING
+* risky behavior change without validation evidence -> CRITICAL
+* final validation requires deployed, manual, or external code may still pass only when the deferred validation note is explicit and the implementation is otherwise safe to commit
 
----
+### 6. Scope Control
 
-### Stage Boundary
+Ensure:
 
-Do not perform regression risk, readability, consistency, maintainability, or justified-complexity review in this stage.
-The runner-enforced stage-2 quality review owns those checks and the completion decision.
-Do not make deferred external validation decisions in this stage.
+* no unrelated changes
+* no scope expansion
 
 ---
 
@@ -269,20 +322,23 @@ Do not make deferred external validation decisions in this stage.
 * file-list mismatch
 * user-journey implementation gap
 * user-journey validation gap
+* breaking change
+* unacceptable regression risk
+* repository rule violation
+* unsafe maintainability or complexity issue
 * high-risk behavior change without validation evidence
-
----
 
 ### WARNING
 
 * missing validation evidence for a low-risk claimed behavior
 * deviation from plan-owned validation intent
-
----
+* non-blocking regression risk note
+* maintainability concern that does not block merge
 
 ### SUGGESTION
 
-* none in this stage unless it directly clarifies spec compliance work
+* readability improvement
+* maintainability improvement
 
 ---
 
@@ -309,23 +365,37 @@ execute-plan
 
 2. add the next review entry.
 
-Write `.ai/artifacts/<plan-name>/events/review-spec-vX.md`, then update `.ai/artifacts/<plan-name>/state/workflow.json` with runner-readable thin-plan-v2 state: preserve `planPath`, set `status` and `nextAction`, write the compact spec review event under `latest.reviewSpec`, mirror the same compact state under `latest.review` for compatibility, append the spec-review artifact path to `history`, set `unresolvedBlockers`, and refresh `updatedAt`.
+Write `.ai/artifacts/<plan-name>/events/review-vX.md`, then update
+`.ai/artifacts/<plan-name>/state/workflow.json` with runner-readable
+thin-plan-v2 state: preserve `planPath`, set `status` and `nextAction`, write
+the compact combined review event under `latest.review`, append the review
+artifact path to `history`, set `unresolvedBlockers`, and refresh `updatedAt`.
 
-For legacy thin-plan-v1 plans only, if the plan already contains `## Review History`, append only:
+For legacy thin-plan-v1 plans only, if the plan already contains
+`## Review History`, append only:
 
 ### Review vX
 
 * Summary: NEEDS FIX
-* Evidence: .ai/artifacts/<plan-name>/events/review-spec-vX.md
+* Evidence: .ai/artifacts/<plan-name>/events/review-vX.md
 * Decision: active
 
-Create `## Review History` only if the section is missing in a legacy thin-plan-v1 plan.
+Create `## Review History` only if the section is missing in a legacy
+thin-plan-v1 plan.
 
-Before updating the plan, create `.ai/artifacts/<plan-name>/events/review-spec-vX.md` with `# Review Spec vX`, `## Summary`, and `## Evidence`.
+Before updating the plan, create
+`.ai/artifacts/<plan-name>/events/review-vX.md` with `# Review vX`,
+`## Summary`, and `## Evidence`.
 Put all issue bullets, file references, remediation notes, missing validations, and unresolved risks in the review artifact.
-Review event artifacts use compact evidence: record the relevant command, result, evidence path, short excerpt only when needed, actionable issue bullets, file references, remediation notes, missing validations, and unresolved risk notes.
-Event artifacts must not include full raw stdout/stderr bodies, full raw diffs, or raw Codex event streams.
-Do not paste raw log dumps or full unscoped diffs into review artifacts; cite the path-scoped diff command and include only the small excerpt needed to prove the issue.
+Review event artifacts use compact evidence: record the relevant command,
+result, evidence path, short excerpt only when needed, actionable issue bullets,
+file references, remediation notes, missing validations, unresolved risk notes,
+and deferred validation notes when applicable.
+Event artifacts must not include full raw stdout/stderr bodies, full raw diffs,
+or raw Codex event streams.
+Do not paste raw log dumps or full unscoped diffs into review artifacts; cite
+the path-scoped diff command and include only the small excerpt needed to prove
+the issue.
 Review state entries may contain only compact `Summary`, `Decision`, and `Evidence` pointer fields.
 Do not duplicate the `## Review History` heading in thin-plan-v2 manifests.
 
@@ -340,34 +410,80 @@ Do not duplicate the `## Review History` heading in thin-plan-v2 manifests.
 
 ---
 
-### IF NO CRITICAL issues:
+### IF NO CRITICAL issues AND final validation requires deployed, manual, or external code:
+
+Use this path when the implementation is safe to commit locally, but the final
+proof will be performed manually by the operator after commit, deploy,
+production access, external integration access, or another check outside the
+local reviewed workspace.
 
 1. update the plan manifest:
 
 ## Status
 
-review
+completed
 
 ## Next Action
 
-review-plan
+commit-summary
 
-2. create `.ai/artifacts/<plan-name>/events/review-spec-vX.md` with `# Review Spec vX`, `## Summary`, and `## Evidence`.
+2. create `.ai/artifacts/<plan-name>/events/review-vX.md` with `# Review vX`,
+`## Summary`, and `## Evidence`, including the deferred validation note.
 
-3. update `.ai/artifacts/<plan-name>/state/workflow.json` with `latest.reviewSpec.summary = SPEC PASS`, `latest.reviewSpec.decision = review`, the spec-review evidence pointer, appended `history`, status, nextAction, and updatedAt. Mirror the same compact pass state under `latest.review` for compatibility until stage-2 quality review replaces it.
+3. update `.ai/artifacts/<plan-name>/state/workflow.json` with
+`latest.review.summary = SAFE - DEFERRED VALIDATION`,
+`latest.review.decision = completed`, the review evidence pointer, appended
+`history`, status, nextAction, and updatedAt.
 
-4. reread the plan manifest and `.ai/artifacts/<plan-name>/state/workflow.json`; verify both show `review + review-plan` before final output.
+4. reread the plan manifest and `.ai/artifacts/<plan-name>/state/workflow.json`; verify both show `completed + commit-summary` before final output.
 
-5. do not transition directly to `completed + commit-summary`.
-The runner-enforced stage-2 quality review must run next.
+5. do not create any extra plan section for this path. `commit-summary` records the local commit metadata. The operator performs the deferred validation manually after commit/deploy and reopens the plan if that check finds a required fix.
 
 For legacy thin-plan-v1 plans only, append:
 
 ### Review vX
 
-* Summary: SPEC PASS
-* Evidence: .ai/artifacts/<plan-name>/events/review-spec-vX.md
-* Decision: review
+* Summary: SAFE - DEFERRED VALIDATION
+* Evidence: .ai/artifacts/<plan-name>/events/review-vX.md
+* Decision: completed
+
+---
+
+### IF NO CRITICAL issues AND local/final validation is complete:
+
+Review passed:
+
+Status = completed
+Next Action = commit-summary
+
+1. update the plan manifest:
+
+## Status
+
+completed
+
+## Next Action
+
+commit-summary
+
+2. create `.ai/artifacts/<plan-name>/events/review-vX.md` with `# Review vX`,
+`## Summary`, and `## Evidence`.
+
+3. update `.ai/artifacts/<plan-name>/state/workflow.json` with
+`latest.review.summary = SAFE`, `latest.review.decision = completed`, the
+review evidence pointer, appended `history`, status, nextAction, and updatedAt.
+
+4. reread the plan manifest and `.ai/artifacts/<plan-name>/state/workflow.json`; verify both show `completed + commit-summary` before final output.
+
+Put optional warnings and suggestions in the review artifact.
+
+For legacy thin-plan-v1 plans only, append:
+
+### Review vX
+
+* Summary: SAFE
+* Evidence: .ai/artifacts/<plan-name>/events/review-vX.md
+* Decision: completed
 
 ---
 
@@ -389,8 +505,7 @@ Rules:
 * Terminal issue bullets should focus on the problem details, not lead with file paths.
 * File and line references should stay in the review artifact; use inline terminal refs only when needed to avoid ambiguity.
 * Do not include long examples unless they are required to prove the issue.
-* Do not output separate spec coverage or regression risk sections.
-* Fold spec coverage into `**Issues**` only when actionable.
+* Fold spec coverage, regression risk, rule compliance, validation sufficiency, and code quality into `**Issues**` only when actionable.
 * Keep `**Final Verdict**` exactly in the checkbox format below.
 
 **Plan**
@@ -418,9 +533,9 @@ Rules:
 Status:
 
 * active
-* review
+* completed
 
 Next Action:
 
 * execute-plan
-* review-plan
+* commit-summary
