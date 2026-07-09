@@ -9,11 +9,14 @@ This prompt creates a structured implementation plan only.
 Read:
 
 - `.codex/AGENTS.md`
-- `.ai/instructions/shared/workflow-state.md`
 - `.ai/instructions/shared/reasoning-quality.md`
+- `.ai/instructions/shared/flow-trace-artifacts.md`
 - relevant `.ai/instructions/**/*.md`
 - the spec file
-- the user-journey artifact for user-facing work
+- the user-journey artifact when flow-trace artifacts are required for the scope
+
+Read `.ai/instructions/shared/workflow-state.md` only for
+`runner-managed` mode.
 
 Apply the shared reasoning-quality guidance for assumption validation,
 edge-case checks, tradeoff notes, and scope discipline.
@@ -24,7 +27,26 @@ edge-case checks, tradeoff notes, and scope discipline.
 
 Generate a complete implementation plan using the provided spec.
 
-New draft plans MUST start at:
+## Execution Mode (MANDATORY)
+
+Choose exactly one execution mode before planning:
+
+- `manual`
+- `runner-managed`
+
+If the operator does not specify a mode, default to `manual`.
+
+Mode rules:
+
+- `manual` means create a spec, create a plan, and execute in the same
+  conversation without invoking the workflow runner.
+- `runner-managed` means create a plan that will continue through
+  `sync-plan-artifacts`, `plan-validator`, and later runner-managed stages.
+- Both modes MUST use the same spec discipline, flow-artifact gating rules,
+  implementation-map requirements, and concrete phase planning quality.
+- Only `runner-managed` mode may require runner-only workflow state artifacts.
+
+For `runner-managed` plans, new draft plans MUST start at:
 
 - Status = draft
 - Next Action = sync-plan-artifacts
@@ -33,6 +55,12 @@ This is the `draft + sync-plan-artifacts` state.
 
 The workflow runner performs `sync-plan-artifacts` after plan creation and
 before `plan-validator`.
+
+For `manual` plans, keep the plan manifest structure but do not require
+runner-managed workflow state before execution.
+After saving a manual plan, append the manual token checkpoint:
+
+`pnpm exec tsx .ai/scripts/manual-token-usage.ts --plan <plan-name> --stage plan`
 
 ---
 
@@ -80,77 +108,28 @@ If any behavior is:
 
 ---
 
-## User Journey Artifact Check (MANDATORY)
+## Flow Artifact Gating Check (MANDATORY)
 
-Before planning, derive the plan name from the spec file and classify whether the work is user-facing.
+Before planning:
 
-User-facing work means a feature, bugfix, or change that affects a customer, admin, or operator screen, route, workflow, visible state, or user-triggered API behavior.
-
-If the work is user-facing:
-
-- required path: `.ai/artifacts/<plan-name>/user-journey.md`
-- ensure the user-journey artifact exists before planning
-- if the artifact is missing, automatically create it by applying `.ai/prompts/generate-user-flow.md` to the same spec and observed codebase paths
-- if the artifact exists but is incomplete, stale, or inconsistent with the spec, automatically regenerate it by applying `.ai/prompts/generate-user-flow.md`
-- read the user-journey artifact before planning, after any preflight create/regenerate step
-- verify it was generated from the approved spec plus codebase inspection
-- verify it does not invent desired behavior beyond the spec
-- use it to create `.ai/artifacts/<plan-name>/implementation-map.md`
-
-User-journey preflight rules:
-
-- the preflight may only create or update `.ai/artifacts/<plan-name>/user-journey.md`
-- it must follow `.ai/prompts/generate-user-flow.md`, including required sections, Markdown + Mermaid format, and spec-only desired behavior
-- it must inspect the codebase only for existing routes, components, APIs, services, state, storage effects, and tests
-- it must exclude `.ai/artifacts` from broad searches except the target artifact path
-- it must not create a plan until the artifact exists and validates
-
-If user-journey preflight cannot produce a valid artifact because the spec is incomplete, vague, ambiguous, not actually user-facing, or still inconsistent after regeneration:
-
-→ STOP  
-→ state the concrete user-journey preflight blocker  
-→ do NOT generate plan
-
-For non-user-facing work:
-
-- no flow artifact is required
-- in `.ai/artifacts/<plan-name>/implementation-map.md`, write exactly `N/A: <concrete reason>`
-- the reason must explain why the change does not affect a screen, route, workflow, visible state, or user-triggered API behavior
-- this is the only allowed `N/A` value in generated implementation-map artifacts
+- derive the plan name from the spec file
+- apply `.ai/instructions/shared/flow-trace-artifacts.md` to classify whether
+  the scope is flow-trace-required
+- if flow-trace artifacts are required, complete the create-plan preflight from
+  that shared instruction before finalizing `## Phases`
+- if flow-trace artifacts are not required, write the exact
+  `N/A: <concrete reason>` values required by that shared instruction
 
 ---
 
-## User-Facing Plan Authoring Preflight (MANDATORY)
+## Flow-Trace Plan Authoring Preflight (MANDATORY)
 
-For user-facing work, run this preflight in order before finalizing the draft:
+When flow-trace artifacts are required, run the create-plan preflight from
+`.ai/instructions/shared/flow-trace-artifacts.md`.
 
-1. validate or regenerate `user-journey.md`
-2. derive or repair `implementation-map.md` from every user-flow and acceptance-scenario action
-3. write plan phases
-4. run a mandatory self-check
-5. revise the plan/artifacts in place if the self-check finds gaps
-
-Auto-correct when possible. STOP only when the preflight still cannot satisfy these rules.
-
-The mandatory self-check MUST verify:
-
-- each `[task:..]` chunk can pass, be reviewed, and be committed independently
-- no lifecycle-only or red-test-only savepoints remain
-- each spec-required behavior, especially visible validation and failure-state behavior, is assigned to a concrete task
-- each implementation-map row has implementation and validation coverage
-
-If a savepoint is invalid:
-
-- rewrite or remove invalid task savepoints
-- rewrite lifecycle-only or red-test-only chunks into independently passable subsystem or behavior chunks
-- remove task IDs entirely when the work is really one final-commit fix
-
-If the implementation map or phase ownership is under-scoped:
-
-- repair missing user-action rows before finalizing phases
-- expand task ownership until every spec-required behavior and every implementation-map row is covered
-
-STOP only when the preflight still cannot satisfy these rules without inventing behavior beyond the spec.
+That preflight owns user-journey regeneration, implementation-map repair,
+savepoint self-checks, behavior-ownership coverage, and the required
+auto-correction before the draft plan is returned.
 
 ---
 
@@ -208,15 +187,6 @@ Rules:
 
 ---
 
-### Implementation Map Artifact
-
-Must include:
-
-- one `### User Action:` entry per user-journey action for user-facing work
-- `N/A: <concrete reason>` for non-user-facing work
-
----
-
 ## Phase-to-File Mapping (MANDATORY)
 
 Each task in the plan manifest's `## Phases` section MUST reference specific files where applicable.
@@ -239,28 +209,11 @@ BAD:
 
 ## Implementation Map Artifact (MANDATORY)
 
-For user-facing work, map every user action from the user-journey artifact to applicable implementation and validation paths.
+Follow `.ai/instructions/shared/flow-trace-artifacts.md` for the exact
+`implementation-map.md` contract.
 
-Write the mapping to `.ai/artifacts/<plan-name>/implementation-map.md`, not into the plan manifest.
-
-Each user action MUST include:
-
-- UI route/component
-- API route
-- backend service/module
-- database/storage effect
-- tests
-
-Rules:
-
-- Use concrete repo-relative paths where applicable.
-- If a category is not applicable to a user action, write `None: <concrete reason>`.
-- The tests entry must identify validation coverage for the action.
-- Every user action in `## User Flows` and `## Acceptance Scenarios` of the flow artifact must appear in this mapping.
-- The mapping must not include actions that do not appear in the flow artifact.
-- Build or repair this artifact before finalizing `## Phases` for user-facing work.
-
-For non-user-facing work, write exactly `N/A: <concrete reason>` in `implementation-map.md`.
+Write the mapping to `.ai/artifacts/<plan-name>/implementation-map.md`, not
+into the plan manifest.
 
 If any user action cannot be mapped to implementation or validation coverage:
 
@@ -270,7 +223,28 @@ If any user action cannot be mapped to implementation or validation coverage:
 
 ---
 
-## Artifact State Files (MANDATORY)
+## Runner-Managed Artifact State Files (CONDITIONAL)
+
+These artifact-state files are required only for `runner-managed` mode.
+
+If execution mode is `manual`:
+
+- do NOT create or update `.ai/artifacts/<plan-name>/state/files.json`
+- do NOT create or update `.ai/artifacts/<plan-name>/state/workflow.json`
+- do NOT create or update `.ai/artifacts/<plan-name>/state/file-ownership.json`
+- do NOT create or update `.ai/artifacts/<plan-name>/state/context.md`
+- do NOT create or update `.ai/artifacts/<plan-name>/events/`
+- in the plan manifest `## Artifacts` section, write exactly:
+  - `* Workflow state: \`N/A: manual plan-bound execution\``
+  - `* File ownership: \`N/A: manual plan-bound execution\``
+  - `* Files: \`N/A: manual plan-bound execution\``
+  - `* Context: \`N/A: manual plan-bound execution\``
+  - `* Events: \`N/A: manual plan-bound execution\``
+- do not require `sync-plan-artifacts`, `plan-validator`, or runner snapshots
+  before continuing into manual execution
+
+If execution mode is `runner-managed`, create the following artifacts exactly as
+specified below.
 
 Write `.ai/artifacts/<plan-name>/state/files.json` with:
 
@@ -408,8 +382,7 @@ Before completing:
 - verify all template sections exist
 - verify `## Status` is present
 - verify all Phases are complete
-- verify User Journey Artifact is present and valid
-- verify `.ai/artifacts/<plan-name>/implementation-map.md` covers every user action for user-facing work
+- verify any flow-trace artifacts required by the plan are present and valid
 - verify `.ai/artifacts/<plan-name>/state/files.json` is complete
 - verify Phase ↔ files artifact mapping is consistent
 

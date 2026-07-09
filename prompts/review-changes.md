@@ -19,9 +19,12 @@ Read:
 * `.ai/instructions/shared/reasoning-quality.md`
 * `.ai/instructions/shared/debugging.md` when classifying failures or review remediation risk
 * `.ai/instructions/shared/testing.md` before running, skipping, or classifying validation
+* `.ai/instructions/shared/flow-trace-artifacts.md` when the plan `## Artifacts` section requires flow artifacts
 * the repo-relative `*.spec.md` path(s) listed under the plan's `## Spec` section (if any)
-* the `.ai/artifacts/<plan-name>/user-journey.md` file listed under `## User Journey Artifact` when the plan is user-facing
-* `.ai/artifacts/<plan-name>/implementation-map.md` when the plan is user-facing
+* the `.ai/artifacts/<plan-name>/user-journey.md` file listed under the plan
+  `## Artifacts` section when that section requires flow artifacts
+* `.ai/artifacts/<plan-name>/implementation-map.md` when the plan `## Artifacts`
+  section requires flow artifacts
 * runner-owned context snapshot `.ai/artifacts/<plan-name>/state/context.md` as the primary current-state source
 * Active Context Packet instruction files selected from `.ai/instructions/index.md`
 * the full plan file only when exact plan edits are required or the snapshot is insufficient
@@ -31,6 +34,10 @@ files only. Do not broadly load `.ai/instructions/**`.
 Read the full plan only when exact plan edits are required or the snapshot is
 insufficient.
 Do not load full historical sections unless the snapshot is insufficient.
+Do not inspect workflow `history` during normal review runs; use the snapshot,
+path-scoped staged diff, latest validation evidence, and the latest relevant
+event pointer first, then open only that exact event artifact when specific
+evidence is needed.
 If the runner provides a `Workflow token guardrail` note for this run, honor it
 as mandatory snapshot-first discipline without overriding the runner-injected
 path-scoped staged diff source, required specs, latest validation evidence,
@@ -174,7 +181,7 @@ CRITICAL issue.
 ## Source of Truth Priority
 
 1. Spec (if exists)
-2. User-journey artifact for user-facing plans
+2. User-journey artifact for flow-trace-required plans
 3. Path-scoped staged diff
 4. Plan (reference only)
 
@@ -202,7 +209,8 @@ Analyze:
 * impacted modules
 * shared logic
 * dependencies
-* user actions, visible states, failure branches, and acceptance scenarios from `.ai/artifacts/<plan-name>/user-journey.md` for user-facing plans
+* user actions, visible states, failure branches, and acceptance scenarios from
+  `.ai/artifacts/<plan-name>/user-journey.md` for flow-trace-required plans
 
 ---
 
@@ -220,21 +228,21 @@ If mismatch:
 
 -> mark as CRITICAL
 
-### 1a. User Journey Coverage (MANDATORY FOR USER-FACING PLANS)
+### 1a. User Journey Coverage (MANDATORY WHEN FLOW ARTIFACTS ARE REQUIRED)
 
-For user-facing plans, read `.ai/artifacts/<plan-name>/user-journey.md` and
-`.ai/artifacts/<plan-name>/implementation-map.md`, then compare them with the
-staged diff and validation evidence.
+Use `.ai/instructions/shared/flow-trace-artifacts.md` as the review contract.
+
+When the plan `## Artifacts` section points to concrete `User journey` and
+`Implementation map` paths, compare those artifacts with the staged diff and
+validation evidence.
 
 Check:
 
 * each user action in the flow artifact is implemented by the staged diff or already covered by unchanged existing code referenced by the mapping
-* every visible state in the flow artifact is represented in the implemented UI, API response, service behavior, or documented unchanged path
-* every failure branch in the flow artifact is handled or explicitly deferred by spec-approved scope
-* acceptance scenarios from the flow artifact have validation coverage through tests, focused checks, or explicit local evidence
-* `.ai/artifacts/<plan-name>/implementation-map.md` accurately points each user action to applicable UI route/component, API route, backend service/module, database/storage effect, and tests
+* every visible state, failure branch, and acceptance scenario required by the flow artifact has implementation and validation coverage or a documented unchanged path
+* `.ai/artifacts/<plan-name>/implementation-map.md` still accurately points each user action to the applicable implementation and validation paths
 
-If a user-facing flow step lacks implementation coverage or validation
+If a flow-trace-required step lacks implementation coverage or validation
 coverage:
 
 -> mark as CRITICAL
@@ -247,6 +255,11 @@ artifact:
 If the user-journey artifact conflicts with the spec:
 
 -> mark as CRITICAL and state that the spec remains authoritative
+
+When the plan records `User journey` as `N/A: <concrete reason>`, do not
+require flow-artifact review. Instead, verify that the staged diff still
+matches the spec and that the `N/A` reason remains credible for the actual
+scope.
 
 ### 2. Regression Risk
 

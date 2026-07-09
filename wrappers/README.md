@@ -14,27 +14,51 @@ For cloning, installation, publishing, runner setup, and troubleshooting, use
 Canonical lifecycle:
 
 ```text
-spec -> user-journey artifact -> plan -> sync artifacts -> validator/runner
+spec -> optional user-journey artifact -> plan -> (manual execute | sync artifacts -> validator/runner)
 ```
 
 1. Create a spec:
    - Feature: use `.ai/wrappers/generate-feature-spec.md`
    - Bugfix: use `.ai/wrappers/generate-bugfix-spec.md`
-2. Optionally create a user-journey artifact for user-facing work when you want to
-   inspect it before planning:
+2. Optionally create a user-journey artifact for flow-trace-required work when
+   you want to inspect it before planning:
    - Use `.ai/wrappers/generate-user-flow.md`
    - Output: `.ai/artifacts/<plan-name>/user-journey.md`
    - Skip this manual step when using `.ai/wrappers/create-plan.md`; it creates
-     or regenerates the user-journey artifact automatically for user-facing
-     work before writing the plan.
+     or regenerates the user-journey artifact automatically only when the
+     scope needs end-to-end flow mapping before writing the plan.
    - `create-plan` also auto-preflights `.ai/artifacts/<plan-name>/implementation-map.md`,
      savepoint validity, and spec-required behavior ownership before it returns
      a draft plan.
-   - Skip for non-user-facing work; the plan records `N/A: <concrete reason>`.
+   - Skip for non-user-facing or narrow flow-trace-not-required work; the plan
+     records `N/A: <concrete reason>`.
 3. Create a plan:
    - Use `.ai/wrappers/create-plan.md`
-4. Use one post-plan path. The default runner first performs
-   `sync-plan-artifacts`, then continues to validation.
+   - Choose an execution mode:
+     - `manual` for `spec -> plan -> execute` in one conversation without
+       runner-managed workflow state
+     - `runner-managed` when you want the harness to own post-plan execution
+4. Use one post-plan path.
+
+Manual post-plan path:
+
+- Continue execution in the same conversation from the spec and plan.
+- Do not create runner-only workflow state just to keep working.
+- For explicit manual execution, use `.ai/wrappers/manual-execute-plan.md`.
+- Repo-local Codex hooks can auto-append token checkpoints after manual
+  `spec`, `plan`, and final `execute` when you use the tracked wrappers or
+  prompts and the agent emits the required completion marker lines.
+- Those auto-checkpoints are valid only when the matching spec or plan file was
+  actually written; marker text alone should not count as a completed stage.
+- Manual fallback remains:
+  `pnpm exec tsx .ai/scripts/manual-token-usage.ts --plan <plan-name> --stage <spec|plan|execute>`
+- For cleaner apples-to-apples measurements, start manual `spec -> plan -> execute`
+  work in a fresh conversation when possible.
+
+Runner-managed post-plan path:
+
+- The runner first performs `sync-plan-artifacts`, then continues to
+  validation.
 
 Default runner path:
 
@@ -89,10 +113,13 @@ pnpm exec tsx .ai/scripts/workflow-runner.ts --compact .ai/plans/<plan-name>.md
 ## Rules
 
 - Install and publish the workflow using the setup steps in `.ai/README.md`.
-- Manual prompting is supported for spec generation and plan creation.
-- After a plan exists, the workflow runner remains the default path for
-  `sync-plan-artifacts`, `plan-validator`, `execute-plan`,
-  `review-changes`, `unblock-plan`, `reopen-plan`, and `commit-summary`.
+- Manual prompting is supported for spec generation, plan creation, and
+  manual plan-bound execution.
+- After a plan exists, the workflow runner is the default path only for plans
+  that explicitly chose `runner-managed` execution or already use
+  runner-managed state for the same task.
+- Manual plans may continue execution in the same conversation without
+  `sync-plan-artifacts`, `plan-validator`, or runner-managed state files.
 - Review stages use harness review only. Do not add a separate subagent or
   plugin review system inside the default runner review path.
 - `plan-preview-before-apply` and `manual-preview` are available only through

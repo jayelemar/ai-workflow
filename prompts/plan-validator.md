@@ -24,10 +24,12 @@ Read:
 
 * `.codex/AGENTS.md`
 * `.ai/instructions/shared/workflow-state.md`
+* `.ai/instructions/shared/flow-trace-artifacts.md`
 * runner-owned context snapshot `.ai/artifacts/<plan-name>/state/context.md` as the primary current-state source
 * the plan file
 * the repo-relative `*.spec.md` path(s) listed under the plan's `## Spec` section (if any)
-* `.ai/artifacts/<plan-name>/user-journey.md` when the plan is user-facing
+* `.ai/artifacts/<plan-name>/user-journey.md` when the plan `## Artifacts`
+  section requires flow artifacts
 * relevant codebase files named by the spec or plan when contract, shape, rendering, or file-scope questions must be resolved from existing implementation evidence
 
 Read the full plan only when exact validation or bounded repair edits require
@@ -115,18 +117,15 @@ When a minor spec repair is allowed:
 3. do not add new behavior, changed business logic, product decisions, API/data-shape decisions, or edge-case rules
 4. update the plan only if needed to align with the repaired spec text
 
-After repairs, rerun the same authoring preflight used by `create-plan`.
+After repairs, rerun the validator preflight from
+`.ai/instructions/shared/flow-trace-artifacts.md`.
 
 Do not limit repairs to patching only the cited lines when the plan artifacts
-or task boundaries are still invalid.
-
-Preflight steps:
-
-1. re-read the spec, `user-journey.md`, and `implementation-map.md`
-2. repair missing action rows and under-scoped behavior ownership
-3. rewrite bad task savepoints into coherent subsystem/behavior chunks
-4. remove task IDs when the work is really one final-commit fix
-5. re-check that every implementation-map row has implementation and validation coverage and that each spec-required behavior is owned by a concrete task
+or task boundaries are still invalid. The validator preflight must re-read the
+spec plus any required flow-trace artifacts, repair missing action rows and
+under-scoped behavior ownership, rewrite bad task savepoints, remove task IDs
+when the work is really one final-commit fix, and re-check implementation and
+validation coverage.
 
 Preflight constraints:
 
@@ -369,37 +368,23 @@ If missing:
 
 ---
 
-## User Journey Artifact Validation (MANDATORY)
+## Flow Artifact Validation (MANDATORY)
 
-Read the plan's `## Artifacts` section plus `.ai/artifacts/<plan-name>/implementation-map.md`.
+Use `.ai/instructions/shared/flow-trace-artifacts.md` as the validation
+contract.
 
-User-facing work means a feature, bugfix, or change that affects a customer, admin, or operator screen, route, workflow, visible state, or user-triggered API behavior.
+Treat the plan `## Artifacts` entries as the source of truth for whether flow
+artifacts are required.
 
-For user-facing plans:
+If the plan requires flow-trace artifacts, validate the user-journey artifact
+and `implementation-map.md` against that shared contract.
 
-* user-facing work MUST have `.ai/artifacts/<plan-name>/user-journey.md`
-* the user-journey artifact MUST exist
-* the artifact MUST contain Goal, Actors, Entry Points, User Flows, Mermaid Diagram, States, Failures, Acceptance Scenarios, and Open Decisions
-* `.ai/artifacts/<plan-name>/implementation-map.md` MUST exist
-* every user action from the artifact's User Flows and Acceptance Scenarios MUST appear in `.ai/artifacts/<plan-name>/implementation-map.md`
-* each user action MUST include implementation coverage for applicable UI route/component, API route, backend service/module, and database/storage effect paths
-* each user action MUST include validation coverage in tests or an explicit validation command
-* a `None: <concrete reason>` entry is allowed only for implementation categories that genuinely do not apply to that action
+If the plan records `User journey` as `N/A: <concrete reason>`, require
+`implementation-map.md` to be exactly `N/A: <concrete reason>` and verify that
+the reason remains credible for the actual scope.
 
-If a user-facing flow step lacks implementation coverage or validation coverage:
-
-→ mark as CRITICAL
-
-If a user-facing plan records `N/A` in `.ai/artifacts/<plan-name>/implementation-map.md`:
-
-→ mark as CRITICAL
-
-For non-user-facing plans:
-
-* `.ai/artifacts/<plan-name>/implementation-map.md` MUST write `N/A: <concrete reason>`
-* the concrete reason MUST explain why the change does not affect a screen, route, workflow, visible state, or user-triggered API behavior
-
-If the non-user-facing reason is missing, vague, or contradicted by the spec or plan:
+If required implementation coverage, validation coverage, or valid `N/A`
+handling is missing:
 
 → mark as CRITICAL
 

@@ -3982,14 +3982,17 @@ export const generateWorkflowContextSnapshot = ({
   planPath,
   planContent,
   latestTokenUsage,
+  workflowState,
 }: {
   planName: string;
   planPath: string;
   planContent: string;
   latestTokenUsage?: WorkflowContextSnapshotTokenUsage;
+  workflowState?: ThinPlanV2WorkflowState;
 }): string => {
   const validation = extractLatestValidationSummary(planContent);
   const review = extractLatestReviewSummary(planContent);
+  const relevantEvent = selectRelevantWorkflowEvent(planContent, workflowState);
   const reviewRemediationContext =
     extractLatestReviewRemediationContext(planContent);
   const tokenSummary = summarizeLatestTokenUsage(latestTokenUsage);
@@ -4026,6 +4029,14 @@ ${validation.details.length > 0 ? validation.details.map((detail) => `* ${detail
 * Decision: ${review.decision ?? "(none recorded)"}
 * Evidence: ${review.evidence ?? "(none recorded)"}
 ${formatSnapshotSection("### Unresolved Findings", review.unresolvedFindings)}
+
+## Latest Relevant Event
+
+${relevantEvent ? `* Kind: ${relevantEvent.label}
+* Why: ${relevantEvent.reason}
+* Summary: ${relevantEvent.summary ?? "(none recorded)"}
+* ${relevantEvent.stateField}: ${relevantEvent.stateValue ?? "(none recorded)"}
+* Evidence: ${relevantEvent.evidence ?? "(none recorded)"}` : "(none)"}
 
 ${formatSnapshotSection("## Latest Review Remediation Context", reviewRemediationContext)}
 
@@ -4145,7 +4156,9 @@ Use the Active Context Packet and index-selected instruction files only. Do not 
 
 Artifact loading rule:
 - Use ${contextSnapshotPath} first.
-- Open event artifacts only when the snapshot references them and specific evidence is needed.
+- Use workflow.json only for current state, latest event pointers, and unresolved blockers.
+- Treat workflow.json \`history\` as historical fallback only; do not inspect it during normal runs.
+- Open only the latest relevant event artifact referenced by the snapshot or workflow state when exact evidence is needed.
 - Do not broadly load \`.ai/artifacts/**\`.
 `;
 };
@@ -4389,6 +4402,218 @@ const latestString = (
   key: string,
 ): string | undefined =>
   typeof record?.[key] === "string" ? record[key] : undefined;
+
+type RelevantWorkflowEvent = {
+  kind: "execution" | "validation" | "review" | "unblock" | "reopen";
+  label: "Execution" | "Validation" | "Review" | "Unblock" | "Reopen";
+  stateField: "Result" | "Decision" | "Status";
+  stateValue?: string;
+  summary?: string;
+  evidence?: string;
+  reason: string;
+};
+
+const relevantWorkflowEventDetails = (
+  kind: RelevantWorkflowEvent["kind"],
+  latest: Record<string, unknown> | undefined,
+  reason: string,
+): RelevantWorkflowEvent | undefined => {
+  if (!latestNumber(latest)) {
+    return undefined;
+  }
+
+  if (kind === "execution") {
+    return {
+      kind,
+      label: "Execution",
+      stateField: "Result",
+      stateValue: latestString(latest, "result"),
+      summary: latestString(latest, "summary"),
+      evidence: latestString(latest, "evidence"),
+      reason,
+    };
+  }
+
+  if (kind === "validation") {
+    return {
+      kind,
+      label: "Validation",
+      stateField: "Result",
+      stateValue: latestString(latest, "result"),
+      summary: latestString(latest, "summary"),
+      evidence: latestString(latest, "evidence"),
+      reason,
+    };
+  }
+
+  if (kind === "review") {
+    return {
+      kind,
+      label: "Review",
+      stateField: "Decision",
+      stateValue: latestString(latest, "decision"),
+      summary: latestString(latest, "summary"),
+      evidence: latestString(latest, "evidence"),
+      reason,
+    };
+  }
+
+  return {
+    kind,
+    label: kind === "unblock" ? "Unblock" : "Reopen",
+    stateField: "Status",
+    stateValue: latestString(latest, "status"),
+    summary: latestString(latest, "summary"),
+    evidence: latestString(latest, "evidence"),
+    reason,
+  };
+};
+
+const selectRelevantWorkflowEvent = (
+  planContent: string,
+  workflow: ThinPlanV2WorkflowState | undefined,
+): RelevantWorkflowEvent | undefined => {
+  if (!workflow) {
+    return undefined;
+  }
+
+  const execution = latestRecord(workflow, "execution");
+  const validation = latestRecord(workflow, "validation");
+  const review = latestRecord(workflow, "review");
+  const unblock = latestRecord(workflow, "unblock");
+  const reopen = latestRecord(workflow, "reopen");
+  const reviewFindings = asStringArray(review?.unresolvedFindings) ?? [];
+  const status = workflow.status || extractSectionValue(planContent, "## Status");
+  const nextAction =
+    workflow.nextAction || extractSectionValue(planContent, "## Next Action");
+
+  if (nextAction === "execute-plan") {
+    if (
+      status === "active" &&
+      review &&
+      (reviewFindings.length > 0 || latestString(review, "decision") === "active")
+    ) {
+      return relevantWorkflowEventDetails(
+        "review",
+        review,
+        "latest review remediation for the next execute-plan run",
+      );
+    }
+    if (status === "approved" && validation) {
+      return relevantWorkflowEventDetails(
+        "validation",
+        validation,
+        "latest approval evidence before execution starts",
+      );
+    }
+    if (execution) {
+      return relevantWorkflowEventDetails(
+        "execution",
+        execution,
+        "latest execution checkpoint for the active implementation loop",
+      );
+    }
+    if (validation) {
+      return relevantWorkflowEventDetails(
+        "validation",
+        validation,
+        "latest validation evidence still relevant to execution",
+      );
+    }
+  }
+
+  if (nextAction === "review-plan") {
+    if (validation) {
+      return relevantWorkflowEventDetails(
+        "validation",
+        validation,
+        "latest validation evidence for the current review pass",
+      );
+    }
+    if (execution) {
+      return relevantWorkflowEventDetails(
+        "execution",
+        execution,
+        "latest execution evidence behind the current review pass",
+      );
+    }
+  }
+
+  if (nextAction === "unblock-plan") {
+    if (execution) {
+      return relevantWorkflowEventDetails(
+        "execution",
+        execution,
+        "latest blocking execution evidence to resolve before unblocking",
+      );
+    }
+    if (unblock) {
+      return relevantWorkflowEventDetails(
+        "unblock",
+        unblock,
+        "latest unblock attempt for the current blocked state",
+      );
+    }
+  }
+
+  if (nextAction === "reopen-plan") {
+    if (review) {
+      return relevantWorkflowEventDetails(
+        "review",
+        review,
+        "latest completion review evidence behind the reopen request",
+      );
+    }
+    if (reopen) {
+      return relevantWorkflowEventDetails(
+        "reopen",
+        reopen,
+        "latest reopen attempt for the current request",
+      );
+    }
+  }
+
+  if (nextAction === "commit-summary") {
+    if (review) {
+      return relevantWorkflowEventDetails(
+        "review",
+        review,
+        "latest approval evidence before commit summary",
+      );
+    }
+    if (execution) {
+      return relevantWorkflowEventDetails(
+        "execution",
+        execution,
+        "latest execution checkpoint before commit summary",
+      );
+    }
+  }
+
+  if (nextAction === "plan-validator" && validation) {
+    return relevantWorkflowEventDetails(
+      "validation",
+      validation,
+      "latest validation evidence for the current draft plan",
+    );
+  }
+
+  return (
+    relevantWorkflowEventDetails("review", review, "latest review evidence") ??
+    relevantWorkflowEventDetails(
+      "validation",
+      validation,
+      "latest validation evidence",
+    ) ??
+    relevantWorkflowEventDetails(
+      "execution",
+      execution,
+      "latest execution evidence",
+    ) ??
+    relevantWorkflowEventDetails("unblock", unblock, "latest unblock evidence") ??
+    relevantWorkflowEventDetails("reopen", reopen, "latest reopen evidence")
+  );
+};
 
 const synthesizeLatestEventSection = ({
   heading,
@@ -4942,6 +5167,7 @@ Harness review policy:
 - Do not load plugin skills for review.
 - Do not run a separate spec-review or code-quality review system.`
     : "";
+  void promptContent;
 
   return `Use ${promptPath}
 
@@ -4958,10 +5184,10 @@ ${taskSavepointBoundary}${taskAggregateBoundary}
 ${actionLabel}:
 ${planPath}${reviewBoundary}${commitBoundary}${unblockEvidence}
 
-Workflow prompt content:
-<workflow-prompt>
-${promptContent.trimEnd()}
-</workflow-prompt>
+Workflow prompt controller:
+- The controlling workflow prompt file is already warm-loaded above.
+- Follow ${promptPath} exactly.
+- Do not restate or duplicate the full prompt text in this stage response.
 `;
 };
 
@@ -6251,12 +6477,34 @@ const writeWorkflowContextSnapshot = async ({
   plan: ParsedPlan;
 }): Promise<WorkflowContextSnapshotResult | Failure> => {
   const latestTokenUsage = await readLatestTokenUsage(rootDir, plan.planName);
+  let workflowState: ThinPlanV2WorkflowState | undefined;
+  if (plan.thinPlanContract === "thin-plan-v2") {
+    const workflowPath = thinPlanV2ArtifactPath(
+      plan.planName,
+      "state",
+      "workflow.json",
+    );
+    const workflowRaw = await readJsonArtifact(rootDir, workflowPath);
+    if (isFailure(workflowRaw)) {
+      return workflowRaw;
+    }
+    const parsedWorkflow = parseThinPlanV2WorkflowState(
+      workflowRaw,
+      plan.planPath,
+      workflowPath,
+    );
+    if (isFailure(parsedWorkflow)) {
+      return parsedWorkflow;
+    }
+    workflowState = parsedWorkflow;
+  }
   const snapshotPath = workflowContextSnapshotRelativePath(plan.planName);
   const snapshot = generateWorkflowContextSnapshot({
     planName: plan.planName,
     planPath: plan.planPath,
     planContent: plan.content,
     latestTokenUsage,
+    workflowState,
   });
 
   try {

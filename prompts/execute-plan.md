@@ -16,7 +16,7 @@ Read:
 * the repo-relative `*.spec.md` path(s) listed under the plan's `## Spec` section (if any)
 * runner-owned context snapshot `.ai/artifacts/<plan-name>/state/context.md` as the primary current-state source
 * the plan file's `## Phases` section for preparation, implementation, validation tasks, and task savepoints
-* `.ai/artifacts/<plan-name>/state/workflow.json` for current workflow state, latest event pointers, blockers, and compact history
+* `.ai/artifacts/<plan-name>/state/workflow.json` for current workflow state, the latest relevant event pointer, and unresolved blockers
 * `.ai/artifacts/<plan-name>/state/files.json` for the changed-file inventory
 * Active Context Packet instruction files selected from `.ai/instructions/index.md`
 * the full plan file only when exact plan edits are required or the snapshot is insufficient
@@ -26,6 +26,7 @@ When resuming `active` + `execute-plan` after review feedback, use `## Latest Re
 Read the full plan only when exact plan edits are required or the snapshot is insufficient.
 Do not load `## Review History` by default; read the full plan only when exact plan edits or missing detail cannot be derived from the snapshot.
 Do not load full historical sections unless the snapshot is insufficient.
+Do not inspect workflow `history` during normal runs; use the snapshot and the latest relevant event pointer first, then open only that exact event artifact when specific evidence is needed.
 If the runner provides a `Workflow token guardrail` note for this run, treat it as mandatory context-loading discipline: stay snapshot-first, avoid broad artifact/history reads, and fall back only to the exact plan section or exact event file needed for the current execution without skipping required spec, validation, workflow state, or correctness-critical reads.
 
 Apply the shared reasoning-quality and debugging guidance for assumption

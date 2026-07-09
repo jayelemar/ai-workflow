@@ -13,9 +13,11 @@ Tracked workflow source:
 - `instructions/shared/security.md`
 - `instructions/shared/testing.md`
 - `instructions/shared/workflow-state.md`
+- `instructions/shared/flow-trace-artifacts.md`
 - `changelogs/security.changelog.md`
 - `changelogs/testing.changelog.md`
 - `changelogs/workflow-state.changelog.md`
+- `changelogs/flow-trace-artifacts.changelog.md`
 
 Local-only directories that are intentionally excluded:
 
@@ -187,8 +189,9 @@ Notes:
 Main workflow artifacts:
 
 - spec: the behavior contract
-- user-journey artifact: the user-facing flow contract generated from the approved
-  spec plus codebase inspection
+- user-journey artifact: the optional flow-trace contract generated from the
+  approved spec plus codebase inspection when the scope needs end-to-end flow
+  mapping
 - plan: the execution contract
 - prompt: the stage-specific workflow controller
 - runner: the post-plan state-machine driver
@@ -197,7 +200,7 @@ Main workflow artifacts:
 Default locations:
 
 - ordinary feature and bug specs: `.ai/specs/<name>.spec.md`
-- user-journey artifacts for user-facing work:
+- user-journey artifacts for flow-trace-required work:
   `.ai/artifacts/<name>/user-journey.md`
 - plans: `.ai/plans/<name>.md`
 - prompts: `.ai/prompts/*.md`
@@ -212,17 +215,18 @@ when a workflow companion spec belongs elsewhere, such as
 Canonical lifecycle:
 
 ```text
-spec -> user-journey artifact -> plan -> sync artifacts -> validator/runner
+spec -> optional user-journey artifact -> plan -> (manual execute | sync artifacts -> validator/runner)
 ```
 
 Normal end-to-end flow:
 
 1. Create a spec.
-2. Create a user-journey artifact for user-facing work.
+2. Create a user-journey artifact only when the scope requires end-to-end flow
+   mapping.
 3. Create a plan.
 4. Choose a post-plan path.
-5. Let the runner sync plan artifacts, then let plan `Status` and
-   `Next Action` drive every later stage.
+5. Either continue manual execution in the same conversation or let the runner
+   sync plan artifacts and drive every later stage.
 
 ### Create A Spec
 
@@ -236,9 +240,9 @@ to live elsewhere, keep the plan `## Spec` entry repo-relative.
 
 ### Create A User-Journey Artifact
 
-For user-facing work, this artifact is required, but `create-plan` automatically
-creates or regenerates it when it is missing or invalid. To inspect the flow
-before planning, use:
+For flow-trace-required work, this artifact is required, but `create-plan`
+automatically creates or regenerates it when it is missing or invalid. To
+inspect the flow before planning, use:
 
 ```text
 .ai/wrappers/generate-user-flow.md
@@ -254,7 +258,13 @@ User-facing work means a feature, bugfix, or change that affects a customer,
 admin, or operator screen, route, workflow, visible state, or user-triggered API
 behavior.
 
-For non-user-facing work, skip this stage. The plan must record
+Flow-trace artifacts are required only when the scope needs end-to-end flow
+mapping, such as multi-step workflows, multi-route handoffs, multiple visible
+states or failure branches, or user-triggered API behavior whose ownership is
+not obvious from a single file or single state.
+
+For non-user-facing work and narrow user-facing work that does not need
+end-to-end flow mapping, skip this stage. The plan must record
 `N/A: <concrete reason>` for the user journey entry in `## Artifacts` and in
 `.ai/artifacts/<plan-name>/implementation-map.md`.
 
@@ -272,13 +282,13 @@ The generated plan should live at:
 .ai/plans/<plan-name>.md
 ```
 
-When the work is user-facing, this wrapper first ensures
+When the work requires flow-trace artifacts, this wrapper first ensures
 `.ai/artifacts/<plan-name>/user-journey.md` exists and validates against the
 spec. If it is missing or stale, the wrapper applies
 `.ai/prompts/generate-user-flow.md` automatically before writing the plan.
 
-`create-plan` also auto-preflights user-facing plan authoring before returning
-the draft:
+`create-plan` also auto-preflights flow-trace-required plan authoring before
+returning the draft:
 
 - repair or regenerate `.ai/artifacts/<plan-name>/user-journey.md`
 - derive or repair `.ai/artifacts/<plan-name>/implementation-map.md`
@@ -287,14 +297,25 @@ the draft:
 - STOP only when those checks still cannot be satisfied without inventing
   behavior beyond the spec
 
-New draft plans start at `draft + sync-plan-artifacts`. The default runner
-reconciles the plan, spec, user-journey artifact, implementation map, and
-thin-plan-v2 state before moving to validation.
+Choose an execution mode when you create the plan:
+
+- `manual` for `spec -> plan -> execute` in one conversation without
+  runner-managed workflow state
+- `runner-managed` for the harness path
+
+In `runner-managed` mode, new draft plans start at
+`draft + sync-plan-artifacts`. The default runner reconciles the plan, spec,
+user-journey artifact, implementation map, and thin-plan-v2 state before
+moving to validation.
+
+In `manual` mode, keep the spec and plan discipline but do not create
+runner-only state artifacts just to continue execution.
 
 ### Choose A Post-Plan Path
 
-You have two options:
+You have three options:
 
+- manual execution in the same conversation
 - default runner path
 - manual `plan-preview-before-apply` path
 
@@ -443,6 +464,23 @@ they do not stop an otherwise successful workflow stage from continuing.
 
 The `token-usage.jsonl` ledger is measurement data. Keep it compact and
 append-only so workflow changes can be evaluated instead of guessed.
+
+Manual `spec -> plan -> execute` work can append to the same ledger format.
+If repo-local Codex hooks are enabled and trusted, tracked manual wrappers and
+prompts can do this automatically after successful stage completion.
+
+Manual fallback:
+
+```bash
+pnpm exec tsx .ai/scripts/manual-token-usage.ts --plan <plan-name> --stage spec
+pnpm exec tsx .ai/scripts/manual-token-usage.ts --plan <plan-name> --stage plan
+pnpm exec tsx .ai/scripts/manual-token-usage.ts --plan <plan-name> --stage execute
+```
+
+The workflow runner does not backfill pre-runner planning turns. If you want
+apples-to-apples totals across manual and runner-managed work, record the
+manual `spec` and `plan` checkpoints either through the repo-local hooks or
+explicitly with the script.
 
 When the runner warns that a plan is too large, move bulky workflow detail into
 event artifacts and keep only bounded summaries plus exact `Evidence:` paths in

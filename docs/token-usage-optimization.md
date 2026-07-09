@@ -11,6 +11,7 @@ single reference for future workflow simplification.
 This document compares the current default choices:
 
 - Native Codex CLI `/plan`
+- Manual plan-bound execution (`spec -> plan -> execute` in one conversation)
 - Gondoor harness with native shared `.ai/instructions` guidance
 
 It also keeps historical notes for external skill/plugin workflows and the
@@ -25,6 +26,13 @@ review quality for the task risk.
 
 Treat `token-usage.jsonl` entries as measurement data: keep them compact,
 append-only, and useful for comparing workflow changes over time.
+
+As of 2026-07-09, the runner ledger still starts only when the workflow runner
+starts. That means runner-managed measurements do not automatically include the
+earlier spec or plan conversation unless those stages were also recorded
+manually. Manual mode now needs tracked stage checkpoints for fair
+`spec -> plan -> execute` comparisons, either via repo-local hooks or the
+manual checkpoint script.
 
 ## Evidence Used
 
@@ -127,6 +135,7 @@ Intentionally left alone:
 | Workflow | Estimated LLM Calls | Context Duplication | Token Efficiency | Complexity |
 | --- | ---: | --- | --- | --- |
 | Native Codex CLI `/plan` | 2-4 typical | Low | Best | Low |
+| Manual plan-bound execution | 3-5 typical | Low-medium | Near-best | Medium |
 | Harness with native shared guidance | 6-8 best case; much higher with loops | High | Poor for small and medium tasks; useful for high-risk workflow control | High |
 | External skill/plugin workflow, manual only | Depends on explicitly installed skill and subagent use | Medium-high | Medium | Medium-high |
 | Removed harness plus external skill injection | Harness stages plus skill and subagent calls | Very high | Worst | Very high |
@@ -160,6 +169,66 @@ Use for:
 - Routine frontend/backend changes.
 - Tasks where strict artifact state, file locks, and staged review gates are
   not needed.
+
+## Manual Plan-Bound Execution
+
+Expected behavior:
+
+- One active conversation creates a spec, creates a plan, and executes against
+  that plan without invoking the workflow runner.
+- The spec still defines behavior and the plan still defines execution intent.
+- The conversation keeps context instead of rehydrating through separate runner
+  stages.
+- No runner-specific review gates, workflow state, task savepoints, or artifact
+  sync are required unless the operator explicitly switches the task into the
+  harness.
+
+Estimated cost profile:
+
+- Initial prompt: system/developer context, AGENTS stack, user request, chosen
+  instructions, and the files the agent inspects.
+- Context loaded: selected project files plus the spec and plan created in the
+  same conversation.
+- Planning passes: usually 1 spec pass plus 1 plan pass.
+- Review passes: optional and conversation-local unless the operator chooses a
+  separate review step.
+- Subagents: 0 unless explicitly used.
+- Token efficiency: near-best when the task needs more structure than `/plan`
+  alone but not full runner bookkeeping.
+- `create-plan` now supports an explicit execution mode split so manual plans
+  can avoid runner-only workflow state by default.
+- Manual mode should append `spec`, `plan`, and `execute` checkpoints into
+  `.ai/artifacts/<plan-name>/logs/token-usage.jsonl` so the full lifecycle
+  cost is visible.
+- Repo-local Codex hooks can now auto-append those checkpoints when the
+  operator uses the tracked spec, create-plan, and manual-execute prompt paths
+  and the assistant emits the required completion markers.
+- Those automatic checkpoints should count only when the stage artifact was
+  actually written to disk. A completion marker without the matching spec or
+  plan file should be treated as a skipped checkpoint, not a saved stage.
+
+Use for:
+
+- Medium tasks where a written spec and plan help, but runner-managed state is
+  unnecessary.
+- Work where the operator wants `spec -> plan -> execute` discipline without
+  task savepoints, file locks, or harness review loops.
+- Changes that stay understandable in one conversation even if they are larger
+  than a trivial bugfix.
+
+Avoid for:
+
+- Large risky tasks that need strict plan-owned file boundaries.
+- Work that benefits from task savepoints, resumable workflow state, or
+  harness-managed review checkpoints.
+
+Manual checkpoint commands:
+
+```bash
+pnpm exec tsx .ai/scripts/manual-token-usage.ts --plan <plan-name> --stage spec
+pnpm exec tsx .ai/scripts/manual-token-usage.ts --plan <plan-name> --stage plan
+pnpm exec tsx .ai/scripts/manual-token-usage.ts --plan <plan-name> --stage execute
+```
 
 ## Harness With Native Shared Guidance
 
@@ -283,6 +352,8 @@ Cost:
 Replacement:
 
 - For simple tasks, use native `/plan`.
+- For medium tasks that benefit from a spec and plan but not runner state, use
+  manual plan-bound execution.
 - For harness tasks, allow one bounded preflight plus deterministic plan-shape
   checks.
 - Do not run external skill planning inside harness planning unless explicitly
@@ -324,6 +395,8 @@ Replacement:
 
 - Use snapshot-first prompts.
 - Load exact plan sections and event artifacts only when needed.
+- Use manual plan-bound execution when the work needs a spec and plan but not
+  fresh runner stages.
 - Prefer one native conversation for smaller tasks.
 
 ### Over-Application Of User-Facing Artifacts
@@ -342,6 +415,26 @@ Replacement:
 - Require user journey and implementation map only for user-facing multi-route
   or multi-state work.
 - For simple fixes, use a compact acceptance checklist in the plan/spec.
+
+### Runner-Oriented Plan Creation For Manual Work
+
+Problem:
+
+- This was previously a mismatch: manual plan-bound execution was allowed, but
+  `create-plan.md` still wrote runner-specific state and artifact scaffolding
+  by default.
+
+Cost:
+
+- Medium.
+
+Replacement:
+
+- Implemented on 2026-07-09.
+- `create-plan` now supports explicit `manual` and `runner-managed` modes.
+- Manual mode keeps the same spec and plan discipline but records runner-only
+  artifact entries as `N/A: manual plan-bound execution` instead of creating
+  runner state by default.
 
 ### Large Prompt Contracts
 
@@ -398,13 +491,15 @@ Replacement:
 | 1 | Stop combining harness review with separate plugin/subagent review by default | Implemented high savings | Less layered review |
 | 2 | Collapse validation and repair into one bounded `plan-validator` preflight | High | Fewer automatic repair attempts |
 | 3 | Merge `review-changes` and `review-quality` for routine tasks | Implemented high savings | Less separation between spec and quality review |
-| 4 | Use native `/plan` for small and medium tasks | High | Less workflow bookkeeping |
-| 5 | Remove always-on external skill injection from harness stages | Implemented high savings | Harness prompts rely on native shared guidance |
-| 6 | Gate `user-journey.md` and `implementation-map.md` generation | Medium-high | Less product traceability on small tasks |
-| 7 | Lower token guardrail thresholds and make snapshot-first default | Medium | More early summarization |
-| 8 | Keep only rolling state plus latest event in normal prompts | Medium | Less inline history |
-| 9 | Shorten duplicated workflow rules across prompts | Medium | More reliance on shared references |
-| 10 | Keep hooks absent or minimal | Low | None; hooks were not a current cost driver |
+| 4 | Support explicit manual plan-bound execution without runner-only artifacts | Implemented high savings | Two plan-creation modes instead of one |
+| 5 | Use native `/plan` or manual plan-bound execution for non-runner tasks | High | Less workflow bookkeeping |
+| 6 | Remove always-on external skill injection from harness stages | Implemented high savings | Harness prompts rely on native shared guidance |
+| 7 | Gate `user-journey.md` and `implementation-map.md` generation | Implemented medium-high savings | Less product traceability on small tasks |
+| 8 | Remove duplicated prompt payload from runner stages | Implemented medium-high savings | Less self-contained stage prompts |
+| 9 | Lower token guardrail thresholds and make snapshot-first default | Medium | More early summarization |
+| 10 | Keep only rolling state plus latest event in normal prompts | Implemented medium | Less inline history |
+| 11 | Shorten duplicated workflow rules across prompts | Implemented medium | More reliance on shared references |
+| 12 | Keep hooks absent or minimal | Low | None; hooks were not a current cost driver |
 
 Priority 2 is implemented. Draft validation now uses one bounded
 `plan-validator` preflight so plan repair stays available without repeated
@@ -419,7 +514,47 @@ Priority 1 is implemented. Harness review remains the review system for
 `review + review-plan`; a second subagent or plugin review system is not
 injected into the default runner review path.
 
-Priority 5 is implemented. Harness-generated prompts now load native
+Priority 4 is implemented. `create-plan` now supports explicit `manual` and
+`runner-managed` execution modes so manual plans do not create runner-only
+workflow state by default.
+
+Priority 7 is implemented. Flow-trace artifacts are now required only for
+scopes that need end-to-end flow mapping; narrow user-facing work can record
+`N/A: <concrete reason>` instead of creating `user-journey.md` and
+`implementation-map.md`.
+
+Priority 8 is implemented. Runner-generated stage prompts now reference the
+controlling prompt path and rely on the warm-loaded prompt file in the Active
+Context Packet instead of embedding the full workflow prompt body a second
+time.
+
+Priority 11 is implemented. Shared flow-trace scope classification and
+`user-journey.md` / `implementation-map.md` policy now live in
+`.ai/instructions/shared/flow-trace-artifacts.md` so create-plan, sync,
+validator, and review prompts can load one shared baseline instead of carrying
+duplicated rule blocks.
+
+Priority 10 is implemented. The workflow context snapshot now carries the
+latest relevant workflow event pointer, and normal runner prompts are directed
+to use rolling snapshot state plus that exact event before touching workflow
+history.
+
+Current recommendation:
+
+- Default to native `/plan` for small routine work.
+- Use manual plan-bound execution when you want `spec -> plan -> execute`
+  discipline without runner-managed state.
+- Use the harness only when you explicitly want runner-managed workflow
+  behavior for a large fix or new feature.
+
+Next optimization needed:
+
+- Trim the legacy `review-quality` resume path further so it loads only the
+  extra state needed for already-split reviews.
+- After that, reduce commit-summary source reads to the minimum completed-state
+  evidence needed for commit generation and aggregate summaries.
+
+Priority 6 is implemented. Harness-generated prompts now load native
 `.ai/instructions/shared/reasoning-quality.md` and
 `.ai/instructions/shared/debugging.md` guidance instead of injecting
 `.ai/prompts/superpowers.md`, skill roots, or default subagent guidance.

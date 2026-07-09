@@ -25,6 +25,10 @@ Read:
 
 Read the full plan only when exact plan edits are required or the snapshot is insufficient.
 Do not load full historical sections unless the snapshot is insufficient.
+Do not inspect workflow `history` during normal reopen runs; use the snapshot,
+latest review pointer, unresolved blockers, and the latest relevant event
+pointer first, then open only that exact event artifact when specific evidence
+is needed.
 Preserve exact reopen findings, workflow state, event evidence, user-provided findings, and issue-report reads required to avoid unsafe reopen transitions.
 Use the runner-provided Active Context Packet and index-selected instruction files only. Do not broadly load `.ai/instructions/**`.
 
@@ -50,8 +54,8 @@ If not provided:
 Use the latest bug findings from one of:
 
 * the user's current request
-* the latest review pointer and unresolved blockers in `.ai/artifacts/<plan-name>/state/workflow.json`
-* review/reopen evidence under `.ai/artifacts/<plan-name>/events/`
+* the latest review pointer, latest relevant event pointer, and unresolved blockers in `.ai/artifacts/<plan-name>/state/workflow.json`
+* the exact event artifact referenced by the latest relevant event pointer when that evidence is needed
 * a clearly referenced issue report in the plan
 
 These reopen findings, workflow state, and event evidence remain correctness-critical inputs even when the context snapshot is available.

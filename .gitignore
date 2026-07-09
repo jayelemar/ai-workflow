@@ -22,6 +22,7 @@
 !/instructions/shared/workflow-state.md
 !/instructions/shared/reasoning-quality.md
 !/instructions/shared/debugging.md
+!/instructions/shared/flow-trace-artifacts.md
 !/prompts/
 !/prompts/**
 !/scripts/
@@ -30,6 +31,7 @@
 !/templates/**
 !/wrappers/
 !/wrappers/**
+!/changelogs/flow-trace-artifacts.changelog.md
 
 # Dynamic/local-only workflow data
 /artifacts/

@@ -840,96 +840,132 @@ test("generate-user-flow prompt defines the user-journey artifact contract", asy
   assert.match(wrapper, /Output artifact:/);
 });
 
-test("create-plan prompt auto-preflights user-facing flow artifacts or records non-user-facing N/A", async () => {
+test("create-plan prompt gates flow artifacts and records N/A when end-to-end mapping is unnecessary", async () => {
   const prompt = await readWorkflowPrompt("create-plan.md");
+  const instructions = await readInstruction("shared/flow-trace-artifacts.md");
 
-  assert.match(prompt, /user-facing/i);
-  assert.match(prompt, /\.ai\/artifacts\/<plan-name>\/user-journey\.md/);
+  assert.match(prompt, /\.ai\/instructions\/shared\/flow-trace-artifacts\.md/);
   assert.match(
-    prompt,
-    /automatically create it by applying `\.ai\/prompts\/generate-user-flow\.md`/i,
+    instructions,
+    /flow-trace artifacts are required only when the scope needs end-to-end flow\s+mapping/i,
+  );
+  assert.match(instructions, /\.ai\/artifacts\/<plan-name>\/user-journey\.md/);
+  assert.match(
+    instructions,
+    /create or regenerate `?user-journey\.md`? by applying[\s\S]*`?\.ai\/prompts\/generate-user-flow\.md`?/i,
   );
   assert.match(
-    prompt,
-    /automatically regenerate it by applying `\.ai\/prompts\/generate-user-flow\.md`/i,
+    instructions,
+    /missing, stale,[\s\S]*inconsistent with the spec/i,
   );
-  assert.match(prompt, /read the user-journey artifact before planning/i);
-  assert.match(prompt, /For non-user-facing work/i);
-  assert.match(prompt, /write exactly `N\/A:/);
-  assert.match(prompt, /concrete reason/i);
+  assert.match(instructions, /read the validated user journey before phase planning/i);
+  assert.match(instructions, /When flow-trace artifacts are not required/i);
+  assert.match(instructions, /exactly\s+`N\/A:/i);
+  assert.match(instructions, /end-to-end flow mapping is unnecessary/i);
 });
 
 test("create-plan prompt completes implementation-map preflight before finalizing plan phases", async () => {
   const prompt = await readWorkflowPrompt("create-plan.md");
+  const instructions = await readInstruction("shared/flow-trace-artifacts.md");
 
-  assert.match(prompt, /run this preflight in order/i);
-  assert.match(prompt, /1\.\s+validate or regenerate `?user-journey\.md`?/i);
+  assert.match(prompt, /run the create-plan preflight from/i);
+  assert.match(instructions, /During plan creation, and during any draft preflight/i);
+  assert.match(instructions, /1\.\s+derive the plan name from the spec path/i);
+  assert.match(instructions, /2\.\s+classify the scope using this instruction/i);
   assert.match(
-    prompt,
-    /2\.\s+derive or repair `?implementation-map\.md`? from every user-flow and acceptance-scenario action/i,
+    instructions,
+    /create or regenerate `?user-journey\.md`? by applying[\s\S]*`?\.ai\/prompts\/generate-user-flow\.md`?/i,
   );
-  assert.match(prompt, /3\.\s+write plan phases/i);
-  assert.match(prompt, /4\.\s+run a mandatory self-check/i);
   assert.match(
-    prompt,
-    /5\.\s+revise the plan\/artifacts in place if the self-check finds gaps/i,
+    instructions,
+    /derive or repair `?implementation-map\.md`?/i,
+  );
+  assert.match(instructions, /5\.\s+before returning a draft plan, self-check/i);
+  assert.match(
+    instructions,
+    /each implementation-map row has implementation and validation coverage/i,
   );
 });
 
 test("create-plan prompt self-checks savepoints and spec behavior ownership before returning", async () => {
-  const prompt = await readWorkflowPrompt("create-plan.md");
+  const instructions = await readInstruction("shared/flow-trace-artifacts.md");
 
   assert.match(
-    prompt,
-    /each `?\[task:[^\n`]+`? chunk can pass, be reviewed, and be committed independently/i,
+    instructions,
+    /each `?\[task:[\s\S]+?chunk can pass, be reviewed, and be committed\s+independently/i,
   );
-  assert.match(prompt, /no lifecycle-only or red-test-only savepoints remain/i);
-  assert.match(prompt, /each spec-required behavior/i);
-  assert.match(prompt, /visible validation and failure-state behavior/i);
-  assert.match(prompt, /assigned to a concrete task/i);
+  assert.match(instructions, /no lifecycle-only or red-test-only savepoints remain/i);
+  assert.match(instructions, /each spec-required behavior/i);
   assert.match(
-    prompt,
+    instructions,
+    /visible validation and\s+failure-state behavior/i,
+  );
+  assert.match(instructions, /assigned to a concrete task/i);
+  assert.match(
+    instructions,
     /each implementation-map row has implementation and validation coverage/i,
   );
 });
 
 test("create-plan prompt auto-corrects preflight defects and STOPs only when unresolved", async () => {
-  const prompt = await readWorkflowPrompt("create-plan.md");
+  const instructions = await readInstruction("shared/flow-trace-artifacts.md");
 
-  assert.match(prompt, /auto-correct when possible/i);
-  assert.match(prompt, /rewrite or remove invalid task savepoints/i);
+  assert.match(instructions, /auto-correct/i);
+  assert.match(instructions, /bad savepoints/i);
   assert.match(
-    prompt,
-    /STOP only when the preflight still cannot satisfy these rules/i,
+    instructions,
+    /stop only when the preflight still cannot satisfy these rules/i,
   );
 });
 
-test("create-plan defaults new draft plans to sync-plan-artifacts before validation", async () => {
+test("create-plan prompt defines manual and runner-managed execution modes", async () => {
+  const prompt = await readWorkflowPrompt("create-plan.md");
+  const wrapper = await readWorkflowWrapper("create-plan.md");
+
+  assert.match(prompt, /## Execution Mode \(MANDATORY\)/);
+  assert.match(prompt, /`manual`/);
+  assert.match(prompt, /`runner-managed`/);
+  assert.match(prompt, /If the operator does not specify a mode, default to `manual`/i);
+  assert.match(wrapper, /Execution mode:/i);
+  assert.match(wrapper, /`manual` or `runner-managed`/);
+  assert.match(wrapper, /Default when omitted:\s*`manual`/i);
+});
+
+test("create-plan uses sync-plan-artifacts only for runner-managed plans", async () => {
   const prompt = await readWorkflowPrompt("create-plan.md");
   const template = await readPlanTemplate();
   const wrapper = await readWorkflowWrapper("create-plan.md");
 
   assert.match(template, /## Next Action\s*\n\s*sync-plan-artifacts/);
+  assert.match(prompt, /For `runner-managed` plans, new draft plans MUST start at:/i);
   assert.match(prompt, /Next Action\s*=\s*sync-plan-artifacts/i);
   assert.match(prompt, /draft \+ sync-plan-artifacts/i);
+  assert.match(
+    prompt,
+    /For `manual` plans, keep the plan manifest structure but do not require\s+runner-managed workflow state before execution/i,
+  );
   assert.match(wrapper, /sync-plan-artifacts/i);
-  assert.match(wrapper, /before validation/i);
+  assert.match(wrapper, /If execution mode is `runner-managed`, the workflow runner performs the\s+`sync-plan-artifacts` stage before validation/i);
 });
 
 test("plan template requires artifact pointers for implementation map and state files", async () => {
   const template = await readPlanTemplate();
 
   assert.match(template, /thin-plan-v2/);
+  assert.match(template, /## Execution Mode/);
   assert.match(template, /## Artifacts/);
   assert.match(template, /\.ai\/artifacts\/<plan-name>\/user-journey\.md/);
   assert.match(
     template,
-    /\.ai\/artifacts\/<plan-name>\/implementation-map\.md/,
+    /\.ai\/artifacts\/<plan-name>\/implementation-map\.md` or `N\/A: <concrete reason>/,
   );
-  assert.match(template, /\.ai\/artifacts\/<plan-name>\/state\/workflow\.json/);
   assert.match(
     template,
-    /\.ai\/artifacts\/<plan-name>\/state\/file-ownership\.json/,
+    /\.ai\/artifacts\/<plan-name>\/state\/workflow\.json` or `N\/A: manual plan-bound execution/,
+  );
+  assert.match(
+    template,
+    /\.ai\/artifacts\/<plan-name>\/state\/file-ownership\.json` or `N\/A: manual plan-bound execution/,
   );
   assert.match(template, /\.ai\/artifacts\/<plan-name>\/state\/files\.json/);
   assert.match(template, /N\/A: <concrete reason>/);
@@ -1024,12 +1060,17 @@ test("boss summary percent uses review range when all savepoints are committed",
 
 test("plan-validator prompt fails user-facing flow steps without implementation and validation coverage", async () => {
   const prompt = await readWorkflowPrompt("plan-validator.md");
+  const instructions = await readInstruction("shared/flow-trace-artifacts.md");
 
+  assert.match(prompt, /\.ai\/instructions\/shared\/flow-trace-artifacts\.md/);
   assert.match(prompt, /implementation-map\.md/i);
-  assert.match(prompt, /user-facing/i);
-  assert.match(prompt, /each user action/i);
-  assert.match(prompt, /implementation coverage/i);
-  assert.match(prompt, /validation coverage/i);
+  assert.match(
+    prompt,
+    /source of truth for whether flow\s+artifacts are required/i,
+  );
+  assert.match(instructions, /each mapped user action/i);
+  assert.match(instructions, /implementation coverage/i);
+  assert.match(instructions, /validation coverage/i);
   assert.match(prompt, /mark as CRITICAL/i);
 });
 
@@ -1042,11 +1083,11 @@ test("workflow docs expose spec to user-journey artifact to plan to runner flow"
 
   assert.match(
     readme,
-    /spec -> user-journey artifact -> plan -> sync artifacts -> validator\/runner/i,
+    /spec -> optional user-journey artifact -> plan -> \(manual execute \| sync artifacts -> validator\/runner\)/i,
   );
   assert.match(
     wrappersReadme,
-    /spec -> user-journey artifact -> plan -> sync artifacts -> validator\/runner/i,
+    /spec -> optional user-journey artifact -> plan -> \(manual execute \| sync artifacts -> validator\/runner\)/i,
   );
   assert.match(readme, /\.ai\/wrappers\/generate-user-flow\.md/);
   assert.match(wrappersReadme, /\.ai\/wrappers\/generate-user-flow\.md/);
@@ -1078,6 +1119,15 @@ test("workflow docs describe create-plan preflighting implementation maps, savep
     assert.match(content, /savepoint/i);
     assert.match(content, /spec-required behavior|behavior ownership/i);
     assert.match(content, /auto-?preflight/i);
+    assert.match(
+      content,
+      /flow-trace|required only when the scope needs end-to-end flow mapping/i,
+    );
+  }
+
+  for (const content of [wrapper, readme, wrappersReadme]) {
+    assert.match(content, /manual/i);
+    assert.match(content, /runner-managed/i);
   }
 });
 
@@ -1149,23 +1199,23 @@ test("plan-validator prompt runs the same authoring preflight before approval", 
 
   assert.match(
     prompt,
-    /same authoring preflight used by `?create-plan`?/i,
+    /validator preflight from\s+`?\.ai\/instructions\/shared\/flow-trace-artifacts\.md`?/i,
   );
   assert.match(
     prompt,
-    /re-read the spec, `?user-journey\.md`?, and `?implementation-map\.md`?/i,
+    /re-read the\s+spec plus any required flow-trace artifacts/i,
   );
   assert.match(
     prompt,
-    /repair missing action rows and under-scoped behavior ownership/i,
+    /repair missing action rows and\s+under-scoped behavior ownership/i,
   );
   assert.match(
     prompt,
-    /rewrite bad task savepoints into coherent subsystem\/behavior chunks/i,
+    /rewrite bad task savepoints/i,
   );
   assert.match(
     prompt,
-    /remove task IDs when the work is really one final-commit fix/i,
+    /remove task IDs/i,
   );
   assert.match(prompt, /do not limit repairs to patching only the cited lines/i);
 });
@@ -1219,10 +1269,13 @@ test("sync-plan-artifacts prompt defines the pre-validator artifact sync contrac
   const prompt = await readWorkflowPrompt("sync-plan-artifacts.md");
 
   assert.match(prompt, /\.ai\/instructions\/shared\/workflow-state\.md/);
+  assert.match(prompt, /\.ai\/instructions\/shared\/flow-trace-artifacts\.md/);
   assert.match(prompt, /read the plan/i);
   assert.match(prompt, /read the spec/i);
+  assert.match(prompt, /sync contract from/i);
   assert.match(prompt, /user-journey\.md/i);
   assert.match(prompt, /implementation-map\.md/i);
+  assert.match(prompt, /plan `## Artifacts` section/i);
   assert.match(prompt, /state\/workflow\.json/i);
   assert.match(prompt, /plan-owned/i);
   assert.match(prompt, /\.ai\/plans\/<plan-name>\.md/);
@@ -1438,9 +1491,14 @@ test("review prompts load native guidance and forbid subagent review", async () 
 
 test("workflow prompts load native shared guidance instead of retired Superpowers prompt", async () => {
   const promptExpectations = [
-    ["create-plan.md", ["reasoning-quality"]],
+    ["create-plan.md", ["reasoning-quality", "flow-trace-artifacts"]],
+    ["plan-validator.md", ["flow-trace-artifacts"]],
+    ["sync-plan-artifacts.md", ["flow-trace-artifacts"]],
     ["execute-plan.md", ["reasoning-quality", "debugging", "testing"]],
-    ["review-changes.md", ["reasoning-quality", "debugging", "testing"]],
+    [
+      "review-changes.md",
+      ["reasoning-quality", "debugging", "testing", "flow-trace-artifacts"],
+    ],
     ["review-quality.md", ["reasoning-quality", "debugging", "testing"]],
     ["unblock-plan.md", ["reasoning-quality", "debugging"]],
     ["reopen-plan.md", ["reasoning-quality", "debugging"]],
@@ -1469,6 +1527,9 @@ test("workflow prompts load native shared guidance instead of retired Superpower
 test("create-plan prompt defines artifact state as the planning-time boundary", async () => {
   const prompt = await readWorkflowPrompt("create-plan.md");
 
+  assert.match(prompt, /These artifact-state files are required only for `runner-managed` mode/i);
+  assert.match(prompt, /If execution mode is `manual`:/i);
+  assert.match(prompt, /N\/A: manual plan-bound execution/);
   assert.match(prompt, /state\/file-ownership\.json/);
   assert.match(prompt, /planning-time ownership boundary/i);
   assert.match(prompt, /state\/files\.json/);
@@ -1609,18 +1670,20 @@ test("review-changes prompt loads testing instructions before validation", async
   assert.match(prompt, /before running, skipping, or classifying validation/i);
 });
 
-test("review-changes prompt validates user-facing diffs against user-journey artifacts", async () => {
+test("review-changes prompt validates flow-trace-required diffs against user-journey artifacts", async () => {
   const prompt = await readWorkflowPrompt("review-changes.md");
+  const instructions = await readInstruction("shared/flow-trace-artifacts.md");
 
   assert.match(prompt, /\.ai\/artifacts\/<plan-name>\/user-journey\.md/);
-  assert.match(prompt, /user-facing/i);
+  assert.match(prompt, /\.ai\/instructions\/shared\/flow-trace-artifacts\.md/);
   assert.match(prompt, /implementation-map\.md/i);
   assert.match(prompt, /each user action/i);
-  assert.match(prompt, /visible state/i);
-  assert.match(prompt, /failure branch/i);
-  assert.match(prompt, /validation coverage/i);
+  assert.match(instructions, /visible state/i);
+  assert.match(instructions, /failure branch/i);
+  assert.match(instructions, /validation coverage/i);
   assert.match(prompt, /Spec remains authoritative/i);
   assert.match(prompt, /mark as CRITICAL/i);
+  assert.match(prompt, /do not\s+require flow-artifact review/i);
 });
 
 test("testing instructions require command-level escalation for local E2E in Codex sandbox", async () => {
@@ -4002,12 +4065,18 @@ test("generates manual workflow prompts for every prompt action", () => {
     if (promptPath === ".ai/prompts/unblock-plan.md") {
       assert.match(prompt, /Unblock evidence note:\n\(none provided\)/);
     }
+    assert.match(prompt, /Workflow prompt controller:/);
     assert.match(
       prompt,
-      new RegExp(
-        `Workflow prompt content:\\n<workflow-prompt>\\n${promptContent}\\n</workflow-prompt>`,
-      ),
+      new RegExp(`Follow ${promptPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} exactly\\.`),
     );
+    assert.match(
+      prompt,
+      /Do not restate or duplicate the full prompt text in this stage response\./,
+    );
+    assert.doesNotMatch(prompt, /Workflow prompt content:/);
+    assert.doesNotMatch(prompt, /<workflow-prompt>/);
+    assert.doesNotMatch(prompt, new RegExp(promptContent));
   }
 });
 
@@ -4131,7 +4200,15 @@ test("workflow prompt injects active context packet with current prompt, plan, s
   assert.match(prompt, /\.ai\/specs\/dashboard-home\.spec\.md/);
   assert.match(
     prompt,
-    /Open event artifacts only when the snapshot references them and specific evidence is needed/i,
+    /Use workflow\.json only for current state, latest event pointers, and unresolved blockers/i,
+  );
+  assert.match(
+    prompt,
+    /Treat workflow\.json `history` as historical fallback only; do not inspect it during normal runs/i,
+  );
+  assert.match(
+    prompt,
+    /Open only the latest relevant event artifact referenced by the snapshot or workflow state when exact evidence is needed/i,
   );
   assert.match(prompt, /Do not broadly load `\.ai\/artifacts\/\*\*`/i);
   assert.match(
@@ -4371,6 +4448,39 @@ Remaining:
 * Required Action: compact the plan history
 * Next Step: rerun execute-plan
 `,
+    workflowState: {
+      planPath: ".ai/plans/workflow-runner.md",
+      status: "active",
+      nextAction: "execute-plan",
+      latest: {
+        execution: {
+          version: 2,
+          result: "completed",
+          summary: "latest execution summary to keep",
+          evidence: ".ai/artifacts/workflow-runner/events/execution-v2.md",
+        },
+        validation: {
+          version: 2,
+          result: "PASS",
+          summary: "latest validation summary to keep",
+          evidence: ".ai/artifacts/workflow-runner/events/validation-v2.md",
+        },
+        review: {
+          version: 2,
+          summary: "NEEDS FIX",
+          decision: "active",
+          evidence: ".ai/artifacts/workflow-runner/events/review-v2.md",
+          unresolvedFindings: ["compact the plan history before the next run"],
+        },
+      },
+      history: [
+        ".ai/artifacts/workflow-runner/events/execution-v2.md",
+        ".ai/artifacts/workflow-runner/events/validation-v2.md",
+        ".ai/artifacts/workflow-runner/events/review-v2.md",
+      ],
+      unresolvedBlockers: ["compact the plan history"],
+      updatedAt: "2026-07-09T00:00:00.000Z",
+    },
     latestTokenUsage: {
       iteration: 7,
       promptPath: ".ai/prompts/review-changes.md",
@@ -4393,6 +4503,12 @@ Remaining:
   assert.match(snapshot, /## Key Details/);
   assert.match(snapshot, /## Validation/);
   assert.match(snapshot, /## Review/);
+  assert.match(snapshot, /## Latest Relevant Event/);
+  assert.match(snapshot, /\* Kind: Review/);
+  assert.match(
+    snapshot,
+    /\* Why: latest review remediation for the next execute-plan run/,
+  );
   assert.match(snapshot, /Snapshot generation is implemented/);
   assert.match(snapshot, /latest execution summary to keep/);
   assert.match(snapshot, /PASS/);
@@ -4500,6 +4616,25 @@ test("workflow prompts tell agents to use the snapshot first and avoid full hist
     assert.match(
       prompt,
       /do not load full historical sections unless the snapshot is insufficient/i,
+      promptPath,
+    );
+  }
+});
+
+test("normal runner prompts avoid workflow history reads by default", async () => {
+  const promptPaths = [
+    ".ai/prompts/execute-plan.md",
+    ".ai/prompts/review-changes.md",
+    ".ai/prompts/commit-summary.md",
+    ".ai/prompts/unblock-plan.md",
+    ".ai/prompts/reopen-plan.md",
+  ];
+
+  for (const promptPath of promptPaths) {
+    const prompt = await readFile(promptPath, "utf8");
+    assert.match(
+      prompt,
+      /Do not inspect workflow `history` during normal/i,
       promptPath,
     );
   }
@@ -7921,7 +8056,12 @@ test(`${CODEX_EXEC_LABEL} prompt contains selected prompt content and exact plan
       calls[0].args[6],
       /Execute:\n\.ai\/plans\/workflow-runner\.md/,
     );
-    assert.match(calls[0].args[6], /EXECUTE PLAN PROMPT/);
+    assert.match(calls[0].args[6], /Workflow prompt controller:/);
+    assert.match(
+      calls[0].args[6],
+      /Follow \.ai\/prompts\/execute-plan\.md exactly\./,
+    );
+    assert.doesNotMatch(calls[0].args[6], /EXECUTE PLAN PROMPT/);
   } finally {
     await workspace.cleanup();
   }

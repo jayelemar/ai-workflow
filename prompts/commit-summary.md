@@ -35,6 +35,9 @@ Read:
 
 Read the full plan only when exact plan edits are required or the snapshot is insufficient.
 Do not load full historical sections unless the snapshot is insufficient.
+Do not inspect workflow `history` during normal commit-summary runs; use the
+snapshot and the latest relevant event pointer first, then open only that exact
+event artifact when specific evidence is needed.
 
 ---
 

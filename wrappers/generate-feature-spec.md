@@ -55,3 +55,9 @@ Process Requirements:
 Output:
 Save the finalized spec to:
 .ai/specs/<feature-name>.spec.md
+
+Then append the manual token checkpoint:
+`pnpm exec tsx .ai/scripts/manual-token-usage.ts --plan <feature-name> --stage spec`
+
+If the spec is completed successfully, end the final response with exactly:
+`Spec saved to .ai/specs/<feature-name>.spec.md`

@@ -12,6 +12,12 @@ thin-plan-v2
 
 ---
 
+## Execution Mode
+
+manual
+
+---
+
 ## Status
 
 draft
@@ -33,12 +39,12 @@ sync-plan-artifacts
 ## Artifacts
 
 * User journey: `.ai/artifacts/<plan-name>/user-journey.md` or `N/A: <concrete reason>`
-* Implementation map: `.ai/artifacts/<plan-name>/implementation-map.md`
-* Workflow state: `.ai/artifacts/<plan-name>/state/workflow.json`
-* File ownership: `.ai/artifacts/<plan-name>/state/file-ownership.json`
-* Files: `.ai/artifacts/<plan-name>/state/files.json`
-* Context: `.ai/artifacts/<plan-name>/state/context.md`
-* Events: `.ai/artifacts/<plan-name>/events/`
+* Implementation map: `.ai/artifacts/<plan-name>/implementation-map.md` or `N/A: <concrete reason>`
+* Workflow state: `.ai/artifacts/<plan-name>/state/workflow.json` or `N/A: manual plan-bound execution`
+* File ownership: `.ai/artifacts/<plan-name>/state/file-ownership.json` or `N/A: manual plan-bound execution`
+* Files: `.ai/artifacts/<plan-name>/state/files.json` or `N/A: manual plan-bound execution`
+* Context: `.ai/artifacts/<plan-name>/state/context.md` or `N/A: manual plan-bound execution`
+* Events: `.ai/artifacts/<plan-name>/events/` or `N/A: manual plan-bound execution`
 
 ---
 
@@ -69,7 +75,7 @@ sync-plan-artifacts
 
 ## Workflow State Rules
 
-See `.ai/instructions/shared/workflow-state.md`.
+For runner-managed plans, see `.ai/instructions/shared/workflow-state.md`.
 
 ---
 
@@ -78,7 +84,7 @@ See `.ai/instructions/shared/workflow-state.md`.
 The task is complete ONLY when:
 
 * plan details are visible in `## Phases`
-* required runtime artifacts are saved under `.ai/artifacts/<plan-name>/`
+* required artifacts for the selected execution mode are saved under `.ai/artifacts/<plan-name>/` or recorded as `N/A: manual plan-bound execution`
 * plan is saved to `.ai/plans/<plan-name>.md`
 
 ---

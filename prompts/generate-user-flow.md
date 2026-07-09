@@ -37,7 +37,9 @@ Derive `<plan-name>` from the spec filename by removing the path and `.spec.md`.
 - Inspect the codebase only to identify current routes, components, services, APIs, state boundaries, storage effects, and existing tests.
 - The artifact must not invent desired behavior beyond the spec.
 - If the spec does not define a user-facing behavior well enough to create a deterministic flow, STOP and list the missing decisions.
-- For non-user-facing work, do not create a user-journey artifact; the later plan records `N/A: <concrete reason>` in `## User Journey Artifact`.
+- For non-user-facing work or narrow user-facing work that does not need
+  end-to-end flow mapping, do not create a user-journey artifact; the later
+  plan records `N/A: <concrete reason>` in `## Artifacts`.
 
 ---
 

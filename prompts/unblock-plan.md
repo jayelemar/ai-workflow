@@ -25,6 +25,9 @@ Read:
 
 Read the full plan only when exact plan edits are required or the snapshot is insufficient.
 Do not load full historical sections unless the snapshot is insufficient.
+Do not inspect workflow `history` during normal unblock runs; use the snapshot,
+unresolved blockers, and the latest relevant event pointer first, then open
+only that exact event artifact when specific evidence is needed.
 Preserve exact unblock evidence reads for unresolved blockers, owner-plan evidence, workflow state, event evidence, user-provided unblock evidence, and file ownership releases.
 Use the runner-provided Active Context Packet and index-selected instruction files only. Do not broadly load `.ai/instructions/**`.
 
@@ -50,9 +53,9 @@ If not provided:
 Use blocker-resolution evidence from:
 
 * the runner-provided `Unblock evidence note`
-* unresolved blockers in `.ai/artifacts/<plan-name>/state/workflow.json`
+* unresolved blockers and the latest relevant event pointer in `.ai/artifacts/<plan-name>/state/workflow.json`
 * the user's current request
-* documented runtime or validation evidence in `.ai/artifacts/<plan-name>/events/`
+* the exact event artifact referenced by the latest relevant event pointer when that evidence is needed
 
 These unresolved blockers, owner-plan evidence, workflow state, and event evidence remain correctness-critical inputs even when the context snapshot is available.
 

@@ -1,4 +1,4 @@
-Version: 1.0
+Version: 1.1
 Last Updated: 2026-07-09
 
 # Reasoning Quality Instructions
@@ -52,6 +52,8 @@ external skill prompts or plugin-specific paths.
   validation evidence.
 - For execution stages, ensure plan-owned files, tests, and state transitions
   match the current task or plan stage before moving forward.
+- For runner-managed stages, prefer the snapshot plus the latest relevant event
+  pointer before opening additional artifact history.
 
 ## Anti-Patterns
 
@@ -61,3 +63,5 @@ external skill prompts or plugin-specific paths.
 - Replacing explicit workflow gates with informal judgment.
 - Using broad instruction or artifact reads when the Active Context Packet or
   snapshot provides the required source.
+- Inspecting workflow `history` during normal runs when the snapshot and latest
+  relevant event pointer already provide the required evidence path.

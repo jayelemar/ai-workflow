@@ -15,6 +15,7 @@ Read:
 
 * `.codex/AGENTS.md`
 * `.ai/instructions/shared/workflow-state.md`
+* `.ai/instructions/shared/flow-trace-artifacts.md`
 * the plan file
 * read the spec from the repo-relative `*.spec.md` path(s)
 * the repo-relative `*.spec.md` path(s) listed under the plan's `## Spec` section
@@ -104,26 +105,15 @@ Do not stage files or create commits.
 
 ## Sync Rules
 
-Read the plan, spec, user-journey artifact, implementation map, and workflow
-state before editing.
+Read the plan, spec, workflow state, and any flow artifacts required by the
+plan `## Artifacts` section before editing.
+
+Apply the sync contract from
+`.ai/instructions/shared/flow-trace-artifacts.md`.
 
 Repair missing, stale, or inconsistent planning artifacts when the correct
 content can be derived from the approved spec, current plan, and observed
 codebase paths without inventing product behavior.
-
-For user-facing work:
-
-* ensure `user-journey.md` exists and reflects only the spec plus observed
-  codebase entry points
-* ensure `implementation-map.md` maps every user-flow and acceptance-scenario
-  action to concrete implementation and validation paths
-* remove implementation-map rows that do not correspond to the user journey
-
-For non-user-facing work:
-
-* ensure the plan `## Artifacts` user journey entry records
-  `N/A: <concrete reason>`
-* ensure `implementation-map.md` contains exactly `N/A: <concrete reason>`
 
 For thin-plan-v2 state:
 
@@ -141,8 +131,7 @@ For thin-plan-v2 state:
 Output `STOP` and keep the plan in `draft + sync-plan-artifacts` when:
 
 * the spec is incomplete, vague, ambiguous, or internally inconsistent
-* the user journey cannot be repaired without a product decision
-* the implementation map cannot be repaired without a product decision
+* a required flow-trace artifact cannot be repaired without a product decision
 * artifact inconsistencies cannot be resolved without inventing behavior beyond
   the spec
 * repairing would require editing app code, tests, migrations, generated files,

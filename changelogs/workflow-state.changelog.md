@@ -1,5 +1,10 @@
 # Workflow State Instruction Changelog
 
+## v1.15 — 2026-07-09
+
+* Added the snapshot-plus-latest-relevant-event hot path and clarified that
+  workflow `history` is for historical investigations, not normal prompt runs.
+
 ## v1.14 — 2026-07-09
 
 * Updated the review boundary to forbid separate subagent or plugin review

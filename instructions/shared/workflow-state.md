@@ -1,4 +1,4 @@
-Version: 1.14
+Version: 1.15
 Last Updated: 2026-07-09
 
 # Workflow State Instructions
@@ -34,6 +34,10 @@ Thin-plan-v2 state parity:
 * After every state transition, the prompt MUST reread both locations and verify the values match.
 * If the values do not match, repair the mismatch before final output; if repair is not possible, STOP with the exact mismatch.
 * Do not rely on the runner's post-run mismatch check as the first parity verification.
+* During normal prompt reads, treat `.ai/artifacts/<plan-name>/state/context.md`
+  plus the latest relevant event pointer in `.ai/artifacts/<plan-name>/state/workflow.json`
+  as the hot path; do not inspect workflow `history` unless a historical
+  failure investigation needs it.
 
 Allowed Status Values:
 
