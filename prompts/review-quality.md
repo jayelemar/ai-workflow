@@ -12,6 +12,8 @@ Read:
 
 * `.codex/AGENTS.md`
 * `.ai/instructions/shared/workflow-state.md`
+* `.ai/instructions/shared/reasoning-quality.md`
+* `.ai/instructions/shared/debugging.md` when classifying failures or review remediation risk
 * `.ai/instructions/shared/testing.md` before running, skipping, or classifying validation
 * the repo-relative `*.spec.md` path(s) listed under the plan's `## Spec` section (if any)
 * the `.ai/artifacts/<plan-name>/user-journey.md` file listed under `## User Journey Artifact` when the plan is user-facing
@@ -24,13 +26,10 @@ Read the full plan only when exact plan edits are required or the snapshot is in
 Do not load full historical sections unless the snapshot is insufficient.
 If the runner provides a `Workflow token guardrail` note for this run, honor it as mandatory snapshot-first discipline without overriding the runner-injected path-scoped staged diff source, required specs, latest validation evidence, workflow state, spec-review pass evidence, or other correctness-critical review inputs.
 
-Load:
-
-* `.ai/prompts/superpowers.md`
-
-Apply advisory edge-case guidance only.
-This harness review stage must not spawn subagents, load
-`subagent-driven-development`, or run a separate Superpowers review.
+Apply shared reasoning-quality guidance for edge-case checks and scope
+discipline.
+This harness review stage must not spawn subagents, load plugin skills, or run
+a separate review system.
 
 ---
 

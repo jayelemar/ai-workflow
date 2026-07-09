@@ -1,4 +1,4 @@
-Version: 1.13
+Version: 1.14
 Last Updated: 2026-07-09
 
 # Workflow State Instructions
@@ -224,7 +224,8 @@ Review system boundary:
 
 * Public entry remains `review + review-plan`.
 * The harness review loop is the review system for runner-managed review.
-* The runner must not automatically add Superpowers subagent review.
+* The runner must not automatically add a separate subagent or plugin review
+  system.
 * This boundary does not add a status value, next-action value, or state
   transition.
 * The combined harness review may approve `completed + commit-summary` or return to `active + execute-plan`.

@@ -1,5 +1,11 @@
 # Testing Instruction Changelog
 
+## v1.3 — 2026-07-09
+
+* Added the behavior-change and bugfix rule to confirm or add a failing
+  regression test before implementation, using the cheapest practical test
+  layer.
+
 ## v1.2 — 2026-06-28
 
 * Converted the testing baseline into a shared cross-project instruction and removed Gondoor-specific paths and commands.

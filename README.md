@@ -363,13 +363,12 @@ Default stage routing:
 Notes:
 
 - `review + review-plan` remains the public review entrypoint.
-- The runner internally splits review into `review-changes` (stage-1 spec
-  review) and `review-quality` (stage-2 quality review).
-- `review-changes` remains the main correctness gate, so both review stages
-  keep the highest-quality model and reasoning tier.
-- Harness review does not run Superpowers subagent review. Additional review,
-  when desired, is a separate manual decision outside the default runner review
-  path.
+- The runner normally runs one combined harness review through
+  `review-changes`; `review-quality` is only a legacy resume path for in-flight
+  split reviews that already have spec-pass evidence.
+- Harness prompts use native `.ai/instructions/shared/*` guidance for reasoning,
+  debugging, testing, and workflow state. Additional review, when desired, is a
+  separate manual decision outside the default runner review path.
 - `commit-summary` uses `gpt-5.3-codex-spark` because it is the cheapest
   low-risk stage: formatting the final commit subject and user-facing summary,
   not validating implementation correctness.

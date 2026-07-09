@@ -11,6 +11,8 @@
 !/changelogs/security.changelog.md
 !/changelogs/testing.changelog.md
 !/changelogs/workflow-state.changelog.md
+!/changelogs/reasoning-quality.changelog.md
+!/changelogs/debugging.changelog.md
 !/docs/
 !/docs/**
 !/instructions/
@@ -18,6 +20,8 @@
 !/instructions/shared/security.md
 !/instructions/shared/testing.md
 !/instructions/shared/workflow-state.md
+!/instructions/shared/reasoning-quality.md
+!/instructions/shared/debugging.md
 !/prompts/
 !/prompts/**
 !/scripts/

@@ -20,17 +20,16 @@ Read:
 
 * `.codex/AGENTS.md`
 * `.ai/instructions/shared/workflow-state.md`
+* `.ai/instructions/shared/reasoning-quality.md`
+* `.ai/instructions/shared/debugging.md` before diagnosing failed preview or validation behavior
 * `.ai/instructions/shared/testing.md`
 * `.ai/instructions/index.md`
 * the routed domain instruction files selected from `.ai/instructions/index.md` for the current plan step's code paths
 * the repo-relative `*.spec.md` path(s) listed under the plan's `## Spec` section (if any)
 * the full plan file
 
-Load:
-
-* `.ai/prompts/superpowers.md`
-
-Apply the superpowers advisory guidance for analysis and edge-case checks.
+Apply shared reasoning-quality and debugging guidance for assumption
+validation, edge-case checks, root-cause analysis, and scope discipline.
 
 Do not broadly load `.ai/instructions/**` beyond the routed files required for
 the current preflight or execution work.

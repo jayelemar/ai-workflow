@@ -1414,34 +1414,55 @@ test("execute-plan prompt loads testing instructions before validation", async (
   assert.match(prompt, /before running, skipping, or classifying validation/i);
 });
 
-test("superpowers prompt does not require compact agent progress updates", async () => {
-  const prompt = await readWorkflowPrompt("superpowers.md");
+test("shared reasoning guidance keeps harness review subagents disabled", async () => {
+  const prompt = await readFile(
+    ".ai/instructions/shared/reasoning-quality.md",
+    "utf8",
+  );
 
-  assert.doesNotMatch(
-    prompt,
-    /Free-form `\[agent\]` progress updates should be one sentence by default/,
-  );
-  assert.doesNotMatch(prompt, /Lead with `Area: finding\/result`/);
-  assert.doesNotMatch(prompt, /Avoid narrative lead-ins/);
-  assert.doesNotMatch(
-    prompt,
-    /Use bullets only for multiple actionable findings, capped at 3/,
-  );
+  assert.match(prompt, /do not bypass/i);
+  assert.doesNotMatch(prompt, /Superpowers/i);
+  assert.doesNotMatch(prompt, /subagent-driven-development/i);
 });
 
-test("superpowers prompt keeps harness review subagents disabled", async () => {
-  const prompt = await readWorkflowPrompt("superpowers.md");
-
-  assert.match(prompt, /Harness Review Boundary/);
-  assert.match(prompt, /must not add Superpowers subagent review/i);
-});
-
-test("review prompts describe advisory-only Superpowers review", async () => {
+test("review prompts load native guidance and forbid subagent review", async () => {
   for (const promptName of ["review-changes.md", "review-quality.md"]) {
     const prompt = await readWorkflowPrompt(promptName);
 
-    assert.match(prompt, /advisory edge-case guidance/i);
+    assert.match(prompt, /\.ai\/instructions\/shared\/reasoning-quality\.md/);
     assert.match(prompt, /must not spawn subagents/i);
+    assert.doesNotMatch(prompt, /Superpowers/i);
+    assert.doesNotMatch(prompt, /subagent-driven-development/i);
+  }
+});
+
+test("workflow prompts load native shared guidance instead of retired Superpowers prompt", async () => {
+  const promptExpectations = [
+    ["create-plan.md", ["reasoning-quality"]],
+    ["execute-plan.md", ["reasoning-quality", "debugging", "testing"]],
+    ["review-changes.md", ["reasoning-quality", "debugging", "testing"]],
+    ["review-quality.md", ["reasoning-quality", "debugging", "testing"]],
+    ["unblock-plan.md", ["reasoning-quality", "debugging"]],
+    ["reopen-plan.md", ["reasoning-quality", "debugging"]],
+    [
+      "plan-preview-before-apply.md",
+      ["reasoning-quality", "debugging", "testing"],
+    ],
+    ["manual-preview.md", ["reasoning-quality", "debugging", "testing"]],
+    ["generate-user-flow.md", ["reasoning-quality"]],
+  ] as const;
+
+  for (const [promptName, expectedInstructions] of promptExpectations) {
+    const prompt = await readWorkflowPrompt(promptName);
+
+    for (const instruction of expectedInstructions) {
+      assert.match(
+        prompt,
+        new RegExp(`\\.ai\\/instructions\\/shared\\/${instruction}\\.md`),
+        promptName,
+      );
+    }
+    assert.doesNotMatch(prompt, /\.ai\/prompts\/superpowers\.md/, promptName);
   }
 });
 
@@ -3951,12 +3972,18 @@ test("generates manual workflow prompts for every prompt action", () => {
       prompt,
       new RegExp(`^Use ${promptPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`),
     );
-    assert.match(prompt, /load: \.ai\/prompts\/superpowers\.md/);
+    assert.match(prompt, /load: \.ai\/instructions\/shared\/reasoning-quality\.md/);
+    assert.match(prompt, /load: \.ai\/instructions\/shared\/debugging\.md/);
     assert.match(
       prompt,
-      /Apply the superpowers advisory guidance for analysis and edge-case checks/,
+      /Apply native shared reasoning and debugging guidance/,
     );
+    assert.doesNotMatch(prompt, /load: \.ai\/prompts\/superpowers\.md/);
+    assert.doesNotMatch(prompt, /Superpower skill root:/);
     assert.doesNotMatch(prompt, /use superpower skills: analyze/);
+    assert.doesNotMatch(prompt, /using-superpowers\/SKILL\.md/);
+    assert.doesNotMatch(prompt, /subagent-driven-development\/SKILL\.md/);
+    assert.doesNotMatch(prompt, /use sub-agents/i);
     assert.match(prompt, /Active Context Packet:/);
     assert.match(
       prompt,
@@ -4043,16 +4070,19 @@ test("non-review prompts use the shared terminal output contract", async () => {
   assert.match(prompts[6], /do not include a branch line/i);
 });
 
-test("superpowers prompt describes analysis as advisory guidance, not a missing skill", async () => {
-  const prompt = await readFile(".ai/prompts/superpowers.md", "utf8");
+test("native reasoning guidance describes analysis as shared instruction, not a missing skill", async () => {
+  const prompt = await readFile(
+    ".ai/instructions/shared/reasoning-quality.md",
+    "utf8",
+  );
 
   assert.match(
     prompt,
-    /Use this advisory layer to think through complex logic/,
+    /Validate assumptions against the spec, plan, codebase, and evidence/i,
   );
   assert.match(
     prompt,
-    /Do not load `think`, `analyze`, or `edge-cases` as filesystem skills/,
+    /Do not load `think`, `analyze`, or `edge-cases` as filesystem skills/i,
   );
   assert.doesNotMatch(prompt, /Use skill: think, analyze, edge-cases/);
 });
@@ -4573,7 +4603,7 @@ test("workflow prompt injects repo-relative spec paths outside .ai/specs", () =>
   assert.match(activeContextPacket, /\.ai\/scripts\/workflow-runner\.spec\.md/);
 });
 
-test("workflow prompt pins superpower skills to the installed global skill root", () => {
+test("workflow prompt uses native guidance without Superpowers skill roots", () => {
   const prompt = generateWorkflowPrompt({
     promptPath: ".ai/prompts/execute-plan.md",
     planPath: ".ai/plans/workflow-runner.md",
@@ -4581,18 +4611,17 @@ test("workflow prompt pins superpower skills to the installed global skill root"
     planContent: planWith("active", "execute-plan"),
   });
 
-  assert.match(prompt, /Superpower skill root:/);
-  assert.match(prompt, /\/home\/jetermulo\/\.agents\/skills/);
-  assert.match(prompt, /using-superpowers\/SKILL\.md/);
-  assert.match(prompt, /executing-plans\/SKILL\.md/);
-  assert.match(prompt, /subagent-driven-development\/SKILL\.md/);
-  assert.match(
-    prompt,
-    /Do not read superpower skills from \/home\/jetermulo\/\.codex-shared\/skills/,
-  );
+  assert.match(prompt, /load: \.ai\/instructions\/shared\/reasoning-quality\.md/);
+  assert.match(prompt, /load: \.ai\/instructions\/shared\/debugging\.md/);
+  assert.doesNotMatch(prompt, /Superpower skill root:/);
+  assert.doesNotMatch(prompt, /\/home\/jetermulo\/\.agents\/skills/);
+  assert.doesNotMatch(prompt, /using-superpowers\/SKILL\.md/);
+  assert.doesNotMatch(prompt, /executing-plans\/SKILL\.md/);
+  assert.doesNotMatch(prompt, /subagent-driven-development\/SKILL\.md/);
+  assert.doesNotMatch(prompt, /\/home\/jetermulo\/\.codex-shared\/skills/);
 });
 
-test("review workflow prompts default to harness-only review without Superpowers subagents", () => {
+test("review workflow prompts default to harness-only review without subagents", () => {
   for (const promptPath of [
     ".ai/prompts/review-changes.md",
     ".ai/prompts/review-quality.md",
@@ -4605,14 +4634,15 @@ test("review workflow prompts default to harness-only review without Superpowers
     });
 
     assert.match(prompt, /Harness review policy:/);
-    assert.match(prompt, /Do not run Superpowers subagent review/);
+    assert.match(prompt, /Use the harness review prompt as the only review system/);
     assert.doesNotMatch(prompt, /use sub-agents/i);
     assert.doesNotMatch(prompt, /subagent-driven-development\/SKILL\.md/);
     assert.doesNotMatch(prompt, /full-history fork/i);
+    assert.doesNotMatch(prompt, /Superpowers/i);
   }
 });
 
-test("non-review workflow prompts may still include Codex-compatible sub-agent guidance", () => {
+test("non-review workflow prompts do not inject default subagent guidance", () => {
   const prompt = generateWorkflowPrompt({
     promptPath: ".ai/prompts/execute-plan.md",
     planPath: ".ai/plans/workflow-runner.md",
@@ -4620,11 +4650,11 @@ test("non-review workflow prompts may still include Codex-compatible sub-agent g
     planContent: planWith("active", "execute-plan"),
   });
 
-  assert.match(prompt, /use sub-agents/i);
-  assert.match(prompt, /subagent-driven-development\/SKILL\.md/);
-  assert.match(prompt, /full-history fork/i);
-  assert.match(prompt, /omit `agent_type`, `model`, and `reasoning_effort`/);
-  assert.match(prompt, /spawn without a full-history fork/);
+  assert.doesNotMatch(prompt, /use sub-agents/i);
+  assert.doesNotMatch(prompt, /subagent-driven-development\/SKILL\.md/);
+  assert.doesNotMatch(prompt, /full-history fork/i);
+  assert.doesNotMatch(prompt, /omit `agent_type`, `model`, and `reasoning_effort`/);
+  assert.doesNotMatch(prompt, /spawn without a full-history fork/);
 });
 
 test("workflow prompt selects area instructions from plan-owned paths", () => {

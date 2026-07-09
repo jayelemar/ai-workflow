@@ -1,5 +1,5 @@
-Version: 1.2
-Last Updated: 2026-06-28
+Version: 1.3
+Last Updated: 2026-07-09
 
 # Testing Instructions
 
@@ -23,6 +23,7 @@ Set a shared testing standard that provides high release confidence while minimi
 - Use E2E tests sparingly for critical business workflows only, such as authentication, registration, checkout, subscription management, revenue-generating flows, or mission-critical user journeys.
 - Do not create E2E tests for every feature, component, validation message, or edge case.
 - When a bug is found, add regression coverage at the cheapest layer that would have prevented it: unit first, integration for interaction failures, E2E only when a complete user workflow is required.
+- Before changing behavior or fixing a bug, confirm or add a failing regression test at the cheapest practical layer, then implement the smallest change that makes that test pass.
 - Validate observable behavior and business outcomes; avoid tests that mainly assert implementation details, call counts, mock behavior, or framework internals.
 - Treat flaky tests as defects; fix, quarantine, or remove tests that randomly fail, depend on arbitrary waits, depend on unstable external systems, or rely on timing.
 - Classify merge-required validation as fast unit tests, core integration tests, and the smallest critical E2E set.

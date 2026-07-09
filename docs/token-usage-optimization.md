@@ -8,12 +8,16 @@ Last Updated: 2026-07-09
 Record the token-efficiency audit for the Gondoor AI coding workflow and keep a
 single reference for future workflow simplification.
 
-This document compares:
+This document compares the current default choices:
 
 - Native Codex CLI `/plan`
-- Gondoor harness only
-- Superpowers only
-- Gondoor harness plus Superpowers
+- Gondoor harness with native shared `.ai/instructions` guidance
+
+It also keeps historical notes for external skill/plugin workflows and the
+removed harness-plus-Superpowers combination so future audits do not reintroduce
+the most expensive pattern by accident. The shared Superpowers install,
+profile config entries, and plugin caches were removed after the harness
+stopped depending on them.
 
 The goal is not to prove one workflow is better in every case. The goal is to
 choose the cheapest workflow that still gives enough planning, execution, and
@@ -34,8 +38,12 @@ Static files inspected:
 - `.ai/scripts/workflow-runner/*.ts`
 - `.ai/prompts/*.md`
 - `.ai/wrappers/*.md`
-- Superpowers skills under `/home/jetermulo/.agents/skills`
+- Native shared guidance under `.ai/instructions/shared/*.md`
+- Previously inspected Superpowers skills before removal for historical
+  comparison only
 - Codex config files checked for hooks and slash-command behavior
+- Shared Codex/Claude profile config, active skill, and plugin cache locations
+  checked after Superpowers removal
 
 Runtime token ledgers inspected:
 
@@ -91,16 +99,37 @@ workflow:
 
 The plan, spec, implementation map, and current-state snapshot are not the main
 problem by themselves. The main cost comes from repeatedly reloading them across
-fresh `codex exec` stages, review loops, and optional subagent workflows.
+fresh `codex exec` stages and review loops. The retired Superpowers injection
+made that worse by adding plugin guidance, skill-root paths, and optional
+subagent workflows to already-large harness prompts.
+
+## Removed Superpowers State
+
+The harness no longer depends on the shared Superpowers plugin, and the shared
+install was removed on 2026-07-09.
+
+Removed shared state:
+
+- `superpowers@openai-curated` plugin entries from shared Codex profile configs
+  and old profile config backups.
+- Superpowers-derived active skills from `/home/jetermulo/.agents/skills`.
+- Codex and Claude Superpowers plugin cache, tmp, and data directories under
+  shared account profiles.
+
+Intentionally left alone:
+
+- Project-local Superpowers docs or state outside the shared plugin install,
+  such as unrelated project folders that merely contain `superpowers` in their
+  path.
 
 ## Workflow Comparison
 
 | Workflow | Estimated LLM Calls | Context Duplication | Token Efficiency | Complexity |
 | --- | ---: | --- | --- | --- |
 | Native Codex CLI `/plan` | 2-4 typical | Low | Best | Low |
-| Harness only | 6-8 best case; much higher with loops | High | Poor for small and medium tasks; useful for high-risk workflow control | High |
-| Superpowers only | 4-8 setup calls plus `3N+2` task/review calls for N subagent tasks | Medium-high | Medium | Medium-high |
-| Harness + Superpowers | Harness stages plus skill and subagent calls; measured 24-call admin workflow and 126-call full workflow | Very high | Worst | Very high |
+| Harness with native shared guidance | 6-8 best case; much higher with loops | High | Poor for small and medium tasks; useful for high-risk workflow control | High |
+| External skill/plugin workflow, manual only | Depends on explicitly installed skill and subagent use | Medium-high | Medium | Medium-high |
+| Removed harness plus external skill injection | Harness stages plus skill and subagent calls | Very high | Worst | Very high |
 
 ## Native Codex CLI `/plan`
 
@@ -132,7 +161,7 @@ Use for:
 - Tasks where strict artifact state, file locks, and staged review gates are
   not needed.
 
-## Harness Only
+## Harness With Native Shared Guidance
 
 Expected behavior:
 
@@ -153,7 +182,7 @@ Estimated cost profile:
   relevant code files.
 - Planning passes: at least 1 validation pass; can loop.
 - Review passes: usually 1 combined stage.
-- Subagents: optional, depending on prompt and task shape.
+- Subagents: not injected by default.
 - Token efficiency: expensive but sometimes justified for high-risk work.
 
 Use for:
@@ -168,26 +197,29 @@ Avoid for:
 - One-file edits.
 - Routine review-only work.
 
-## Superpowers Only
+## External Skill Workflows (Manual Only)
 
 Expected behavior:
 
-- A mandatory skill check happens before action.
-- Creative or behavior-changing work can trigger brainstorming, plan writing,
-  execution guidance, verification, and review skills.
-- Subagent-driven development can create one implementer and two reviewers per
-  task, plus a final reviewer.
+- A specific skill or plugin workflow is invoked because the operator
+  explicitly requested it or because the task clearly needs that specialized
+  workflow.
+- The selected skill may add design, planning, debugging, verification, review,
+  or subagent steps.
+- The harness does not inject this workflow. It is a separate manual choice.
+- No shared Superpowers plugin remains installed. Any future Superpowers-style
+  workflow requires explicit reinstall or a one-off setup outside the harness.
 
 Estimated cost profile:
 
-- Initial prompt: AGENTS plus selected skill files.
-- Context loaded: chosen skills, user request, relevant code files, and
-  generated design/plan docs.
+- Initial prompt: AGENTS plus selected skill/plugin instructions.
+- Context loaded: chosen skill guidance, user request, relevant code files, and
+  any generated design or plan docs.
 - Planning passes: often more than 1 for non-trivial work.
-- Review passes: often per task when subagent-driven development is used.
-- Subagents: common for implementation plans.
-- Token efficiency: worse than native `/plan`, usually better than current
-  harness plus Superpowers if contexts are curated.
+- Review passes: may be per task when a subagent-driven workflow is selected.
+- Subagents: explicit only.
+- Token efficiency: worse than native `/plan`, usually better than the retired
+  harness plus external skill injection pattern if contexts are curated.
 
 Use for:
 
@@ -199,37 +231,39 @@ Avoid for:
 
 - Small changes where the mandatory skill chain adds more process than value.
 
-## Harness Plus Superpowers
+## Removed: Harness Plus External Skill Injection
 
 Expected behavior:
 
 - Harness stages still run.
-- Superpowers guidance is injected or invited inside those stages.
+- External skill/plugin guidance is injected or invited inside those stages.
 - Agents may reload skills in every fresh `codex exec` call.
-- Harness review and Superpowers review can both apply.
-- Harness task savepoints and Superpowers subagent task decomposition can stack.
+- Harness review and plugin review can both apply.
+- Harness task savepoints and plugin subagent task decomposition can stack.
 
 Estimated cost profile:
 
 - Initial prompt per stage: largest of all workflows.
 - Context loaded: harness context plus selected skills and possible subagent
   task context.
-- Planning passes: duplicated between harness plan validation and Superpowers
+- Planning passes: duplicated between harness plan validation and external
   plan/design skills when both apply.
-- Review passes: duplicated between harness two-stage review and Superpowers
+- Review passes: duplicated between harness review and external
   spec/code-quality review.
 - Subagents: optional but encouraged by both systems in some cases.
 - Token efficiency: worst.
 
-Use only when:
+Historical use case:
 
 - The task is very high risk.
 - The user explicitly wants both systems.
 - The expected quality gain is worth very high token cost.
 
-Default decision:
+Current policy:
 
-- Do not combine the harness and Superpowers automatically.
+- Do not combine the harness and external skill/plugin workflows automatically.
+- Do not reinstall or re-enable shared Superpowers to satisfy normal harness
+  stages.
 
 ## Expensive Patterns
 
@@ -239,7 +273,7 @@ Problem:
 
 - Harness planning used to split validation and repair across separate fresh
   stages.
-- Superpowers can add brainstorming and plan-writing workflows.
+- External skill workflows can add brainstorming and plan-writing workflows.
 - Native `/plan` may already have created an implementation plan.
 
 Cost:
@@ -251,7 +285,7 @@ Replacement:
 - For simple tasks, use native `/plan`.
 - For harness tasks, allow one bounded preflight plus deterministic plan-shape
   checks.
-- Do not run Superpowers planning inside harness planning unless explicitly
+- Do not run external skill planning inside harness planning unless explicitly
   requested.
 
 ### Duplicate Review
@@ -260,8 +294,8 @@ Problem:
 
 - Harness used to run `review-changes` and `review-quality` as separate default
   stages.
-- Superpowers subagent-driven development adds spec review and code-quality
-  review per task.
+- External subagent-driven workflows can add spec review and code-quality review
+  per task.
 
 Cost:
 
@@ -271,7 +305,8 @@ Replacement:
 
 - Use one review system per task.
 - Harness combined review is the review system for `review + review-plan`.
-- Do not inject Superpowers subagent review into harness review stages.
+- Do not inject a second subagent or plugin review system into harness review
+  stages.
 - For routine changes, use one final review.
 
 ### Repeated Fresh Context Rehydration
@@ -360,11 +395,11 @@ Replacement:
 
 | Rank | Recommendation | Expected Savings | Tradeoff |
 | ---: | --- | --- | --- |
-| 1 | Stop combining harness review with Superpowers subagent review by default | Implemented high savings | Less layered review |
+| 1 | Stop combining harness review with separate plugin/subagent review by default | Implemented high savings | Less layered review |
 | 2 | Collapse validation and repair into one bounded `plan-validator` preflight | High | Fewer automatic repair attempts |
 | 3 | Merge `review-changes` and `review-quality` for routine tasks | Implemented high savings | Less separation between spec and quality review |
 | 4 | Use native `/plan` for small and medium tasks | High | Less workflow bookkeeping |
-| 5 | Remove always-on Superpowers injection from harness stages | High | Skills become opt-in or task-triggered |
+| 5 | Remove always-on external skill injection from harness stages | Implemented high savings | Harness prompts rely on native shared guidance |
 | 6 | Gate `user-journey.md` and `implementation-map.md` generation | Medium-high | Less product traceability on small tasks |
 | 7 | Lower token guardrail thresholds and make snapshot-first default | Medium | More early summarization |
 | 8 | Keep only rolling state plus latest event in normal prompts | Medium | Less inline history |
@@ -381,8 +416,13 @@ combined harness review and route directly to either `active + execute-plan` or
 legacy split-review resume.
 
 Priority 1 is implemented. Harness review remains the review system for
-`review + review-plan`; Superpowers subagent review is not injected into the
-default runner review path.
+`review + review-plan`; a second subagent or plugin review system is not
+injected into the default runner review path.
+
+Priority 5 is implemented. Harness-generated prompts now load native
+`.ai/instructions/shared/reasoning-quality.md` and
+`.ai/instructions/shared/debugging.md` guidance instead of injecting
+`.ai/prompts/superpowers.md`, skill roots, or default subagent guidance.
 
 ## Recommended Default Policy
 
@@ -395,8 +435,8 @@ Use this routing table before starting work:
 | Narrow refactor | Native `/plan`, targeted validation |
 | User-facing multi-screen change | Harness only, with gated artifacts |
 | High-risk auth/security/migration work | Harness only, one strong review or explicitly justified second review |
-| Work needing a specific Superpowers skill | Superpowers only or native flow plus that one skill |
-| Very high-risk work where user explicitly wants both systems | Harness plus Superpowers |
+| Work needing a specific external skill | Native flow plus that one explicitly available skill, or standalone skill workflow |
+| Very high-risk work where user explicitly wants both systems | Manually composed harness plus explicit external skill setup; never default injection |
 
 ## Existing Implemented Optimizations
 
@@ -408,6 +448,10 @@ Already implemented in the workflow docs/runner at the time of this reference:
   - Stage input warning: `1_000_000`
   - Stage uncached input warning: `75_000`
 - Compact validation evidence guidance.
+- Native shared reasoning/debugging guidance in harness prompts instead of
+  always-on external prompt-layer skill injection.
+- Shared Superpowers plugin config, active skills, and plugin caches removed
+  after harness dependency removal.
 - Event artifact size caps:
   - Event artifacts capped at 20 KB.
   - Extracted event summaries capped at 1 KB.
@@ -415,7 +459,6 @@ Already implemented in the workflow docs/runner at the time of this reference:
 Still recommended:
 
 - Tune routine review model/reasoning settings.
-- Avoid combining harness plus Superpowers by default.
 - Reduce duplicate planning and review gates.
 - Route small tasks to native Codex workflows.
 - Treat the 24-call `admin-users-active-ban-details` result as evidence that
@@ -447,7 +490,8 @@ Best balance of quality and cost:
 
 Most expensive:
 
-- Harness plus Superpowers.
+- Harness plus external plugin or subagent systems, especially if an external
+  plugin layer is reinstalled and loaded inside harness stages.
 
 Primary simplification:
 

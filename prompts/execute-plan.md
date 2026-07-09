@@ -10,6 +10,8 @@ Read:
 
 * `.codex/AGENTS.md`
 * `.ai/instructions/shared/workflow-state.md`
+* `.ai/instructions/shared/reasoning-quality.md`
+* `.ai/instructions/shared/debugging.md` before diagnosing failed implementation or validation
 * `.ai/instructions/shared/testing.md` before running, skipping, or classifying validation
 * the repo-relative `*.spec.md` path(s) listed under the plan's `## Spec` section (if any)
 * runner-owned context snapshot `.ai/artifacts/<plan-name>/state/context.md` as the primary current-state source
@@ -26,11 +28,8 @@ Do not load `## Review History` by default; read the full plan only when exact p
 Do not load full historical sections unless the snapshot is insufficient.
 If the runner provides a `Workflow token guardrail` note for this run, treat it as mandatory context-loading discipline: stay snapshot-first, avoid broad artifact/history reads, and fall back only to the exact plan section or exact event file needed for the current execution without skipping required spec, validation, workflow state, or correctness-critical reads.
 
-Load:
-
-* `.ai/prompts/superpowers.md`
-
-Apply the superpowers advisory guidance for analysis and edge-case checks.
+Apply the shared reasoning-quality and debugging guidance for assumption
+validation, edge-case checks, root-cause analysis, and scope discipline.
 
 ---
 
@@ -233,32 +232,6 @@ For each phase:
 * preserve existing behavior unless required
 
 ---
-
-### Multi-Agent Execution Rules
-
-Use sub-agents when plan-owned file scope is explicit and non-conflicting.
-
-Sub-agents MAY be used only when file ownership is explicit and non-conflicting.
-
-Before dispatching sub-agents:
-
-* assign each sub-agent a concrete file ownership set
-* ensure every assigned file is plan-owned
-* ensure no two sub-agents are assigned the same file
-* tell each sub-agent not to edit outside its assigned files
-* tell each sub-agent not to revert or rewrite unrelated worktree changes
-
-If two sub-agents need the same file:
-
-→ execute those tasks sequentially or in the main agent
-
-If a sub-agent modifies a file outside its assigned ownership set:
-
-→ STOP (`sub-agent modified unassigned file`)
-
-If a sub-agent reports that required work needs a file outside the plan-owned paths:
-
-→ STOP (`file outside plan scope`)
 
 ### Cross-Plan File Dependency
 

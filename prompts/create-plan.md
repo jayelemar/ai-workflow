@@ -10,15 +10,13 @@ Read:
 
 - `.codex/AGENTS.md`
 - `.ai/instructions/shared/workflow-state.md`
+- `.ai/instructions/shared/reasoning-quality.md`
 - relevant `.ai/instructions/**/*.md`
 - the spec file
 - the user-journey artifact for user-facing work
 
-Load:
-
-- `.ai/prompts/superpowers.md`
-
-Apply the superpowers advisory guidance for analysis and edge-case checks.
+Apply the shared reasoning-quality guidance for assumption validation,
+edge-case checks, tradeoff notes, and scope discipline.
 
 ---
 

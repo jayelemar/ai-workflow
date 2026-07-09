@@ -16,6 +16,8 @@ Read:
 
 * `.codex/AGENTS.md`
 * `.ai/instructions/shared/workflow-state.md`
+* `.ai/instructions/shared/reasoning-quality.md`
+* `.ai/instructions/shared/debugging.md`
 * runner-owned context snapshot `.ai/artifacts/<plan-name>/state/context.md` as the primary current-state source
 * the repo-relative `*.spec.md` path(s) listed under the plan's `## Spec` section (if any)
 * Active Context Packet instruction files selected from `.ai/instructions/index.md`
@@ -26,11 +28,8 @@ Do not load full historical sections unless the snapshot is insufficient.
 Preserve exact unblock evidence reads for unresolved blockers, owner-plan evidence, workflow state, event evidence, user-provided unblock evidence, and file ownership releases.
 Use the runner-provided Active Context Packet and index-selected instruction files only. Do not broadly load `.ai/instructions/**`.
 
-Load:
-
-* `.ai/prompts/superpowers.md`
-
-Apply the superpowers advisory guidance for analysis and edge-case checks.
+Apply shared reasoning-quality and debugging guidance for evidence checks,
+root-cause validation, and safe workflow transitions.
 
 ---
 

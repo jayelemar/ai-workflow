@@ -18,16 +18,15 @@ Read:
 
 * `.codex/AGENTS.md`
 * `.ai/instructions/index.md`
+* `.ai/instructions/shared/reasoning-quality.md`
+* `.ai/instructions/shared/debugging.md` before diagnosing failed preview or validation behavior
 * the routed domain instruction files selected from `.ai/instructions/index.md`
   for the target files or requested change
 * `.ai/instructions/shared/testing.md` before adding, changing, deleting, or
   selecting validation for tests
 
-Load:
-
-* `.ai/prompts/superpowers.md`
-
-Apply the superpowers advisory guidance for analysis and edge-case checks.
+Apply shared reasoning-quality and debugging guidance for assumption
+validation, edge-case checks, root-cause analysis, and scope discipline.
 
 Do not broadly load `.ai/instructions/**` beyond the routed files required for
 the requested change.

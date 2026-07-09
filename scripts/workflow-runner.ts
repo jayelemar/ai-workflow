@@ -114,8 +114,6 @@ const PROTECTED_WORKFLOW_BRANCHES = new Set([
   "dev",
   "staging",
 ]);
-const SUPERPOWER_SKILL_ROOT = path.join(homedir(), ".agents", "skills");
-const SHARED_SKILL_ROOT = path.join(homedir(), ".codex-shared", "skills");
 const TERMINAL_FAILED_COMMAND_OUTPUT_LINE_LIMIT = 4;
 const TERMINAL_FAILED_COMMAND_OUTPUT_CHAR_LIMIT = 1000;
 const TERMINAL_FILE_DETAIL_LIMIT = 3;
@@ -4936,51 +4934,21 @@ The previous stage exceeded token thresholds.
 `
       : "";
   const promptIsReview = REVIEW_PROMPT_PATHS.has(promptPath);
-  const superpowerSkillExamples = [
-    `- ${path.join(SUPERPOWER_SKILL_ROOT, "using-superpowers", "SKILL.md")}`,
-    `- ${path.join(SUPERPOWER_SKILL_ROOT, "executing-plans", "SKILL.md")}`,
-    ...(promptIsReview
-      ? []
-      : [
-          `- ${path.join(
-            SUPERPOWER_SKILL_ROOT,
-            "subagent-driven-development",
-            "SKILL.md",
-          )}`,
-        ]),
-  ].join("\n");
-  const subAgentGuidance = [
-    rel(".ai", "prompts", "sync-plan-artifacts.md"),
-    rel(".ai", "prompts", "plan-validator.md"),
-    rel(".ai", "prompts", "execute-plan.md"),
-    rel(".ai", "prompts", "fix-review.md"),
-    rel(".ai", "prompts", "reopen-plan.md"),
-  ].includes(promptPath)
-    ? `
-use sub-agents
-Codex sub-agent spawn compatibility:
-- For a full-history fork, omit \`agent_type\`, \`model\`, and \`reasoning_effort\`; those fields are inherited from the parent.
-- If a different \`agent_type\`, \`model\`, or \`reasoning_effort\` is required, spawn without a full-history fork.`
-    : "";
-  const reviewSuperpowersPolicy = promptIsReview
+  const reviewPolicy = promptIsReview
     ? `
 Harness review policy:
 - Use the harness review prompt as the only review system for this stage.
-- Do not run Superpowers subagent review.
-- Do not load subagent-driven-development for review.
-- Do not spawn spec-review or code-quality review subagents.
-- Advisory edge-case reasoning from .ai/prompts/superpowers.md remains allowed without subagents.`
+- Do not spawn subagents.
+- Do not load plugin skills for review.
+- Do not run a separate spec-review or code-quality review system.`
     : "";
 
   return `Use ${promptPath}
 
-load: .ai/prompts/superpowers.md
-Superpower skill root: ${SUPERPOWER_SKILL_ROOT}
-When loading superpower skills, use this root, for example:
-${superpowerSkillExamples}
-Do not read superpower skills from ${SHARED_SKILL_ROOT}; that root contains separate shared/caveman skills only.
-Apply the superpowers advisory guidance for analysis and edge-case checks.${subAgentGuidance}
-${reviewSuperpowersPolicy}
+load: .ai/instructions/shared/reasoning-quality.md
+load: .ai/instructions/shared/debugging.md
+Apply native shared reasoning and debugging guidance for assumption validation, edge-case checks, root-cause analysis, and scope discipline.
+${reviewPolicy}
 
 ${activeContextPacket({ promptPath, planPath, planContent, contextSnapshotPath })}
 ${workflowGuardrail}

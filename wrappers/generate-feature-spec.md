@@ -5,9 +5,9 @@ Use .ai/prompts/generate-spec.md.
 Feature: <feature name>
 
 Load:
-.ai/prompts/superpowers.md
+.ai/instructions/shared/reasoning-quality.md
 
-Apply the superpowers advisory guidance for analysis and edge-case checks.
+Apply shared reasoning-quality guidance for analysis and edge-case checks.
 
 Objective:
 Create a specification file only.

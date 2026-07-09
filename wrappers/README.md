@@ -93,8 +93,8 @@ pnpm exec tsx .ai/scripts/workflow-runner.ts --compact .ai/plans/<plan-name>.md
 - After a plan exists, the workflow runner remains the default path for
   `sync-plan-artifacts`, `plan-validator`, `execute-plan`,
   `review-changes`, `unblock-plan`, `reopen-plan`, and `commit-summary`.
-- Review stages use harness review only. Do not add Superpowers subagent review
-  inside the default runner review path.
+- Review stages use harness review only. Do not add a separate subagent or
+  plugin review system inside the default runner review path.
 - `plan-preview-before-apply` and `manual-preview` are available only through
   explicit prompt-file invocation; they are not keyword-triggered workflow
   modes.

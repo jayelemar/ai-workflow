@@ -1,5 +1,10 @@
 # Workflow State Instruction Changelog
 
+## v1.14 — 2026-07-09
+
+* Updated the review boundary to forbid separate subagent or plugin review
+  systems without depending on external prompt-layer skill terminology.
+
 ## v1.13 — 2026-07-09
 
 * Replaced the normal split review loop with one combined harness review through

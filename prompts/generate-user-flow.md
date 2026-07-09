@@ -10,14 +10,12 @@ Read:
 
 - `.codex/AGENTS.md`
 - `.ai/instructions/index.md`
+- `.ai/instructions/shared/reasoning-quality.md`
 - relevant `.ai/instructions/**/*.md`
 - the approved spec file
 
-Load:
-
-- `.ai/prompts/superpowers.md`
-
-Apply the superpowers advisory guidance for analysis and edge-case checks.
+Apply shared reasoning-quality guidance for assumption validation, edge-case
+checks, and scope discipline.
 
 ---
 
