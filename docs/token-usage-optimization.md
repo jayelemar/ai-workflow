@@ -230,6 +230,12 @@ pnpm exec tsx .ai/scripts/manual-token-usage.ts --plan <plan-name> --stage plan
 pnpm exec tsx .ai/scripts/manual-token-usage.ts --plan <plan-name> --stage execute
 ```
 
+Manual checkpoint resolution:
+
+- The script should prefer the active `CODEX_HOME` automatically.
+- `--codex-home` should remain an override only for exceptional cases, not a
+  required flag for operators who switch between multiple Codex profiles.
+
 ## Harness With Native Shared Guidance
 
 Expected behavior:

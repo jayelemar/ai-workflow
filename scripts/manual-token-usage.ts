@@ -117,6 +117,15 @@ const manualPromptPath = (stage: ManualTokenUsageStage): string => {
   }
 };
 
+const defaultCodexHome = (): string => {
+  const envCodexHome = process.env.CODEX_HOME?.trim();
+  if (envCodexHome) {
+    return path.resolve(envCodexHome);
+  }
+
+  return path.join(os.homedir(), ".codex");
+};
+
 const readJsonlRecords = async (
   filePath: string,
 ): Promise<Record<string, unknown>[]> => {
@@ -502,7 +511,7 @@ export const appendManualTokenUsageCheckpoint = async ({
   planName,
   stage,
   sessionId,
-  codexHome = path.join(os.homedir(), ".codex"),
+  codexHome = defaultCodexHome(),
 }: AppendManualTokenUsageOptions): Promise<AppendManualTokenUsageResult> => {
   const ledgerPath = path.join(rootDir, tokenUsageLedgerRelativePath(planName));
   const sessionSnapshot = await detectLatestSessionSnapshot({
@@ -675,9 +684,7 @@ export const runManualTokenUsageCli = async (
     planName: args.planName,
     stage: args.stage,
     sessionId: args.sessionId,
-    codexHome: args.codexHome
-      ? path.resolve(args.codexHome)
-      : path.join(os.homedir(), ".codex"),
+    codexHome: args.codexHome ? path.resolve(args.codexHome) : defaultCodexHome(),
   });
 
   if (!result.ok) {

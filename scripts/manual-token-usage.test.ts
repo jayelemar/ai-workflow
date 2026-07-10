@@ -8,6 +8,7 @@ import {
   appendManualTokenUsageCheckpoint,
   detectLatestSessionSnapshot,
   parseSessionTokenSnapshot,
+  runManualTokenUsageCli,
 } from "./manual-token-usage.ts";
 
 type Workspace = {
@@ -274,6 +275,74 @@ test("appendManualTokenUsageCheckpoint appends stage deltas and skips duplicates
       .filter(Boolean);
     assert.equal(ledgerLines.length, 2);
   } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("runManualTokenUsageCli prefers CODEX_HOME when --codex-home is omitted", async () => {
+  const workspace = await createWorkspace();
+  const originalCodexHome = process.env.CODEX_HOME;
+
+  try {
+    const rootDir = path.join(workspace.root, "repo");
+    const codexHome = path.join(workspace.root, ".codex-adam");
+    const sessionDir = path.join(codexHome, "sessions", "2026", "07", "09");
+    await mkdir(rootDir, { recursive: true });
+    await mkdir(sessionDir, { recursive: true });
+
+    await writeFile(
+      path.join(sessionDir, "rollout-2026-07-09T03-00-00-session-2.jsonl"),
+      sessionContent({
+        sessionId: "session-2",
+        cwd: rootDir,
+        inputTokens: 900,
+        cachedInputTokens: 600,
+        outputTokens: 100,
+        reasoningOutputTokens: 10,
+        totalTokens: 1000,
+        lastTotalTokens: 180,
+      }),
+      "utf8",
+    );
+
+    process.env.CODEX_HOME = codexHome;
+
+    let stdout = "";
+    let stderr = "";
+    const exitCode = await runManualTokenUsageCli(
+      ["--plan", "manual-mode-env", "--stage", "spec", "--root-dir", rootDir],
+      { write: (chunk: string) => void (stdout += chunk) },
+      { write: (chunk: string) => void (stderr += chunk) },
+    );
+
+    assert.equal(exitCode, 0);
+    assert.equal(stderr, "");
+    assert.match(stdout, /Appended manual spec token checkpoint/);
+
+    const ledgerPath = path.join(
+      rootDir,
+      ".ai",
+      "artifacts",
+      "manual-mode-env",
+      "logs",
+      "token-usage.jsonl",
+    );
+    const [line] = (await readFile(ledgerPath, "utf8"))
+      .trim()
+      .split(/\r?\n/)
+      .filter(Boolean);
+    const record = JSON.parse(line) as { sessionId: string; sessionFilePath: string };
+    assert.equal(record.sessionId, "session-2");
+    assert.equal(
+      record.sessionFilePath,
+      "sessions/2026/07/09/rollout-2026-07-09T03-00-00-session-2.jsonl",
+    );
+  } finally {
+    if (originalCodexHome === undefined) {
+      delete process.env.CODEX_HOME;
+    } else {
+      process.env.CODEX_HOME = originalCodexHome;
+    }
     await workspace.cleanup();
   }
 });
