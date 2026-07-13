@@ -703,7 +703,11 @@ export const runManualTokenUsageCli = async (
   return 0;
 };
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+const main = async (): Promise<void> => {
   const exitCode = await runManualTokenUsageCli(process.argv.slice(2));
   process.exitCode = exitCode;
+};
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  void main();
 }

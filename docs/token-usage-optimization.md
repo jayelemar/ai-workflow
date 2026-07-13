@@ -1,7 +1,7 @@
 # Token Usage Optimization Reference
 
 Created: 2026-07-08
-Last Updated: 2026-07-09
+Last Updated: 2026-07-10
 
 ## Purpose
 
@@ -57,6 +57,7 @@ Runtime token ledgers inspected:
 
 - `.ai/artifacts/admin-users-active-ban-details/logs/token-usage.jsonl`
 - `.ai/artifacts/market-research-competitive-gap-upgrade/logs/token-usage.jsonl`
+- `.ai/artifacts/support-ticket-department-assignment/logs/token-usage.jsonl`
 
 Official Codex references:
 
@@ -75,6 +76,7 @@ The strongest signal is from local workflow token ledgers.
 | --- | ---: | ---: | ---: | ---: |
 | `admin-users-active-ban-details` completed workflow | 24 | 34.3M | 2.25M | 34.6M |
 | `market-research-competitive-gap-upgrade` full workflow | 126 | 453.0M | 24.9M | 455.2M |
+| `support-ticket-department-assignment` completed workflow | 17 | 48.0M | 2.24M | 48.3M |
 
 The completed `admin-users-active-ban-details` run had strong cache efficiency:
 32.1M of 34.3M input tokens were cached, or roughly 93.5%. It was still
@@ -110,6 +112,215 @@ problem by themselves. The main cost comes from repeatedly reloading them across
 fresh `codex exec` stages and review loops. The retired Superpowers injection
 made that worse by adding plugin guidance, skill-root paths, and optional
 subagent workflows to already-large harness prompts.
+
+## 2026-07-10 Completed Runner Baseline: Support Ticket Department Assignment
+
+This baseline records the completed runner-managed workflow for
+`.ai/plans/support-ticket-department-assignment.md`. Use it as the comparison
+point when changing runner prompt loading, review loops, state snapshots,
+commit-summary behavior, or artifact hydration.
+
+Source:
+
+- `.ai/artifacts/support-ticket-department-assignment/logs/token-usage.jsonl`
+- Measured through `2026-07-10T09:14:09.163Z`
+- Workflow state at measurement: completed, next action `commit-summary`
+- Savepoint state at measurement: 2 of 2 savepoints completed
+- Commits: `9579e3b`, `6b8088b`
+
+Aggregate token usage:
+
+| Metric | Value |
+| --- | ---: |
+| Successful LLM calls | 17 |
+| Input tokens | 47,962,369 |
+| Cached input tokens | 45,718,144 |
+| Uncached input tokens | 2,244,225 |
+| Output tokens | 298,913 |
+| Reasoning output tokens | 133,208 |
+| Total tokens | 48,261,282 |
+| Cache hit rate | 95.3% |
+| Uncached input rate | 4.7% |
+
+Optimization scorecard for this run:
+
+| Area | Rank | Evidence |
+| --- | --- | --- |
+| Cache efficiency | A | 95.3% of input tokens were cached. |
+| Uncached token control | B | 2.24M uncached input tokens across 17 calls. |
+| Total workflow weight | C | 48.3M total tokens for a two-savepoint workflow. |
+| Final review stage | B- | Final `review-changes` cost 2.56M total tokens with 95.3% cache hit rate. |
+| Commit-summary behavior | C+ | Three commit-summary calls consumed 1.02M tokens. |
+| Overall runner optimization | B- | Cache reuse is strong, but execute/review loops and repeated commit-summary calls keep cost high. |
+
+Prompt-level breakdown:
+
+| Prompt | Calls | Input | Cached | Uncached | Output | Reasoning Output | Total | Avg Input | Max Input | Avg Uncached |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `execute-plan` | 6 | 33,017,098 | 31,934,080 | 1,083,018 | 159,551 | 56,384 | 33,176,649 | 5,502,849 | 14,849,256 | 180,503 |
+| `review-changes` | 6 | 13,175,671 | 12,210,816 | 964,855 | 106,893 | 58,703 | 13,282,564 | 2,195,945 | 2,973,873 | 160,809 |
+| `commit-summary` | 3 | 1,006,094 | 910,848 | 95,246 | 17,219 | 10,722 | 1,023,313 | 335,364 | 598,465 | 31,748 |
+| `plan-validator` | 1 | 630,296 | 561,152 | 69,144 | 12,560 | 6,727 | 642,856 | 630,296 | 630,296 | 69,144 |
+| `sync-plan-artifacts` | 1 | 133,210 | 101,248 | 31,962 | 2,690 | 672 | 135,900 | 133,210 | 133,210 | 31,962 |
+
+Per-call stage sequence:
+
+| Stage Time | Prompt | Stage Total | Stage Input | Cached | Uncached | Cache Hit |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| 2026-07-10T07:00:45.437Z | `sync-plan-artifacts` | 135,900 | 133,210 | 101,248 | 31,962 | 76.0% |
+| 2026-07-10T07:05:00.787Z | `plan-validator` | 642,856 | 630,296 | 561,152 | 69,144 | 89.0% |
+| 2026-07-10T07:34:55.714Z | `execute-plan` | 14,918,724 | 14,849,256 | 14,409,856 | 439,400 | 97.0% |
+| 2026-07-10T07:50:38.398Z | `review-changes` | 2,992,719 | 2,973,873 | 2,681,856 | 292,017 | 90.2% |
+| 2026-07-10T07:59:21.249Z | `execute-plan` | 4,360,609 | 4,342,542 | 4,214,528 | 128,014 | 97.1% |
+| 2026-07-10T08:08:07.957Z | `review-changes` | 2,361,450 | 2,342,869 | 2,178,432 | 164,437 | 93.0% |
+| 2026-07-10T08:11:40.255Z | `execute-plan` | 532,115 | 522,699 | 465,920 | 56,779 | 89.1% |
+| 2026-07-10T08:22:13.581Z | `review-changes` | 1,595,909 | 1,577,160 | 1,473,920 | 103,240 | 93.5% |
+| 2026-07-10T08:28:18.139Z | `execute-plan` | 2,433,178 | 2,419,486 | 2,280,320 | 139,166 | 94.2% |
+| 2026-07-10T08:36:23.091Z | `review-changes` | 1,815,684 | 1,798,802 | 1,640,064 | 158,738 | 91.2% |
+| 2026-07-10T08:37:15.403Z | `commit-summary` | 289,761 | 284,643 | 259,456 | 25,187 | 91.2% |
+| 2026-07-10T08:52:37.902Z | `execute-plan` | 9,636,296 | 9,601,567 | 9,345,408 | 256,159 | 97.3% |
+| 2026-07-10T08:59:21.497Z | `review-changes` | 1,960,888 | 1,944,503 | 1,818,624 | 125,879 | 93.5% |
+| 2026-07-10T09:04:57.245Z | `execute-plan` | 1,295,727 | 1,281,548 | 1,218,048 | 63,500 | 95.0% |
+| 2026-07-10T09:12:38.213Z | `review-changes` | 2,555,914 | 2,538,464 | 2,417,920 | 120,544 | 95.3% |
+| 2026-07-10T09:13:54.435Z | `commit-summary` | 605,237 | 598,465 | 562,816 | 35,649 | 94.0% |
+| 2026-07-10T09:14:09.163Z | `commit-summary` | 128,315 | 122,986 | 88,576 | 34,410 | 72.0% |
+
+Important interpretation:
+
+- Cache behavior improved enough that cached input is no longer the main
+  optimization failure mode.
+- The remaining cost driver is repeated stage rehydration, especially
+  `execute-plan` and `review-changes` loops.
+- `execute-plan` is still the largest hotspot by total tokens: 33.2M of 48.3M,
+  or about 68.7% of the completed run.
+- `review-changes` is second: 13.3M of 48.3M, or about 27.5% of the completed
+  run.
+- `commit-summary` is small relative to execute/review but still repeated:
+  three calls consumed 1.02M tokens.
+- The first `execute-plan` call is the single biggest outlier at 14.9M total
+  tokens. Future runner changes should check whether initial execution can
+  avoid loading broad diff/spec/artifact context before it knows the task slice.
+- Later execute calls are smaller, but task 02 still produced a 9.6M execute
+  stage, which means context narrowing is inconsistent across savepoints.
+- The completed run had 17 LLM calls. A comparable optimized target should
+  finish a two-task runner-managed plan in fewer calls, avoid repeated
+  commit-summary calls, or keep each loop materially below the current average.
+
+Comparison against older runner evidence:
+
+| Artifact | Calls | Total Tokens | Tokens Per Call | Cache Hit |
+| --- | ---: | ---: | ---: | ---: |
+| `admin-users-active-ban-details` | 24 | 34.6M | 1.44M | 93.5% |
+| `support-ticket-department-assignment` completed workflow | 17 | 48.3M | 2.84M | 95.3% |
+| `market-research-competitive-gap-upgrade` | 126 | 455.2M | 3.61M | 94.5% |
+
+What improved:
+
+- The support-ticket workflow used fewer LLM calls than the older completed
+  admin workflow.
+- Cache hit rate improved from the admin workflow's 93.5% to 95.3%.
+- The runner no longer shows legacy `fix-plan` or routine `review-quality`
+  stages in this completed run.
+- `sync-plan-artifacts` and `plan-validator` are small compared with
+  execute/review and are not the current priority.
+
+What did not improve enough:
+
+- Tokens per call are still high: 2.84M average total tokens per successful
+  call.
+- `execute-plan` still reloads or discovers enough context to dominate total
+  cost.
+- Review repair loops are still expensive even with strong caching.
+- Commit-summary ran three times, which added avoidable final-stage overhead.
+
+Targets for the next runner optimization:
+
+| Metric | Completed Baseline | Next Target |
+| --- | ---: | ---: |
+| Cache hit rate | 95.3% | Keep >= 95% |
+| Uncached input rate | 4.7% | <= 4% |
+| Avg `execute-plan` total | 5.53M | <= 3.0M |
+| Max `execute-plan` total | 14.92M | <= 8.0M |
+| Avg `review-changes` total | 2.21M | <= 1.5M |
+| Max `review-changes` total | 2.99M | <= 2.0M |
+| Commit-summary calls | 3 | 1 |
+| Calls for comparable two-task plan | 17 | <= 10 |
+| Total tokens for comparable two-task plan | 48.3M | <= 30.0M |
+
+How to append a future comparison:
+
+1. Preserve this section as the baseline.
+2. Add a new dated section with the same aggregate table.
+3. Use the same prompt-level table so stage shifts are visible.
+4. Compare cache hit rate, uncached input rate, average execute total, maximum
+   execute total, average review total, loop count, and final total tokens.
+5. Mark a runner change as progress only if it reduces uncached input or stage
+   total tokens without increasing review misses, unresolved blockers, or
+   manual cleanup work.
+
+## 2026-07-10 Runner Optimization Update
+
+The workflow runner was updated after the completed support-ticket baseline
+above. Use the next comparable runner-managed plan to verify whether review and
+cleanup scope narrowing reduced stage cost.
+
+Runner changes now in place:
+
+- Token budget helpers warn at `300,000` input tokens or `40,000` uncached
+  input tokens for a stage.
+- Review auto-narrowing can run up to `3` passes before stopping as too broad.
+- Review pass 1 uses all plan-owned changed paths in summary-only mode.
+- Review pass 2 focuses on latest task paths, latest blocker paths, and
+  suspicious diff-stat entries.
+- Review pass 3 uses the smallest focused blocker/remediation path set and
+  caps primary full-diff paths at `8`.
+- Review staging clears stale staged blobs for review paths before re-adding
+  them with `git add --all -- <review paths>`.
+- Review staging fails before Codex review if any review path still has mixed
+  staged and unstaged state after staging.
+- Review prompts now read `git diff --staged --name-status` and
+  `git diff --staged --stat` for all review paths.
+- Review prompts read full staged diffs only for narrowed primary paths.
+- Full review diff text is capped at `80 KB`.
+- Scope cleanup skips Codex cleanup when the cached cleanup diff exceeds
+  `80 KB`; the runner should narrow again instead of sending the huge diff.
+- Latest failed review state cannot report `NEEDS FIX` or `HIGH RISK` while
+  leaving `unresolvedBlockers: []`.
+- Runner token logs now include review scope metadata:
+  `narrowPass`, `reviewAllPaths`, `reviewPrimaryPaths`, `diffBytes`,
+  `autoNarrowReason`, latest stage token usage, and cumulative token usage.
+
+Expected verification signal on the next comparable test:
+
+| Metric | Completed Support-Ticket Baseline | Expected After Runner Update |
+| --- | ---: | ---: |
+| Avg `review-changes` input | 2.20M | <= 300k when auto-narrow triggers |
+| Avg `review-changes` uncached input | 160,809 | <= 40k when auto-narrow triggers |
+| Max full review diff size | Not capped | <= 80 KB |
+| Max review full-diff path count | Not capped | <= 8 |
+| Stale staged review paths | Possible | Cleared and re-added before review |
+| Mixed staged/unstaged review paths | Could reach review prompt | Runner fails before review |
+| Huge scope-cleanup diff | Could reach Codex cleanup | Triggers narrowing/skips Codex cleanup |
+| Token/scope reason in ledger | Partial | Required on narrowed review stages |
+| Commit-summary calls | 3 | 1 |
+
+How to verify the improvement:
+
+1. Run a comparable two-task runner-managed workflow.
+2. Inspect `.ai/artifacts/<plan-name>/logs/token-usage.jsonl`.
+3. For each `review-changes` row, compare `inputTokens`,
+   `uncachedInputTokens`, `totalTokens`, `narrowPass`, `reviewAllPaths`,
+   `reviewPrimaryPaths`, `diffBytes`, and `autoNarrowReason`.
+4. Confirm narrowed review rows stay under `300k` input tokens and `40k`
+   uncached input tokens, or show an explicit `autoNarrowReason`.
+5. Confirm any `narrowPass: 3` row has at most `8` primary paths and
+   `diffBytes <= 81920`.
+6. Confirm large cleanup diffs are not sent to Codex cleanup.
+7. Compare aggregate `review-changes` cost against the completed support-ticket
+   baseline: 6 calls, 13.18M input tokens, 965k uncached input tokens, 13.28M total
+   tokens.
+8. Confirm completed two-task plans avoid repeated commit-summary calls; the
+   completed support-ticket baseline used 3 calls and 1.02M total tokens.
 
 ## Removed Superpowers State
 

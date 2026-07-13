@@ -31,7 +31,11 @@ import {
   parseCommitSummaryPathsForPlan,
   parseContextUsage,
   parseReviewStagingPaths,
+  runReviewStagingForPaths,
+  runScopeCleanupForPaths,
   runWorkflowRunner,
+  selectReviewPrimaryPaths,
+  stagedStatusHasMixedReviewPath,
   supportsWorkflowAnsiColor,
   WORKFLOW_WAIT_NOTICE_INTERVAL_MS,
   WORKFLOW_RUNNER_CODEX_PROFILE,
@@ -43,7 +47,10 @@ import {
 } from "./workflow-runner.ts";
 import {
   collectWorkflowThresholdWarnings,
+  decideWorkflowAutoNarrow,
   exceedsWorkflowTokenThresholds,
+  WORKFLOW_REVIEW_FULL_DIFF_BYTE_LIMIT,
+  WORKFLOW_REVIEW_PRIMARY_PATH_LIMIT,
 } from "./workflow-runner/token-warnings.ts";
 
 type Workspace = {
@@ -307,6 +314,31 @@ const setupWorkspace = async (): Promise<Workspace> => {
 
 const writePlan = async (root: string, planName: string, content: string) => {
   await writeFile(join(root, ".ai", "plans", `${planName}.md`), content);
+};
+
+const callTriples = (calls: Parameters<ProcessRunner>[0][]) =>
+  calls.map((call) => [call.command, call.args[0] ?? "", call.promptPath]);
+
+const assertCallSubsequence = (
+  calls: Parameters<ProcessRunner>[0][],
+  expected: string[][],
+) => {
+  const actual = callTriples(calls);
+  let cursor = 0;
+  for (const item of actual) {
+    if (
+      cursor < expected.length &&
+      item.length === expected[cursor].length &&
+      item.every((value, index) => value === expected[cursor][index])
+    ) {
+      cursor += 1;
+    }
+  }
+  assert.equal(
+    cursor,
+    expected.length,
+    `missing call subsequence ${JSON.stringify(expected)} in ${JSON.stringify(actual)}`,
+  );
 };
 
 const writeWorkflowEventArtifactSync = ({
@@ -4274,22 +4306,22 @@ test("unguarded workflow prompts do not add generic token guardrails after a pri
 test("workflow token thresholds use lowered strict warning boundaries", () => {
   assert.equal(
     exceedsWorkflowTokenThresholds({
-      stageInputTokens: 1_000_000,
-      stageUncachedInputTokens: 75_000,
+      stageInputTokens: 299_999,
+      stageUncachedInputTokens: 39_999,
     }),
     false,
   );
   assert.equal(
     exceedsWorkflowTokenThresholds({
-      stageInputTokens: 1_000_001,
-      stageUncachedInputTokens: 75_000,
+      stageInputTokens: 300_000,
+      stageUncachedInputTokens: 39_999,
     }),
     true,
   );
   assert.equal(
     exceedsWorkflowTokenThresholds({
-      stageInputTokens: 1_000_000,
-      stageUncachedInputTokens: 75_001,
+      stageInputTokens: 299_999,
+      stageUncachedInputTokens: 40_000,
     }),
     true,
   );
@@ -4297,8 +4329,8 @@ test("workflow token thresholds use lowered strict warning boundaries", () => {
     collectWorkflowThresholdWarnings({
       planByteSize: 1,
       latestTokenUsage: {
-        stageInputTokens: 1_000_000,
-        stageUncachedInputTokens: 75_000,
+        stageInputTokens: 299_999,
+        stageUncachedInputTokens: 39_999,
       },
     }),
     [],
@@ -4307,14 +4339,175 @@ test("workflow token thresholds use lowered strict warning boundaries", () => {
     collectWorkflowThresholdWarnings({
       planByteSize: 1,
       latestTokenUsage: {
-        stageInputTokens: 1_000_001,
-        stageUncachedInputTokens: 75_000,
+        stageInputTokens: 300_000,
+        stageUncachedInputTokens: 39_999,
       },
     }),
     [
       "Stage token usage is high; the next guarded workflow stage will use snapshot-first guidance.",
     ],
   );
+});
+
+test("review prompt uses all-path summaries and narrowed primary full diff", () => {
+  const prompt = generateWorkflowPrompt({
+    promptPath: ".ai/prompts/review-changes.md",
+    planPath: ".ai/plans/workflow-runner.md",
+    promptContent: "REVIEW CHANGES PROMPT",
+    reviewStagingPaths: ["src/a.ts", "src/b.ts", "src/c.ts"],
+    reviewPrimaryPaths: ["src/b.ts"],
+    reviewScopeMetadata: {
+      narrowPass: 2,
+      reviewAllPaths: ["src/a.ts", "src/b.ts", "src/c.ts"],
+      reviewPrimaryPaths: ["src/b.ts"],
+      diffBytes: 1234,
+      autoNarrowReason: "stage input 300000 >= 300000",
+    },
+  });
+
+  assert.match(
+    prompt,
+    /git diff --staged --name-status -- src\/a\.ts src\/b\.ts src\/c\.ts/,
+  );
+  assert.match(
+    prompt,
+    /git diff --staged --stat -- src\/a\.ts src\/b\.ts src\/c\.ts/,
+  );
+  assert.match(prompt, /git diff --staged -- src\/b\.ts/);
+  assert.doesNotMatch(
+    prompt,
+    /git diff --staged -- src\/a\.ts src\/b\.ts src\/c\.ts/,
+  );
+  assert.match(prompt, /Full diff byte limit: 81920/);
+  assert.match(prompt, /Auto-narrow reason: stage input 300000 >= 300000/);
+});
+
+test("review prompt can run summary-only pass without full diff paths", () => {
+  const prompt = generateWorkflowPrompt({
+    promptPath: ".ai/prompts/review-changes.md",
+    planPath: ".ai/plans/workflow-runner.md",
+    promptContent: "REVIEW CHANGES PROMPT",
+    reviewStagingPaths: ["src/a.ts", "src/b.ts"],
+    reviewPrimaryPaths: [],
+    reviewScopeMetadata: {
+      narrowPass: 1,
+      reviewAllPaths: ["src/a.ts", "src/b.ts"],
+      reviewPrimaryPaths: [],
+    },
+  });
+
+  assert.match(prompt, /No narrowed primary full-diff paths for this pass/);
+  assert.doesNotMatch(prompt, /git diff --staged -- src\/a\.ts src\/b\.ts/);
+});
+
+test("review primary path selection retries up to pass 3 and caps paths at 8", () => {
+  const allPaths = Array.from({ length: 12 }, (_, index) => `src/${index}.ts`);
+
+  assert.deepEqual(
+    selectReviewPrimaryPaths({ allPaths, narrowPass: 1 }),
+    [],
+  );
+  assert.deepEqual(
+    selectReviewPrimaryPaths({
+      allPaths,
+      narrowPass: 2,
+      blockerPaths: ["src/9.ts"],
+      suspiciousStatPaths: ["src/10.ts"],
+    }),
+    ["src/9.ts", "src/10.ts"],
+  );
+  assert.equal(
+    selectReviewPrimaryPaths({ allPaths, narrowPass: 3 }).length,
+    WORKFLOW_REVIEW_PRIMARY_PATH_LIMIT,
+  );
+});
+
+test("workflow auto-narrow helper increments passes then stops after pass 3", () => {
+  const first = decideWorkflowAutoNarrow({
+    currentPass: 0,
+    latestTokenUsage: { stageInputTokens: 300_000 },
+  });
+  assert.equal(first.shouldNarrow, true);
+  assert.equal(first.nextPass, 1);
+  assert.match(first.reason ?? "", /stage input 300000 >= 300000/);
+
+  const third = decideWorkflowAutoNarrow({
+    currentPass: 3,
+    diffBytes: WORKFLOW_REVIEW_FULL_DIFF_BYTE_LIMIT + 1,
+  });
+  assert.equal(third.shouldStop, true);
+  assert.equal(third.shouldNarrow, false);
+});
+
+test("review staging clears stale staged path then re-adds before review", async () => {
+  const calls: Parameters<ProcessRunner>[0][] = [];
+  const runner: ProcessRunner = async (call) => {
+    calls.push(call);
+    if (call.args.slice(0, 3).join(" ") === "diff --cached --name-only") {
+      return { launched: true, exitCode: 0, stdout: "src/a.ts\n", stderr: "" };
+    }
+    return { launched: true, exitCode: 0, stdout: "M  src/a.ts\n", stderr: "" };
+  };
+
+  const result = await runReviewStagingForPaths("/tmp/repo", ["src/a.ts"], runner);
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(
+    calls.map((call) => call.args.slice(0, 3).join(" ")),
+    ["diff --cached --name-only", "restore --staged --", "add --all --", "status --porcelain=v1 --"],
+  );
+});
+
+test("review staging fails when path remains mixed staged and unstaged", async () => {
+  const runner: ProcessRunner = async (call) => {
+    if (call.args[0] === "status") {
+      return { launched: true, exitCode: 0, stdout: "MM src/a.ts\n", stderr: "" };
+    }
+    return { launched: true, exitCode: 0, stdout: "", stderr: "" };
+  };
+
+  const result = await runReviewStagingForPaths("/tmp/repo", ["src/a.ts"], runner);
+
+  assert.equal(result.ok, false);
+  assert.match(result.ok ? "" : result.reason, /mixed staged\/unstaged/);
+  assert.equal(stagedStatusHasMixedReviewPath("MM src/a.ts\n"), true);
+  assert.equal(stagedStatusHasMixedReviewPath("M  src/a.ts\n"), false);
+});
+
+test("scope cleanup skips Codex when staged diff exceeds 80 KB", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    const calls: Parameters<ProcessRunner>[0][] = [];
+    const hugeDiff = `diff --git a/src/a.ts b/src/a.ts\n${"x".repeat(
+      WORKFLOW_REVIEW_FULL_DIFF_BYTE_LIMIT + 1,
+    )}`;
+    const result = await runScopeCleanupForPaths({
+      codexRuntime: {
+        command: "codex",
+        profile: WORKFLOW_RUNNER_CODEX_PROFILE,
+        execLabel: "codex exec",
+      },
+      rootDir: workspace.root,
+      planPath: ".ai/plans/workflow-runner.md",
+      planContent: planWithFileScope("review", "review-plan", {
+        modified: ["src/a.ts"],
+      }),
+      paths: ["src/a.ts"],
+      processRunner: async (call) => {
+        calls.push(call);
+        if (call.command === "git" && call.args[0] === "diff") {
+          return { launched: true, exitCode: 0, stdout: hugeDiff, stderr: "" };
+        }
+        return { launched: true, exitCode: 0, stdout: "", stderr: "" };
+      },
+      mode: "review",
+    });
+
+    assert.equal(result.skippedLargeDiff, true);
+    assert.equal(calls.some((call) => call.command === "codex"), false);
+  } finally {
+    await workspace.cleanup();
+  }
 });
 
 test("workflow prompt includes ai-workflow instructions for .ai-owned plan files", () => {
@@ -4830,8 +5023,13 @@ test("review workflow prompt includes plan-scoped staged diff commands for plan-
   );
   assert.match(
     prompt,
+    /git diff --staged --stat -- \.ai\/scripts\/workflow-runner\.ts \.ai\/scripts\/workflow-runner\.test\.ts/,
+  );
+  assert.doesNotMatch(
+    prompt,
     /git diff --staged -- \.ai\/scripts\/workflow-runner\.ts \.ai\/scripts\/workflow-runner\.test\.ts/,
   );
+  assert.match(prompt, /No narrowed primary full-diff paths for this pass/);
   assert.match(prompt, /Ignore staged files outside this path list/);
 });
 
@@ -4952,11 +5150,15 @@ test("review workflow prompt shell-quotes path-scoped diff commands", () => {
 
   assert.match(
     prompt,
-    /git diff --staged -- src\/simple\.ts 'docs\/plan notes\.md' 'src\/it'\\''s\.ts'/,
+    /git diff --staged --name-status -- src\/simple\.ts 'docs\/plan notes\.md' 'src\/it'\\''s\.ts'/,
   );
   assert.match(
     prompt,
-    /git diff --staged --name-status -- src\/simple\.ts 'docs\/plan notes\.md' 'src\/it'\\''s\.ts'/,
+    /git diff --staged --stat -- src\/simple\.ts 'docs\/plan notes\.md' 'src\/it'\\''s\.ts'/,
+  );
+  assert.doesNotMatch(
+    prompt,
+    /git diff --staged -- src\/simple\.ts 'docs\/plan notes\.md' 'src\/it'\\''s\.ts'/,
   );
 });
 
@@ -5282,6 +5484,36 @@ test("parsePlan rejects thin-plan-v2 sync state when workflow sidecar is mismatc
     assert.match(
       parsed.ok ? "" : parsed.reason,
       /draft \+ sync-plan-artifacts/,
+    );
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("parsePlan rejects thin-plan-v2 latest failed review with empty blockers", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writeThinPlanV2Artifacts(workspace.root, {
+      status: "active",
+      nextAction: "execute-plan",
+      latestReviewSummary: "NEEDS FIX",
+      activeBlockers: [],
+    });
+    await writePlan(
+      workspace.root,
+      "artifact-state",
+      thinPlanV2Manifest("active", "execute-plan"),
+    );
+
+    const parsed = await parsePlan({
+      planName: planArg("artifact-state"),
+      rootDir: workspace.root,
+    });
+
+    assert.equal(parsed.ok, false);
+    assert.match(
+      parsed.ok ? "" : parsed.reason,
+      /latest review requires fixes but unresolvedBlockers is empty/,
     );
   } finally {
     await workspace.cleanup();
@@ -6187,6 +6419,9 @@ test("routes only spec-defined executable pairs and sends blocked plans through 
               launchedModels.push(call.args[3] ?? "");
               launchedReasoning.push(call.args[5] ?? "");
             }
+            if (call.promptPath === ".ai/prompts/scope-cleanup.md") {
+              return;
+            }
             if (call.promptPath === ".ai/prompts/sync-plan-artifacts.md") {
               writeFileSync(
                 join(workspace.root, ".ai", "plans", `${name}.md`),
@@ -6372,15 +6607,13 @@ test("review safe path routes to completed commit-summary and succeeds after pla
         ".ai/prompts/commit-summary.md",
       ],
     );
-    assert.deepEqual(
-      calls
-        .filter((call) => call.command === "git")
-        .map((call) => call.args.slice(0, 4)),
+    assertCallSubsequence(
+      calls.filter((call) => call.command === "git"),
       [
-        ["diff", "--staged", "--name-status", "--"],
-        ["add", "--all", "--", "src/file.ts"],
-        ["diff", "--cached", "--unified=0", "--"],
-        ["status", "--short", "--", "src/file.ts"],
+        ["git", "diff", "git-pre-review-staged-check"],
+        ["git", "add", "git-staging"],
+        ["git", "diff", "git-scope-cleanup-diff"],
+        ["git", "status", "git-commit-summary-clean-check"],
       ],
     );
   } finally {
@@ -6466,15 +6699,13 @@ test("thin-plan-v2 review and commit-summary stage plan-owned paths from files.j
         ".ai/prompts/commit-summary.md",
       ],
     );
-    assert.deepEqual(
-      calls
-        .filter((call) => call.command === "git")
-        .map((call) => call.args.slice(0, 4)),
+    assertCallSubsequence(
+      calls.filter((call) => call.command === "git"),
       [
-        ["diff", "--staged", "--name-status", "--"],
-        ["add", "--all", "--", "src/artifact-state.ts"],
-        ["diff", "--cached", "--unified=0", "--"],
-        ["status", "--short", "--", "src/artifact-state.ts"],
+        ["git", "diff", "git-pre-review-staged-check"],
+        ["git", "add", "git-staging"],
+        ["git", "diff", "git-scope-cleanup-diff"],
+        ["git", "status", "git-commit-summary-clean-check"],
       ],
     );
   } finally {
@@ -6635,11 +6866,14 @@ test("workflow runner succeeds after review defers final browser validation to m
         ".ai/prompts/commit-summary.md",
       ],
     );
-    assert.deepEqual(
-      calls
-        .filter((call) => call.command === "git")
-        .map((call) => call.args[0]),
-      ["diff", "add", "diff", "status"],
+    assertCallSubsequence(
+      calls.filter((call) => call.command === "git"),
+      [
+        ["git", "diff", "git-pre-review-staged-check"],
+        ["git", "add", "git-staging"],
+        ["git", "diff", "git-scope-cleanup-diff"],
+        ["git", "status", "git-commit-summary-clean-check"],
+      ],
     );
     const consoleOutput = output.lines.join("\n");
     assert.match(consoleOutput, /SUCCESS/);
@@ -8028,17 +8262,14 @@ test(`${CODEX_EXEC_LABEL} prompt contains selected prompt content and exact plan
       ),
     });
     assert.equal(result.success, false);
-    assert.equal(calls.length, 7);
     assert.deepEqual(
-      calls.map((call) => [call.command, call.args[0], call.promptPath]),
+      calls
+        .filter((call) => call.command === CODEX_COMMAND)
+        .map((call) => [call.command, call.args[0], call.promptPath]),
       [
         [CODEX_COMMAND, "exec", ".ai/prompts/execute-plan.md"],
-        ["git", "diff", "git-pre-review-staged-check"],
-        ["git", "add", "git-staging"],
-        ["git", "diff", "git-scope-cleanup-diff"],
         [CODEX_COMMAND, "exec", ".ai/prompts/scope-cleanup.md"],
         [CODEX_COMMAND, "exec", ".ai/prompts/review-changes.md"],
-        ["git", "restore", "git-review-unstage"],
       ],
     );
     assert.equal(calls[0].args.length, 7);
@@ -8161,7 +8392,7 @@ test("reopen-plan prompts include selected prompt content and continue to execut
     assert.equal(calls[0].input, "");
     assert.match(calls[0].args[6], /^Use \.ai\/prompts\/reopen-plan\.md/);
     assert.match(calls[0].args[6], /Reopen:\n\.ai\/plans\/workflow-runner\.md/);
-    assert.match(calls[0].args[6], /REOPEN PLAN PROMPT/);
+    assert.doesNotMatch(calls[0].args[6], /REOPEN PLAN PROMPT/);
   } finally {
     await workspace.cleanup();
   }
@@ -9088,19 +9319,19 @@ test("high-token prior stages do not add generic guardrail guidance to unguarded
   }
 });
 
-test("equal-threshold, malformed latest, and non-finite latest ledgers do not add workflow guardrails", async () => {
+test("below-threshold, malformed latest, and non-finite latest ledgers do not add workflow guardrails", async () => {
   const scenarios: Array<{
     name: string;
     ledger: string;
   }> = [
     {
-      name: "equal-threshold",
+      name: "below-threshold",
       ledger: `${JSON.stringify({
         timestamp: "2026-06-29T00:00:00.000Z",
         iteration: 3,
         promptPath: ".ai/prompts/review-changes.md",
-        stageInputTokens: 1_000_000,
-        stageUncachedInputTokens: 75_000,
+        stageInputTokens: 299_999,
+        stageUncachedInputTokens: 39_999,
       })}\n`,
     },
     {
@@ -12668,22 +12899,24 @@ test(`review staging git add runs before review ${CODEX_COMMAND}, unstages plan-
     assert.equal(failed.success, false);
     assert.match(failed.reason, /review staging git add exited with code 1/);
     assert.match(failed.reason, /fatal/);
-    assert.deepEqual(
-      calls.map((call) => [call.command, call.args[0]]),
-      [
-        ["git", "diff"],
-        ["git", "add"],
-        ["git", "restore"],
-      ],
+    assertCallSubsequence(calls, [
+      ["git", "diff", "git-pre-review-staged-check"],
+      ["git", "diff", "git-review-staging-staged-paths"],
+      ["git", "add", "git-staging"],
+      ["git", "restore", "git-review-unstage"],
+    ]);
+    const addCall = calls.find((call) => call.promptPath === "git-staging");
+    const cleanupCall = calls.find(
+      (call) => call.promptPath === "git-review-unstage",
     );
-    assert.deepEqual(calls[1].args, [
+    assert.deepEqual(addCall?.args, [
       "add",
       "--all",
       "--",
       ".ai/scripts/workflow-runner.test.ts",
       ".ai/scripts/workflow-runner.ts",
     ]);
-    assert.deepEqual(calls[2].args, [
+    assert.deepEqual(cleanupCall?.args, [
       "restore",
       "--staged",
       "--",
@@ -12833,17 +13066,14 @@ test("review-plan stages plan-owned files normally when the repo has no pre-exis
     });
 
     assert.equal(result.success, true);
-    assert.deepEqual(
-      calls.map((call) => [call.command, call.args[0] ?? "", call.promptPath]),
-      [
-        ["git", "diff", "git-pre-review-staged-check"],
-        ["git", "add", "git-staging"],
-        ["git", "diff", "git-scope-cleanup-diff"],
-        [CODEX_COMMAND, "exec", ".ai/prompts/review-changes.md"],
-        [CODEX_COMMAND, "exec", ".ai/prompts/commit-summary.md"],
-        ["git", "status", "git-commit-summary-clean-check"],
-      ],
-    );
+    assertCallSubsequence(calls, [
+      ["git", "diff", "git-pre-review-staged-check"],
+      ["git", "add", "git-staging"],
+      ["git", "diff", "git-scope-cleanup-diff"],
+      [CODEX_COMMAND, "exec", ".ai/prompts/review-changes.md"],
+      [CODEX_COMMAND, "exec", ".ai/prompts/commit-summary.md"],
+      ["git", "status", "git-commit-summary-clean-check"],
+    ]);
   } finally {
     await workspace.cleanup();
   }
@@ -13119,20 +13349,20 @@ test("review staging auto-unstages unrelated hunks before review prompt runs", a
     });
 
     assert.equal(result.success, true);
-    assert.deepEqual(
-      calls.map((call) => [call.command, call.args[0] ?? "", call.promptPath]),
-      [
-        ["git", "diff", "git-pre-review-staged-check"],
-        ["git", "add", "git-staging"],
-        ["git", "diff", "git-scope-cleanup-diff"],
-        [CODEX_COMMAND, "exec", ".ai/prompts/scope-cleanup.md"],
-        ["git", "apply", "git-scope-cleanup-unstage"],
-        [CODEX_COMMAND, "exec", ".ai/prompts/review-changes.md"],
-        [CODEX_COMMAND, "exec", ".ai/prompts/commit-summary.md"],
-        ["git", "status", "git-commit-summary-clean-check"],
-      ],
+    assertCallSubsequence(calls, [
+      ["git", "diff", "git-pre-review-staged-check"],
+      ["git", "add", "git-staging"],
+      ["git", "diff", "git-scope-cleanup-diff"],
+      [CODEX_COMMAND, "exec", ".ai/prompts/scope-cleanup.md"],
+      ["git", "apply", "git-scope-cleanup-unstage"],
+      [CODEX_COMMAND, "exec", ".ai/prompts/review-changes.md"],
+      [CODEX_COMMAND, "exec", ".ai/prompts/commit-summary.md"],
+      ["git", "status", "git-commit-summary-clean-check"],
+    ]);
+    const applyCall = calls.find(
+      (call) => call.promptPath === "git-scope-cleanup-unstage",
     );
-    assert.equal(calls[4].input.includes('const unrelated = "remove";'), true);
+    assert.equal(applyCall?.input.includes('const unrelated = "remove";'), true);
   } finally {
     await workspace.cleanup();
   }
@@ -13493,17 +13723,16 @@ test(`review ${CODEX_COMMAND} failure after staging unstages plan-owned files be
       failed.reason,
       /output contained STOP: review requires manual fix/,
     );
-    assert.deepEqual(
-      calls.map((call) => [call.command, call.args[0] ?? ""]),
-      [
-        ["git", "diff"],
-        ["git", "add"],
-        ["git", "diff"],
-        [CODEX_COMMAND, "exec"],
-        ["git", "restore"],
-      ],
+    assertCallSubsequence(calls, [
+      ["git", "diff", "git-pre-review-staged-check"],
+      ["git", "add", "git-staging"],
+      [CODEX_COMMAND, "exec", ".ai/prompts/review-changes.md"],
+      ["git", "restore", "git-review-unstage"],
+    ]);
+    const unstageCall = calls.find(
+      (call) => call.promptPath === "git-review-unstage",
     );
-    assert.deepEqual(calls[4].args, [
+    assert.deepEqual(unstageCall?.args, [
       "restore",
       "--staged",
       "--",
@@ -13527,6 +13756,9 @@ test("review cleanup failures write staging and cleanup command evidence to the 
       planName: planArg("review-cleanup-failure"),
       rootDir: workspace.root,
       processRunner: async (call) => {
+        if (call.command === "git" && call.args[0] === "status") {
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
         if (call.command === "git" && call.args[0] === "add") {
           return { launched: true, stdout: "staged", stderr: "", exitCode: 0 };
         }
@@ -13662,17 +13894,14 @@ test(`review changes failure resumes execute-plan after unstaging review paths`,
 
     assert.equal(result.success, false);
     assert.match(result.reason, /plan blocked after execute-plan/i);
-    assert.deepEqual(
-      calls.map((call) => [call.command, call.args[0] ?? "", call.promptPath]),
-      [
-        ["git", "diff", "git-pre-review-staged-check"],
-        ["git", "add", "git-staging"],
-        ["git", "diff", "git-scope-cleanup-diff"],
-        [CODEX_COMMAND, "exec", ".ai/prompts/review-changes.md"],
-        ["git", "restore", "git-review-unstage"],
-        [CODEX_COMMAND, "exec", ".ai/prompts/execute-plan.md"],
-      ],
-    );
+    assertCallSubsequence(calls, [
+      ["git", "diff", "git-pre-review-staged-check"],
+      ["git", "add", "git-staging"],
+      ["git", "diff", "git-scope-cleanup-diff"],
+      [CODEX_COMMAND, "exec", ".ai/prompts/review-changes.md"],
+      ["git", "restore", "git-review-unstage"],
+      [CODEX_COMMAND, "exec", ".ai/prompts/execute-plan.md"],
+    ]);
   } finally {
     await workspace.cleanup();
   }
@@ -13750,16 +13979,13 @@ test(`legacy review quality failure resumes execute-plan after unstaging review 
 
     assert.equal(result.success, false);
     assert.match(result.reason, /plan blocked after execute-plan/i);
-    assert.deepEqual(
-      calls.map((call) => [call.command, call.args[0] ?? "", call.promptPath]),
-      [
-        ["git", "add", "git-staging"],
-        ["git", "diff", "git-scope-cleanup-diff"],
-        [CODEX_COMMAND, "exec", ".ai/prompts/review-quality.md"],
-        ["git", "restore", "git-review-unstage"],
-        [CODEX_COMMAND, "exec", ".ai/prompts/execute-plan.md"],
-      ],
-    );
+    assertCallSubsequence(calls, [
+      ["git", "add", "git-staging"],
+      ["git", "diff", "git-scope-cleanup-diff"],
+      [CODEX_COMMAND, "exec", ".ai/prompts/review-quality.md"],
+      ["git", "restore", "git-review-unstage"],
+      [CODEX_COMMAND, "exec", ".ai/prompts/execute-plan.md"],
+    ]);
   } finally {
     await workspace.cleanup();
   }

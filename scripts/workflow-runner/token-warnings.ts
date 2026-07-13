@@ -1,10 +1,20 @@
 const WORKFLOW_CONTEXT_PLAN_SIZE_WARNING_BYTES = 100 * 1024;
-const WORKFLOW_CONTEXT_STAGE_INPUT_WARNING_TOKENS = 1_000_000;
-const WORKFLOW_CONTEXT_STAGE_UNCACHED_WARNING_TOKENS = 75_000;
+export const WORKFLOW_STAGE_INPUT_WARNING_TOKENS = 300_000;
+export const WORKFLOW_STAGE_UNCACHED_WARNING_TOKENS = 40_000;
+export const WORKFLOW_REVIEW_FULL_DIFF_BYTE_LIMIT = 80 * 1024;
+export const WORKFLOW_REVIEW_PRIMARY_PATH_LIMIT = 8;
+export const WORKFLOW_AUTO_NARROW_PASS_LIMIT = 3;
 
 export type WorkflowThresholdTokenUsage = {
   stageInputTokens?: number | null;
   stageUncachedInputTokens?: number | null;
+};
+
+export type WorkflowAutoNarrowDecision = {
+  shouldNarrow: boolean;
+  shouldStop: boolean;
+  nextPass: number;
+  reason?: string;
 };
 
 const isFiniteNumber = (value: unknown): value is number =>
@@ -16,9 +26,68 @@ export const exceedsWorkflowTokenThresholds = (
   latestTokenUsage?: WorkflowThresholdTokenUsage,
 ): boolean =>
   (isFiniteNumber(latestTokenUsage?.stageInputTokens) &&
-    latestTokenUsage.stageInputTokens > WORKFLOW_CONTEXT_STAGE_INPUT_WARNING_TOKENS) ||
+    latestTokenUsage.stageInputTokens >= WORKFLOW_STAGE_INPUT_WARNING_TOKENS) ||
   (isFiniteNumber(latestTokenUsage?.stageUncachedInputTokens) &&
-    latestTokenUsage.stageUncachedInputTokens > WORKFLOW_CONTEXT_STAGE_UNCACHED_WARNING_TOKENS);
+    latestTokenUsage.stageUncachedInputTokens >= WORKFLOW_STAGE_UNCACHED_WARNING_TOKENS);
+
+export const formatWorkflowTokenBudgetReason = (
+  latestTokenUsage?: WorkflowThresholdTokenUsage,
+): string | undefined => {
+  const reasons: string[] = [];
+  if (
+    isFiniteNumber(latestTokenUsage?.stageInputTokens) &&
+    latestTokenUsage.stageInputTokens >= WORKFLOW_STAGE_INPUT_WARNING_TOKENS
+  ) {
+    reasons.push(
+      `stage input ${latestTokenUsage.stageInputTokens} >= ${WORKFLOW_STAGE_INPUT_WARNING_TOKENS}`,
+    );
+  }
+  if (
+    isFiniteNumber(latestTokenUsage?.stageUncachedInputTokens) &&
+    latestTokenUsage.stageUncachedInputTokens >=
+      WORKFLOW_STAGE_UNCACHED_WARNING_TOKENS
+  ) {
+    reasons.push(
+      `stage uncached input ${latestTokenUsage.stageUncachedInputTokens} >= ${WORKFLOW_STAGE_UNCACHED_WARNING_TOKENS}`,
+    );
+  }
+  return reasons.length > 0 ? reasons.join("; ") : undefined;
+};
+
+export const decideWorkflowAutoNarrow = ({
+  latestTokenUsage,
+  currentPass = 0,
+  diffBytes,
+  cleanupDiffBytes,
+}: {
+  latestTokenUsage?: WorkflowThresholdTokenUsage;
+  currentPass?: number;
+  diffBytes?: number;
+  cleanupDiffBytes?: number;
+}): WorkflowAutoNarrowDecision => {
+  const reasons = [
+    formatWorkflowTokenBudgetReason(latestTokenUsage),
+    isFiniteNumber(diffBytes) && diffBytes > WORKFLOW_REVIEW_FULL_DIFF_BYTE_LIMIT
+      ? `review full diff ${diffBytes} bytes > ${WORKFLOW_REVIEW_FULL_DIFF_BYTE_LIMIT} bytes`
+      : undefined,
+    isFiniteNumber(cleanupDiffBytes) &&
+    cleanupDiffBytes > WORKFLOW_REVIEW_FULL_DIFF_BYTE_LIMIT
+      ? `scope cleanup diff ${cleanupDiffBytes} bytes > ${WORKFLOW_REVIEW_FULL_DIFF_BYTE_LIMIT} bytes`
+      : undefined,
+  ].filter((reason): reason is string => Boolean(reason));
+
+  if (reasons.length === 0) {
+    return { shouldNarrow: false, shouldStop: false, nextPass: currentPass };
+  }
+
+  const nextPass = Math.min(currentPass + 1, WORKFLOW_AUTO_NARROW_PASS_LIMIT);
+  return {
+    shouldNarrow: currentPass < WORKFLOW_AUTO_NARROW_PASS_LIMIT,
+    shouldStop: currentPass >= WORKFLOW_AUTO_NARROW_PASS_LIMIT,
+    nextPass,
+    reason: reasons.join("; "),
+  };
+};
 
 export const collectWorkflowThresholdWarnings = ({
   planByteSize,
@@ -38,9 +107,10 @@ export const collectWorkflowThresholdWarnings = ({
 
   if (
     (isFiniteNumber(latestTokenUsage?.stageInputTokens) &&
-      latestTokenUsage.stageInputTokens > WORKFLOW_CONTEXT_STAGE_INPUT_WARNING_TOKENS) ||
+      latestTokenUsage.stageInputTokens >= WORKFLOW_STAGE_INPUT_WARNING_TOKENS) ||
     (isFiniteNumber(latestTokenUsage?.stageUncachedInputTokens) &&
-      latestTokenUsage.stageUncachedInputTokens > WORKFLOW_CONTEXT_STAGE_UNCACHED_WARNING_TOKENS)
+      latestTokenUsage.stageUncachedInputTokens >=
+        WORKFLOW_STAGE_UNCACHED_WARNING_TOKENS)
   ) {
     warnings.push(
       'Stage token usage is high; the next guarded workflow stage will use snapshot-first guidance.',
