@@ -1,5 +1,5 @@
-Version: 1.15
-Last Updated: 2026-07-09
+Version: 1.16
+Last Updated: 2026-07-14
 
 # Workflow State Instructions
 
@@ -16,7 +16,6 @@ Define the canonical plan workflow state machine: plan statuses, next actions, a
 - `.ai/prompts/execute-plan.md`
 - `.ai/prompts/unblock-plan.md`
 - `.ai/prompts/review-changes.md`
-- `.ai/prompts/review-quality.md`
 - `.ai/prompts/fix-review.md`
 - `.ai/prompts/reopen-plan.md`
 - `.ai/prompts/commit-summary.md`
@@ -222,8 +221,6 @@ Review implementation note:
 
 * Public entry remains `review + review-plan`.
 * The runner executes one combined harness review through `.ai/prompts/review-changes.md`.
-* `.ai/prompts/review-quality.md` is a legacy resume path only for in-flight split reviews that already have stage-1 spec-pass evidence.
-
 Review system boundary:
 
 * Public entry remains `review + review-plan`.

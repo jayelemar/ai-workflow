@@ -48,7 +48,6 @@ import {
 } from "./workflow-runner/thin-plan.ts";
 type CodexProfile = string;
 type CodexModel =
-  | "gpt-5.6-sol"
   | "gpt-5.6-terra"
   | "gpt-5.6-luna"
   | "gpt-5.5"
@@ -70,25 +69,19 @@ const SYNC_PLAN_ARTIFACTS_PROMPT_PATH = ".ai/prompts/sync-plan-artifacts.md";
 const EXECUTE_PLAN_PROMPT_PATH = ".ai/prompts/execute-plan.md";
 const UNBLOCK_PLAN_PROMPT_PATH = ".ai/prompts/unblock-plan.md";
 const REVIEW_CHANGES_PROMPT_PATH = ".ai/prompts/review-changes.md";
-const REVIEW_QUALITY_PROMPT_PATH = ".ai/prompts/review-quality.md";
 const REOPEN_PLAN_PROMPT_PATH = ".ai/prompts/reopen-plan.md";
 const COMMIT_SUMMARY_PROMPT_PATH = ".ai/prompts/commit-summary.md";
 const SCOPE_CLEANUP_PROMPT_PATH = ".ai/prompts/scope-cleanup.md";
-const REVIEW_PROMPT_PATHS = new Set([
-  REVIEW_CHANGES_PROMPT_PATH,
-  REVIEW_QUALITY_PROMPT_PATH,
-]);
 
 // Previous routing kept for rollback/reference:
-// sync-plan-artifacts -> gpt-5.4 medium
-// plan-validator      -> gpt-5.4 high
-// execute-plan        -> gpt-5.4 high
-// unblock-plan        -> gpt-5.4 medium
-// review-changes      -> gpt-5.5 xhigh
-// review-quality      -> gpt-5.5 xhigh
-// reopen-plan         -> gpt-5.4 medium
-// commit-summary      -> gpt-5.3-codex-spark medium
-// scope-cleanup       -> gpt-5.5 xhigh
+// sync-plan-artifacts -> gpt-5.6-luna medium
+// plan-validator      -> gpt-5.6-terra medium
+// execute-plan        -> gpt-5.6-terra high
+// unblock-plan        -> gpt-5.6-luna medium
+// review-changes      -> gpt-5.6-terra xhigh
+// reopen-plan         -> gpt-5.6-luna medium
+// commit-summary      -> gpt-5.6-luna medium
+// scope-cleanup       -> gpt-5.6-terra high
 const PROMPT_CODEX_EXECUTION_OVERRIDES: Record<string, CodexExecutionConfig> = {
   [SYNC_PLAN_ARTIFACTS_PROMPT_PATH]: {
     model: "gpt-5.6-luna",
@@ -97,8 +90,7 @@ const PROMPT_CODEX_EXECUTION_OVERRIDES: Record<string, CodexExecutionConfig> = {
   [PLAN_VALIDATOR_PROMPT_PATH]: { model: "gpt-5.6-terra", reasoning: "medium" },
   [EXECUTE_PLAN_PROMPT_PATH]: { model: "gpt-5.6-terra", reasoning: "high" },
   [UNBLOCK_PLAN_PROMPT_PATH]: { model: "gpt-5.6-luna", reasoning: "medium" },
-  [REVIEW_CHANGES_PROMPT_PATH]: { model: "gpt-5.6-terra", reasoning: "high" },
-  [REVIEW_QUALITY_PROMPT_PATH]: { model: "gpt-5.6-sol", reasoning: "xhigh" },
+  [REVIEW_CHANGES_PROMPT_PATH]: { model: "gpt-5.6-terra", reasoning: "xhigh" },
   [REOPEN_PLAN_PROMPT_PATH]: { model: "gpt-5.6-luna", reasoning: "medium" },
   [COMMIT_SUMMARY_PROMPT_PATH]: {
     model: "gpt-5.6-luna",
@@ -139,6 +131,8 @@ const TERMINAL_FAILED_COMMAND_OUTPUT_CHAR_LIMIT = 1000;
 const TERMINAL_FILE_DETAIL_LIMIT = 3;
 const TERMINAL_PROGRESS_DETAIL_LIMIT = 200;
 const STOP_REASON_EXCERPT_CHAR_LIMIT = 240;
+const WORKFLOW_FILE_LOCK_HEARTBEAT_INTERVAL_MS = 60_000;
+const WORKFLOW_FILE_LOCK_STALE_AFTER_MS = 30 * 60_000;
 const ANSI_RESET = "\u001b[0m";
 const ANSI_SEQUENCE_PATTERN =
   /\u001b(?:\[([0-?]*[ -/]*)([@-~])|\][^\u0007]*(?:\u0007|\u001b\\)|[@-_])/g;
@@ -292,6 +286,7 @@ type ReviewStagingResult =
 type ReviewStagingProcess = {
   command: string;
   args: string[];
+  paths?: string[];
   stdout: string;
   stderr: string;
   exitCode?: number;
@@ -303,6 +298,7 @@ type ReviewScopeMetadata = {
   narrowPass: number;
   reviewAllPaths: string[];
   reviewPrimaryPaths: string[];
+  summaryOnlyPaths?: string[];
   diffBytes?: number;
   autoNarrowReason?: string;
 };
@@ -314,6 +310,7 @@ type WorkflowFileLockMetadata = {
   planPath: string;
   pid: number;
   createdAt: string;
+  heartbeatAt?: string;
   path: string;
 };
 
@@ -2558,10 +2555,6 @@ const stageStylesByPromptPath: Record<
     label: "REVIEW",
     colorCode: "\u001b[37;45m",
   },
-  [rel(".ai", "prompts", "review-quality.md")]: {
-    label: "QUALITY REVIEW",
-    colorCode: "\u001b[37;45m",
-  },
   [rel(".ai", "prompts", "reopen-plan.md")]: {
     label: "REOPEN",
     colorCode: "\u001b[37;45m",
@@ -3518,7 +3511,6 @@ const promptActionLabels: Record<string, string> = {
   [rel(".ai", "prompts", "execute-plan.md")]: "Execute",
   [rel(".ai", "prompts", "unblock-plan.md")]: "Unblock",
   [rel(".ai", "prompts", "review-changes.md")]: "Review",
-  [rel(".ai", "prompts", "review-quality.md")]: "Quality review",
   [rel(".ai", "prompts", "fix-review.md")]: "Fix review",
   [rel(".ai", "prompts", "reopen-plan.md")]: "Reopen",
   [rel(".ai", "prompts", "commit-summary.md")]: "Commit summary",
@@ -3856,17 +3848,6 @@ const extractLatestReviewSummary = (
     evidence: extractFieldValue(latestReview.lines, "Evidence"),
     unresolvedFindings,
   };
-};
-
-const latestReviewIsSpecPass = (planContent: string): boolean => {
-  const latestReview = extractLatestReviewSummary(planContent);
-  const evidence = latestReview.evidence ?? "";
-  const summary = latestReview.summary ?? "";
-  return (
-    latestReview.decision === "review" &&
-    /(?:^|\/)review-spec-v\d+\.md$/i.test(evidence) &&
-    /\b(?:SPEC PASS|PASS)\b/i.test(summary)
-  );
 };
 
 const extractLatestReviewRemediationContext = (
@@ -4303,6 +4284,27 @@ const workflowEventHistoryIndex = (
   return indexes.length > 0 ? Math.min(...indexes) : -1;
 };
 
+const normalizeWorkflowEventHistory = (
+  value: unknown,
+): string[] | undefined => {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const history = value.map((entry) => {
+    if (typeof entry === "string") {
+      return entry;
+    }
+    const event = asRecord(entry);
+    const pointer = event?.path ?? event?.evidence;
+    return typeof pointer === "string" && pointer.length > 0
+      ? pointer
+      : undefined;
+  });
+  return history.every((entry): entry is string => typeof entry === "string")
+    ? history
+    : undefined;
+};
+
 const workflowReviewSupersededByProgress = (
   latest: Record<string, unknown> | undefined,
   history: string[] | undefined,
@@ -4334,7 +4336,7 @@ const parseThinPlanV2WorkflowState = (
   const nextAction = record?.nextAction;
   const updatedAt = record?.updatedAt;
   const unresolvedBlockers = asStringArray(record?.unresolvedBlockers) ?? [];
-  const history = asStringArray(record?.history);
+  const history = normalizeWorkflowEventHistory(record?.history);
 
   if (
     typeof planPath !== "string" ||
@@ -5074,26 +5076,13 @@ const routeFor = (status: Status, nextAction: NextAction): Route => {
   };
 };
 
-const internalRouteForPromptPath = (promptPath: string): Route => ({
-  executable: true,
-  promptPath,
-  terminal: false,
-});
-
-const isSpecReviewPrompt = (promptPath: string): boolean =>
-  promptPath === REVIEW_CHANGES_PROMPT_PATH;
-
-const isQualityReviewPrompt = (promptPath: string): boolean =>
-  promptPath === REVIEW_QUALITY_PROMPT_PATH;
-
 const isReviewPrompt = (promptPath: string): boolean =>
-  isSpecReviewPrompt(promptPath) || isQualityReviewPrompt(promptPath);
+  promptPath === REVIEW_CHANGES_PROMPT_PATH;
 
 const WORKFLOW_TOKEN_GUARDED_PROMPT_PATHS = new Set([
   PLAN_VALIDATOR_PROMPT_PATH,
   EXECUTE_PLAN_PROMPT_PATH,
   REVIEW_CHANGES_PROMPT_PATH,
-  REVIEW_QUALITY_PROMPT_PATH,
 ]);
 
 const isWorkflowTokenGuardedPrompt = (promptPath: string): boolean =>
@@ -5186,6 +5175,18 @@ Stop reading full diff output after ${WORKFLOW_REVIEW_FULL_DIFF_BYTE_LIMIT} byte
 No narrowed primary full-diff paths for this pass.
 Do not run full \`git diff --staged\` across all review paths. Use name-status/stat summaries first and request another narrowed pass by returning \`STOP\` with exact suspicious paths if full diff evidence is required.
 `;
+  const reviewSummaryOnlyBlock =
+    reviewScopeMetadata?.summaryOnlyPaths &&
+    reviewScopeMetadata.summaryOnlyPaths.length > 0
+      ? `
+These generated artifacts are summary-only for this review pass:
+${reviewScopeMetadata.summaryOnlyPaths
+  .map((stagingPath) => `- ${stagingPath}`)
+  .join("\n")}
+
+Verify them through the all-path name-status/stat output and the source migration or schema changes that generated them. Do not spend the primary full-diff budget on generated output unless a concrete type/API mismatch requires exact evidence.
+`
+      : "";
   const reviewBoundary =
     isReviewPrompt(promptPath) && reviewAllPaths.length > 0
       ? `
@@ -5200,6 +5201,8 @@ git diff --staged --name-status -- ${shellPathspecs(reviewAllPaths)}
 git diff --staged --stat -- ${shellPathspecs(reviewAllPaths)}
 
 ${reviewPrimaryBlock}
+
+${reviewSummaryOnlyBlock}
 
 Ignore staged files outside this path list. Do not run bare \`git diff --staged\` as the primary review source.
 The runner may auto-unstage clearly unrelated staged hunks from these paths before review. Review the remaining path-scoped staged diff only.
@@ -5291,7 +5294,7 @@ The previous stage exceeded token thresholds.
 - This guardrail does not override required spec reads, path-scoped staged diff reads, latest validation evidence, workflow state reads, or other correctness-critical prompt inputs.
 `
       : "";
-  const promptIsReview = REVIEW_PROMPT_PATHS.has(promptPath);
+  const promptIsReview = isReviewPrompt(promptPath);
   const reviewPolicy = promptIsReview
     ? `
 Harness review policy:
@@ -6520,7 +6523,7 @@ const recoverThinPlanV2ExecuteHandoff = async ({
     },
   };
   const history = uniquePaths([
-    ...(asStringArray(workflowRecord.history) ?? []),
+    ...(normalizeWorkflowEventHistory(workflowRecord.history) ?? []),
     executionPath,
     validationPath,
   ]);
@@ -7537,6 +7540,18 @@ const checkForPreReviewStagedWork = async (
   return { ok: true };
 };
 
+const gitStatusPathFromPorcelainLine = (line: string): string | undefined => {
+  const body = line.slice(3).trim();
+  if (!body) {
+    return undefined;
+  }
+  const renameSeparator = " -> ";
+  if (body.includes(renameSeparator)) {
+    return body.split(renameSeparator).at(-1)?.trim();
+  }
+  return body;
+};
+
 export const runReviewStagingForPaths = async (
   rootDir: string,
   paths: string[],
@@ -7553,9 +7568,54 @@ export const runReviewStagingForPaths = async (
       staging?: ReviewStagingProcess;
     }
 > => {
+  const changedPathResult = await processRunner({
+    command: "git",
+    args: ["status", "--porcelain=v1", "--untracked-files=all", "--", ...paths],
+    cwd: rootDir,
+    input: "",
+    promptPath: "git-review-staging-changed-paths",
+  }).catch(
+    (error): ProcessResult => ({
+      launched: false,
+      stdout: "",
+      stderr: "",
+      error: String(error),
+    }),
+  );
+  if (!changedPathResult.launched) {
+    return {
+      ok: false,
+      reason: `could not launch review staging changed-path check: ${changedPathResult.error}`,
+    };
+  }
+  if (changedPathResult.exitCode !== 0) {
+    const details = [
+      changedPathResult.stderr.trim(),
+      changedPathResult.stdout.trim(),
+    ]
+      .filter(Boolean)
+      .join("\n");
+    return {
+      ok: false,
+      reason: `review staging changed-path check exited with code ${changedPathResult.exitCode}${details ? `: ${details}` : ""}`,
+    };
+  }
+  const requestedPaths = new Set(paths);
+  const changedPaths = uniquePaths(
+    [changedPathResult.stdout, changedPathResult.stderr]
+      .flatMap((output) => output.split(/\r?\n/))
+      .map(gitStatusPathFromPorcelainLine)
+      .filter(
+        (path): path is string =>
+          path !== undefined && requestedPaths.has(path),
+      ),
+  );
+  // Preserve existing behavior when Git reports no status entries.
+  const stagingPaths = changedPaths.length > 0 ? changedPaths : paths;
+
   const stagedPathResult = await processRunner({
     command: "git",
-    args: ["diff", "--cached", "--name-only", "--", ...paths],
+    args: ["diff", "--cached", "--name-only", "--", ...stagingPaths],
     cwd: rootDir,
     input: "",
     promptPath: "git-review-staging-staged-paths",
@@ -7570,8 +7630,8 @@ export const runReviewStagingForPaths = async (
   if (!stagedPathResult.launched) {
     const reason = `could not launch review staging staged-path check: ${stagedPathResult.error}`;
     const staging: ReviewStagingProcess = {
-      command: `git diff --cached --name-only -- ${shellPathspecs(paths)}`,
-      args: ["diff", "--cached", "--name-only", "--", ...paths],
+      command: `git diff --cached --name-only -- ${shellPathspecs(stagingPaths)}`,
+      args: ["diff", "--cached", "--name-only", "--", ...stagingPaths],
       stdout: stagedPathResult.stdout,
       stderr: stagedPathResult.stderr,
       exitCode: undefined,
@@ -7595,8 +7655,8 @@ export const runReviewStagingForPaths = async (
       ok: false,
       reason,
       staging: {
-        command: `git diff --cached --name-only -- ${shellPathspecs(paths)}`,
-        args: ["diff", "--cached", "--name-only", "--", ...paths],
+        command: `git diff --cached --name-only -- ${shellPathspecs(stagingPaths)}`,
+        args: ["diff", "--cached", "--name-only", "--", ...stagingPaths],
         stdout: stagedPathResult.stdout,
         stderr: stagedPathResult.stderr,
         exitCode: stagedPathResult.exitCode,
@@ -7604,7 +7664,7 @@ export const runReviewStagingForPaths = async (
       },
     };
   }
-  const stagedPathSet = new Set(paths);
+  const stagedPathSet = new Set(stagingPaths);
   const restorePaths = uniquePaths(
     stagedPathResult.stdout
       .split(/\r?\n/)
@@ -7612,17 +7672,24 @@ export const runReviewStagingForPaths = async (
       .filter((line) => line.length > 0 && stagedPathSet.has(line)),
   );
   const restoreArgs = ["restore", "--staged", "--", ...restorePaths];
-  const addArgs = ["add", "--all", "--", ...paths];
-  const stagingCommand =
+  const addArgsForPaths = (candidatePaths: string[]) => [
+    "add",
+    "--all",
+    "--",
+    ...candidatePaths,
+  ];
+  const stagingCommandForPaths = (candidatePaths: string[]) =>
     restorePaths.length > 0
-      ? `git restore --staged -- ${shellPathspecs(restorePaths)} && git add --all -- ${shellPathspecs(paths)}`
-      : `git add --all -- ${shellPathspecs(paths)}`;
+      ? `git restore --staged -- ${shellPathspecs(restorePaths)} && git add --all -- ${shellPathspecs(candidatePaths)}`
+      : `git add --all -- ${shellPathspecs(candidatePaths)}`;
   const stagingFrom = (
     result: ProcessResult,
-    args: string[] = addArgs,
+    args: string[] = addArgsForPaths(stagingPaths),
   ): ReviewStagingProcess => ({
-    command: stagingCommand,
+    command: stagingCommandForPaths(stagingPaths),
     args,
+    paths:
+      result.launched && result.exitCode === 0 ? [...stagingPaths] : undefined,
     stdout: result.stdout,
     stderr: result.stderr,
     exitCode: result.launched ? result.exitCode : undefined,
@@ -7672,7 +7739,7 @@ export const runReviewStagingForPaths = async (
 
   const result = await processRunner({
     command: "git",
-    args: addArgs,
+    args: addArgsForPaths(stagingPaths),
     cwd: rootDir,
     input: "",
     promptPath: "git-staging",
@@ -7708,7 +7775,7 @@ export const runReviewStagingForPaths = async (
   }
   const statusResult = await processRunner({
     command: "git",
-    args: ["status", "--porcelain=v1", "--", ...paths],
+    args: ["status", "--porcelain=v1", "--", ...stagingPaths],
     cwd: rootDir,
     input: "",
     promptPath: "git-review-staging-status",
@@ -7750,7 +7817,7 @@ export const runReviewStagingForPaths = async (
       staging: { ...staging, stopReason: reason },
     };
   }
-  return { ok: true, staging, paths };
+  return { ok: true, staging, paths: stagingPaths };
 };
 
 const runReviewUnstageForPaths = async (
@@ -7812,18 +7879,6 @@ const runReviewUnstageForPaths = async (
     };
   }
   return { ok: true, cleanup };
-};
-
-const gitStatusPathFromPorcelainLine = (line: string): string | undefined => {
-  const body = line.slice(3).trim();
-  if (!body) {
-    return undefined;
-  }
-  const renameSeparator = " -> ";
-  if (body.includes(renameSeparator)) {
-    return body.split(renameSeparator).at(-1)?.trim();
-  }
-  return body;
 };
 
 export const stagedStatusHasMixedReviewPath = (statusOutput: string): boolean =>
@@ -7928,6 +7983,15 @@ const statOutputPaths = (statOutput: string | undefined): string[] => {
 const pathsMentionedInText = (text: string, candidates: string[]): string[] =>
   uniquePaths(candidates.filter((candidate) => text.includes(candidate)));
 
+const isGeneratedReviewArtifact = (pathValue: string): boolean => {
+  const filename = path.posix.basename(pathValue);
+  return (
+    filename === "generated.ts" ||
+    filename === "generated.tsx" ||
+    /\.generated\.[cm]?[jt]sx?$/.test(filename)
+  );
+};
+
 export const selectReviewPrimaryPaths = ({
   allPaths,
   narrowPass,
@@ -7967,7 +8031,7 @@ export const selectReviewPrimaryPaths = ({
   return all.slice(0, WORKFLOW_REVIEW_PRIMARY_PATH_LIMIT);
 };
 
-const buildReviewScopeMetadata = async ({
+export const buildReviewScopeMetadata = async ({
   rootDir,
   paths,
   planContent,
@@ -7989,6 +8053,10 @@ const buildReviewScopeMetadata = async ({
   | Failure
 > => {
   const reviewAllPaths = uniquePaths(paths);
+  const summaryOnlyPaths = reviewAllPaths.filter(isGeneratedReviewArtifact);
+  const fullDiffCandidates = reviewAllPaths.filter(
+    (reviewPath) => !summaryOnlyPaths.includes(reviewPath),
+  );
   let effectivePass = narrowPass;
   let reason = autoNarrowReason;
   const statOutput = await readCachedStatForPaths(
@@ -8001,10 +8069,14 @@ const buildReviewScopeMetadata = async ({
 
   while (true) {
     const reviewPrimaryPaths = selectReviewPrimaryPaths({
-      allPaths: reviewAllPaths,
+      allPaths: fullDiffCandidates,
       narrowPass: effectivePass,
-      blockerPaths,
-      suspiciousStatPaths,
+      blockerPaths: blockerPaths.filter((reviewPath) =>
+        fullDiffCandidates.includes(reviewPath),
+      ),
+      suspiciousStatPaths: suspiciousStatPaths.filter((reviewPath) =>
+        fullDiffCandidates.includes(reviewPath),
+      ),
     });
     const fullDiff = reviewPrimaryPaths.length
       ? await readCachedDiffForPaths(rootDir, reviewPrimaryPaths, processRunner, {
@@ -8030,6 +8102,7 @@ const buildReviewScopeMetadata = async ({
           narrowPass: effectivePass,
           reviewAllPaths,
           reviewPrimaryPaths,
+          summaryOnlyPaths,
           diffBytes,
           autoNarrowReason: reason,
         },
@@ -9323,12 +9396,14 @@ const parseWorkflowFileLockMetadata = (
   const planPath = record?.planPath;
   const pid = record?.pid;
   const createdAt = record?.createdAt;
+  const heartbeatAt = record?.heartbeatAt;
   const ownedPath = record?.path;
   if (
     typeof planPath !== "string" ||
     !Number.isInteger(pid) ||
     (pid as number) <= 0 ||
     typeof createdAt !== "string" ||
+    (heartbeatAt !== undefined && typeof heartbeatAt !== "string") ||
     typeof ownedPath !== "string"
   ) {
     return {
@@ -9341,8 +9416,17 @@ const parseWorkflowFileLockMetadata = (
     planPath,
     pid: pid as number,
     createdAt,
+    heartbeatAt: heartbeatAt as string | undefined,
     path: ownedPath,
   };
+};
+
+const isWorkflowFileLockStale = (
+  metadata: WorkflowFileLockMetadata,
+  now = Date.now(),
+): boolean => {
+  const leaseAt = Date.parse(metadata.heartbeatAt ?? metadata.createdAt);
+  return Number.isFinite(leaseAt) && now - leaseAt > WORKFLOW_FILE_LOCK_STALE_AFTER_MS;
 };
 
 const isProcessAlive = (pid: number): boolean => {
@@ -9370,6 +9454,40 @@ const releaseWorkflowFileLocks = async (
     }
   }
   return { ok: true };
+};
+
+const refreshWorkflowFileLockHeartbeats = async ({
+  lockPaths,
+  now = () => new Date().toISOString(),
+}: {
+  lockPaths: Set<string>;
+  now?: () => string;
+}): Promise<void> => {
+  for (const lockPath of [...lockPaths]) {
+    let raw: string;
+    try {
+      raw = await readFile(lockPath, "utf8");
+    } catch {
+      lockPaths.delete(lockPath);
+      continue;
+    }
+
+    const metadata = parseWorkflowFileLockMetadata(raw, lockPath);
+    if (!("planPath" in metadata) || metadata.pid !== process.pid) {
+      lockPaths.delete(lockPath);
+      continue;
+    }
+
+    try {
+      await writeFile(
+        lockPath,
+        JSON.stringify({ ...metadata, heartbeatAt: now() }),
+        "utf8",
+      );
+    } catch {
+      // Keep the lock tracked so normal release still attempts cleanup.
+    }
+  }
 };
 
 const acquireWorkflowFileOwnershipForPaths = async ({
@@ -9414,6 +9532,7 @@ const acquireWorkflowFileOwnershipForPaths = async ({
       planPath,
       pid: process.pid,
       createdAt: now(),
+      heartbeatAt: now(),
       path: ownedPath,
     };
 
@@ -9458,7 +9577,7 @@ const acquireWorkflowFileOwnershipForPaths = async ({
         heldLockPaths.add(lockPath);
         break;
       }
-      if (isProcessAlive(existing.pid)) {
+      if (isProcessAlive(existing.pid) && !isWorkflowFileLockStale(existing)) {
         const unlockHint =
           existing.planPath === planPath
             ? `\n\n${workflowFileUnlockPathHint(planPath)}`
@@ -9706,18 +9825,6 @@ const transitionAllowed = (
       };
     }
   }
-  if (promptPath === REVIEW_QUALITY_PROMPT_PATH) {
-    const allowedActive =
-      next.status === "active" && next.nextAction === "execute-plan";
-    const allowedCompleted =
-      next.status === "completed" && next.nextAction === "commit-summary";
-    if (!allowedActive && !allowedCompleted) {
-      return {
-        ok: false,
-        reason: `review-quality may only hand off to active + execute-plan or completed + commit-summary, got ${next.status} + ${next.nextAction}`,
-      };
-    }
-  }
   if (promptPath === rel(".ai", "prompts", "unblock-plan.md")) {
     const allowedActive =
       next.status === "active" && next.nextAction === "execute-plan";
@@ -9789,6 +9896,7 @@ export const runWorkflowRunner = async (
   let tokenUsageLogPath: string | undefined;
   let tokenUsageTotals = { ...zeroTokenUsageTotals };
   const heldWorkflowFileLockPaths = new Set<string>();
+  let workflowFileLockHeartbeat: ReturnType<typeof setInterval> | undefined;
   const emittedWorkflowWarnings = new Set<string>();
   let currentTaskContext: WorkflowTaskContext | undefined;
   let carriedReviewStagingPaths: string[] | undefined;
@@ -9831,8 +9939,23 @@ export const runWorkflowRunner = async (
   const releaseHeldWorkflowFileLocks = async (): Promise<
     string | undefined
   > => {
+    if (workflowFileLockHeartbeat) {
+      clearInterval(workflowFileLockHeartbeat);
+      workflowFileLockHeartbeat = undefined;
+    }
     const released = await releaseWorkflowFileLocks(heldWorkflowFileLockPaths);
     return released.ok ? undefined : released.reason;
+  };
+  const startWorkflowFileLockHeartbeat = () => {
+    if (workflowFileLockHeartbeat) {
+      return;
+    }
+    workflowFileLockHeartbeat = setInterval(() => {
+      void refreshWorkflowFileLockHeartbeats({
+        lockPaths: heldWorkflowFileLockPaths,
+      });
+    }, WORKFLOW_FILE_LOCK_HEARTBEAT_INTERVAL_MS);
+    workflowFileLockHeartbeat.unref();
   };
   const finishFailure = async (
     reason: string,
@@ -9960,13 +10083,7 @@ export const runWorkflowRunner = async (
   };
 
   while (true) {
-    const recoveredQualityReview =
-      parsedPlan.status === "review" &&
-      parsedPlan.nextAction === "review-plan" &&
-      latestReviewIsSpecPass(parsedPlan.content);
-    const route = recoveredQualityReview
-      ? internalRouteForPromptPath(REVIEW_QUALITY_PROMPT_PATH)
-      : routeFor(parsedPlan.status, parsedPlan.nextAction);
+    const route = routeFor(parsedPlan.status, parsedPlan.nextAction);
     if (!route.executable) {
       return await finishFailure(route.reason);
     }
@@ -10372,21 +10489,6 @@ export const runWorkflowRunner = async (
       planName: parsedPlan.planName,
       promptPath: route.promptPath,
     });
-    if (isReviewPrompt(route.promptPath)) {
-      const decision = decideWorkflowAutoNarrow({
-        latestTokenUsage: workflowTokenGuardrail,
-        currentPass: reviewNarrowPass,
-      });
-      if (decision.shouldStop) {
-        return await finishFailure(
-          `review scope remains too broad after ${WORKFLOW_AUTO_NARROW_PASS_LIMIT} narrow passes: ${decision.reason}`,
-        );
-      }
-      if (decision.shouldNarrow) {
-        reviewNarrowPass = decision.nextPass;
-        reviewAutoNarrowReason = decision.reason;
-      }
-    }
     if (route.promptPath === rel(".ai", "prompts", "execute-plan.md")) {
       const ownershipPaths =
         fileOwnershipPreflight?.hasOwnershipScope &&
@@ -10415,9 +10517,10 @@ export const runWorkflowRunner = async (
       if (!acquired.ok) {
         return await finishFailure(acquired.reason);
       }
+      startWorkflowFileLockHeartbeat();
     }
     if (isReviewPrompt(route.promptPath)) {
-      if (isSpecReviewPrompt(route.promptPath)) {
+      if (isReviewPrompt(route.promptPath)) {
         const parsedPaths =
           fileOwnershipPreflight?.hasOwnershipScope &&
           fileOwnershipPreflight.reviewStagingPaths
@@ -10588,6 +10691,7 @@ export const runWorkflowRunner = async (
         if (!acquired.ok) {
           return await finishFailure(acquired.reason);
         }
+        startWorkflowFileLockHeartbeat();
         if (!selectedTask) {
           logger.log(
             `Staging ${parsedPaths.paths.length} plan-owned ${
@@ -10601,7 +10705,7 @@ export const runWorkflowRunner = async (
           processRunner,
         );
         if (!staged.ok) {
-          const cleanup = await cleanupReviewStagingPaths(parsedPaths.paths);
+          const cleanup = await cleanupReviewStagingPaths(staged.staging?.paths);
           const stopReason = cleanup.ok
             ? staged.reason
             : `${staged.reason}; ${cleanup.reason}`;
@@ -10728,6 +10832,7 @@ export const runWorkflowRunner = async (
           if (!acquired.ok) {
             return await finishFailure(acquired.reason);
           }
+          startWorkflowFileLockHeartbeat();
           if (!selectedTask) {
             logger.log(
               `Staging ${parsedPaths.paths.length} plan-owned ${
@@ -10741,7 +10846,7 @@ export const runWorkflowRunner = async (
             processRunner,
           );
           if (!staged.ok) {
-            const cleanup = await cleanupReviewStagingPaths(parsedPaths.paths);
+            const cleanup = await cleanupReviewStagingPaths(staged.staging?.paths);
             const stopReason = cleanup.ok
               ? staged.reason
               : `${staged.reason}; ${cleanup.reason}`;
@@ -10790,6 +10895,7 @@ export const runWorkflowRunner = async (
       if (!acquired.ok) {
         return await finishFailure(acquired.reason);
       }
+      startWorkflowFileLockHeartbeat();
     }
 
     logWorkflowProgress();
@@ -11492,11 +11598,6 @@ export const runWorkflowRunner = async (
       }
       parsedPlan = updated;
       continue;
-    }
-
-    if (isQualityReviewPrompt(route.promptPath)) {
-      carriedReviewStagingPaths = undefined;
-      carriedReviewStagingProcess = undefined;
     }
 
     const logResult = await appendIterationLog(undefined, updated);

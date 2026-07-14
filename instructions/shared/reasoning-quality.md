@@ -1,5 +1,5 @@
-Version: 1.1
-Last Updated: 2026-07-09
+Version: 1.2
+Last Updated: 2026-07-14
 
 # Reasoning Quality Instructions
 
@@ -15,7 +15,6 @@ external skill prompts or plugin-specific paths.
 - `.ai/prompts/plan-validator.md`
 - `.ai/prompts/execute-plan.md`
 - `.ai/prompts/review-changes.md`
-- `.ai/prompts/review-quality.md`
 - `.ai/prompts/fix-review.md`
 - `.ai/prompts/unblock-plan.md`
 - `.ai/prompts/reopen-plan.md`

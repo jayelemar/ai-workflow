@@ -376,7 +376,6 @@ Default stage routing:
 | `execute-plan` | `gpt-5.6-terra` | `high` |
 | `unblock-plan` | `gpt-5.6-luna` | `medium` |
 | `review-changes` | `gpt-5.6-terra` | `high` |
-| `review-quality` | `gpt-5.6-sol` | `xhigh` |
 | `reopen-plan` | `gpt-5.6-luna` | `medium` |
 | `commit-summary` | `gpt-5.6-luna` | `medium` |
 | `scope-cleanup` | `gpt-5.6-terra` | `high` |
@@ -384,9 +383,7 @@ Default stage routing:
 Notes:
 
 - `review + review-plan` remains the public review entrypoint.
-- The runner normally runs one combined harness review through
-  `review-changes`; `review-quality` is only a legacy resume path for in-flight
-  split reviews that already have spec-pass evidence.
+- The runner runs one combined harness review through `review-changes`.
 - Harness prompts use native `.ai/instructions/shared/*` guidance for reasoning,
   debugging, testing, and workflow state. Additional review, when desired, is a
   separate manual decision outside the default runner review path.
@@ -404,7 +401,6 @@ plan-validator      -> gpt-5.4 high
 execute-plan        -> gpt-5.4 high
 unblock-plan        -> gpt-5.4 medium
 review-changes      -> gpt-5.5 xhigh
-review-quality      -> gpt-5.5 xhigh
 reopen-plan         -> gpt-5.4 medium
 commit-summary      -> gpt-5.3-codex-spark medium
 scope-cleanup       -> gpt-5.5 xhigh

@@ -1,5 +1,9 @@
 # Reasoning Quality Instruction Changelog
 
+## v1.2 - 2026-07-14
+
+* Removed the retired split-review prompt from the shared workflow prompt scope.
+
 ## v1.1 - 2026-07-09
 
 * Added snapshot-plus-latest-relevant-event guidance for runner-managed stages

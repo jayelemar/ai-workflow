@@ -65,7 +65,7 @@ pnpm exec tsx .ai/scripts/workflow-runner.ts .ai/plans/<plan-name>.md
 
 If the operator intends to use the normal review flow afterward, this manual
 execution path MUST keep the plan artifacts and workflow context snapshot
-compatible with `review-changes.md` and `review-quality.md`.
+compatible with `review-changes.md`.
 
 ## State Validation (MANDATORY)
 
@@ -352,9 +352,9 @@ After each plan update, refresh:
 .ai/artifacts/<plan-name>/state/context.md
 ```
 
-The snapshot must stay compatible with the `review-changes.md` and
-`review-quality.md` expectation that it is the primary current-state source. At
-minimum it must reflect the latest plan content using these sections:
+The snapshot must stay compatible with the `review-changes.md` expectation that
+it is the primary current-state source. At minimum it must reflect the latest
+plan content using these sections:
 
 ```markdown
 # Workflow Context Snapshot: <plan-name>

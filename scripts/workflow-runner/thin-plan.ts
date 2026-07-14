@@ -144,25 +144,13 @@ const expectedWorkflowEventArtifactPath = (
   version: number,
 ): string => rel('.ai', 'artifacts', planName, 'events', `${kind}-v${version}.md`);
 
-const splitReviewWorkflowEventArtifactPathPattern = (planName: string): RegExp =>
-  new RegExp(
-    `^${escapeRegExp(rel('.ai', 'artifacts', planName, 'events', 'review-'))}(spec|quality)-v\\d+\\.md$`,
-    'i',
-  );
-
 const workflowEventEvidencePathMatches = (
   planName: string,
   kind: WorkflowEventKind,
   version: number,
   evidencePath: string,
 ): boolean => {
-  if (evidencePath === expectedWorkflowEventArtifactPath(planName, kind, version)) {
-    return true;
-  }
-  if (kind !== 'review') {
-    return false;
-  }
-  return splitReviewWorkflowEventArtifactPathPattern(planName).test(evidencePath);
+  return evidencePath === expectedWorkflowEventArtifactPath(planName, kind, version);
 };
 
 const workflowEventEvidencePathRequirement = (
@@ -171,10 +159,7 @@ const workflowEventEvidencePathRequirement = (
   version: number,
 ): string => {
   const expectedPath = expectedWorkflowEventArtifactPath(planName, kind, version);
-  if (kind !== 'review') {
-    return expectedPath;
-  }
-  return `${expectedPath} or a split review artifact path under .ai/artifacts/${planName}/events/ (review-spec-vN.md or review-quality-vN.md)`;
+  return expectedPath;
 };
 
 const parseWorkflowEventHeading = (

@@ -30,43 +30,16 @@ export const exceedsWorkflowTokenThresholds = (
   (isFiniteNumber(latestTokenUsage?.stageUncachedInputTokens) &&
     latestTokenUsage.stageUncachedInputTokens >= WORKFLOW_STAGE_UNCACHED_WARNING_TOKENS);
 
-export const formatWorkflowTokenBudgetReason = (
-  latestTokenUsage?: WorkflowThresholdTokenUsage,
-): string | undefined => {
-  const reasons: string[] = [];
-  if (
-    isFiniteNumber(latestTokenUsage?.stageInputTokens) &&
-    latestTokenUsage.stageInputTokens >= WORKFLOW_STAGE_INPUT_WARNING_TOKENS
-  ) {
-    reasons.push(
-      `stage input ${latestTokenUsage.stageInputTokens} >= ${WORKFLOW_STAGE_INPUT_WARNING_TOKENS}`,
-    );
-  }
-  if (
-    isFiniteNumber(latestTokenUsage?.stageUncachedInputTokens) &&
-    latestTokenUsage.stageUncachedInputTokens >=
-      WORKFLOW_STAGE_UNCACHED_WARNING_TOKENS
-  ) {
-    reasons.push(
-      `stage uncached input ${latestTokenUsage.stageUncachedInputTokens} >= ${WORKFLOW_STAGE_UNCACHED_WARNING_TOKENS}`,
-    );
-  }
-  return reasons.length > 0 ? reasons.join("; ") : undefined;
-};
-
 export const decideWorkflowAutoNarrow = ({
-  latestTokenUsage,
   currentPass = 0,
   diffBytes,
   cleanupDiffBytes,
 }: {
-  latestTokenUsage?: WorkflowThresholdTokenUsage;
   currentPass?: number;
   diffBytes?: number;
   cleanupDiffBytes?: number;
 }): WorkflowAutoNarrowDecision => {
   const reasons = [
-    formatWorkflowTokenBudgetReason(latestTokenUsage),
     isFiniteNumber(diffBytes) && diffBytes > WORKFLOW_REVIEW_FULL_DIFF_BYTE_LIMIT
       ? `review full diff ${diffBytes} bytes > ${WORKFLOW_REVIEW_FULL_DIFF_BYTE_LIMIT} bytes`
       : undefined,

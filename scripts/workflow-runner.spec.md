@@ -69,7 +69,7 @@ the runner state machine.
 - Do not allow draft preflight to introduce new behavior beyond existing
   `plan-validator` / `fix-plan` semantics.
 - Keep execution and validation artifacts plus the workflow context snapshot
-  compatible with `review-changes.md` and `review-quality.md`.
+  compatible with `review-changes.md`.
 
 ## File Scope
 

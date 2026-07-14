@@ -1,5 +1,10 @@
 # Workflow State Instruction Changelog
 
+## v1.16 — 2026-07-14
+
+* Removed the retired split-review compatibility route; `review + review-plan`
+  always runs the combined `review-changes` stage.
+
 ## v1.15 — 2026-07-09
 
 * Added the snapshot-plus-latest-relevant-event hot path and clarified that

@@ -223,8 +223,8 @@ What improved:
 - The support-ticket workflow used fewer LLM calls than the older completed
   admin workflow.
 - Cache hit rate improved from the admin workflow's 93.5% to 95.3%.
-- The runner no longer shows legacy `fix-plan` or routine `review-quality`
-  stages in this completed run.
+- The runner no longer shows legacy `fix-plan` or split-review stages in this
+  completed run.
 - `sync-plan-artifacts` and `plan-validator` are small compared with
   execute/review and are not the current priority.
 
@@ -261,6 +261,74 @@ How to append a future comparison:
 5. Mark a runner change as progress only if it reduces uncached input or stage
    total tokens without increasing review misses, unresolved blockers, or
    manual cleanup work.
+
+## 2026-07-14 Completed Workflow: CEO Talk-to-Me Free Account Restriction
+
+This completed plan provides the first recorded post-runner-update comparison:
+
+- Plan: `.ai/plans/ceo-talk-to-me-free-account-restriction.md`
+- Ledger: `.ai/artifacts/ceo-talk-to-me-free-account-restriction/logs/token-usage.jsonl`
+- Measured through `2026-07-14T05:42:44.749Z`
+- Workflow state at measurement: `completed`, next action `commit-summary`
+- Successful LLM calls: 9 total; 7 runner-managed and 2 manual checkpoints
+
+The ledger includes manual `spec` and `plan` checkpoints before the runner
+started. Keep the full-workflow total for lifecycle comparison, but use the
+runner-only row for the runner target comparison; the runner ledger normally
+does not capture those earlier manual stages.
+
+Aggregate token usage:
+
+| Metric | Full workflow | Runner-only |
+| --- | ---: | ---: |
+| Successful LLM calls | 9 | 7 |
+| Input tokens | 30,669,936 | 21,938,682 |
+| Cached input tokens | 28,918,656 | 21,043,200 |
+| Uncached input tokens | 1,751,280 | 895,482 |
+| Output tokens | 132,163 | 82,107 |
+| Reasoning output tokens | 55,362 | 37,456 |
+| Total tokens | 30,802,099 | 22,020,789 |
+| Cache hit rate | 94.3% | 95.9% |
+| Uncached input rate | 5.7% | 4.1% |
+
+Runner prompt-level breakdown:
+
+| Prompt | Calls | Input | Cached | Uncached | Output | Reasoning Output | Total | Avg Input | Max Input | Avg Uncached |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `sync-plan-artifacts` | 1 | 473,499 | 394,240 | 79,259 | 3,447 | 647 | 476,946 | 473,499 | 473,499 | 79,259 |
+| `plan-validator` | 1 | 1,091,310 | 1,008,384 | 82,926 | 8,413 | 3,116 | 1,099,723 | 1,091,310 | 1,091,310 | 82,926 |
+| `execute-plan` | 2 | 16,457,963 | 16,072,448 | 385,515 | 37,697 | 13,656 | 16,495,660 | 8,228,982 | 16,040,800 | 192,758 |
+| `review-changes` | 2 | 3,430,125 | 3,152,128 | 277,997 | 28,763 | 18,814 | 3,458,888 | 1,715,063 | 2,224,024 | 138,999 |
+| `commit-summary` | 1 | 485,785 | 416,000 | 69,785 | 3,787 | 1,223 | 489,572 | 485,785 | 485,785 | 69,785 |
+
+Comparison with the completed support-ticket targets:
+
+| Metric | Result | Target | Assessment |
+| --- | ---: | ---: | --- |
+| Cache hit rate | 95.9% | >= 95% | Met |
+| Uncached input rate | 4.1% | <= 4% | Missed by 0.1 percentage points |
+| Avg `execute-plan` total | 8.25M | <= 3.0M | Above target |
+| Max `execute-plan` total | 16.07M | <= 8.0M | Above target |
+| Avg `review-changes` total | 1.73M | <= 1.5M | Above target |
+| Max `review-changes` total | 2.24M | <= 2.0M | Above target |
+| Commit-summary calls | 1 | 1 | Met |
+| Runner calls | 7 | <= 10 | Met |
+| Runner-only total tokens | 22.02M | <= 30.0M | Met, directionally |
+
+Interpretation:
+
+- This is not a strict like-for-like comparison: the reference target is for a
+  comparable two-task runner-managed plan, while this completed plan has no
+  task-savepoint structure.
+- The runner update improved control flow: it completed in seven runner calls,
+  used one commit summary, and maintained a 95.9% cache hit rate.
+- The first `execute-plan` call consumed 16.07M total tokens and ended
+  `blocked`; it accounts for about 73.0% of runner-only total cost. Earlier
+  validation-hygiene preflight and narrower initial execution context are the
+  highest-priority optimizations.
+- Both review calls carried explicit auto-narrowing evidence, but their token
+  totals still exceed the completed-baseline targets. Focused validation before
+  review should reduce repair-loop context in future comparable runs.
 
 ## 2026-07-10 Runner Optimization Update
 
@@ -461,8 +529,7 @@ Expected behavior:
 - Draft plans can pass through `sync-plan-artifacts` and one bounded
   `plan-validator` preflight.
 - Implementation can pass through `execute-plan`, combined `review-changes`,
-  `scope-cleanup`, and `commit-summary`. `review-quality` remains only as a
-  legacy resume path for in-flight split reviews.
+  `scope-cleanup`, and `commit-summary`.
 
 Estimated cost profile:
 
@@ -584,8 +651,7 @@ Replacement:
 
 Problem:
 
-- Harness used to run `review-changes` and `review-quality` as separate default
-  stages.
+- Harness used to split review work into separate default stages.
 - External subagent-driven workflows can add spec review and code-quality review
   per task.
 
@@ -711,7 +777,7 @@ Replacement:
 | ---: | --- | --- | --- |
 | 1 | Stop combining harness review with separate plugin/subagent review by default | Implemented high savings | Less layered review |
 | 2 | Collapse validation and repair into one bounded `plan-validator` preflight | High | Fewer automatic repair attempts |
-| 3 | Merge `review-changes` and `review-quality` for routine tasks | Implemented high savings | Less separation between spec and quality review |
+| 3 | Use one combined `review-changes` stage | Implemented high savings | Less separation between spec and quality review |
 | 4 | Support explicit manual plan-bound execution without runner-only artifacts | Implemented high savings | Two plan-creation modes instead of one |
 | 5 | Use native `/plan` or manual plan-bound execution for non-runner tasks | High | Less workflow bookkeeping |
 | 6 | Remove always-on external skill injection from harness stages | Implemented high savings | Harness prompts rely on native shared guidance |
@@ -728,8 +794,7 @@ fresh-stage context rehydration.
 
 Priority 3 is implemented. Normal `review + review-plan` entries now run one
 combined harness review and route directly to either `active + execute-plan` or
-`completed + commit-summary`; `review-quality` remains available only for
-legacy split-review resume.
+`completed + commit-summary`.
 
 Priority 1 is implemented. Harness review remains the review system for
 `review + review-plan`; a second subagent or plugin review system is not
@@ -770,10 +835,8 @@ Current recommendation:
 
 Next optimization needed:
 
-- Trim the legacy `review-quality` resume path further so it loads only the
-  extra state needed for already-split reviews.
-- After that, reduce commit-summary source reads to the minimum completed-state
-  evidence needed for commit generation and aggregate summaries.
+- Reduce commit-summary source reads to the minimum completed-state evidence
+  needed for commit generation and aggregate summaries.
 
 Priority 6 is implemented. Harness-generated prompts now load native
 `.ai/instructions/shared/reasoning-quality.md` and

@@ -5,8 +5,7 @@ runner-managed `review + review-plan` workflow entry.
 
 The review must validate spec correctness, user-journey coverage, validation
 evidence, regression risk, rule compliance, scope control, and code quality in
-one pass. It must not hand off to `review-quality.md` during normal successful
-review.
+one pass.
 
 ---
 
@@ -382,6 +381,10 @@ Write `.ai/artifacts/<plan-name>/events/review-vX.md`, then update
 thin-plan-v2 state: preserve `planPath`, set `status` and `nextAction`, write
 the compact combined review event under `latest.review`, append the review
 artifact path to `history`, set `unresolvedBlockers`, and refresh `updatedAt`.
+For every `NEEDS FIX` or `HIGH RISK` result, `unresolvedBlockers` MUST contain
+one or more concise, actionable remediation strings that correspond to the
+review artifact. Keep those entries until a later execution or validation event
+has remediated the review; do not write `[]` while the failed review is latest.
 
 For legacy thin-plan-v1 plans only, if the plan already contains
 `## Review History`, append only:
@@ -519,6 +522,7 @@ Rules:
 * Do not include long examples unless they are required to prove the issue.
 * Fold spec coverage, regression risk, rule compliance, validation sufficiency, and code quality into `**Issues**` only when actionable.
 * Keep `**Final Verdict**` exactly in the checkbox format below.
+* Mark exactly one final-verdict checkbox.
 
 **Plan**
 
@@ -536,9 +540,9 @@ Rules:
 
 **Final Verdict**
 
-- [ ] safe to merge
-- [ ] requires fixes
-- [ ] block merge
+- [ ] Safe to merge
+- [ ] Requires fixes
+- [ ] Blocked
 
 **Next**
 
