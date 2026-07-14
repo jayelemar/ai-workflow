@@ -34,7 +34,12 @@ Choose exactly one execution mode before planning:
 - `manual`
 - `runner-managed`
 
-If the operator does not specify a mode, default to `manual`.
+If the operator does not explicitly specify a mode:
+
+→ STOP  
+→ ask: `Which execution mode should create-plan use: manual or runner-managed?`  
+→ do NOT read the spec  
+→ do NOT create, modify, or delete any files
 
 Mode rules:
 
@@ -112,6 +117,7 @@ If any behavior is:
 
 Before planning:
 
+- confirm execution mode has already been explicitly selected
 - derive the plan name from the spec file
 - apply `.ai/instructions/shared/flow-trace-artifacts.md` to classify whether
   the scope is flow-trace-required
@@ -335,7 +341,9 @@ Rules:
 
 ---
 
-## File Coverage Enforcement (MANDATORY)
+## Runner-Managed File Coverage Enforcement (CONDITIONAL)
+
+For `runner-managed` mode:
 
 - ALL files referenced in `## Phases` tasks MUST appear in `.ai/artifacts/<plan-name>/state/files.json`
 - ALL files in `.ai/artifacts/<plan-name>/state/files.json` MUST be referenced in at least one `## Phases` task
@@ -383,8 +391,8 @@ Before completing:
 - verify `## Status` is present
 - verify all Phases are complete
 - verify any flow-trace artifacts required by the plan are present and valid
-- verify `.ai/artifacts/<plan-name>/state/files.json` is complete
-- verify Phase ↔ files artifact mapping is consistent
+- for `runner-managed` mode, verify `.ai/artifacts/<plan-name>/state/files.json` is complete
+- for `runner-managed` mode, verify Phase ↔ files artifact mapping is consistent
 
 If any requirement fails:
 
@@ -399,7 +407,7 @@ The task is complete ONLY when:
 1. the plan follows the template exactly
 2. spec is fully defined (no ambiguity)
 3. all required sections are present
-4. file coverage is complete and consistent
+4. for `runner-managed` mode, file coverage is complete and consistent
 5. the file is saved to:
 
 .ai/plans/<plan-name>.md

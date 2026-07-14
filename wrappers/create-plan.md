@@ -11,8 +11,10 @@ Default:
 Execution mode:
 `manual` or `runner-managed`
 
-Default when omitted:
-`manual`
+Mode selection:
+Mandatory. If the operator did not explicitly choose `manual` or
+`runner-managed`, ask which execution mode to use and stop before creating or
+modifying any files.
 
 User-journey artifact for flow-trace-required work:
 .ai/artifacts/<feature-or-bug-name>/user-journey.md
@@ -64,6 +66,10 @@ Strict Constraints:
 - Limit output strictly to the plan creation process.
 
 Required Behavior:
+- Resolve execution mode before reading the spec, creating planning artifacts,
+  or writing the plan.
+- If execution mode is missing, STOP and ask:
+  `Which execution mode should create-plan use: manual or runner-managed?`
 - Read `.codex/AGENTS.md`.
 - Read `.ai/instructions/index.md` and use it as the repository instruction routing entrypoint.
 - Read `.ai/instructions/shared/workflow-state.md` only for `runner-managed` mode.

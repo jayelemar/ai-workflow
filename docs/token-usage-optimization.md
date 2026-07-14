@@ -1,7 +1,7 @@
 # Token Usage Optimization Reference
 
 Created: 2026-07-08
-Last Updated: 2026-07-10
+Last Updated: 2026-07-14
 
 ## Purpose
 
@@ -23,6 +23,10 @@ stopped depending on them.
 The goal is not to prove one workflow is better in every case. The goal is to
 choose the cheapest workflow that still gives enough planning, execution, and
 review quality for the task risk.
+
+Use `operator-gated-workflow.md` before choosing a route. It defines the
+operator evidence, approval, blast-radius, and independent-review gates that
+prevent expensive workflow stages from starting before the task is understood.
 
 Treat `token-usage.jsonl` entries as measurement data: keep them compact,
 append-only, and useful for comparing workflow changes over time.
@@ -789,6 +793,11 @@ Use this routing table before starting work:
 | High-risk auth/security/migration work | Harness only, one strong review or explicitly justified second review |
 | Work needing a specific external skill | Native flow plus that one explicitly available skill, or standalone skill workflow |
 | Very high-risk work where user explicitly wants both systems | Manually composed harness plus explicit external skill setup; never default injection |
+
+Apply the operator evidence and risk gates in
+`operator-gated-workflow.md` before this table. The table selects a workflow;
+the operator-gated policy determines when planning and execution are allowed to
+start.
 
 ## Existing Implemented Optimizations
 

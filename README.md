@@ -371,15 +371,15 @@ Default stage routing:
 
 | Stage | Model | Reasoning |
 | --- | --- | --- |
-| `sync-plan-artifacts` | `gpt-5.4` | `medium` |
-| `plan-validator` | `gpt-5.4` | `high` |
-| `execute-plan` | `gpt-5.4` | `high` |
-| `unblock-plan` | `gpt-5.4` | `medium` |
-| `review-changes` | `gpt-5.5` | `xhigh` |
-| `review-quality` | `gpt-5.5` | `xhigh` |
-| `reopen-plan` | `gpt-5.4` | `medium` |
-| `commit-summary` | `gpt-5.3-codex-spark` | `medium` |
-| `scope-cleanup` | `gpt-5.5` | `xhigh` |
+| `sync-plan-artifacts` | `gpt-5.6-luna` | `medium` |
+| `plan-validator` | `gpt-5.6-terra` | `medium` |
+| `execute-plan` | `gpt-5.6-terra` | `high` |
+| `unblock-plan` | `gpt-5.6-luna` | `medium` |
+| `review-changes` | `gpt-5.6-terra` | `high` |
+| `review-quality` | `gpt-5.6-sol` | `xhigh` |
+| `reopen-plan` | `gpt-5.6-luna` | `medium` |
+| `commit-summary` | `gpt-5.6-luna` | `medium` |
+| `scope-cleanup` | `gpt-5.6-terra` | `high` |
 
 Notes:
 
@@ -390,11 +390,25 @@ Notes:
 - Harness prompts use native `.ai/instructions/shared/*` guidance for reasoning,
   debugging, testing, and workflow state. Additional review, when desired, is a
   separate manual decision outside the default runner review path.
-- `commit-summary` uses `gpt-5.3-codex-spark` because it is the cheapest
-  low-risk stage: formatting the final commit subject and user-facing summary,
-  not validating implementation correctness.
+- `commit-summary` uses `gpt-5.6-luna` because it is a low-risk formatting
+  stage: final commit subject and user-facing summary, not implementation
+  correctness validation.
 - `scope-cleanup` is not a visible workflow state, but the runner uses it
   before review and commit-summary cleanup decisions, so it has its own routing.
+
+Previous stage routing:
+
+```text
+sync-plan-artifacts -> gpt-5.4 medium
+plan-validator      -> gpt-5.4 high
+execute-plan        -> gpt-5.4 high
+unblock-plan        -> gpt-5.4 medium
+review-changes      -> gpt-5.5 xhigh
+review-quality      -> gpt-5.5 xhigh
+reopen-plan         -> gpt-5.4 medium
+commit-summary      -> gpt-5.3-codex-spark medium
+scope-cleanup       -> gpt-5.5 xhigh
+```
 
 The runner writes a hot-path context snapshot for each plan:
 

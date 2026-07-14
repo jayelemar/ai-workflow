@@ -48,6 +48,9 @@ import {
 } from "./workflow-runner/thin-plan.ts";
 type CodexProfile = string;
 type CodexModel =
+  | "gpt-5.6-sol"
+  | "gpt-5.6-terra"
+  | "gpt-5.6-luna"
   | "gpt-5.5"
   | "gpt-5.4"
   | "gpt-5.4-mini"
@@ -76,19 +79,32 @@ const REVIEW_PROMPT_PATHS = new Set([
   REVIEW_QUALITY_PROMPT_PATH,
 ]);
 
+// Previous routing kept for rollback/reference:
+// sync-plan-artifacts -> gpt-5.4 medium
+// plan-validator      -> gpt-5.4 high
+// execute-plan        -> gpt-5.4 high
+// unblock-plan        -> gpt-5.4 medium
+// review-changes      -> gpt-5.5 xhigh
+// review-quality      -> gpt-5.5 xhigh
+// reopen-plan         -> gpt-5.4 medium
+// commit-summary      -> gpt-5.3-codex-spark medium
+// scope-cleanup       -> gpt-5.5 xhigh
 const PROMPT_CODEX_EXECUTION_OVERRIDES: Record<string, CodexExecutionConfig> = {
-  [SYNC_PLAN_ARTIFACTS_PROMPT_PATH]: { model: "gpt-5.4", reasoning: "medium" },
-  [PLAN_VALIDATOR_PROMPT_PATH]: { model: "gpt-5.4", reasoning: "high" },
-  [EXECUTE_PLAN_PROMPT_PATH]: { model: "gpt-5.4", reasoning: "high" },
-  [UNBLOCK_PLAN_PROMPT_PATH]: { model: "gpt-5.4", reasoning: "medium" },
-  [REVIEW_CHANGES_PROMPT_PATH]: { model: "gpt-5.5", reasoning: "xhigh" },
-  [REVIEW_QUALITY_PROMPT_PATH]: { model: "gpt-5.5", reasoning: "xhigh" },
-  [REOPEN_PLAN_PROMPT_PATH]: { model: "gpt-5.4", reasoning: "medium" },
-  [COMMIT_SUMMARY_PROMPT_PATH]: {
-    model: "gpt-5.3-codex-spark",
+  [SYNC_PLAN_ARTIFACTS_PROMPT_PATH]: {
+    model: "gpt-5.6-luna",
     reasoning: "medium",
   },
-  [SCOPE_CLEANUP_PROMPT_PATH]: { model: "gpt-5.5", reasoning: "xhigh" },
+  [PLAN_VALIDATOR_PROMPT_PATH]: { model: "gpt-5.6-terra", reasoning: "medium" },
+  [EXECUTE_PLAN_PROMPT_PATH]: { model: "gpt-5.6-terra", reasoning: "high" },
+  [UNBLOCK_PLAN_PROMPT_PATH]: { model: "gpt-5.6-luna", reasoning: "medium" },
+  [REVIEW_CHANGES_PROMPT_PATH]: { model: "gpt-5.6-terra", reasoning: "high" },
+  [REVIEW_QUALITY_PROMPT_PATH]: { model: "gpt-5.6-sol", reasoning: "xhigh" },
+  [REOPEN_PLAN_PROMPT_PATH]: { model: "gpt-5.6-luna", reasoning: "medium" },
+  [COMMIT_SUMMARY_PROMPT_PATH]: {
+    model: "gpt-5.6-luna",
+    reasoning: "medium",
+  },
+  [SCOPE_CLEANUP_PROMPT_PATH]: { model: "gpt-5.6-terra", reasoning: "high" },
 };
 
 const VALID_STATUSES = [
@@ -3262,7 +3278,8 @@ const classifyFailureForLog = (reason: string): FailureMetadataLogFields => {
     return {
       failureKind: "codex-stop",
       failureReason: reason.slice(stopMatch[0].length).trim() || "STOP",
-      nextSuggestedAction: "unblock-plan with evidence",
+      nextSuggestedAction:
+        "inspect STOP reason, fix code or workflow evidence, then rerun workflow-runner",
     };
   }
   if (/^could not launch [A-Za-z0-9][A-Za-z0-9_-]* exec(?::|$)/.test(reason)) {
@@ -3324,7 +3341,7 @@ const classifyFailureForLog = (reason: string): FailureMetadataLogFields => {
       failureKind: "dirty-plan-owned-paths",
       failureReason: reason,
       nextSuggestedAction:
-        "inspect plan-owned changes, commit them, then rerun workflow-runner",
+        "fix commit preflight errors, then rerun workflow-runner; plan returned to active + execute-plan",
     };
   }
   if (
@@ -4270,6 +4287,42 @@ const readJsonArtifact = async (
   }
 };
 
+const workflowEventHistoryIndex = (
+  history: string[] | undefined,
+  event: Record<string, unknown> | undefined,
+): number => {
+  if (!history || history.length === 0 || !event) {
+    return -1;
+  }
+  const candidates = [event.path, event.evidence].filter(
+    (value): value is string => typeof value === "string" && value.length > 0,
+  );
+  const indexes = candidates
+    .map((candidate) => history.indexOf(candidate))
+    .filter((index) => index >= 0);
+  return indexes.length > 0 ? Math.min(...indexes) : -1;
+};
+
+const workflowReviewSupersededByProgress = (
+  latest: Record<string, unknown> | undefined,
+  history: string[] | undefined,
+): boolean => {
+  const reviewIndex = workflowEventHistoryIndex(
+    history,
+    asRecord(latest?.review) ?? undefined,
+  );
+  if (reviewIndex < 0) {
+    return false;
+  }
+  return ["execution", "validation"].some((kind) => {
+    const eventIndex = workflowEventHistoryIndex(
+      history,
+      asRecord(latest?.[kind]) ?? undefined,
+    );
+    return eventIndex > reviewIndex;
+  });
+};
+
 const parseThinPlanV2WorkflowState = (
   raw: unknown,
   expectedPlanPath: string,
@@ -4311,7 +4364,8 @@ const parseThinPlanV2WorkflowState = (
   if (
     unresolvedBlockers.length === 0 &&
     reviewDecision === "active" &&
-    /\b(?:NEEDS FIX|HIGH RISK)\b/.test(reviewSummary)
+    /\b(?:NEEDS FIX|HIGH RISK)\b/.test(reviewSummary) &&
+    !workflowReviewSupersededByProgress(latest, history)
   ) {
     return {
       ok: false,
@@ -4523,6 +4577,7 @@ const selectRelevantWorkflowEvent = (
     if (
       status === "active" &&
       review &&
+      !workflowReviewSupersededByProgress(workflow.latest, workflow.history) &&
       (reviewFindings.length > 0 || latestString(review, "decision") === "active")
     ) {
       return relevantWorkflowEventDetails(
@@ -5194,6 +5249,11 @@ Task savepoint current task:
 Task savepoint rules:
 - Work only on the current task above.
 - Do not start another \`[task:...]\` item in the same run.
+- If the current task changed a shared contract, service invariant, schema, payload shape, generated type, or backend enforcement rule, fix the smallest compatibility path needed to keep existing later-task call sites from submitting invalid data.
+- Do not output \`STOP\` solely because that minimal compatibility fix touches a file named in a later \`[task:...]\` item.
+- If review feedback identifies a missing backend RPC, migration, generated database type, or database regression test required to uphold the current task's access/security invariant, treat it as that smallest compatibility repair.
+- If such a file is not currently listed in the plan file inventory and no active owner plan or live workflow-runner file lock claims it, add the exact file to the current plan's ownership/inventory artifacts and continue.
+- Do not output \`STOP\` solely because the required minimal backend contract repair touches a migration, generated database contract file, or database test outside the original current-task file list.
 - Keep \`.ai/\` artifacts out of git commits.
 - The runner owns .ai/artifacts/<plan-name>/execution-summary.md; do not edit it directly.
 - If this stage cannot complete for the current task, output \`STOP\` and keep the same current task active for remediation.
@@ -6257,6 +6317,310 @@ const reopenPlanForNextTask = async (
       reason: `plan cannot be reopened for next task: ${String(error)}`,
     };
   }
+};
+
+const workflowOutputHasValidationPass = (stdout: string): boolean =>
+  /\bvalidation\s+passed\b/i.test(stdout) ||
+  /\bvalidation\s*:\s*(?:pass|passed|ok|success)\b/i.test(stdout);
+
+const nextWorkflowEventVersion = async ({
+  rootDir,
+  planName,
+  kind,
+}: {
+  rootDir: string;
+  planName: string;
+  kind: "execution" | "validation";
+}): Promise<number> => {
+  const eventsDir = path.join(
+    rootDir,
+    thinPlanV2ArtifactPath(planName, "events"),
+  );
+  let entries: string[] = [];
+  try {
+    entries = await readdir(eventsDir);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== "ENOENT") {
+      throw error;
+    }
+  }
+  const pattern = new RegExp(`^${kind}-v(\\d+)\\.md$`);
+  const latest = entries.reduce((max, entry) => {
+    const version = Number(pattern.exec(entry)?.[1] ?? 0);
+    return Number.isInteger(version) ? Math.max(max, version) : max;
+  }, 0);
+  return latest + 1;
+};
+
+const workflowEventBody = ({
+  title,
+  summary,
+  evidenceLines,
+}: {
+  title: string;
+  summary: string;
+  evidenceLines: string[];
+}): string => `${title}
+
+## Summary
+
+${summary}
+
+## Evidence
+
+${evidenceLines.length > 0 ? evidenceLines.map((line) => `* ${line}`).join("\n") : "* No evidence recorded."}
+`;
+
+const recoverThinPlanV2ExecuteHandoff = async ({
+  rootDir,
+  plan,
+  processRunner,
+  stdout,
+  timestamp,
+}: {
+  rootDir: string;
+  plan: ParsedPlan;
+  processRunner: ProcessRunner;
+  stdout: string;
+  timestamp: () => string;
+}): Promise<{ ok: true; recovered: boolean } | Failure> => {
+  if (
+    plan.thinPlanContract !== "thin-plan-v2" ||
+    plan.status !== "active" ||
+    plan.nextAction !== "execute-plan" ||
+    !workflowOutputHasValidationPass(stdout)
+  ) {
+    return { ok: true, recovered: false };
+  }
+
+  const changed = await readGitChangedFileEntries(rootDir, processRunner);
+  if (!changed.ok) {
+    return changed;
+  }
+  const entries = changed.entries.filter(
+    (entry) => !entry.path.startsWith(".ai/"),
+  );
+  if (entries.length === 0) {
+    return { ok: true, recovered: false };
+  }
+
+  const head = await readGitHeadSha(rootDir, processRunner);
+  if (!head.ok) {
+    return head;
+  }
+
+  const workflowPath = thinPlanV2ArtifactPath(
+    plan.planName,
+    "state",
+    "workflow.json",
+  );
+  const workflowRaw = await readJsonArtifact(rootDir, workflowPath);
+  if (isFailure(workflowRaw)) {
+    return workflowRaw;
+  }
+  const workflow = parseThinPlanV2WorkflowState(
+    workflowRaw,
+    plan.planPath,
+    workflowPath,
+  );
+  if (isFailure(workflow)) {
+    return workflow;
+  }
+  const workflowRecord = asRecord(workflowRaw);
+  if (!workflowRecord) {
+    return {
+      ok: false,
+      reason: `thin-plan-v2 workflow state is malformed: ${workflowPath}`,
+    };
+  }
+
+  let executionVersion: number;
+  let validationVersion: number;
+  try {
+    executionVersion = await nextWorkflowEventVersion({
+      rootDir,
+      planName: plan.planName,
+      kind: "execution",
+    });
+    validationVersion = await nextWorkflowEventVersion({
+      rootDir,
+      planName: plan.planName,
+      kind: "validation",
+    });
+  } catch (error) {
+    return {
+      ok: false,
+      reason: `workflow event version cannot be selected: ${String(error)}`,
+    };
+  }
+
+  const executionPath = thinPlanV2ArtifactPath(
+    plan.planName,
+    "events",
+    `execution-v${executionVersion}.md`,
+  );
+  const validationPath = thinPlanV2ArtifactPath(
+    plan.planName,
+    "events",
+    `validation-v${validationVersion}.md`,
+  );
+  const changedPaths = entries.map((entry) => entry.path);
+  const created = entries
+    .filter((entry) => entry.change === "created")
+    .map((entry) => entry.path);
+  const modified = entries
+    .filter((entry) => entry.change === "modified")
+    .map((entry) => entry.path);
+  const deleted = entries
+    .filter((entry) => entry.change === "deleted")
+    .map((entry) => entry.path);
+  const now = timestamp();
+
+  const filesPath = thinPlanV2ArtifactPath(
+    plan.planName,
+    "state",
+    "files.json",
+  );
+  const ownershipPath = thinPlanV2ArtifactPath(
+    plan.planName,
+    "state",
+    "file-ownership.json",
+  );
+  const ownershipRaw = await readJsonArtifact(rootDir, ownershipPath);
+  if (isFailure(ownershipRaw)) {
+    return ownershipRaw;
+  }
+  const ownership = parseFileOwnershipArtifact(
+    JSON.stringify(ownershipRaw),
+    ownershipPath,
+  );
+  if (isFailure(ownership)) {
+    return ownership;
+  }
+
+  const latest = {
+    ...(asRecord(workflowRecord.latest) ?? {}),
+    execution: {
+      version: executionVersion,
+      path: executionPath,
+      evidence: executionPath,
+      summary:
+        "Runner recovered the execute-plan review handoff after successful implementation left thin-plan state unchanged.",
+      state: "review-ready",
+      result: "review-ready",
+    },
+    validation: {
+      version: validationVersion,
+      path: validationPath,
+      evidence: validationPath,
+      summary:
+        "Agent output reported validation passed during execute-plan recovery.",
+      result: "passed",
+    },
+  };
+  const history = uniquePaths([
+    ...(asStringArray(workflowRecord.history) ?? []),
+    executionPath,
+    validationPath,
+  ]);
+
+  try {
+    await mkdir(path.join(rootDir, path.dirname(executionPath)), {
+      recursive: true,
+    });
+    await writeFile(
+      path.join(rootDir, executionPath),
+      workflowEventBody({
+        title: `# Execution v${executionVersion}`,
+        summary:
+          "Runner recovered the execute-plan review handoff after successful implementation left thin-plan state unchanged.",
+        evidenceLines: [
+          "execute-plan exited successfully.",
+          "Plan manifest and workflow state were unchanged, so the runner advanced the thin-plan state.",
+          ...changedPaths.map((filePath) => `Changed file: ${filePath}`),
+        ],
+      }),
+      "utf8",
+    );
+    await writeFile(
+      path.join(rootDir, validationPath),
+      workflowEventBody({
+        title: `# Validation v${validationVersion}`,
+        summary:
+          "Agent output reported validation passed during execute-plan recovery.",
+        evidenceLines: [
+          "execute-plan stdout contained a validation passed signal.",
+          "Review remains required before commit-summary.",
+        ],
+      }),
+      "utf8",
+    );
+    await writeFile(
+      path.join(rootDir, filesPath),
+      `${JSON.stringify(
+        {
+          created,
+          modified,
+          deleted,
+          changedFiles: changedPaths,
+          released: [],
+          headSha: head.sha,
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    await writeFile(
+      path.join(rootDir, ownershipPath),
+      `${JSON.stringify(
+        canonicalFileOwnershipArtifact({
+          ...ownership,
+          resolvedFiles: changedPaths,
+          changedFiles: changedPaths,
+          headSha: head.sha,
+          updatedAt: now,
+        }),
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    await writeFile(
+      path.join(rootDir, workflowPath),
+      `${JSON.stringify(
+        {
+          ...workflowRecord,
+          status: "review",
+          nextAction: "review-plan",
+          latest,
+          history,
+          unresolvedBlockers: [],
+          updatedAt: now,
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    await writeFile(
+      plan.absolutePlanPath,
+      replaceSectionValueInPlan(
+        replaceSectionValueInPlan(plan.manifestContent, "## Status", "review"),
+        "## Next Action",
+        "review-plan",
+      ),
+      "utf8",
+    );
+  } catch (error) {
+    return {
+      ok: false,
+      reason: `thin-plan-v2 execute handoff recovery failed: ${String(error)}`,
+    };
+  }
+
+  return { ok: true, recovered: true };
 };
 
 const failureDebugLedgerRelativePath = (planName: string): string =>
@@ -7582,11 +7946,7 @@ export const selectReviewPrimaryPaths = ({
   const cap = (paths: string[]) =>
     uniquePaths(paths).filter(inAll).slice(0, WORKFLOW_REVIEW_PRIMARY_PATH_LIMIT);
 
-  if (narrowPass === 1) {
-    return [];
-  }
-
-  if (narrowPass === 2) {
+  if (narrowPass === 1 || narrowPass === 2) {
     const focused = cap([
       ...latestTaskPaths,
       ...blockerPaths,
@@ -7728,6 +8088,22 @@ Path-scoped staged diff:
 ${diff}
 `;
 
+type ScopeCleanupOptions = {
+  codexRuntime: WorkflowRunnerCodexRuntime;
+  rootDir: string;
+  planPath: string;
+  planContent: string;
+  paths: string[];
+  processRunner: ProcessRunner;
+  mode: "review" | "commit-summary";
+};
+
+type ScopeCleanupResult = {
+  ok: true;
+  skippedLargeDiff?: boolean;
+  diffBytes?: number;
+};
+
 export const runScopeCleanupForPaths = async ({
   codexRuntime,
   rootDir,
@@ -7736,15 +8112,7 @@ export const runScopeCleanupForPaths = async ({
   paths,
   processRunner,
   mode,
-}: {
-  codexRuntime: WorkflowRunnerCodexRuntime;
-  rootDir: string;
-  planPath: string;
-  planContent: string;
-  paths: string[];
-  processRunner: ProcessRunner;
-  mode: "review" | "commit-summary";
-}): Promise<{ ok: true; skippedLargeDiff?: boolean; diffBytes?: number }> => {
+}: ScopeCleanupOptions): Promise<ScopeCleanupResult> => {
   if (paths.length === 0) {
     return { ok: true };
   }
@@ -7829,6 +8197,78 @@ export const runScopeCleanupForPaths = async ({
     }),
   );
   return { ok: true, diffBytes };
+};
+
+export const runScopeCleanupForPathBatches = async (
+  options: ScopeCleanupOptions,
+): Promise<ScopeCleanupResult> => {
+  const { rootDir, paths, processRunner } = options;
+  if (paths.length === 0) {
+    return { ok: true };
+  }
+
+  let totalDiffBytes = 0;
+  let batchPaths: string[] = [];
+  let batchBytes = 0;
+  let skippedLargeDiffBytes: number | undefined;
+
+  const flushBatch = async () => {
+    if (batchPaths.length === 0) {
+      return;
+    }
+
+    const result = await runScopeCleanupForPaths({
+      ...options,
+      paths: batchPaths,
+    });
+    if (result.skippedLargeDiff) {
+      skippedLargeDiffBytes = Math.max(
+        skippedLargeDiffBytes ?? 0,
+        result.diffBytes ?? 0,
+      );
+    }
+    batchPaths = [];
+    batchBytes = 0;
+  };
+
+  for (const scopedPath of paths) {
+    const diff = await readCachedDiffForPaths(rootDir, [scopedPath], processRunner, {
+      promptPath: "git-scope-cleanup-batch-size",
+    });
+    if (!diff) {
+      continue;
+    }
+
+    const diffBytes = Buffer.byteLength(diff, "utf8");
+    totalDiffBytes += diffBytes;
+    if (diffBytes > WORKFLOW_REVIEW_FULL_DIFF_BYTE_LIMIT) {
+      await flushBatch();
+      skippedLargeDiffBytes = Math.max(skippedLargeDiffBytes ?? 0, diffBytes);
+      continue;
+    }
+
+    if (
+      batchPaths.length > 0 &&
+      batchBytes + diffBytes > WORKFLOW_REVIEW_FULL_DIFF_BYTE_LIMIT
+    ) {
+      await flushBatch();
+    }
+
+    batchPaths.push(scopedPath);
+    batchBytes += diffBytes;
+  }
+
+  await flushBatch();
+
+  if (skippedLargeDiffBytes) {
+    return {
+      ok: true,
+      skippedLargeDiff: true,
+      diffBytes: skippedLargeDiffBytes,
+    };
+  }
+
+  return { ok: true, diffBytes: totalDiffBytes };
 };
 
 const parseCommitSummaryPaths = async (
@@ -7964,29 +8404,52 @@ const fileOwnershipArtifactAbsolutePath = (
   planName: string,
 ): string => path.join(rootDir, fileOwnershipArtifactRelativePath(planName));
 
-const parseGitStatusChangedFiles = (output: string): string[] => {
-  const paths: string[] = [];
+type GitChangedFileEntry = {
+  path: string;
+  change: "created" | "modified" | "deleted";
+};
+
+const parseGitStatusChangedFileEntries = (
+  output: string,
+): GitChangedFileEntry[] => {
+  const entries: GitChangedFileEntry[] = [];
   for (const rawLine of output.split(/\r?\n/)) {
     const line = rawLine.trimEnd();
     if (line.length < 4) {
       continue;
     }
+    const status = line.slice(0, 2);
     let filePath = line.slice(3).trim();
     const renameTarget = filePath.match(/\s+->\s+(.+)$/)?.[1];
     if (renameTarget) {
       filePath = renameTarget;
     }
     if (filePath.length > 0) {
-      paths.push(filePath);
+      entries.push({
+        path: filePath,
+        change:
+          status.includes("D")
+            ? "deleted"
+            : status.includes("A") || status === "??"
+              ? "created"
+              : "modified",
+      });
     }
   }
-  return uniquePaths(paths);
+  const seen = new Set<string>();
+  return entries.filter((entry) => {
+    if (seen.has(entry.path)) {
+      return false;
+    }
+    seen.add(entry.path);
+    return true;
+  });
 };
 
-const readGitChangedFiles = async (
+const readGitChangedFileEntries = async (
   rootDir: string,
   processRunner: ProcessRunner,
-): Promise<{ ok: true; paths: string[] } | Failure> => {
+): Promise<{ ok: true; entries: GitChangedFileEntry[] } | Failure> => {
   const result = await processRunner({
     command: "git",
     args: ["status", "--short", "--untracked-files=all", "--"],
@@ -8017,7 +8480,18 @@ const readGitChangedFiles = async (
       reason: `file ownership git status exited with code ${result.exitCode}${details ? `: ${details}` : ""}`,
     };
   }
-  return { ok: true, paths: parseGitStatusChangedFiles(result.stdout) };
+  return { ok: true, entries: parseGitStatusChangedFileEntries(result.stdout) };
+};
+
+const readGitChangedFiles = async (
+  rootDir: string,
+  processRunner: ProcessRunner,
+): Promise<{ ok: true; paths: string[] } | Failure> => {
+  const changed = await readGitChangedFileEntries(rootDir, processRunner);
+  if (!changed.ok) {
+    return changed;
+  }
+  return { ok: true, paths: changed.entries.map((entry) => entry.path) };
 };
 
 const readGitHeadSha = async (
@@ -8633,7 +9107,7 @@ const readThinPlanV2FileOwnershipPreflight = async ({
   if (isFailure(ownershipRaw)) {
     return ownershipRaw;
   }
-  const artifact = parseFileOwnershipArtifact(
+  let artifact = parseFileOwnershipArtifact(
     JSON.stringify(ownershipRaw),
     fileOwnershipPath,
   );
@@ -8647,6 +9121,40 @@ const readThinPlanV2FileOwnershipPreflight = async ({
   const files = parseThinPlanV2FilesState(filesRaw, filesPath);
   if (isFailure(files)) {
     return files;
+  }
+  const activeChangedFiles = files.changedFiles.filter(
+    (filePath) => !files.released.includes(filePath),
+  );
+  if (
+    activeChangedFiles.length > 0 &&
+    artifact.owns.length === 0 &&
+    artifact.resolvedFiles.length === 0 &&
+    artifact.changedFiles.length === 0
+  ) {
+    const head = await readGitHeadSha(rootDir, processRunner);
+    if (!head.ok) {
+      return head;
+    }
+    artifact = {
+      ...artifact,
+      owns: activeChangedFiles,
+      resolvedFiles: activeChangedFiles,
+      changedFiles: activeChangedFiles,
+      headSha: head.sha,
+      updatedAt: new Date().toISOString(),
+    };
+    try {
+      await writeFile(
+        path.join(rootDir, fileOwnershipPath),
+        `${JSON.stringify(canonicalFileOwnershipArtifact(artifact), null, 2)}\n`,
+        "utf8",
+      );
+    } catch (error) {
+      return {
+        ok: false,
+        reason: `file ownership artifact cannot be repaired: ${fileOwnershipPath}: ${String(error)}`,
+      };
+    }
   }
   let dirtyFiles: string[] | undefined;
   if (checkCompletedDirtyConflicts) {
@@ -9753,7 +10261,7 @@ export const runWorkflowRunner = async (
     const prepareReviewScopeForPaths = async (
       paths: string[],
     ): Promise<{ ok: true } | Failure> => {
-      const cleanup = await runScopeCleanupForPaths({
+      let cleanup = await runScopeCleanupForPaths({
         codexRuntime,
         rootDir,
         planPath: parsedPlan.planPath,
@@ -9762,23 +10270,34 @@ export const runWorkflowRunner = async (
         processRunner,
         mode: "review",
       });
+      const skippedCleanupDiffBytes = cleanup.skippedLargeDiff
+        ? cleanup.diffBytes
+        : undefined;
       if (cleanup.skippedLargeDiff) {
+        cleanup = await runScopeCleanupForPathBatches({
+          codexRuntime,
+          rootDir,
+          planPath: parsedPlan.planPath,
+          planContent: parsedPlan.content,
+          paths,
+          processRunner,
+          mode: "review",
+        });
+      }
+      const unresolvedCleanupDiffBytes = cleanup.skippedLargeDiff
+        ? cleanup.diffBytes
+        : skippedCleanupDiffBytes;
+      if (unresolvedCleanupDiffBytes) {
         const decision = decideWorkflowAutoNarrow({
           currentPass: reviewNarrowPass,
-          cleanupDiffBytes: cleanup.diffBytes,
+          cleanupDiffBytes: unresolvedCleanupDiffBytes,
         });
-        if (decision.shouldStop) {
-          return {
-            ok: false,
-            reason: `review scope cleanup diff remains too broad after ${WORKFLOW_AUTO_NARROW_PASS_LIMIT} narrow passes: ${decision.reason}`,
-          };
-        }
         if (decision.shouldNarrow) {
           reviewNarrowPass = decision.nextPass;
-          reviewAutoNarrowReason = [reviewAutoNarrowReason, decision.reason]
-            .filter(Boolean)
-            .join("; ");
         }
+        reviewAutoNarrowReason = [reviewAutoNarrowReason, decision.reason]
+          .filter(Boolean)
+          .join("; ");
       }
       const scope = await buildReviewScopeMetadata({
         rootDir,
@@ -10576,6 +11095,37 @@ export const runWorkflowRunner = async (
           updated,
         );
         if (transition.ok) {
+          if (
+            isReviewPrompt(route.promptPath) &&
+            updated.status === "active" &&
+            updated.nextAction === "execute-plan"
+          ) {
+            const cleanup = await cleanupReviewStagingPaths(reviewStagingPaths);
+            if (!cleanup.ok) {
+              const finalStopReason = `${stopReason}; ${cleanup.reason}`;
+              const logResult = await appendIterationLog(finalStopReason);
+              if (!logResult.ok) {
+                return await finishFailure(logResult.reason);
+              }
+              const snapshotResult = await syncWorkflowSnapshot(updated);
+              if (!snapshotResult.ok) {
+                return await finishFailure(snapshotResult.reason);
+              }
+              return await finishFailure(finalStopReason);
+            }
+            carriedReviewStagingPaths = undefined;
+            carriedReviewStagingProcess = undefined;
+            const logResult = await appendIterationLog(undefined, updated);
+            if (!logResult.ok) {
+              return await finishFailure(logResult.reason);
+            }
+            const snapshotResult = await syncWorkflowSnapshot(updated);
+            if (!snapshotResult.ok) {
+              return await finishFailure(snapshotResult.reason);
+            }
+            parsedPlan = updated;
+            continue;
+          }
           const nonterminalOutcome = nonterminalRouteOutcome(updated);
           if (nonterminalOutcome) {
             const logResult = await appendIterationLog(undefined, updated);
@@ -10614,6 +11164,30 @@ export const runWorkflowRunner = async (
     }
 
     if (route.terminal) {
+      const cleanCheck = await verifyCommitSummaryPathsClean(
+        rootDir,
+        commitSummaryPaths ?? [],
+        processRunner,
+      );
+      if (!cleanCheck.ok) {
+        const reopened = await reopenPlanForNextTask(parsedPlan);
+        if (!reopened.ok) {
+          return await finishFailure(reopened.reason);
+        }
+        const updated = await parsePlan({ planName: planArgument, rootDir });
+        if (!updated.ok) {
+          return await finishFailure(updated.reason);
+        }
+        const logResult = await appendIterationLog(cleanCheck.reason, updated);
+        if (!logResult.ok) {
+          return await finishFailure(logResult.reason);
+        }
+        const snapshotResult = await syncWorkflowSnapshot(updated);
+        if (!snapshotResult.ok) {
+          return await finishFailure(snapshotResult.reason);
+        }
+        return await finishFailure(cleanCheck.reason);
+      }
       if (selectedTask && currentTaskContext) {
         const shaResult = await gitHeadShortSha(rootDir, processRunner);
         if (!shaResult.ok) {
@@ -10635,22 +11209,6 @@ export const runWorkflowRunner = async (
         if (!taskStage.ok) {
           return await finishFailure(taskStage.reason);
         }
-      }
-      const cleanCheck = await verifyCommitSummaryPathsClean(
-        rootDir,
-        commitSummaryPaths ?? [],
-        processRunner,
-      );
-      if (!cleanCheck.ok) {
-        const logResult = await appendIterationLog(cleanCheck.reason);
-        if (!logResult.ok) {
-          return await finishFailure(logResult.reason);
-        }
-        const snapshotResult = await syncWorkflowSnapshot(parsedPlan);
-        if (!snapshotResult.ok) {
-          return await finishFailure(snapshotResult.reason);
-        }
-        return await finishFailure(cleanCheck.reason);
       }
       const logResult = await appendIterationLog();
       if (!logResult.ok) {
@@ -10807,6 +11365,72 @@ export const runWorkflowRunner = async (
     }
 
     if (updated.content === previousContent) {
+      if (route.promptPath === rel(".ai", "prompts", "execute-plan.md")) {
+        const recovered = await recoverThinPlanV2ExecuteHandoff({
+          rootDir,
+          plan: parsedPlan,
+          processRunner,
+          stdout: result.stdout,
+          timestamp,
+        });
+        if (!recovered.ok) {
+          const logResult = await appendIterationLog(recovered.reason);
+          if (!logResult.ok) {
+            return await finishFailure(logResult.reason);
+          }
+          const snapshotResult = await syncWorkflowSnapshot(parsedPlan);
+          if (!snapshotResult.ok) {
+            return await finishFailure(snapshotResult.reason);
+          }
+          return await finishFailure(recovered.reason);
+        }
+        if (recovered.recovered) {
+          const recoveredPlan = await parsePlan({
+            planName: planArgument,
+            rootDir,
+          });
+          if (!recoveredPlan.ok) {
+            const logResult = await appendIterationLog(recoveredPlan.reason);
+            if (!logResult.ok) {
+              return await finishFailure(logResult.reason);
+            }
+            const snapshotResult = await syncWorkflowSnapshot(parsedPlan);
+            if (!snapshotResult.ok) {
+              return await finishFailure(snapshotResult.reason);
+            }
+            return await finishFailure(recoveredPlan.reason);
+          }
+          const transition = transitionAllowed(
+            route.promptPath,
+            parsedPlan,
+            recoveredPlan,
+          );
+          if (!transition.ok) {
+            const logResult = await appendIterationLog(
+              transition.reason,
+              recoveredPlan,
+            );
+            if (!logResult.ok) {
+              return await finishFailure(logResult.reason);
+            }
+            const snapshotResult = await syncWorkflowSnapshot(recoveredPlan);
+            if (!snapshotResult.ok) {
+              return await finishFailure(snapshotResult.reason);
+            }
+            return await finishFailure(transition.reason);
+          }
+          const logResult = await appendIterationLog(undefined, recoveredPlan);
+          if (!logResult.ok) {
+            return await finishFailure(logResult.reason);
+          }
+          const snapshotResult = await syncWorkflowSnapshot(recoveredPlan);
+          if (!snapshotResult.ok) {
+            return await finishFailure(snapshotResult.reason);
+          }
+          parsedPlan = recoveredPlan;
+          continue;
+        }
+      }
       const cleanup = await cleanupReviewStagingPaths(reviewStagingPaths);
       const reason = cleanup.ok
         ? "plan content unchanged after successful nonterminal workflow action"

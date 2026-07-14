@@ -73,6 +73,14 @@ If a blocker describes implementation work that can be performed by continuing `
 * do not require blocker-resolution evidence before execution can continue
 * preserve validation-only blockers that do not prevent implementation
 
+If the unblock evidence proves the current runtime/setup blocker is resolved but a new validation failure appears in plan-owned code, tests, migrations, or artifacts:
+
+* clear the resolved runtime/setup blocker
+* reclassify the new failure as active implementation work when it is covered by the spec and plan
+* transition to `active + execute-plan`
+* record the exact failing validation command and observed failure in the unblock artifact
+* do not keep the stale runtime/setup blocker as the active blocked reason
+
 If a blocker is `Type: plan dependency`:
 
 * require evidence that the owner plan reached `completed + commit-summary` with no uncommitted changes for the shared file OR that the owner plan released the shared file ownership

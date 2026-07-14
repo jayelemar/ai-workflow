@@ -223,6 +223,37 @@ If the runner injects `Task savepoint current task`:
 * when the current task is implemented and validated, set `Status = review` and `Next Action = review-plan`
 * if implementation or validation fails, keep the same task active, record the failure, and do not route to `commit-summary`
 
+#### Compatibility Regression Carve-Out
+
+If the current task changes a shared contract, service invariant, schema,
+payload shape, generated type, or backend enforcement rule, and an existing
+call site from a later task would submit invalid data or otherwise become
+broken because of the current task:
+
+* fix the smallest compatibility path needed to keep existing behavior
+  non-broken
+* keep the edit narrowly tied to the current task's contract change
+* add focused regression coverage for that compatibility path
+* do not implement the later task's full feature surface, UI replacement,
+  visual redesign, workflow expansion, or unrelated behavior
+* do not output `STOP` solely because the minimal compatibility edit touches a
+  file named in a later `[task:...]` item
+* when review feedback identifies a missing backend RPC, migration, generated
+  database type, or database regression test required to uphold the current
+  task's access/security invariant, treat it as this compatibility repair
+* if such a file is not currently listed in the plan file inventory and no
+  active owner plan or live workflow-runner file lock claims it, add the exact
+  file to the current plan's ownership/inventory artifacts and continue
+* do not output `STOP` solely because the required minimal backend contract
+  repair touches a migration, generated database contract file, or database
+  test outside the original current-task file list
+
+Example: if a service task makes restricted channel payloads require
+department/member targets, and the existing legacy create-channel UI can still
+submit restricted saves with empty targets, the service task must patch that
+legacy path to avoid invalid payloads. The full restricted-target UI remains
+owned by the later UI task.
+
 ### Phase Execution Rules
 
 For each phase:
@@ -239,6 +270,9 @@ For each phase:
 If required execution or bugfix work needs a file outside the current plan-owned paths:
 
 * First determine whether the file is owned by another active plan or by a live workflow-runner file lock.
+* If the edit qualifies under Compatibility Regression Carve-Out and the file
+  is unowned, claim the exact file in the current plan's ownership/inventory
+  artifacts and continue instead of stopping.
 * If the file is owned by another active plan, treat this as a `plan dependency`, not as a generic file-scope failure.
 * Do NOT keep executing both plans in parallel.
 * Update the current plan to `Status = blocked` and `Next Action = unblock-plan`.
@@ -416,6 +450,12 @@ If validation cannot be confirmed:
   * do not block the active plan solely for that reason
   * record the validation as deferred or out-of-scope with the exact command, failing files, and remaining risk
   * continue with `Status = review` and `Next Action = review-plan` when implementation and local plan-owned validation are complete
+* IF validation cannot be confirmed because local runtime setup, auth state, external service access, or operator-controlled database state must change before the validation can run against current code:
+  * follow Blocking rules
+  * set `Status = blocked`
+  * set `Next Action = unblock-plan`
+  * record exact unblock evidence required
+  * do not keep `active + execute-plan` when no further implementation work can make validation proceed
 * IF validation cannot be confirmed because implementation tasks remain or a validation finding requires code changes already covered by the spec and plan:
   * keep or set `Status = active`
   * keep or set `Next Action = execute-plan`
