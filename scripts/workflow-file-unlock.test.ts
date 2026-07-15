@@ -101,7 +101,8 @@ test("unlockWorkflowFileLock refuses to remove a live same-plan lock", async () 
     const lockPath = await writeWorkflowFileLock(workspace.root, ownedPath, {
       planPath,
       pid: process.pid,
-      createdAt: "2026-07-03T00:00:00.000Z",
+      createdAt: "2026-07-15T00:00:00.000Z",
+      heartbeatAt: "2026-07-15T00:00:00.000Z",
       path: ownedPath,
     });
 
@@ -110,11 +111,40 @@ test("unlockWorkflowFileLock refuses to remove a live same-plan lock", async () 
       planPath,
       ownedPath,
       isProcessAlive: () => true,
+      now: () => Date.parse("2026-07-15T00:01:00.000Z"),
     });
 
     assert.equal(result.ok, false);
     assert.match(result.reason, /pid .* is still running/);
     assert.equal(existsSync(lockPath), true);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("unlockWorkflowFileLock removes an expired lease even when its PID appears live", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    const planPath = ".ai/plans/current-plan.md";
+    const ownedPath = "src/owned.ts";
+    const lockPath = await writeWorkflowFileLock(workspace.root, ownedPath, {
+      planPath,
+      pid: process.pid,
+      createdAt: "2026-07-15T00:00:00.000Z",
+      heartbeatAt: "2026-07-15T00:00:00.000Z",
+      path: ownedPath,
+    });
+
+    const result = await unlockWorkflowFileLock({
+      rootDir: workspace.root,
+      planPath,
+      ownedPath,
+      isProcessAlive: () => true,
+      now: () => Date.parse("2026-07-15T00:31:00.000Z"),
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(existsSync(lockPath), false);
   } finally {
     await workspace.cleanup();
   }
@@ -205,9 +235,9 @@ test("runWorkflowFileUnlock unlocks all stale same-plan locks when only plan pat
   }
 });
 
-test("workflowFileUnlockPathHint prints the package-script command", () => {
+test("workflowFileUnlockPathHint prints the direct unlock command", () => {
   assert.equal(
     workflowFileUnlockPathHint(".ai/plans/current-plan.md"),
-    "run this on the terminal:\npnpm workflow:unlock .ai/plans/current-plan.md",
+    "run this on the terminal:\npnpm exec tsx .ai/scripts/workflow-file-unlock.ts .ai/plans/current-plan.md",
   );
 });

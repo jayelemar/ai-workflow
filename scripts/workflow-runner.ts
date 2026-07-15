@@ -9,7 +9,7 @@ import {
   stat,
   writeFile,
 } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import path from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -133,6 +133,20 @@ const TERMINAL_PROGRESS_DETAIL_LIMIT = 200;
 const STOP_REASON_EXCERPT_CHAR_LIMIT = 240;
 const WORKFLOW_FILE_LOCK_HEARTBEAT_INTERVAL_MS = 60_000;
 const WORKFLOW_FILE_LOCK_STALE_AFTER_MS = 30 * 60_000;
+const activeWorkflowFileLockPaths = new Set<string>();
+
+const releaseActiveWorkflowFileLocksOnExit = () => {
+  for (const lockPath of activeWorkflowFileLockPaths) {
+    try {
+      rmSync(lockPath, { force: true });
+    } catch {
+      // A forced process exit cannot recover from a filesystem failure.
+    }
+  }
+  activeWorkflowFileLockPaths.clear();
+};
+
+process.once("exit", releaseActiveWorkflowFileLocksOnExit);
 const ANSI_RESET = "\u001b[0m";
 const ANSI_SEQUENCE_PATTERN =
   /\u001b(?:\[([0-?]*[ -/]*)([@-~])|\][^\u0007]*(?:\u0007|\u001b\\)|[@-_])/g;
@@ -515,7 +529,7 @@ export const workflowFileLockPath = (
 };
 
 const workflowFileUnlockPathHint = (planPath: string): string =>
-  `run this on the terminal:\npnpm workflow:unlock ${shellQuote(planPath)}`;
+  `run this on the terminal:\npnpm exec tsx .ai/scripts/workflow-file-unlock.ts ${shellQuote(planPath)}`;
 
 const workflowFileOwnershipResetPathHint = (reason: string): string | null => {
   const match =
@@ -4460,6 +4474,151 @@ const replaceManifestWorkflowValue = (
   return lines.join("\n");
 };
 
+const failedReviewSummary = (review: Record<string, unknown>): boolean =>
+  typeof review.summary === "string" &&
+  /\b(?:NEEDS FIX|HIGH RISK)\b/.test(review.summary.toUpperCase());
+
+const reviewIssueFindings = (content: string): string[] => {
+  const lines = content.split(/\r?\n/);
+  const issuesIndex = lines.findIndex((line) => line.trim() === "## Issues");
+  if (issuesIndex === -1) {
+    return [];
+  }
+
+  const findings: string[] = [];
+  for (const line of lines.slice(issuesIndex + 1)) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith("## ")) {
+      break;
+    }
+    const finding = /^\*\s+(.+)$/.exec(trimmed)?.[1]?.trim();
+    if (finding) {
+      findings.push(finding);
+    }
+  }
+  return findings;
+};
+
+const recoverThinPlanV2FailedReviewState = async ({
+  rootDir,
+  planName,
+  planPath,
+  manifestContent,
+  manifestStatus,
+  manifestNextAction,
+}: {
+  rootDir: string;
+  planName: string;
+  planPath: string;
+  manifestContent: string;
+  manifestStatus: Status;
+  manifestNextAction: NextAction;
+}): Promise<{ ok: true; recovered: boolean; manifestContent: string } | Failure> => {
+  const workflowPath = thinPlanV2ArtifactPath(
+    planName,
+    "state",
+    "workflow.json",
+  );
+  const workflowRaw = await readJsonArtifact(rootDir, workflowPath);
+  if (isFailure(workflowRaw)) {
+    return workflowRaw;
+  }
+  const workflowRecord = asRecord(workflowRaw);
+  const latest = asRecord(workflowRecord?.latest);
+  const review = asRecord(latest?.review);
+  const unresolvedBlockers = asStringArray(workflowRecord?.unresolvedBlockers);
+  const history = normalizeWorkflowEventHistory(workflowRecord?.history);
+  if (
+    !workflowRecord ||
+    !latest ||
+    !review ||
+    !unresolvedBlockers ||
+    unresolvedBlockers.length > 0 ||
+    latestString(review, "decision")?.toLowerCase() !== "active" ||
+    !failedReviewSummary(review) ||
+    workflowReviewSupersededByProgress(latest, history)
+  ) {
+    return { ok: true, recovered: false, manifestContent };
+  }
+
+  const workflowStatus = workflowRecord.status;
+  const workflowNextAction = workflowRecord.nextAction;
+  const isReviewHandoff =
+    workflowStatus === "review" && workflowNextAction === "review-plan";
+  const isActiveHandoff =
+    workflowStatus === "active" && workflowNextAction === "execute-plan";
+  if (
+    (!isReviewHandoff && !isActiveHandoff) ||
+    manifestStatus !== workflowStatus ||
+    manifestNextAction !== workflowNextAction
+  ) {
+    return { ok: true, recovered: false, manifestContent };
+  }
+
+  let findings = asStringArray(review.unresolvedFindings) ?? [];
+  if (findings.length === 0 && typeof review.version === "number") {
+    const reviewEvent = await readTextArtifact(
+      rootDir,
+      thinPlanV2ArtifactPath(
+        planName,
+        "events",
+        `review-v${review.version}.md`,
+      ),
+    );
+    if (reviewEvent.ok) {
+      findings = reviewIssueFindings(reviewEvent.content);
+    }
+  }
+  if (findings.length === 0) {
+    const evidence = latestString(review, "evidence");
+    findings = [
+      evidence
+        ? `Latest failed review requires remediation; see ${evidence}.`
+        : "Latest failed review requires remediation before another review pass.",
+    ];
+  }
+
+  const nextManifestContent = replaceManifestWorkflowValue(
+    replaceManifestWorkflowValue(manifestContent, "## Status", "active"),
+    "## Next Action",
+    "execute-plan",
+  );
+  const nextWorkflow = {
+    ...workflowRecord,
+    status: "active",
+    nextAction: "execute-plan",
+    latest: {
+      ...latest,
+      review: {
+        ...review,
+        unresolvedFindings: findings,
+      },
+    },
+    unresolvedBlockers: findings,
+    updatedAt: new Date().toISOString(),
+  };
+
+  try {
+    await writeFile(
+      path.join(rootDir, workflowPath),
+      `${JSON.stringify(nextWorkflow, null, 2)}\n`,
+      "utf8",
+    );
+    await writeFile(
+      path.join(rootDir, planPath),
+      nextManifestContent,
+      "utf8",
+    );
+  } catch (error) {
+    return {
+      ok: false,
+      reason: `thin-plan-v2 failed-review recovery could not persist state: ${String(error)}`,
+    };
+  }
+
+  return { ok: true, recovered: true, manifestContent: nextManifestContent };
+};
+
 const demoteMarkdownHeadings = (content: string): string =>
   content
     .replace(/^### /gm, "##### ")
@@ -4986,7 +5145,7 @@ export const parsePlan = async ({
   if (extractedStatus === null) {
     return { ok: false, reason: "plan is missing ## Status" };
   }
-  const rawStatus = normalizeWorkflowStateValue(extractedStatus);
+  let rawStatus = normalizeWorkflowStateValue(extractedStatus);
   if (rawStatus.length === 0) {
     return { ok: false, reason: "plan status value is empty" };
   }
@@ -4998,7 +5157,7 @@ export const parsePlan = async ({
   if (extractedNextAction === null) {
     return { ok: false, reason: "plan is missing ## Next Action" };
   }
-  const rawNextAction = normalizeWorkflowStateValue(extractedNextAction);
+  let rawNextAction = normalizeWorkflowStateValue(extractedNextAction);
   if (rawNextAction.length === 0) {
     return { ok: false, reason: "plan next action value is empty" };
   }
@@ -5016,6 +5175,22 @@ export const parsePlan = async ({
   }
 
   if (thinPlan.contract === "thin-plan-v2") {
+    const recovery = await recoverThinPlanV2FailedReviewState({
+      rootDir,
+      planName: normalized.planName,
+      planPath,
+      manifestContent: content,
+      manifestStatus: rawStatus,
+      manifestNextAction: rawNextAction,
+    });
+    if (!recovery.ok) {
+      return recovery;
+    }
+    if (recovery.recovered) {
+      content = recovery.manifestContent;
+      rawStatus = "active";
+      rawNextAction = "execute-plan";
+    }
     const loaded = await loadThinPlanV2WorkingContent({
       rootDir,
       planName: normalized.planName,
@@ -9446,6 +9621,7 @@ const releaseWorkflowFileLocks = async (
     try {
       await rm(lockPath, { force: true });
       lockPaths.delete(lockPath);
+      activeWorkflowFileLockPaths.delete(lockPath);
     } catch (error) {
       return {
         ok: false,
@@ -9541,6 +9717,7 @@ const acquireWorkflowFileOwnershipForPaths = async ({
         await writeFile(lockPath, JSON.stringify(metadata), { flag: "wx" });
         heldLockPaths.add(lockPath);
         acquiredThisAttempt.add(lockPath);
+        activeWorkflowFileLockPaths.add(lockPath);
         break;
       } catch (error) {
         const code = (error as NodeJS.ErrnoException).code;
@@ -9575,6 +9752,7 @@ const acquireWorkflowFileOwnershipForPaths = async ({
       }
       if (existing.pid === process.pid && existing.planPath === planPath) {
         heldLockPaths.add(lockPath);
+        activeWorkflowFileLockPaths.add(lockPath);
         break;
       }
       if (isProcessAlive(existing.pid) && !isWorkflowFileLockStale(existing)) {

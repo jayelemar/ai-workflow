@@ -14,13 +14,22 @@ For cloning, installation, publishing, runner setup, and troubleshooting, use
 Canonical lifecycle:
 
 ```text
-spec -> optional user-journey artifact -> plan -> (manual execute | sync artifacts -> validator/runner)
+intake/RCA approval -> spec -> plan -> final approval -> (manual execute | sync artifacts -> validator/runner)
 ```
 
-1. Create a spec:
+1. Run an analysis-only intake. This is the first operator gate and must not
+   write files:
+   - Feature: use `.ai/wrappers/feature-intake.md`, then reply
+     `APPROVE DIRECTION`.
+   - Bugfix: use `.ai/wrappers/bug-intake-rca.md`, then reply `APPROVE RCA`.
+   - Run intake in Plan Mode or an analysis-only session. Plan Mode cannot
+     create spec or plan files.
+2. Create a spec in an agent session:
    - Feature: use `.ai/wrappers/generate-feature-spec.md`
    - Bugfix: use `.ai/wrappers/generate-bugfix-spec.md`
-2. Optionally create a user-journey artifact for flow-trace-required work when
+   - Supply the approved brief from intake. It does not authorize guessed
+     product behavior; resolve remaining material unknowns first.
+3. Optionally create a user-journey artifact for flow-trace-required work when
    you want to inspect it before planning:
    - Use `.ai/wrappers/generate-user-flow.md`
    - Output: `.ai/artifacts/<plan-name>/user-journey.md`
@@ -32,13 +41,22 @@ spec -> optional user-journey artifact -> plan -> (manual execute | sync artifac
      a draft plan.
    - Skip for non-user-facing or narrow flow-trace-not-required work; the plan
      records `N/A: <concrete reason>`.
-3. Create a plan:
-   - Use `.ai/wrappers/create-plan.md`
-   - Choose an execution mode:
-     - `manual` for `spec -> plan -> execute` in one conversation without
-       runner-managed workflow state
-     - `runner-managed` when you want the harness to own post-plan execution
-4. Use one post-plan path.
+4. Create a plan in an agent session:
+   - Use `.ai/wrappers/create-plan.md`.
+   - Explicitly set `Execution mode: manual` or
+     `Execution mode: runner-managed` in the request.
+   - Plan questions should cover only undiscoverable technical, rollback, or
+     task-boundary decisions. Do not repeat the completed product interview.
+5. For high-risk, cross-system, contract, security, or data-risk plans, use
+   `.ai/wrappers/review-high-risk-plan.md` in a fresh analysis-only session.
+   Repair material findings before the final operator review.
+6. The operator reviews the finalized spec and plan, then replies
+   `APPROVE IMPLEMENTATION` before any code changes or workflow execution.
+7. Use the selected post-plan path:
+   - `manual` for medium-risk work or an explicit operator choice.
+   - `runner-managed` for high-risk work or an explicit operator choice.
+   - Low-risk work normally proceeds through direct implementation after
+     operator approval; do not create runner state solely for a narrow change.
 
 Manual post-plan path:
 

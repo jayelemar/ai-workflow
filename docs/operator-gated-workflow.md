@@ -89,7 +89,22 @@ Then use:
 
 ## Review Gates
 
-The operator reviews every spec and plan before implementation.
+Use two operator approvals for medium and high-risk work:
+
+1. **Direction approval:** after feature intake or bug RCA and before creating
+   a spec. Use `APPROVE DIRECTION` for features or `APPROVE RCA` for bugs.
+2. **Implementation approval:** after the finalized spec and plan have been
+   reviewed. Use `APPROVE IMPLEMENTATION` before any code change or workflow
+   execution. This review covers both the spec and plan; it does not require a
+   separate approval between those two preparation artifacts.
+
+Run feature intake, bug RCA, and independent plan review in Plan Mode or an
+analysis-only session. Create specs and plans in an agent session because Plan
+Mode must not write files.
+
+Use `.ai/wrappers/feature-intake.md` or `.ai/wrappers/bug-intake-rca.md` for
+the first gate. Use `.ai/wrappers/review-high-risk-plan.md` when an independent
+review is required.
 
 Use an independent fresh Codex session for plan review only when the task is
 high-risk, crosses systems, changes contracts, or has meaningful security/data
@@ -107,6 +122,12 @@ no material finding exists.
 Before merge, request code review, resolve material findings, and run the
 smallest local validation that covers the changed behavior. For high-risk work,
 also confirm rollback or recovery behavior.
+
+When creating the plan, the operator must explicitly select `manual` or
+`runner-managed`; risk classification recommends a mode but does not supply it
+implicitly. Planning questions should be limited to undiscoverable technical,
+rollback, or task-boundary decisions after the requirements interview has
+completed.
 
 ## Routing Rules
 

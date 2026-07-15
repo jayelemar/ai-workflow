@@ -5662,19 +5662,48 @@ test("parsePlan rejects thin-plan-v2 sync state when workflow sidecar is mismatc
   }
 });
 
-test("parsePlan rejects thin-plan-v2 latest failed review with empty blockers", async () => {
+test("parsePlan repairs a failed thin-plan-v2 review missing blockers and resumes execution", async () => {
   const workspace = await setupWorkspace();
   try {
     await writeThinPlanV2Artifacts(workspace.root, {
-      status: "active",
-      nextAction: "execute-plan",
-      latestReviewSummary: "NEEDS FIX",
+      status: "review",
+      nextAction: "review-plan",
       activeBlockers: [],
+      latest: {
+        review: {
+          version: 3,
+          summary: "NEEDS FIX",
+          decision: "active",
+          evidence: ".ai/artifacts/artifact-state/events/review-v3.md",
+        },
+      },
+      history: [".ai/artifacts/artifact-state/events/review-v3.md"],
     });
+    await writeFile(
+      join(
+        workspace.root,
+        ".ai",
+        "artifacts",
+        "artifact-state",
+        "events",
+        "review-v3.md",
+      ),
+      `# Review v3
+
+## Summary
+
+NEEDS FIX
+
+## Issues
+
+* Add spoofed-user regression coverage before resuming setup.
+`,
+      "utf8",
+    );
     await writePlan(
       workspace.root,
       "artifact-state",
-      thinPlanV2Manifest("active", "execute-plan"),
+      thinPlanV2Manifest("review", "review-plan"),
     );
 
     const parsed = await parsePlan({
@@ -5682,11 +5711,39 @@ test("parsePlan rejects thin-plan-v2 latest failed review with empty blockers", 
       rootDir: workspace.root,
     });
 
-    assert.equal(parsed.ok, false);
-    assert.match(
-      parsed.ok ? "" : parsed.reason,
-      /latest review requires fixes but unresolvedBlockers is empty/,
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.ok && parsed.status, "active");
+    assert.equal(parsed.ok && parsed.nextAction, "execute-plan");
+
+    const workflow = JSON.parse(
+      await readFile(
+        join(
+          workspace.root,
+          ".ai",
+          "artifacts",
+          "artifact-state",
+          "state",
+          "workflow.json",
+        ),
+        "utf8",
+      ),
+    ) as Record<string, unknown>;
+    assert.equal(workflow.status, "active");
+    assert.equal(workflow.nextAction, "execute-plan");
+    assert.deepEqual(workflow.unresolvedBlockers, [
+      "Add spoofed-user regression coverage before resuming setup.",
+    ]);
+    assert.deepEqual(
+      (workflow.latest as Record<string, Record<string, unknown>>).review
+        .unresolvedFindings,
+      ["Add spoofed-user regression coverage before resuming setup."],
     );
+    const manifest = await readFile(
+      join(workspace.root, ".ai", "plans", "artifact-state.md"),
+      "utf8",
+    );
+    assert.match(manifest, /## Status\s+active/);
+    assert.match(manifest, /## Next Action\s+execute-plan/);
   } finally {
     await workspace.cleanup();
   }

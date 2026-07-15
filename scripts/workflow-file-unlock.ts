@@ -24,11 +24,13 @@ type WorkflowFileLockMetadata = {
   planPath: string;
   pid: number;
   createdAt: string;
+  heartbeatAt?: string;
   path: string;
 };
 
 const WORKFLOW_FILE_UNLOCK_USAGE =
-  "Usage: pnpm workflow:unlock .ai/plans/<plan-name>.md [repo-relative-file-path]";
+  "Usage: pnpm exec tsx .ai/scripts/workflow-file-unlock.ts .ai/plans/<plan-name>.md [repo-relative-file-path]";
+const WORKFLOW_FILE_LOCK_STALE_AFTER_MS = 30 * 60_000;
 
 const shellQuote = (value: string): string => {
   if (/^[A-Za-z0-9_./:@%+=,-]+$/.test(value)) {
@@ -64,6 +66,7 @@ const parseWorkflowFileLockMetadata = (
     !Number.isInteger(record.pid) ||
     (record.pid as number) <= 0 ||
     typeof record.createdAt !== "string" ||
+    (record.heartbeatAt !== undefined && typeof record.heartbeatAt !== "string") ||
     typeof record.path !== "string"
   ) {
     return {
@@ -76,8 +79,17 @@ const parseWorkflowFileLockMetadata = (
     planPath: record.planPath,
     pid: record.pid as number,
     createdAt: record.createdAt,
+    heartbeatAt: record.heartbeatAt as string | undefined,
     path: record.path,
   };
+};
+
+const isWorkflowFileLockStale = (
+  metadata: WorkflowFileLockMetadata,
+  now = Date.now(),
+): boolean => {
+  const leaseAt = Date.parse(metadata.heartbeatAt ?? metadata.createdAt);
+  return Number.isFinite(leaseAt) && now - leaseAt > WORKFLOW_FILE_LOCK_STALE_AFTER_MS;
 };
 
 const defaultIsProcessAlive = (pid: number): boolean => {
@@ -94,18 +106,20 @@ const workflowFileLockDir = (rootDir: string): string =>
   path.join(rootDir, ".ai", "artifacts", "file-locks");
 
 export const workflowFileUnlockPathHint = (planPath: string): string =>
-  `run this on the terminal:\npnpm workflow:unlock ${shellQuote(planPath)}`;
+  `run this on the terminal:\npnpm exec tsx .ai/scripts/workflow-file-unlock.ts ${shellQuote(planPath)}`;
 
 export const unlockWorkflowFileLock = async ({
   rootDir,
   planPath,
   ownedPath,
   isProcessAlive = defaultIsProcessAlive,
+  now = () => Date.now(),
 }: {
   rootDir: string;
   planPath: string;
   ownedPath: string;
   isProcessAlive?: (pid: number) => boolean;
+  now?: () => number;
 }): Promise<UnlockSuccess | UnlockFailure> => {
   const lockPath = workflowFileLockPath(rootDir, ownedPath);
   let raw: string;
@@ -141,7 +155,7 @@ export const unlockWorkflowFileLock = async ({
       reason: `workflow file lock is owned by another plan: ${metadata.planPath}`,
     };
   }
-  if (isProcessAlive(metadata.pid)) {
+  if (isProcessAlive(metadata.pid) && !isWorkflowFileLockStale(metadata, now())) {
     return {
       ok: false,
       reason: `workflow file lock pid ${metadata.pid} is still running for ${planPath}`,
@@ -168,10 +182,12 @@ export const unlockWorkflowFileLocksForPlan = async ({
   rootDir,
   planPath,
   isProcessAlive = defaultIsProcessAlive,
+  now = () => Date.now(),
 }: {
   rootDir: string;
   planPath: string;
   isProcessAlive?: (pid: number) => boolean;
+  now?: () => number;
 }): Promise<UnlockManySuccess | UnlockFailure> => {
   let entries: string[];
   try {
@@ -213,7 +229,7 @@ export const unlockWorkflowFileLocksForPlan = async ({
     if (metadata.planPath !== planPath) {
       continue;
     }
-    if (isProcessAlive(metadata.pid)) {
+    if (isProcessAlive(metadata.pid) && !isWorkflowFileLockStale(metadata, now())) {
       continue;
     }
 
