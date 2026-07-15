@@ -80,7 +80,7 @@ const SCOPE_CLEANUP_PROMPT_PATH = ".ai/prompts/scope-cleanup.md";
 // unblock-plan        -> gpt-5.6-luna medium
 // review-changes      -> gpt-5.6-terra xhigh
 // reopen-plan         -> gpt-5.6-luna medium
-// commit-summary      -> gpt-5.6-luna medium
+// commit-summary      -> gpt-5.6-terra medium
 // scope-cleanup       -> gpt-5.6-terra high
 const PROMPT_CODEX_EXECUTION_OVERRIDES: Record<string, CodexExecutionConfig> = {
   [SYNC_PLAN_ARTIFACTS_PROMPT_PATH]: {
@@ -93,7 +93,7 @@ const PROMPT_CODEX_EXECUTION_OVERRIDES: Record<string, CodexExecutionConfig> = {
   [REVIEW_CHANGES_PROMPT_PATH]: { model: "gpt-5.6-terra", reasoning: "xhigh" },
   [REOPEN_PLAN_PROMPT_PATH]: { model: "gpt-5.6-luna", reasoning: "medium" },
   [COMMIT_SUMMARY_PROMPT_PATH]: {
-    model: "gpt-5.6-luna",
+    model: "gpt-5.6-terra",
     reasoning: "medium",
   },
   [SCOPE_CLEANUP_PROMPT_PATH]: { model: "gpt-5.6-terra", reasoning: "high" },
@@ -5698,6 +5698,37 @@ const currentTaskArtifactRelativePath = async (
   return await nextTaskArtifactRelativePath(rootDir, planName, task);
 };
 
+const readTaskArtifactStage = async (
+  rootDir: string,
+  relativePath: string,
+): Promise<string | undefined> => {
+  let content: string;
+  try {
+    content = await readFile(path.join(rootDir, relativePath), "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return undefined;
+    }
+    throw error;
+  }
+
+  const lines = content.split(/\r?\n/);
+  const stageIndex = lines.findIndex((line) => line.trim() === "## Stage");
+  if (stageIndex === -1) {
+    return undefined;
+  }
+  for (const line of lines.slice(stageIndex + 1)) {
+    const stage = line.trim();
+    if (stage.startsWith("## ")) {
+      return undefined;
+    }
+    if (stage) {
+      return stage;
+    }
+  }
+  return undefined;
+};
+
 const latestTaskArtifactRelativePath = async (
   rootDir: string,
   planName: string,
@@ -10290,7 +10321,17 @@ export const runWorkflowRunner = async (
           description: selectedTask
             ? readableTaskProgressDescription(selectedTask)
             : "task commits complete",
-        }
+          }
+        : undefined;
+    const selectedTaskArtifactPath = selectedTask
+      ? await currentTaskArtifactRelativePath(
+          rootDir,
+          parsedPlan.planName,
+          selectedTask,
+        )
+      : undefined;
+    const selectedTaskStage = selectedTaskArtifactPath
+      ? await readTaskArtifactStage(rootDir, selectedTaskArtifactPath)
       : undefined;
     if (
       taskSavepointMode &&
@@ -10362,6 +10403,7 @@ export const runWorkflowRunner = async (
       route.promptPath === rel(".ai", "prompts", "commit-summary.md") &&
       selectedTask &&
       completedTaskCommits > 0 &&
+      selectedTaskStage !== "commit-message" &&
       !currentTaskContext
     ) {
       const reopened = await reopenPlanForNextTask(parsedPlan);
@@ -10381,13 +10423,6 @@ export const runWorkflowRunner = async (
     if (!selectedTask) {
       currentTaskContext = undefined;
     }
-    const selectedTaskArtifactPath = selectedTask
-      ? await currentTaskArtifactRelativePath(
-          rootDir,
-          parsedPlan.planName,
-          selectedTask,
-        )
-      : undefined;
     const setTaskStage = async ({
       stage,
       detail,
@@ -11167,6 +11202,7 @@ export const runWorkflowRunner = async (
       : [];
     if (streamOutput && editedFiles.length > 0) {
       logger.log(formatEditedFilesForTerminal(editedFiles, colorOutput));
+      outputStream.stdout("\n");
     }
     liveOutput?.flush();
 

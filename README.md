@@ -377,7 +377,7 @@ Default stage routing:
 | `unblock-plan` | `gpt-5.6-luna` | `medium` |
 | `review-changes` | `gpt-5.6-terra` | `high` |
 | `reopen-plan` | `gpt-5.6-luna` | `medium` |
-| `commit-summary` | `gpt-5.6-luna` | `medium` |
+| `commit-summary` | `gpt-5.6-terra` | `medium` |
 | `scope-cleanup` | `gpt-5.6-terra` | `high` |
 
 Notes:
@@ -387,9 +387,9 @@ Notes:
 - Harness prompts use native `.ai/instructions/shared/*` guidance for reasoning,
   debugging, testing, and workflow state. Additional review, when desired, is a
   separate manual decision outside the default runner review path.
-- `commit-summary` uses `gpt-5.6-luna` because it is a low-risk formatting
-  stage: final commit subject and user-facing summary, not implementation
-  correctness validation.
+- `commit-summary` uses `gpt-5.6-terra` with medium reasoning. It remains a
+  low-risk formatting stage: final commit subject and user-facing summary, not
+  implementation correctness validation.
 - `scope-cleanup` is not a visible workflow state, but the runner uses it
   before review and commit-summary cleanup decisions, so it has its own routing.
 

@@ -7757,6 +7757,91 @@ feat(api): add backend endpoints
   }
 });
 
+test("task savepoint mode retries an interrupted task commit-summary before reopening", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(
+      workspace.root,
+      "task-savepoint-summary-retry",
+      planWithTaskSavepoints("completed", "commit-summary"),
+    );
+    const taskDir = join(
+      workspace.root,
+      ".ai",
+      "artifacts",
+      "task-savepoint-summary-retry",
+      "tasks",
+    );
+    mkdirSync(taskDir, { recursive: true });
+    writeFileSync(
+      join(taskDir, "01-backend-endpoints-v1.md"),
+      `# Task Savepoint: 01-backend-endpoints
+
+## Commit SHA
+
+abc1234
+`,
+      "utf8",
+    );
+    writeFileSync(
+      join(taskDir, "02-web-surface-v1.md"),
+      `# Task Savepoint: 02-web-surface
+
+## Stage
+
+commit-message
+
+## Commit SHA
+
+(pending)
+`,
+      "utf8",
+    );
+
+    const promptCalls: string[] = [];
+    const result = await runWorkflowRunner({
+      planName: planArg("task-savepoint-summary-retry"),
+      rootDir: workspace.root,
+      console: collectConsole().console,
+      processRunner: async (call) => {
+        if (call.command === "git") {
+          return {
+            launched: true,
+            stdout: call.args[0] === "rev-parse" ? "def5678\n" : "",
+            stderr: "",
+            exitCode: 0,
+          };
+        }
+        promptCalls.push(call.promptPath);
+        if (call.promptPath === ".ai/prompts/commit-summary.md") {
+          const prompt = call.args.at(-1) ?? "";
+          return {
+            launched: true,
+            stdout: prompt.includes("Task savepoint aggregate summary")
+              ? "aggregate summary"
+              : commitSummaryOutput({
+                  planPath: ".ai/plans/task-savepoint-summary-retry.md",
+                  subject: "feat(web): add support ticket surface",
+                  summaryLines: ["Completed the retried web savepoint."],
+                }),
+            stderr: "",
+            exitCode: 0,
+          };
+        }
+        return { launched: true, stdout: "ok", stderr: "", exitCode: 0 };
+      },
+    });
+
+    assert.equal(result.success, true);
+    assert.deepEqual(promptCalls, [
+      ".ai/prompts/commit-summary.md",
+      ".ai/prompts/commit-summary.md",
+    ]);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
 test("task savepoint mode does not treat artifact without commit SHA as complete", async () => {
   const workspace = await setupWorkspace();
   try {
@@ -8750,7 +8835,7 @@ test("codex execution config requires an explicit prompt mapping", () => {
     reasoning: "medium",
   });
   assert.deepEqual(codexExecutionConfig(".ai/prompts/commit-summary.md"), {
-    model: "gpt-5.6-luna",
+    model: "gpt-5.6-terra",
     reasoning: "medium",
   });
   assert.throws(
@@ -8817,7 +8902,7 @@ test(`${CODEX_EXEC_LABEL} uses prompt-tier model and reasoning policy`, async ()
       "exec",
       "--json",
       "--model",
-      "gpt-5.6-luna",
+      "gpt-5.6-terra",
       "-c",
       'model_reasoning_effort="medium"',
     ]);
@@ -8859,7 +8944,7 @@ test(`${CODEX_EXEC_LABEL} uses prompt-tier model and reasoning policy`, async ()
       "utf8",
     );
     assert.match(log, /model: gpt-5\.6-terra/);
-    assert.match(log, /model: gpt-5\.6-luna/);
+    assert.match(log, /model: gpt-5\.6-terra/);
     assert.match(log, /reasoning: xhigh/);
     assert.match(log, /reasoning: medium/);
   } finally {
@@ -12943,7 +13028,7 @@ test("workflow runner prints edited file summaries before the completed turn mar
     assert.equal(result.success, true);
     assert.match(
       output,
-      /\[agent\]\nDone\n\n\* Edited src\/file\.ts \(\+1 -0\)\n\[codex\] turn completed\n\nSUCCESS/,
+      /\[agent\]\nDone\n\n\* Edited src\/file\.ts \(\+1 -0\)\n\n\[codex\] turn completed\n\nSUCCESS/,
     );
   } finally {
     if (originalForceColor === undefined) {
@@ -14348,7 +14433,7 @@ test("console output reports concise progress and final outcomes", async () => {
     assert.equal(result.success, true);
     assert.match(
       output.lines.join("\n"),
-      /\[1\/100\] STAGE SUMMARY\ncompleted -> commit-summary\nmodel: gpt-5\.6-luna \| reasoning: medium/,
+      /\[1\/100\] STAGE SUMMARY\ncompleted -> commit-summary\nmodel: gpt-5\.6-terra \| reasoning: medium/,
     );
     assert.match(output.lines.join("\n"), /SUCCESS/);
     assert.match(output.lines.join("\n"), /- Worked for 21m 55s/);
