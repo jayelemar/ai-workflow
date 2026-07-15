@@ -215,6 +215,30 @@ Mark malformed structure, invalid dependency ordering, duplicate acceptance
 ownership, artificial lifecycle splits, or missing focused validation as
 CRITICAL and repair them only within the existing bounded pass.
 
+### Commit Boundary Validation
+
+The default is one local commit for each reviewed task savepoint. A `## Commit
+Boundaries` entry is an exception for a runner-managed task that must remain
+one execution and review savepoint while its local history needs to be
+atomized. It is not a substitute for splitting independently implementable and
+validatable outcomes into task savepoints.
+
+When `## Commit Boundaries` is present, validate and repair within the bounded
+pass that each entry:
+
+* targets one existing `[task:NN-readable-words]` task and has two to twelve
+  dependency-ordered boundaries;
+* contains concrete repo-relative paths or narrowly scoped intentional file
+  groups, all within that task's plan-owned scope;
+* assigns every changed plan-owned implementation path to exactly one boundary
+  without overlap or a catch-all group; and
+* keeps focused tests with the matching implementation boundary.
+
+Reject a boundary entry on a manual plan, a one-final-commit plan, or final
+aggregate validation. Mark an invalid, overlapping, incomplete, or
+artificially layer-only boundary list as CRITICAL and either repair it within
+the existing pass or remove it in favor of the default one-commit task.
+
 ---
 
 ## Spec Alignment (MANDATORY)

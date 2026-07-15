@@ -109,6 +109,9 @@ creation:
      reasons to review or revert are separate tasks
    - every structured field, dependency, acceptance owner, size calculation,
      and warning is valid
+   - any explicit `## Commit Boundaries` entry is a valid exception to the
+     one-commit task default: it is task-scoped, ordered, complete,
+     non-overlapping, and keeps focused tests with implementation
    - no lifecycle-only or red-test-only savepoints remain
    - each spec-required behavior, especially visible validation and
      failure-state behavior, is assigned to a concrete task

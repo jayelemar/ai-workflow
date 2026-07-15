@@ -1038,6 +1038,8 @@ test("plan template requires artifact pointers for implementation map and state 
   assert.match(template, /### Preparation/);
   assert.match(template, /### Implementation/);
   assert.match(template, /### Validation/);
+  assert.match(template, /## Commit Boundaries/);
+  assert.match(template, /Each task savepoint produces one local commit/);
   assert.match(template, /tests/i);
 });
 
@@ -1078,6 +1080,13 @@ test("plan creation and validation define atomic runner task savepoints", async 
     assert.match(content, /maximum 50 characters/i);
     assert.match(content, /More than 8 commit paths/);
     assert.match(content, /None — prerequisite for <later task ID>/);
+  }
+
+  for (const content of [prompt, validator, workflowInstructions]) {
+    assert.match(content, /Commit Boundaries/);
+    assert.match(content, /two to twelve/i);
+    assert.match(content, /exactly one\s+boundary/i);
+    assert.match(content, /focused tests/i);
   }
 
   for (const content of [prompt, validator, workflowInstructions]) {
@@ -1142,6 +1151,9 @@ test("workflow prompts define task savepoint execution, review, commit, and aggr
   assert.match(commitPrompt, /Task savepoint aggregate summary/);
   assert.match(commitPrompt, /do NOT create a git commit/i);
   assert.match(commitPrompt, /Task artifact path/);
+  assert.match(commitPrompt, /## Commit Boundaries/);
+  assert.match(commitPrompt, /one commit per boundary/i);
+  assert.match(commitPrompt, /invalid commit boundaries/i);
 });
 
 test("execute-plan allows narrow compatibility fixes for current-task contract changes", async () => {

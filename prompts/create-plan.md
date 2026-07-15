@@ -229,6 +229,33 @@ Rules:
 - Task savepoint artifacts will be written by the runner under `.ai/artifacts/<plan-name>/tasks/`.
 - The runner will write the live task pointer at `.ai/artifacts/<plan-name>/state/current-task.md`.
 
+### Commit Boundaries
+
+The default is exactly one local commit for each reviewed task savepoint. First
+split independently implementable and validatable outcomes into separate task
+savepoints. Do not use commit boundaries merely because a task touches multiple
+apps, layers, or tests.
+
+When one accepted task must remain a single execution and review savepoint, but
+the operator needs an atomized commit history, add `## Commit Boundaries` after
+`## Phases` using the plan template's exact structure. Add an entry only for
+that task ID and only when all of these are true:
+
+- the task has a concrete `Coupling rationale` and, when applicable, its
+  `Size warning` or `Atomization warning` explains why separate task
+  savepoints would be misleading or unsafe;
+- it lists two to twelve dependency-ordered boundaries;
+- every changed plan-owned implementation path belongs to exactly one
+  boundary, and every boundary path is within that task's plan-owned scope;
+- a file group is narrow and intentional, never a catch-all for unrelated
+  paths; and
+- each boundary includes the focused tests required for its implementation.
+
+Do not create a boundary entry for manual plans, one-final-commit plans, or
+final aggregate validation. The runner reviews the complete task before its
+boundaries are committed, creates one local commit per listed boundary, and
+creates no aggregate commit afterward.
+
 ---
 
 ## Phase-to-File Mapping (MANDATORY)

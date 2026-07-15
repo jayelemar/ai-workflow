@@ -91,6 +91,30 @@ For one atomic runner-managed outcome, use the same fields without a
 
 ---
 
+## Commit Boundaries
+
+N/A: Each task savepoint produces one local commit.
+
+For a runner-managed task that cannot safely become separate implementation and
+review savepoints, but needs an atomized local commit history, replace `N/A`
+with one entry per affected task using this exact structure:
+
+```text
+### [task:NN-readable-words]
+
+1. **<coherent boundary name>** — `<exact repo-relative path>`,
+   `<exact repo-relative path or narrowly scoped file group>`.
+2. **<next coherent boundary name>** — `<exact repo-relative path>`.
+```
+
+Use this exception only after considering independent task savepoints first.
+List two to twelve dependency-ordered boundaries. Each changed plan-owned path
+must belong to exactly one boundary; a boundary may name a narrowly scoped
+file group only when every matching file belongs together. Keep each boundary's
+focused tests with its implementation. Do not add a final aggregate commit.
+
+---
+
 ## Workflow State Rules
 
 For runner-managed plans, see `.ai/instructions/shared/workflow-state.md`.

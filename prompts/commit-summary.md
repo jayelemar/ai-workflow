@@ -4,7 +4,10 @@ This prompt stages completed plan implementation files, then generates the final
 
 It does NOT modify code.
 
-For `completed + commit-summary`, it DOES create exactly one local git commit from runner-injected plan-owned paths.
+For `completed + commit-summary`, it will create exactly one local git commit
+from runner-injected plan-owned paths by default. A task-savepoint plan may define
+an explicit `## Commit Boundaries` entry for the current task; in that case,
+create one local commit per listed boundary instead.
 
 It does NOT perform validation or review.
 
@@ -30,10 +33,12 @@ Read:
 * `.codex/AGENTS.md`
 * `.ai/instructions/shared/workflow-state.md`
 * runner-owned context snapshot `.ai/artifacts/<plan-name>/state/context.md` as the primary current-state source
-* the full plan file only when exact plan edits are required or the snapshot is insufficient
+* the full plan file when the current task may define `## Commit Boundaries`,
+  when exact plan edits are required, or when the snapshot is insufficient
 * the repo-relative `*.spec.md` path(s) listed under the plan's `## Spec` section (if any)
 
-Read the full plan only when exact plan edits are required or the snapshot is insufficient.
+Read the full plan before committing a task savepoint so you can determine
+whether that current task defines explicit `## Commit Boundaries`.
 Do not load full historical sections unless the snapshot is insufficient.
 Do not inspect workflow `history` during normal commit-summary runs; use the
 snapshot and the latest relevant event pointer first, then open only that exact
@@ -87,7 +92,7 @@ Use the completed commit rules below.
 
 ## Commit Message Rules
 
-For every allowed git commit, generate exactly one conventional-commit subject line.
+For every allowed git commit, generate one conventional-commit subject line.
 
 Format:
 
@@ -113,7 +118,7 @@ Rules:
 * MUST NOT include runner task IDs, workflow-only plan names, artifact paths, or stage names.
 * MUST NOT add a task-intent mismatch stop. Existing unrelated-scope checks remain authoritative.
 * MUST NOT mention implementation details unnecessarily
-* MUST NOT include multiple commit messages
+* MUST NOT combine multiple commit messages into one commit
 
 Examples:
 
@@ -272,6 +277,29 @@ If `Task savepoint aggregate summary` is present:
 5. Summarize the task commit SHAs and artifact paths.
 6. MUST NOT push.
 
+Otherwise, first check whether the full plan contains an explicit
+`## Commit Boundaries` entry for the runner-injected current task.
+
+If the current task has explicit commit boundaries:
+
+1. Before staging, verify the entry targets the current task, has two to twelve
+   dependency-ordered boundaries, and lists only paths within the
+   runner-injected plan-owned path list. Each changed plan-owned path must be
+   in exactly one boundary. If this is not true, output `STOP` with reason
+   `invalid commit boundaries` and do not stage or commit.
+2. Create one commit per boundary in the documented order. For each boundary,
+   stage only its listed files or narrowly scoped file group, including its
+   focused tests in the same commit.
+3. Run `pnpm lint-staged`, restage that same boundary, inspect its staged path
+   list, and confirm every staged path belongs to that boundary and to the
+   runner-injected plan-owned path list before creating one conventional commit
+   using the required multiline command.
+4. Before moving to the next boundary, confirm the preceding commit is clean
+   and no files outside the runner-injected plan-owned path list are staged.
+5. After the final boundary, confirm no plan-owned changes remain, report every
+   created SHA and subject in documented order, and do not create an aggregate
+   commit.
+
 Otherwise:
 
 1. Stage only plan-owned paths from the runner-injected path list.
@@ -279,8 +307,8 @@ Otherwise:
 3. Stage the same runner-injected plan-owned paths again, because lint-staged tasks may modify files after the first add.
 4. Inspect the staged diff and confirm every staged path is in the runner-injected plan-owned path list.
 5. If any staged path is outside the runner-injected path list, output `STOP` with reason `non plan-scoped staged changes detected` and do not commit.
-6. Generate exactly one conventional-commit subject line and one structured multiline body using the commit message rules.
-7. Create exactly one local git commit using:
+6. Generate one conventional-commit subject line and one structured multiline body using the commit message rules.
+7. Create one local git commit using:
 
 ```bash
 git commit --cleanup=verbatim -F - <<'EOF'
@@ -291,16 +319,23 @@ EOF
 ```
 
 8. MUST NOT push.
-9. If `pnpm lint-staged` or `git commit` fails, output `STOP` with the exact failure. The runner records the failed preflight, unstages the plan-owned paths, preserves `completed + commit-summary`, and lets the next runner invocation resume this stage without bypassing the hook.
-10. Do not write `.ai/artifacts/<plan-name>/execution-summary.md`; the runner refreshes it from completed task artifacts after each task savepoint commit.
-11. After the commit succeeds, read the commit SHA and current branch.
-12. Output the created commit SHA, branch, commit subject, and user-facing summary.
 
 Rules:
 
 * Do not update the plan.
-* Do not create more than one commit.
+* Do not create more than one commit unless the current task has a valid
+  explicit `## Commit Boundaries` entry; then create exactly one commit per
+  listed boundary and no aggregate commit.
 * Do not stage or commit `.ai/` files.
+* If `pnpm lint-staged` or `git commit` fails, output `STOP` with the exact
+  failure. The runner records the failed preflight, unstages the plan-owned
+  paths, preserves `completed + commit-summary`, and lets the next runner
+  invocation resume this stage without bypassing the hook.
+* Do not write `.ai/artifacts/<plan-name>/execution-summary.md`; the runner
+  refreshes it from completed task artifacts after each task savepoint commit.
+* After successful commits, read the current branch. Output the created SHA and
+  subject for a default task commit, or every created SHA and subject in order
+  for explicit boundaries, followed by the user-facing summary.
 
 ---
 
