@@ -50,6 +50,7 @@ type CodexProfile = string;
 type CodexModel =
   | "gpt-5.6-terra"
   | "gpt-5.6-luna"
+  | "gpt-5.6-sol"
   | "gpt-5.5"
   | "gpt-5.4"
   | "gpt-5.4-mini"
@@ -88,9 +89,9 @@ const PROMPT_CODEX_EXECUTION_OVERRIDES: Record<string, CodexExecutionConfig> = {
     reasoning: "medium",
   },
   [PLAN_VALIDATOR_PROMPT_PATH]: { model: "gpt-5.6-terra", reasoning: "medium" },
-  [EXECUTE_PLAN_PROMPT_PATH]: { model: "gpt-5.6-terra", reasoning: "high" },
+  [EXECUTE_PLAN_PROMPT_PATH]: { model: "gpt-5.5", reasoning: "high" },
   [UNBLOCK_PLAN_PROMPT_PATH]: { model: "gpt-5.6-luna", reasoning: "medium" },
-  [REVIEW_CHANGES_PROMPT_PATH]: { model: "gpt-5.6-terra", reasoning: "xhigh" },
+  [REVIEW_CHANGES_PROMPT_PATH]: { model: "gpt-5.6-sol", reasoning: "high" },
   [REOPEN_PLAN_PROMPT_PATH]: { model: "gpt-5.6-luna", reasoning: "medium" },
   [COMMIT_SUMMARY_PROMPT_PATH]: {
     model: "gpt-5.6-terra",
