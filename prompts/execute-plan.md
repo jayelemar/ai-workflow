@@ -461,6 +461,8 @@ If validation cannot be confirmed:
   * set `Next Action = unblock-plan`
   * record exact unblock evidence required
   * do not keep `active + execute-plan` when no further implementation work can make validation proceed
+  * persist the blocked state before outputting `STOP`; do not rely on the
+    runner to infer this transition from terminal output
 * IF validation cannot be confirmed because implementation tasks remain or a validation finding requires code changes already covered by the spec and plan:
   * keep or set `Status = active`
   * keep or set `Next Action = execute-plan`

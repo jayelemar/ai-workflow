@@ -5967,6 +5967,106 @@ NEEDS FIX
   }
 });
 
+test("parsePlan restores review findings after an unblock clears only a runtime blocker", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writeThinPlanV2Artifacts(workspace.root, {
+      status: "active",
+      nextAction: "execute-plan",
+      activeBlockers: [],
+      latest: {
+        execution: {
+          version: 4,
+          result: "completed",
+          evidence: ".ai/artifacts/artifact-state/events/execution-v4.md",
+        },
+        validation: {
+          version: 4,
+          result: "passed",
+          evidence: ".ai/artifacts/artifact-state/events/validation-v4.md",
+        },
+        review: {
+          version: 5,
+          summary: "NEEDS FIX — workspace mutation is not atomic.",
+          decision: "active",
+          evidence: ".ai/artifacts/artifact-state/events/review-v5.md",
+        },
+        unblock: {
+          version: 1,
+          result: "resolved",
+          evidence: ".ai/artifacts/artifact-state/events/unblock-v1.md",
+        },
+      },
+      history: [
+        ".ai/artifacts/artifact-state/events/execution-v4.md",
+        ".ai/artifacts/artifact-state/events/validation-v4.md",
+        ".ai/artifacts/artifact-state/events/review-v5.md",
+        ".ai/artifacts/artifact-state/events/unblock-v1.md",
+      ],
+    });
+    await writeFile(
+      join(
+        workspace.root,
+        ".ai",
+        "artifacts",
+        "artifact-state",
+        "events",
+        "review-v5.md",
+      ),
+      `# Review v5
+
+## Summary
+
+NEEDS FIX
+
+## Evidence
+
+* The runtime blocker is separate from the mutation defect.
+
+## Issues
+
+* Make the workspace mutation and entitlement check atomic.
+`,
+      "utf8",
+    );
+    await writePlan(
+      workspace.root,
+      "artifact-state",
+      thinPlanV2Manifest("active", "execute-plan"),
+    );
+
+    const parsed = await parsePlan({
+      planName: planArg("artifact-state"),
+      rootDir: workspace.root,
+    });
+
+    assert.equal(parsed.ok, true);
+    const workflow = JSON.parse(
+      await readFile(
+        join(
+          workspace.root,
+          ".ai",
+          "artifacts",
+          "artifact-state",
+          "state",
+          "workflow.json",
+        ),
+        "utf8",
+      ),
+    ) as Record<string, unknown>;
+    assert.deepEqual(workflow.unresolvedBlockers, [
+      "Make the workspace mutation and entitlement check atomic.",
+    ]);
+    assert.deepEqual(
+      (workflow.latest as Record<string, Record<string, unknown>>).review
+        .unresolvedFindings,
+      ["Make the workspace mutation and entitlement check atomic."],
+    );
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
 test("review prompt requires unresolved blockers for a failed thin-plan-v2 review", async () => {
   const prompt = await readWorkflowPrompt("review-changes.md");
 
@@ -5975,6 +6075,13 @@ test("review prompt requires unresolved blockers for a failed thin-plan-v2 revie
     prompt,
     /do not write `\[\]` while the failed review is latest/i,
   );
+});
+
+test("unblock prompt preserves latest failed-review findings", async () => {
+  const prompt = await readWorkflowPrompt("unblock-plan.md");
+
+  assert.match(prompt, /latest review[\s\S]*unresolvedFindings/i);
+  assert.match(prompt, /Never set `unresolvedBlockers` to `\[\]`/);
 });
 
 test("parsePlan accepts thin-plan-v2 remediated failed review with empty blockers", async () => {
@@ -12513,6 +12620,83 @@ test("unblock-plan STOP that keeps the plan blocked reports a blocked outcome", 
       lines.some((line) => line.startsWith("FAILED:")),
       false,
     );
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("execute STOP repairs a recorded thin-plan-v2 runtime validation block", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writeThinPlanV2Artifacts(workspace.root, {
+      status: "active",
+      nextAction: "execute-plan",
+      activeBlockers: [
+        "Local Supabase cannot connect to the required database port.",
+      ],
+      latest: {
+        validation: {
+          version: 2,
+          result: "blocked",
+          summary: "Database validation is blocked by local connectivity.",
+          evidence: ".ai/artifacts/artifact-state/events/validation-v2.md",
+        },
+      },
+      history: [".ai/artifacts/artifact-state/events/validation-v2.md"],
+    });
+    await writePlan(
+      workspace.root,
+      "artifact-state",
+      thinPlanV2Manifest("active", "execute-plan"),
+    );
+
+    const { lines, console } = collectConsole();
+    const result = await runWorkflowRunner({
+      planName: planArg("artifact-state"),
+      rootDir: workspace.root,
+      console,
+      processRunner: async (call) => {
+        if (call.command === "git") {
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
+        return {
+          launched: true,
+          stdout: codexAgentMessageLine(
+            "STOP\nRequired local database validation is unavailable.",
+          ),
+          stderr: "",
+          exitCode: 0,
+        };
+      },
+    });
+
+    assert.equal(result.success, false);
+    assert.match(result.reason, /plan blocked after execute-plan/);
+    assert.doesNotMatch(result.reason, /output contained STOP/);
+    assert.equal(lines.includes("BLOCKED"), true);
+
+    const workflow = JSON.parse(
+      await readFile(
+        join(
+          workspace.root,
+          ".ai",
+          "artifacts",
+          "artifact-state",
+          "state",
+          "workflow.json",
+        ),
+        "utf8",
+      ),
+    ) as Record<string, unknown>;
+    assert.equal(workflow.status, "blocked");
+    assert.equal(workflow.nextAction, "unblock-plan");
+
+    const manifest = await readFile(
+      join(workspace.root, ".ai", "plans", "artifact-state.md"),
+      "utf8",
+    );
+    assert.match(manifest, /## Status\s+blocked/);
+    assert.match(manifest, /## Next Action\s+unblock-plan/);
   } finally {
     await workspace.cleanup();
   }

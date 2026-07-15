@@ -4853,7 +4853,11 @@ const recoverThinPlanV2FailedReviewState = async ({
   const workflowRecord = asRecord(workflowRaw);
   const latest = asRecord(workflowRecord?.latest);
   const review = asRecord(latest?.review);
-  const unresolvedBlockers = asStringArray(workflowRecord?.unresolvedBlockers);
+  // Treat a missing or malformed list exactly like an empty list here. The
+  // strict reader below will reject it, but recovery must be able to restore
+  // the review findings before that rejection can strand a valid handoff.
+  const unresolvedBlockers =
+    asStringArray(workflowRecord?.unresolvedBlockers) ?? [];
   const history = normalizeWorkflowEventHistory(workflowRecord?.history);
   if (
     !workflowRecord ||
@@ -4874,10 +4878,16 @@ const recoverThinPlanV2FailedReviewState = async ({
     workflowStatus === "review" && workflowNextAction === "review-plan";
   const isActiveHandoff =
     workflowStatus === "active" && workflowNextAction === "execute-plan";
+  const isBlockedHandoff =
+    workflowStatus === "blocked" && workflowNextAction === "unblock-plan";
+  const manifestHasRecoverableHandoff =
+    (manifestStatus === "review" && manifestNextAction === "review-plan") ||
+    (manifestStatus === "active" &&
+      manifestNextAction === "execute-plan") ||
+    (manifestStatus === "blocked" && manifestNextAction === "unblock-plan");
   if (
-    (!isReviewHandoff && !isActiveHandoff) ||
-    manifestStatus !== workflowStatus ||
-    manifestNextAction !== workflowNextAction
+    (!isReviewHandoff && !isActiveHandoff && !isBlockedHandoff) ||
+    !manifestHasRecoverableHandoff
   ) {
     return { ok: true, recovered: false, manifestContent };
   }
@@ -4940,6 +4950,74 @@ const recoverThinPlanV2FailedReviewState = async ({
   }
 
   return { ok: true, recovered: true, manifestContent: nextManifestContent };
+};
+
+const recoverThinPlanV2BlockedValidationHandoff = async ({
+  rootDir,
+  plan,
+}: {
+  rootDir: string;
+  plan: ParsedPlan;
+}): Promise<{ ok: true; recovered: boolean } | Failure> => {
+  if (
+    plan.thinPlanContract !== "thin-plan-v2" ||
+    plan.status !== "active" ||
+    plan.nextAction !== "execute-plan"
+  ) {
+    return { ok: true, recovered: false };
+  }
+
+  const workflowPath = thinPlanV2ArtifactPath(
+    plan.planName,
+    "state",
+    "workflow.json",
+  );
+  const workflowRaw = await readJsonArtifact(rootDir, workflowPath);
+  if (isFailure(workflowRaw)) {
+    return workflowRaw;
+  }
+  const workflowRecord = asRecord(workflowRaw);
+  const latest = asRecord(workflowRecord?.latest);
+  const validation = asRecord(latest?.validation);
+  const unresolvedBlockers = asStringArray(workflowRecord?.unresolvedBlockers);
+  if (
+    !workflowRecord ||
+    !latest ||
+    !validation ||
+    !unresolvedBlockers ||
+    unresolvedBlockers.length === 0 ||
+    latestString(validation, "result")?.toLowerCase() !== "blocked"
+  ) {
+    return { ok: true, recovered: false };
+  }
+
+  const nextManifestContent = replaceManifestWorkflowValue(
+    replaceManifestWorkflowValue(plan.manifestContent, "## Status", "blocked"),
+    "## Next Action",
+    "unblock-plan",
+  );
+  const nextWorkflow = {
+    ...workflowRecord,
+    status: "blocked",
+    nextAction: "unblock-plan",
+    updatedAt: new Date().toISOString(),
+  };
+
+  try {
+    await writeFile(
+      path.join(rootDir, workflowPath),
+      `${JSON.stringify(nextWorkflow, null, 2)}\n`,
+      "utf8",
+    );
+    await writeFile(plan.absolutePlanPath, nextManifestContent, "utf8");
+  } catch (error) {
+    return {
+      ok: false,
+      reason: `thin-plan-v2 blocked-validation recovery could not persist state: ${String(error)}`,
+    };
+  }
+
+  return { ok: true, recovered: true };
 };
 
 const demoteMarkdownHeadings = (content: string): string =>
@@ -11964,6 +12042,15 @@ export const runWorkflowRunner = async (
     };
 
     if (stopReason) {
+      if (route.promptPath === EXECUTE_PLAN_PROMPT_PATH) {
+        const recovered = await recoverThinPlanV2BlockedValidationHandoff({
+          rootDir,
+          plan: parsedPlan,
+        });
+        if (!recovered.ok) {
+          return await finishFailure(recovered.reason);
+        }
+      }
       const updated = await parsePlan({ planName: planArgument, rootDir });
       if (updated.ok) {
         emitWorkflowThresholdWarnings(updated.warnings);

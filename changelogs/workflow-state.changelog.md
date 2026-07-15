@@ -1,5 +1,15 @@
 # Workflow State Instruction Changelog
 
+## v1.19 — 2026-07-16
+
+* Required execute stages to persist a blocked runtime-validation handoff before
+  `STOP`; documented the narrow thin-plan-v2 recovery condition.
+
+## v1.18 — 2026-07-16
+
+* Clarified that unblocking a runtime or setup failure preserves any latest
+  unremediated failed-review findings while execution resumes.
+
 ## v1.17 — 2026-07-15
 
 * Added resumable handling for lint-staged, hook, and local commit failures,

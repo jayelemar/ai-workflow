@@ -164,6 +164,12 @@ If the blocker is resolved:
 * create `.ai/artifacts/<plan-name>/events/unblock-vX.md` with the resolved blocker evidence
 * update `.ai/artifacts/<plan-name>/state/workflow.json` with `latest.unblock`, appended `history`, and remaining `unresolvedBlockers`
 * preserve unresolved blockers
+* when the latest review has `decision: active` with `NEEDS FIX` or `HIGH RISK`
+  and no later execution or validation has remediated it, preserve its
+  `unresolvedFindings` as active implementation work. If that field is absent,
+  copy the exact `## Issues` bullets from the review artifact. Resolving a
+  Docker, auth, or other runtime blocker does not resolve those review findings.
+  Never set `unresolvedBlockers` to `[]` in that state.
 * keep file ownership unchanged unless the blocker evidence proves the plan already owns the needed files
 * keep fixes traceable to the blocker
 * MUST NOT add inline `## Blockers` to thin-plan-v2 manifests
@@ -203,7 +209,8 @@ Then update `.ai/artifacts/<plan-name>/state/workflow.json` with runner-readable
 * set `status` and `nextAction`
 * write compact `version`, `result`, `summary`, and `evidence` fields under `latest.unblock`
 * append `.ai/artifacts/<plan-name>/events/unblock-vX.md` to `history`
-* set `unresolvedBlockers` to active blocker strings, or `[]` when none remain
+* set `unresolvedBlockers` to active blocker strings, or `[]` only when no
+  runtime blocker and no latest unremediated failed-review finding remains
 * refresh `updatedAt`
 
 Rules:

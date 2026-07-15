@@ -1,4 +1,4 @@
-Version: 1.17
+Version: 1.19
 Last Updated: 2026-07-15
 
 # Workflow State Instructions
@@ -193,6 +193,11 @@ Execution rules:
 * Completed status is available ONLY through the Review Loop
 * Execute may hand off to Review with pending final browser/manual/deployed/external validation, and Review owns the completion decision
 * Implementation defects, incomplete implementation tasks, or validation findings that require code changes already covered by the spec and plan are not execution blockers; they keep or return the plan to `active + execute-plan`
+* If a runtime, local database, auth, external-service, or operator-controlled
+  validation blocker prevents further validation, persist `blocked +
+  unblock-plan` before emitting `STOP`. The runner may recover this exact
+  thin-plan-v2 handoff only when the state already records a blocked validation
+  result and unresolved blockers.
 
 ---
 
@@ -202,6 +207,14 @@ Blocker resolved:
 
 Status = active
 Next Action = execute-plan
+
+Unblock preservation rule:
+
+* Resolving a runtime, setup, auth, or external-service blocker must not clear
+  the latest failed review's required remediation. When the latest review is
+  `decision: active` with `NEEDS FIX` or `HIGH RISK` and no later execution or
+  validation supersedes it, retain its findings in `unresolvedBlockers` and
+  continue through `active + execute-plan`.
 
 ---
 
