@@ -13225,6 +13225,117 @@ test("execute-plan recovers thin-plan review handoff when state is unchanged aft
   }
 });
 
+test("execute-plan repairs a partial thin-plan review handoff", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writeThinPlanV2Artifacts(workspace.root, {
+      status: "active",
+      nextAction: "execute-plan",
+      modified: ["src/service.ts"],
+      changedFiles: ["src/service.ts"],
+      owns: ["src/**"],
+      activeBlockers: [],
+    });
+    await writePlan(
+      workspace.root,
+      "artifact-state",
+      thinPlanV2Manifest("active", "execute-plan"),
+    );
+
+    const calls: Parameters<ProcessRunner>[0][] = [];
+    const result = await runWorkflowRunner({
+      planName: planArg("artifact-state"),
+      rootDir: workspace.root,
+      processRunner: async (call) => {
+        calls.push(call);
+        if (
+          call.command === CODEX_COMMAND &&
+          call.promptPath === ".ai/prompts/execute-plan.md"
+        ) {
+          const workflowPath = join(
+            workspace.root,
+            ".ai",
+            "artifacts",
+            "artifact-state",
+            "state",
+            "workflow.json",
+          );
+          const workflow = JSON.parse(
+            await readFile(workflowPath, "utf8"),
+          ) as Record<string, unknown>;
+          await writeFile(
+            workflowPath,
+            `${JSON.stringify(
+              {
+                ...workflow,
+                status: "active",
+                nextAction: "review-plan",
+              },
+              null,
+              2,
+            )}\n`,
+            "utf8",
+          );
+          await writePlan(
+            workspace.root,
+            "artifact-state",
+            thinPlanV2Manifest("active", "review-plan"),
+          );
+          return { launched: true, stdout: "Review ready.", stderr: "", exitCode: 0 };
+        }
+        if (
+          call.command === CODEX_COMMAND &&
+          call.promptPath === ".ai/prompts/review-changes.md"
+        ) {
+          return {
+            launched: true,
+            stdout: "STOP review intentionally paused",
+            stderr: "",
+            exitCode: 0,
+          };
+        }
+        if (call.command === "git" && call.args[0] === "status") {
+          return { launched: true, stdout: " M src/service.ts\n", stderr: "", exitCode: 0 };
+        }
+        return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+      },
+    });
+
+    assert.equal(result.success, false);
+    assert.match(result.reason, /output contained STOP/);
+    assert(
+      calls.some(
+        (call) => call.promptPath === ".ai/prompts/review-changes.md",
+      ),
+    );
+
+    const manifest = await readFile(
+      join(workspace.root, ".ai", "plans", "artifact-state.md"),
+      "utf8",
+    );
+    assert.match(manifest, /## Status\s+review/);
+    assert.match(manifest, /## Next Action\s+review-plan/);
+
+    const workflow = JSON.parse(
+      await readFile(
+        join(
+          workspace.root,
+          ".ai",
+          "artifacts",
+          "artifact-state",
+          "state",
+          "workflow.json",
+        ),
+        "utf8",
+      ),
+    ) as Record<string, unknown>;
+    assert.equal(workflow.status, "review");
+    assert.equal(workflow.nextAction, "review-plan");
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
 test("execute-plan repairs thin-plan manifest when successful stage advances only workflow sidecar", async () => {
   const workspace = await setupWorkspace();
   try {

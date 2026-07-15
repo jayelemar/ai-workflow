@@ -136,6 +136,11 @@ Execution MUST end in exactly one of these states:
 * `active` with `Next Action = execute-plan`
 * `blocked` with `Next Action = unblock-plan`
 
+When handing off, update the plan manifest and
+`.ai/artifacts/<plan-name>/state/workflow.json` together using one exact
+status/action pair above. Reread both values before final output; never leave
+an `active + review-plan` or other mixed pair.
+
 Execution MUST NOT end with:
 
 * `Status = completed`

@@ -4598,6 +4598,72 @@ const repairThinPlanV2ManifestStateFromWorkflow = async ({
   return { ok: true, repaired: true };
 };
 
+const recoverThinPlanV2PartialExecuteReviewHandoff = async ({
+  rootDir,
+  previous,
+  updated,
+}: {
+  rootDir: string;
+  previous: ParsedPlan;
+  updated: ParsedPlan;
+}): Promise<{ ok: true; recovered: boolean } | Failure> => {
+  if (
+    previous.thinPlanContract !== "thin-plan-v2" ||
+    previous.status !== "active" ||
+    previous.nextAction !== "execute-plan" ||
+    updated.status !== "active" ||
+    updated.nextAction !== "review-plan"
+  ) {
+    return { ok: true, recovered: false };
+  }
+
+  const workflowPath = thinPlanV2ArtifactPath(
+    updated.planName,
+    "state",
+    "workflow.json",
+  );
+  const workflowRaw = await readJsonArtifact(rootDir, workflowPath);
+  if (isFailure(workflowRaw)) {
+    return workflowRaw;
+  }
+  const workflowRecord = asRecord(workflowRaw);
+  if (
+    !workflowRecord ||
+    workflowRecord.status !== "active" ||
+    workflowRecord.nextAction !== "review-plan"
+  ) {
+    return { ok: true, recovered: false };
+  }
+
+  const manifestContent = replaceManifestWorkflowValue(
+    updated.manifestContent,
+    "## Status",
+    "review",
+  );
+  const workflowContent = `${JSON.stringify(
+    {
+      ...workflowRecord,
+      status: "review",
+      nextAction: "review-plan",
+      updatedAt: new Date().toISOString(),
+    },
+    null,
+    2,
+  )}\n`;
+
+  try {
+    await writeFile(updated.absolutePlanPath, manifestContent, "utf8");
+    await writeFile(path.join(rootDir, workflowPath), workflowContent, "utf8");
+  } catch (error) {
+    return {
+      ok: false,
+      reason: `thin-plan-v2 partial execute review handoff could not be repaired: ${String(error)}`,
+    };
+  }
+
+  return { ok: true, recovered: true };
+};
+
 const failedReviewSummary = (review: Record<string, unknown>): boolean =>
   typeof review.summary === "string" &&
   /\b(?:NEEDS FIX|HIGH RISK)\b/.test(review.summary.toUpperCase());
@@ -11933,6 +11999,56 @@ export const runWorkflowRunner = async (
       return await finishFailure(reason);
     }
     emitWorkflowThresholdWarnings(updated.warnings);
+
+    if (route.promptPath === EXECUTE_PLAN_PROMPT_PATH) {
+      const recovered = await recoverThinPlanV2PartialExecuteReviewHandoff({
+        rootDir,
+        previous: parsedPlan,
+        updated,
+      });
+      if (!recovered.ok) {
+        const cleanup = await cleanupReviewStagingPaths(reviewStagingPaths);
+        const reason = cleanup.ok
+          ? recovered.reason
+          : `${recovered.reason}; ${cleanup.reason}`;
+        const logResult = await appendIterationLog(reason, updated);
+        if (!logResult.ok) {
+          return await finishFailure(logResult.reason);
+        }
+        const snapshotResult = await syncWorkflowSnapshot(updated);
+        if (!snapshotResult.ok) {
+          return await finishFailure(snapshotResult.reason);
+        }
+        return await finishFailure(reason);
+      }
+      if (recovered.recovered) {
+        const recoveredPlan = await parsePlan({ planName: planArgument, rootDir });
+        if (!recoveredPlan.ok) {
+          const logResult = await appendIterationLog(recoveredPlan.reason);
+          if (!logResult.ok) {
+            return await finishFailure(logResult.reason);
+          }
+          const snapshotResult = await syncWorkflowSnapshot(parsedPlan);
+          if (!snapshotResult.ok) {
+            return await finishFailure(snapshotResult.reason);
+          }
+          return await finishFailure(recoveredPlan.reason);
+        }
+        const logResult = await appendIterationLog(
+          "repaired partial execute-plan review handoff",
+          recoveredPlan,
+        );
+        if (!logResult.ok) {
+          return await finishFailure(logResult.reason);
+        }
+        const snapshotResult = await syncWorkflowSnapshot(recoveredPlan);
+        if (!snapshotResult.ok) {
+          return await finishFailure(snapshotResult.reason);
+        }
+        parsedPlan = recoveredPlan;
+        continue;
+      }
+    }
 
     const nonterminalOutcome = nonterminalRouteOutcome(updated);
     if (nonterminalOutcome) {
