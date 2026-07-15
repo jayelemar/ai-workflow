@@ -40,6 +40,7 @@ import {
   stagedStatusHasMixedReviewPath,
   supportsWorkflowAnsiColor,
   WORKFLOW_WAIT_NOTICE_INTERVAL_MS,
+  WORKFLOW_RUNNER_CODEX_FALLBACK_MODEL,
   WORKFLOW_RUNNER_CODEX_PROFILE,
   workflowContextSnapshotRelativePath,
   workflowFileLockPath,
@@ -9196,9 +9197,9 @@ test(`${CODEX_EXEC_LABEL} uses prompt-tier model and reasoning policy`, async ()
       "exec",
       "--json",
       "--model",
-      "gpt-5.6-terra",
+      "gpt-5.6-sol",
       "-c",
-      'model_reasoning_effort="xhigh"',
+      'model_reasoning_effort="high"',
     ]);
     assert.deepEqual(codexCalls[2].args.slice(0, 6), [
       "exec",
@@ -9245,10 +9246,114 @@ test(`${CODEX_EXEC_LABEL} uses prompt-tier model and reasoning policy`, async ()
       ),
       "utf8",
     );
+    assert.match(log, /model: gpt-5\.6-sol/);
     assert.match(log, /model: gpt-5\.6-terra/);
-    assert.match(log, /model: gpt-5\.6-terra/);
-    assert.match(log, /reasoning: xhigh/);
+    assert.match(log, /reasoning: high/);
     assert.match(log, /reasoning: medium/);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test(`${CODEX_EXEC_LABEL} retries selected model twice before retrying fallback model twice on capacity`, async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(
+      workspace.root,
+      "capacity-fallback",
+      planWith("completed", "commit-summary"),
+    );
+    const calls: Parameters<ProcessRunner>[0][] = [];
+    const output = collectConsole();
+    let codexLaunches = 0;
+    const result = await runWorkflowRunner({
+      planName: planArg("capacity-fallback"),
+      rootDir: workspace.root,
+      console: output.console,
+      processRunner: async (call) => {
+        calls.push(call);
+        if (call.command !== CODEX_COMMAND) {
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
+        codexLaunches += 1;
+        if (codexLaunches <= 4) {
+          return {
+            launched: true,
+            stdout: "",
+            stderr:
+              "[codex] error: Selected model is at capacity. Please try a different model.",
+            exitCode: 1,
+          };
+        }
+        return { launched: true, stdout: "summary", stderr: "", exitCode: 0 };
+      },
+    });
+
+    assert.equal(result.success, true);
+    const codexCalls = calls.filter((call) => call.command === CODEX_COMMAND);
+    assert.equal(codexCalls.length, 5);
+    assert.deepEqual(
+      codexCalls.map((call) => call.promptPath),
+      Array.from({ length: 5 }, () => ".ai/prompts/commit-summary.md"),
+    );
+    assert.deepEqual(
+      codexCalls.map((call) => call.args.slice(0, 4)),
+      [
+        ["exec", "--json", "--model", "gpt-5.6-terra"],
+        ["exec", "--json", "--model", "gpt-5.6-terra"],
+        ["exec", "--json", "--model", "gpt-5.6-terra"],
+        ["exec", "--json", "--model", WORKFLOW_RUNNER_CODEX_FALLBACK_MODEL],
+        ["exec", "--json", "--model", WORKFLOW_RUNNER_CODEX_FALLBACK_MODEL],
+      ],
+    );
+
+    const log = await readFile(
+      join(
+        workspace.root,
+        ".ai",
+        "artifacts",
+        "capacity-fallback",
+        "logs",
+        "runner.log",
+      ),
+      "utf8",
+    );
+    assert.match(
+      log,
+      new RegExp(`model: ${WORKFLOW_RUNNER_CODEX_FALLBACK_MODEL}`),
+    );
+    assert.equal(
+      output.lines.some((line) =>
+        /retrying \.ai\/prompts\/commit-summary\.md with the same model \(2\/3\)/.test(
+          line,
+        ),
+      ),
+      true,
+    );
+    assert.equal(
+      output.lines.some((line) =>
+        /retrying \.ai\/prompts\/commit-summary\.md with the same model \(3\/3\)/.test(
+          line,
+        ),
+      ),
+      true,
+    );
+    assert.equal(
+      output.lines.some((line) =>
+        /retrying \.ai\/prompts\/commit-summary\.md with fallback model gpt-5\.5 \(1\/2\)/.test(
+          line,
+        ),
+      ),
+      true,
+    );
+    assert.equal(
+      output.lines.some((line) =>
+        /retrying \.ai\/prompts\/commit-summary\.md with fallback model gpt-5\.5 \(2\/2\)/.test(
+          line,
+        ),
+      ),
+      true,
+    );
   } finally {
     await workspace.cleanup();
   }
@@ -13115,6 +13220,142 @@ test("execute-plan recovers thin-plan review handoff when state is unchanged aft
     assert.deepEqual(files.created, ["src/new.ts"]);
     assert.deepEqual(files.modified, ["src/service.ts"]);
     assert.deepEqual(files.deleted, ["src/old.ts"]);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("execute-plan repairs thin-plan manifest when successful stage advances only workflow sidecar", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writeThinPlanV2Artifacts(workspace.root, {
+      status: "active",
+      nextAction: "execute-plan",
+      modified: ["src/service.ts"],
+      changedFiles: ["src/service.ts"],
+      owns: ["src/**"],
+      activeBlockers: [],
+    });
+    await writePlan(
+      workspace.root,
+      "artifact-state",
+      thinPlanV2Manifest("active", "execute-plan"),
+    );
+
+    const calls: Parameters<ProcessRunner>[0][] = [];
+    const result = await runWorkflowRunner({
+      planName: planArg("artifact-state"),
+      rootDir: workspace.root,
+      processRunner: async (call) => {
+        calls.push(call);
+        if (
+          call.command === CODEX_COMMAND &&
+          call.promptPath === ".ai/prompts/execute-plan.md"
+        ) {
+          const workflowPath = join(
+            workspace.root,
+            ".ai",
+            "artifacts",
+            "artifact-state",
+            "state",
+            "workflow.json",
+          );
+          const workflow = JSON.parse(
+            await readFile(workflowPath, "utf8"),
+          ) as Record<string, unknown>;
+          await writeFile(
+            workflowPath,
+            `${JSON.stringify(
+              {
+                ...workflow,
+                status: "review",
+                nextAction: "review-plan",
+                latest: {
+                  ...(workflow.latest as Record<string, unknown>),
+                  execution: {
+                    version: 36,
+                    summary: "Review ready.",
+                    result: "review-ready",
+                    evidence:
+                      ".ai/artifacts/artifact-state/events/execution-v36.md",
+                  },
+                },
+                history: [
+                  ...((workflow.history as string[] | undefined) ?? []),
+                  ".ai/artifacts/artifact-state/events/execution-v36.md",
+                ],
+                updatedAt: "2026-07-15T00:00:00.000Z",
+              },
+              null,
+              2,
+            )}\n`,
+            "utf8",
+          );
+          writeWorkflowEventArtifactSync({
+            root: workspace.root,
+            planName: "artifact-state",
+            kind: "execution",
+            version: 36,
+            summary: "Review ready.",
+            evidence: "Focused validation passed.",
+          });
+          return {
+            launched: true,
+            stdout: "Review ready.",
+            stderr: "",
+            exitCode: 0,
+          };
+        }
+        if (
+          call.command === CODEX_COMMAND &&
+          call.promptPath === ".ai/prompts/review-changes.md"
+        ) {
+          return {
+            launched: true,
+            stdout: "STOP review intentionally paused",
+            stderr: "",
+            exitCode: 0,
+          };
+        }
+        if (call.command === "git" && call.args[0] === "rev-parse") {
+          return {
+            launched: true,
+            stdout: "abcdef1234567890\n",
+            stderr: "",
+            exitCode: 0,
+          };
+        }
+        if (
+          call.command === "git" &&
+          call.args[0] === "status" &&
+          call.args[1] === "--short"
+        ) {
+          return {
+            launched: true,
+            stdout: " M src/service.ts\n",
+            stderr: "",
+            exitCode: 0,
+          };
+        }
+        return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+      },
+    });
+
+    assert.equal(result.success, false);
+    assert.match(result.reason, /output contained STOP/);
+    assert.doesNotMatch(result.reason, /thin-plan-v2 manifest state mismatch/);
+    assert(
+      calls.some(
+        (call) => call.promptPath === ".ai/prompts/review-changes.md",
+      ),
+    );
+
+    const manifest = await readFile(
+      join(workspace.root, ".ai", "plans", "artifact-state.md"),
+      "utf8",
+    );
+    assert.match(manifest, /## Status\s+review/);
+    assert.match(manifest, /## Next Action\s+review-plan/);
   } finally {
     await workspace.cleanup();
   }

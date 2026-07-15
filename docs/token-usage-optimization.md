@@ -1,7 +1,7 @@
 # Token Usage Optimization Reference
 
 Created: 2026-07-08
-Last Updated: 2026-07-14
+Last Updated: 2026-07-16
 
 ## Purpose
 
@@ -984,3 +984,105 @@ Primary simplification:
 - Do not stack subagent orchestration systems.
 - Use the harness when its state machine is worth the cost; otherwise delegate
   planning and review back to native Codex features.
+
+## Scope-Valid Comparison Contract
+
+Do not judge a runner-managed workflow against the two-savepoint Support Ticket
+baseline merely because both runs use the workflow runner. Plan size, accepted
+savepoints, review remediation, model routing, and measurement coverage can
+materially change total token usage.
+
+Use two distinct comparison types:
+
+1. **Operational measurement:** successful runner calls only, showing cache-hit
+   rate, uncached-input rate, prompt-stage distribution, and stage p50/p90/max.
+   This diagnoses runner behaviour; it is not a cost target or quality score.
+2. **Delivery measurement:** tokens, calls, and tokens per accepted savepoint
+   across a matched, completed cohort. Only this supports a cost target or a
+   claim that a runner change saved tokens.
+
+### Quick Comparison Checklist
+
+Mark each criterion before assigning a comparison rank.
+
+| Criterion | Needed for a delivery comparison | Multi-business snapshot |
+| --- | --- | --- |
+| Successful runner-call filter only | Yes | Yes |
+| Same execution mode and ledger coverage | Yes | Yes: runner-only |
+| Workflow completed through commit summary | Yes | No: Task 03 is in remediation |
+| Accepted, committed savepoint as the unit | Yes | Partial: Tasks 01 and 02 only |
+| `taskId` on every runner ledger record | Yes | No |
+| Matched task tags (migration, integration, security/concurrency, UI, required validation) | Yes | Not recorded as a cohort |
+| Same prompt revision, model family, reasoning, and context-loading policy | Yes | Not established against a peer |
+| Validation/review outcome recorded for every compared savepoint | Yes | No: current task unresolved |
+
+Do not substitute planned-task count, changed-file count, checklist-item count,
+or review-loop count for accepted savepoints.
+
+### Comparison Ranking
+
+| Rank | Label | Criteria met | Permitted conclusion |
+| --- | --- | --- |
+| A | Benchmark-grade | All checklist criteria; at least two completed matched cohorts | Set or revise cost targets; claim measured savings. |
+| B | Directional cohort | Completed and task-attributed, with one documented scope/configuration mismatch | Compare trends and propose a target; do not claim a causal saving. |
+| C | Operational | Successful-call filter and runner coverage are known, but cohort or completion matching is absent | Identify stage hotspots and operational regressions only. |
+| D | Incomplete snapshot | Workflow is incomplete, task attribution is missing, or outcome evidence is unresolved | Record facts only; make no comparative performance judgment. |
+
+Every future successful runner ledger record must retain `taskId`, task stage,
+prompt path, model, reasoning setting, and result. Without `taskId`, a ledger
+can show whole-run operational cost but cannot justify tokens-per-savepoint.
+
+Report an A- or B-ranked matched cohort with this minimum table:
+
+| Cohort | Completed savepoints | Successful calls | Median tokens/savepoint | p90 tokens/savepoint | Total tokens | Cache hit | Uncached rate |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Before runner change |  |  |  |  |  |  |  |
+| After runner change |  |  |  |  |  |  |  |
+
+Use medians and p90 values rather than only an average: a single large
+remediation loop can dominate the mean. Compare stage p50/p90/max separately
+to locate a rehydration regression, but do not turn those diagnostic values
+into universal limits until an A-ranked cohort exists.
+
+## 2026-07-15 Observational Snapshot: Multi-Business Workspaces
+
+**Rank: D — Incomplete snapshot.** It is useful for recording current costs,
+but not for a baseline or target comparison.
+
+Source:
+
+- `.ai/artifacts/multi-business-workspaces/logs/token-usage.jsonl`
+- Measured through `2026-07-15T20:08:42.792Z`
+- Filter: successful runner calls only (`result: "success"`); manual,
+  failed, and interrupted records excluded.
+
+The plan has five planned savepoints, two accepted and committed savepoints,
+and Task 03 remains in review remediation; Tasks 04 and 05 have not started.
+The current ledger also lacks task IDs on its runner records, so no defensible
+per-savepoint cost can be calculated retrospectively.
+
+Aggregate operational measurements:
+
+| Metric | Value |
+| --- | ---: |
+| Successful runner calls | 76 |
+| Input tokens | 346,528,907 |
+| Cached input tokens | 331,442,176 |
+| Uncached input tokens | 15,086,731 |
+| Output tokens | 1,545,033 |
+| Total tokens | 348,073,940 |
+| Cache-hit rate | 95.65% |
+| Uncached input rate | 4.35% |
+
+Stage distribution (successful runner calls only):
+
+| Stage | Calls | Total tokens | p50 | p90 | Max |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `execute-plan` | 38 | 223.70M | 4.70M | 14.21M | 25.48M |
+| `review-changes` | 34 | 121.40M | 2.51M | 6.74M | 13.27M |
+| All other stages | 4 | 2.98M | N/A | N/A | N/A |
+
+Interpretation: execution and review rehydration account for about 99% of
+successful-runner tokens in this snapshot. That is a valid operational finding,
+but it is not evidence that this workflow missed the Support Ticket total-token
+or call-count targets.

@@ -63,6 +63,7 @@ type CodexExecutionConfig = {
 
 export const WORKFLOW_RUNNER_CODEX_PROFILE: CodexProfile =
   "codex-work" as const;
+export const WORKFLOW_RUNNER_CODEX_FALLBACK_MODEL: CodexModel = "gpt-5.5";
 const CODEX_PROFILE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 
 const PLAN_VALIDATOR_PROMPT_PATH = ".ai/prompts/plan-validator.md";
@@ -91,7 +92,7 @@ const PROMPT_CODEX_EXECUTION_OVERRIDES: Record<string, CodexExecutionConfig> = {
   [PLAN_VALIDATOR_PROMPT_PATH]: { model: "gpt-5.6-terra", reasoning: "medium" },
   [EXECUTE_PLAN_PROMPT_PATH]: { model: "gpt-5.5", reasoning: "high" },
   [UNBLOCK_PLAN_PROMPT_PATH]: { model: "gpt-5.6-luna", reasoning: "medium" },
-  [REVIEW_CHANGES_PROMPT_PATH]: { model: "gpt-5.6-sol", reasoning: "high" },
+  [REVIEW_CHANGES_PROMPT_PATH]: { model: "gpt-5.6-terra", reasoning: "xhigh" },
   [REOPEN_PLAN_PROMPT_PATH]: { model: "gpt-5.6-luna", reasoning: "medium" },
   [COMMIT_SUMMARY_PROMPT_PATH]: {
     model: "gpt-5.6-terra",
@@ -99,6 +100,10 @@ const PROMPT_CODEX_EXECUTION_OVERRIDES: Record<string, CodexExecutionConfig> = {
   },
   [SCOPE_CLEANUP_PROMPT_PATH]: { model: "gpt-5.6-terra", reasoning: "high" },
 };
+const CODEX_SELECTED_MODEL_CAPACITY_MESSAGE =
+  "Selected model is at capacity" as const;
+const CODEX_SELECTED_MODEL_CAPACITY_PRIMARY_ATTEMPTS = 3;
+const CODEX_SELECTED_MODEL_CAPACITY_FALLBACK_ATTEMPTS = 2;
 
 const VALID_STATUSES = [
   "draft",
@@ -3509,6 +3514,27 @@ const codexExecArgs = ({
   return args;
 };
 
+const codexResultContainsSelectedModelCapacity = (
+  result: ProcessResult,
+): boolean =>
+  result.launched &&
+  result.exitCode !== 0 &&
+  `${result.stdout}\n${result.stderr}`.includes(
+    CODEX_SELECTED_MODEL_CAPACITY_MESSAGE,
+  );
+
+const codexCapacityFallbackConfig = (
+  executionConfig: CodexExecutionConfig,
+): CodexExecutionConfig | undefined => {
+  if (executionConfig.model === WORKFLOW_RUNNER_CODEX_FALLBACK_MODEL) {
+    return undefined;
+  }
+  return {
+    ...executionConfig,
+    model: WORKFLOW_RUNNER_CODEX_FALLBACK_MODEL,
+  };
+};
+
 const promptRoutes: Record<string, string> = {
   "draft|sync-plan-artifacts": SYNC_PLAN_ARTIFACTS_PROMPT_PATH,
   "draft|plan-validator": PLAN_VALIDATOR_PROMPT_PATH,
@@ -4478,6 +4504,98 @@ const replaceManifestWorkflowValue = (
   }
   lines.splice(headingIndex + 1, 0, "", value);
   return lines.join("\n");
+};
+
+const repairThinPlanV2ManifestStateFromWorkflow = async ({
+  rootDir,
+  plan,
+}: {
+  rootDir: string;
+  plan: ParsedPlan;
+}): Promise<{ ok: true; repaired: boolean } | Failure> => {
+  if (plan.thinPlanContract !== "thin-plan-v2") {
+    return { ok: true, repaired: false };
+  }
+
+  let manifestContent: string;
+  try {
+    manifestContent = await readFile(plan.absolutePlanPath, "utf8");
+  } catch (error) {
+    return {
+      ok: false,
+      reason: `plan file cannot be read: ${plan.planPath}: ${String(error)}`,
+    };
+  }
+
+  const manifestStatus = extractSectionValue(manifestContent, "## Status");
+  const manifestNextAction = extractSectionValue(
+    manifestContent,
+    "## Next Action",
+  );
+  if (manifestStatus === null) {
+    return { ok: false, reason: "plan is missing ## Status" };
+  }
+  if (manifestNextAction === null) {
+    return { ok: false, reason: "plan is missing ## Next Action" };
+  }
+
+  const rawStatus = normalizeWorkflowStateValue(manifestStatus);
+  const rawNextAction = normalizeWorkflowStateValue(manifestNextAction);
+  if (!isStatus(rawStatus)) {
+    return { ok: false, reason: `unknown status value: ${rawStatus}` };
+  }
+  if (!isNextAction(rawNextAction)) {
+    return { ok: false, reason: `unknown next action value: ${rawNextAction}` };
+  }
+
+  const workflowPath = thinPlanV2ArtifactPath(
+    plan.planName,
+    "state",
+    "workflow.json",
+  );
+  const workflowRaw = await readJsonArtifact(rootDir, workflowPath);
+  if (isFailure(workflowRaw)) {
+    return workflowRaw;
+  }
+  const workflow = parseThinPlanV2WorkflowState(
+    workflowRaw,
+    plan.planPath,
+    workflowPath,
+  );
+  if (isFailure(workflow)) {
+    return workflow;
+  }
+
+  if (
+    rawStatus === workflow.status &&
+    rawNextAction === workflow.nextAction
+  ) {
+    return { ok: true, repaired: false };
+  }
+
+  if (rawStatus !== plan.status || rawNextAction !== plan.nextAction) {
+    return { ok: true, repaired: false };
+  }
+
+  const repairedContent = replaceManifestWorkflowValue(
+    replaceManifestWorkflowValue(manifestContent, "## Status", workflow.status),
+    "## Next Action",
+    workflow.nextAction,
+  );
+  if (repairedContent === manifestContent) {
+    return { ok: true, repaired: false };
+  }
+
+  try {
+    await writeFile(plan.absolutePlanPath, repairedContent, "utf8");
+  } catch (error) {
+    return {
+      ok: false,
+      reason: `plan file cannot be written: ${plan.planPath}: ${String(error)}`,
+    };
+  }
+
+  return { ok: true, repaired: true };
 };
 
 const failedReviewSummary = (review: Record<string, unknown>): boolean =>
@@ -11241,34 +11359,81 @@ export const runWorkflowRunner = async (
         )
       : undefined;
     waitNotice.start();
-    const result = await processRunner({
-      command: codexRuntime.command,
-      binaryCommand: CODEX_BINARY_COMMAND,
-      args: codexExecArgs({
-        executionConfig,
+    let effectiveExecutionConfig = executionConfig;
+    const runCodexAttempt = async (
+      attemptExecutionConfig: CodexExecutionConfig,
+    ): Promise<ProcessResult> =>
+      processRunner({
+        command: codexRuntime.command,
+        binaryCommand: CODEX_BINARY_COMMAND,
+        args: codexExecArgs({
+          executionConfig: attemptExecutionConfig,
+          promptPath: route.promptPath,
+          prompt: generatedPrompt,
+          rootDir,
+        }),
+        cwd: rootDir,
+        input: "",
         promptPath: route.promptPath,
-        prompt: generatedPrompt,
-        rootDir,
-      }),
-      cwd: rootDir,
-      input: "",
-      promptPath: route.promptPath,
-      env: codexWorkEnvironment(process.env, codexRuntime.profile),
-      abortSignal: options.abortSignal,
-      onStdout: liveOutput?.stdout,
-      onStderr: liveOutput?.stderr,
-    })
-      .catch(
+        env: codexWorkEnvironment(process.env, codexRuntime.profile),
+        abortSignal: options.abortSignal,
+        onStdout: liveOutput?.stdout,
+        onStderr: liveOutput?.stderr,
+      }).catch(
         (error): ProcessResult => ({
           launched: false,
           stdout: "",
           stderr: "",
           error: String(error),
         }),
+      );
+    let result: ProcessResult;
+    try {
+      const retryNotices: string[] = [];
+      result = await runCodexAttempt(executionConfig);
+      for (
+        let attempt = 2;
+        attempt <= CODEX_SELECTED_MODEL_CAPACITY_PRIMARY_ATTEMPTS &&
+        codexResultContainsSelectedModelCapacity(result);
+        attempt += 1
+      ) {
+        const retryNotice = `[workflow-runner] ${executionConfig.model} reported capacity; retrying ${route.promptPath} with the same model (${attempt}/${CODEX_SELECTED_MODEL_CAPACITY_PRIMARY_ATTEMPTS}).`;
+        retryNotices.push(retryNotice);
+        logger.log(streamOutput ? `${retryNotice}\n` : retryNotice);
+        result = await runCodexAttempt(executionConfig);
+      }
+
+      const fallbackExecutionConfig = codexResultContainsSelectedModelCapacity(
+        result,
       )
-      .finally(() => {
-        waitNotice.stop();
-      });
+        ? codexCapacityFallbackConfig(executionConfig)
+        : undefined;
+      if (fallbackExecutionConfig) {
+        effectiveExecutionConfig = fallbackExecutionConfig;
+        for (
+          let attempt = 1;
+          attempt <= CODEX_SELECTED_MODEL_CAPACITY_FALLBACK_ATTEMPTS &&
+          codexResultContainsSelectedModelCapacity(result);
+          attempt += 1
+        ) {
+          const retryNotice = `[workflow-runner] ${executionConfig.model} still reported capacity after ${CODEX_SELECTED_MODEL_CAPACITY_PRIMARY_ATTEMPTS} attempts; retrying ${route.promptPath} with fallback model ${fallbackExecutionConfig.model} (${attempt}/${CODEX_SELECTED_MODEL_CAPACITY_FALLBACK_ATTEMPTS}).`;
+          retryNotices.push(retryNotice);
+          logger.log(streamOutput ? `${retryNotice}\n` : retryNotice);
+          result = await runCodexAttempt(fallbackExecutionConfig);
+        }
+      }
+
+      if (result.launched && retryNotices.length > 0) {
+        result = {
+          ...result,
+          stderr: [...retryNotices, result.stderr]
+            .filter((part) => part.length > 0)
+            .join("\n"),
+        };
+      }
+    } finally {
+      waitNotice.stop();
+    }
     liveOutput?.flush({ includePendingTurnCompleted: false });
     const durationMs = Math.max(0, now() - attemptStartedAt);
     const contextUsage = result.launched
@@ -11370,8 +11535,8 @@ export const runWorkflowRunner = async (
           status: parsedPlan.status,
           nextAction: parsedPlan.nextAction,
           promptPath: route.promptPath,
-          model: executionConfig.model,
-          reasoning: executionConfig.reasoning,
+          model: effectiveExecutionConfig.model,
+          reasoning: effectiveExecutionConfig.reasoning,
           contextUsage,
           result: result.launched ? "launched" : "launch-failed",
           exitCode: result.launched ? result.exitCode : undefined,
@@ -11418,8 +11583,8 @@ export const runWorkflowRunner = async (
           promptPath: route.promptPath,
           endingStatus: endingPlan?.status,
           endingNextAction: endingPlan?.nextAction,
-          model: executionConfig.model,
-          reasoning: executionConfig.reasoning,
+          model: effectiveExecutionConfig.model,
+          reasoning: effectiveExecutionConfig.reasoning,
           result: ledgerResult,
           signal: interruptSignal ?? null,
           usageAvailable: tokenUsage.usageAvailable,
@@ -11445,6 +11610,28 @@ export const runWorkflowRunner = async (
       }
       return ledgerResultValue;
     };
+
+    if (result.launched && result.exitCode === 0 && !interruptSignal) {
+      const manifestRepair = await repairThinPlanV2ManifestStateFromWorkflow({
+        rootDir,
+        plan: parsedPlan,
+      });
+      if (!manifestRepair.ok) {
+        const cleanup = await cleanupReviewStagingPaths(reviewStagingPaths);
+        const reason = cleanup.ok
+          ? manifestRepair.reason
+          : `${manifestRepair.reason}; ${cleanup.reason}`;
+        const logResult = await appendIterationLog(reason);
+        if (!logResult.ok) {
+          return await finishFailure(logResult.reason);
+        }
+        const snapshotResult = await syncWorkflowSnapshot(parsedPlan);
+        if (!snapshotResult.ok) {
+          return await finishFailure(snapshotResult.reason);
+        }
+        return await finishFailure(reason);
+      }
+    }
 
     const nonterminalRouteOutcome = (
       updated: ParsedPlan,
