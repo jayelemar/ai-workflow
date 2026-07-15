@@ -78,6 +78,11 @@ Rules:
 * Use two hyphens before each completed item.
 * Include only completed work.
 * Include every meaningful completed item. There is no maximum bullet count.
+* If no completed task savepoint exists, omit both `Pre-Execution` and `Commit`
+  group labels. List verified completed plan-specific outcomes as ungrouped
+  `--` bullets immediately after the header.
+* Never place completed implementation outcomes under `Pre-Execution` merely
+  because a task savepoint is missing.
 * Pre-execution bullets must name actual business or product outcomes from the
   specific plan, spec, artifacts, or event summaries.
 * Do not use generic workflow bullets such as "created the implementation plan"
@@ -184,8 +189,9 @@ If `.ai/artifacts/<plan-name>/boss-summary.md` already exists:
 
 * preserve completed `Commit <short_sha>` groups that still correspond to completed task
   savepoints.
-* preserve or refresh the `Pre-Execution` group so it contains only completed,
-  plan-specific pre-execution outcomes.
+* when at least one completed task savepoint exists, preserve or refresh the
+  `Pre-Execution` group so it contains only completed, plan-specific
+  pre-execution outcomes.
 * rewrite the single header with the latest percentage.
 * append any missing completed task groups.
 * do not duplicate the header.
@@ -193,6 +199,10 @@ If `.ai/artifacts/<plan-name>/boss-summary.md` already exists:
 * do not duplicate an existing `Commit <short_sha>` group.
 
 If the file does not exist, create it.
+
+When no completed task savepoint exists, remove any existing `Pre-Execution`
+or `Commit <short_sha>` group labels and retain only verified completed outcomes
+as ungrouped bullets below the header.
 
 ---
 

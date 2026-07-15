@@ -330,6 +330,66 @@ Interpretation:
   totals still exceed the completed-baseline targets. Focused validation before
   review should reduce repair-loop context in future comparable runs.
 
+## 2026-07-15 Successful-Stage Audit: Channel Access Notifications
+
+This audit records only successful stages, per the requested measurement scope.
+
+- Plan: `.ai/plans/channel-access-notifications.md`
+- Ledger: `.ai/artifacts/channel-access-notifications/logs/token-usage.jsonl`
+- Workflow state: `completed`, next action `commit-summary`
+- Scope: one manual `spec` checkpoint and 15 successful runner stages
+
+Aggregate token usage:
+
+| Metric | Successful stages | Successful runner stages |
+| --- | ---: | ---: |
+| Calls | 16 | 15 |
+| Input tokens | 23,716,759 | 23,266,767 |
+| Cached input tokens | 21,574,656 | 21,177,600 |
+| Uncached input tokens | 2,142,103 | 2,089,167 |
+| Output tokens | 200,512 | 190,561 |
+| Reasoning output tokens | 108,395 | 102,539 |
+| Total tokens | 23,917,271 | 23,457,328 |
+| Cache hit rate | 91.0% | 91.0% |
+| Uncached input rate | 9.0% | 9.0% |
+
+Successful-stage prompt breakdown:
+
+| Prompt | Calls | Input | Cached | Uncached | Output | Total | Avg Total | Max Total |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `generate-spec` | 1 | 449,992 | 397,056 | 52,936 | 9,951 | 459,943 | 459,943 | 459,943 |
+| `sync-plan-artifacts` | 1 | 180,402 | 146,944 | 33,458 | 2,207 | 182,609 | 182,609 | 182,609 |
+| `plan-validator` | 1 | 518,805 | 458,496 | 60,309 | 5,462 | 524,267 | 524,267 | 524,267 |
+| `execute-plan` | 6 | 14,189,887 | 13,277,440 | 912,447 | 84,485 | 14,274,372 | 2,379,062 | 5,138,163 |
+| `review-changes` | 5 | 7,838,356 | 6,811,392 | 1,026,964 | 91,701 | 7,930,057 | 1,586,011 | 2,761,114 |
+| `unblock-plan` | 1 | 253,103 | 224,768 | 28,335 | 3,986 | 257,089 | 257,089 | 257,089 |
+| `commit-summary` | 1 | 286,214 | 258,560 | 27,654 | 2,720 | 288,934 | 288,934 | 288,934 |
+
+Comparison with current two-task runner targets:
+
+| Metric | Result | Target | Assessment |
+| --- | ---: | ---: | --- |
+| Successful-stage total tokens | 23.92M | <= 30.0M | Met |
+| Successful runner calls | 15 | <= 10 | Missed |
+| Cache hit rate | 91.0% | >= 95% | Missed |
+| Uncached input rate | 9.0% | <= 4% | Missed |
+| Avg `execute-plan` total | 2.38M | <= 3.0M | Met |
+| Max `execute-plan` total | 5.14M | <= 8.0M | Met |
+| Avg `review-changes` total | 1.59M | <= 1.5M | Missed |
+| Max `review-changes` total | 2.76M | <= 2.0M | Missed |
+| Commit-summary calls | 1 | 1 | Met |
+
+Interpretation:
+
+- Successful-stage total cost meets the current target, and successful execute
+  stages meet both average and maximum token targets.
+- Call count, cache reuse, and uncached-input control remain below target.
+- `review-changes` is the remaining hotspot: all five successful reviews
+  recorded `narrowPass: 0`, so review scope did not auto-narrow despite review
+  costs above target.
+- Next optimization: trigger snapshot-first review narrowing from stage token
+  size, then load only latest task and blocker paths before a review retry.
+
 ## 2026-07-10 Runner Optimization Update
 
 The workflow runner was updated after the completed support-ticket baseline

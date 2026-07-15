@@ -1617,14 +1617,13 @@ const summarizeInlineTsxCommand = (
   }
 
   const filterIndex = tokens.indexOf("--filter");
-  const packageName =
-    filterIndex >= 0 ? tokens[filterIndex + 1] : undefined;
+  const packageName = filterIndex >= 0 ? tokens[filterIndex + 1] : undefined;
   const scopeLabel =
     packageName === "@gondoor/backend"
       ? "backend"
       : packageName === "@gondoor/web"
         ? "web"
-        : packageName?.replace(/^@gondoor\//, "") ?? "workspace";
+        : (packageName?.replace(/^@gondoor\//, "") ?? "workspace");
   const prefixTokens = tokens.slice(0, tsxIndex + 2);
   return {
     group: "Ran",
@@ -4058,11 +4057,15 @@ ${formatSnapshotSection("### Unresolved Findings", review.unresolvedFindings)}
 
 ## Latest Relevant Event
 
-${relevantEvent ? `* Kind: ${relevantEvent.label}
+${
+  relevantEvent
+    ? `* Kind: ${relevantEvent.label}
 * Why: ${relevantEvent.reason}
 * Summary: ${relevantEvent.summary ?? "(none recorded)"}
 * ${relevantEvent.stateField}: ${relevantEvent.stateValue ?? "(none recorded)"}
-* Evidence: ${relevantEvent.evidence ?? "(none recorded)"}` : "(none)"}
+* Evidence: ${relevantEvent.evidence ?? "(none recorded)"}`
+    : "(none)"
+}
 
 ${formatSnapshotSection("## Latest Review Remediation Context", reviewRemediationContext)}
 
@@ -4516,7 +4519,9 @@ const recoverThinPlanV2FailedReviewState = async ({
   manifestContent: string;
   manifestStatus: Status;
   manifestNextAction: NextAction;
-}): Promise<{ ok: true; recovered: boolean; manifestContent: string } | Failure> => {
+}): Promise<
+  { ok: true; recovered: boolean; manifestContent: string } | Failure
+> => {
   const workflowPath = thinPlanV2ArtifactPath(
     planName,
     "state",
@@ -4607,11 +4612,7 @@ const recoverThinPlanV2FailedReviewState = async ({
       `${JSON.stringify(nextWorkflow, null, 2)}\n`,
       "utf8",
     );
-    await writeFile(
-      path.join(rootDir, planPath),
-      nextManifestContent,
-      "utf8",
-    );
+    await writeFile(path.join(rootDir, planPath), nextManifestContent, "utf8");
   } catch (error) {
     return {
       ok: false,
@@ -4733,7 +4734,8 @@ const selectRelevantWorkflowEvent = (
   const unblock = latestRecord(workflow, "unblock");
   const reopen = latestRecord(workflow, "reopen");
   const reviewFindings = asStringArray(review?.unresolvedFindings) ?? [];
-  const status = workflow.status || extractSectionValue(planContent, "## Status");
+  const status =
+    workflow.status || extractSectionValue(planContent, "## Status");
   const nextAction =
     workflow.nextAction || extractSectionValue(planContent, "## Next Action");
 
@@ -4742,7 +4744,8 @@ const selectRelevantWorkflowEvent = (
       status === "active" &&
       review &&
       !workflowReviewSupersededByProgress(workflow.latest, workflow.history) &&
-      (reviewFindings.length > 0 || latestString(review, "decision") === "active")
+      (reviewFindings.length > 0 ||
+        latestString(review, "decision") === "active")
     ) {
       return relevantWorkflowEventDetails(
         "review",
@@ -4861,7 +4864,11 @@ const selectRelevantWorkflowEvent = (
       execution,
       "latest execution evidence",
     ) ??
-    relevantWorkflowEventDetails("unblock", unblock, "latest unblock evidence") ??
+    relevantWorkflowEventDetails(
+      "unblock",
+      unblock,
+      "latest unblock evidence",
+    ) ??
     relevantWorkflowEventDetails("reopen", reopen, "latest reopen evidence")
   );
 };
@@ -5753,7 +5760,8 @@ const formatTaskProgressLine = ({
   task: PlanTask;
   stage: TaskStage;
   detail: string;
-}): string => `TASK ${task.id} | ${stage} | ${compactTerminalProgressDetail(detail)}`;
+}): string =>
+  `TASK ${task.id} | ${stage} | ${compactTerminalProgressDetail(detail)}`;
 
 const humanizeTaskWords = (words: string): string => words.replace(/-/g, " ");
 
@@ -5771,7 +5779,11 @@ const readableTaskProgressDescription = (task: PlanTask): string => {
   if (new RegExp(`\\b${escapeRegExp(taskWords)}\\b`, "i").test(baseName)) {
     return baseName;
   }
-  if (/\b(?:in|for|on|with|around|to|into|through|across|from|by)$/i.test(baseName)) {
+  if (
+    /\b(?:in|for|on|with|around|to|into|through|across|from|by)$/i.test(
+      baseName,
+    )
+  ) {
     return `${baseName} ${taskWords}`;
   }
   return `${baseName} for ${taskWords}`;
@@ -6879,8 +6891,7 @@ const appendFailureDebugLedger = async (
   }
 };
 
-const NON_PLAN_SCOPED_REVIEW_STOP_TEXT =
-  "non plan-scoped changes detected";
+const NON_PLAN_SCOPED_REVIEW_STOP_TEXT = "non plan-scoped changes detected";
 
 const latestExecutionEvidenceMtimeMs = async (
   rootDir: string,
@@ -6890,7 +6901,10 @@ const latestExecutionEvidenceMtimeMs = async (
   try {
     workflowRaw = JSON.parse(
       await readFile(
-        path.join(rootDir, thinPlanV2ArtifactPath(planName, "state", "workflow.json")),
+        path.join(
+          rootDir,
+          thinPlanV2ArtifactPath(planName, "state", "workflow.json"),
+        ),
         "utf8",
       ),
     ) as unknown;
@@ -7906,19 +7920,19 @@ export const runReviewStagingForPaths = async (
 
   if (restorePaths.length > 0) {
     const restoreResult = await processRunner({
-    command: "git",
-    args: restoreArgs,
-    cwd: rootDir,
-    input: "",
-    promptPath: "git-review-staging-restore",
-  }).catch(
-    (error): ProcessResult => ({
-      launched: false,
-      stdout: "",
-      stderr: "",
-      error: String(error),
-    }),
-  );
+      command: "git",
+      args: restoreArgs,
+      cwd: rootDir,
+      input: "",
+      promptPath: "git-review-staging-restore",
+    }).catch(
+      (error): ProcessResult => ({
+        launched: false,
+        stdout: "",
+        stderr: "",
+        error: String(error),
+      }),
+    );
 
     if (!restoreResult.launched) {
       return {
@@ -8033,6 +8047,10 @@ const runReviewUnstageForPaths = async (
   rootDir: string,
   paths: string[],
   processRunner: ProcessRunner,
+  options: {
+    operationLabel?: string;
+    promptPath?: string;
+  } = {},
 ): Promise<
   | {
       ok: true;
@@ -8050,7 +8068,7 @@ const runReviewUnstageForPaths = async (
     args,
     cwd: rootDir,
     input: "",
-    promptPath: "git-review-unstage",
+    promptPath: options.promptPath ?? "git-review-unstage",
   }).catch(
     (error): ProcessResult => ({
       launched: false,
@@ -8067,12 +8085,13 @@ const runReviewUnstageForPaths = async (
     exitCode: result.launched ? result.exitCode : undefined,
   };
   if (!result.launched) {
+    const operationLabel = options.operationLabel ?? "review cleanup";
     return {
       ok: false,
-      reason: `could not launch review cleanup git restore: ${result.error}`,
+      reason: `could not launch ${operationLabel} git restore: ${result.error}`,
       cleanup: {
         ...cleanup,
-        stopReason: `could not launch review cleanup git restore: ${result.error}`,
+        stopReason: `could not launch ${operationLabel} git restore: ${result.error}`,
       },
     };
   }
@@ -8080,7 +8099,8 @@ const runReviewUnstageForPaths = async (
     const details = [result.stderr.trim(), result.stdout.trim()]
       .filter(Boolean)
       .join("\n");
-    const reason = `review cleanup git restore exited with code ${result.exitCode}${details ? `: ${details}` : ""}`;
+    const operationLabel = options.operationLabel ?? "review cleanup";
+    const reason = `${operationLabel} git restore exited with code ${result.exitCode}${details ? `: ${details}` : ""}`;
     return {
       ok: false,
       reason,
@@ -8217,7 +8237,9 @@ export const selectReviewPrimaryPaths = ({
   const all = uniquePaths(allPaths);
   const inAll = (pathValue: string) => all.includes(pathValue);
   const cap = (paths: string[]) =>
-    uniquePaths(paths).filter(inAll).slice(0, WORKFLOW_REVIEW_PRIMARY_PATH_LIMIT);
+    uniquePaths(paths)
+      .filter(inAll)
+      .slice(0, WORKFLOW_REVIEW_PRIMARY_PATH_LIMIT);
 
   if (narrowPass === 1 || narrowPass === 2) {
     const focused = cap([
@@ -8225,7 +8247,9 @@ export const selectReviewPrimaryPaths = ({
       ...blockerPaths,
       ...suspiciousStatPaths,
     ]);
-    return focused.length > 0 ? focused : all.slice(0, WORKFLOW_REVIEW_PRIMARY_PATH_LIMIT);
+    return focused.length > 0
+      ? focused
+      : all.slice(0, WORKFLOW_REVIEW_PRIMARY_PATH_LIMIT);
   }
 
   if (narrowPass >= WORKFLOW_AUTO_NARROW_PASS_LIMIT) {
@@ -8234,7 +8258,9 @@ export const selectReviewPrimaryPaths = ({
       ...latestTaskPaths,
       ...suspiciousStatPaths,
     ]);
-    return focused.length > 0 ? focused : all.slice(0, WORKFLOW_REVIEW_PRIMARY_PATH_LIMIT);
+    return focused.length > 0
+      ? focused
+      : all.slice(0, WORKFLOW_REVIEW_PRIMARY_PATH_LIMIT);
   }
 
   return all.slice(0, WORKFLOW_REVIEW_PRIMARY_PATH_LIMIT);
@@ -8288,9 +8314,14 @@ export const buildReviewScopeMetadata = async ({
       ),
     });
     const fullDiff = reviewPrimaryPaths.length
-      ? await readCachedDiffForPaths(rootDir, reviewPrimaryPaths, processRunner, {
-          promptPath: "git-review-primary-diff-size",
-        })
+      ? await readCachedDiffForPaths(
+          rootDir,
+          reviewPrimaryPaths,
+          processRunner,
+          {
+            promptPath: "git-review-primary-diff-size",
+          },
+        )
       : undefined;
     const diffBytes = Buffer.byteLength(fullDiff ?? "", "utf8");
     const decision = decideWorkflowAutoNarrow({
@@ -8322,7 +8353,6 @@ export const buildReviewScopeMetadata = async ({
     reason = [reason, decision.reason].filter(Boolean).join("; ");
   }
 };
-
 
 export const generateScopeCleanupPrompt = ({
   promptContent,
@@ -8514,9 +8544,14 @@ export const runScopeCleanupForPathBatches = async (
   };
 
   for (const scopedPath of paths) {
-    const diff = await readCachedDiffForPaths(rootDir, [scopedPath], processRunner, {
-      promptPath: "git-scope-cleanup-batch-size",
-    });
+    const diff = await readCachedDiffForPaths(
+      rootDir,
+      [scopedPath],
+      processRunner,
+      {
+        promptPath: "git-scope-cleanup-batch-size",
+      },
+    );
     if (!diff) {
       continue;
     }
@@ -8622,7 +8657,11 @@ export const parseCommitSummaryPathsForPlan = async (
     return parseThinPlanV2CommitSummaryPaths(rootDir, plan.planName, isIgnored);
   }
 
-  const parsed = await parseCommitSummaryPaths(rootDir, plan.content, isIgnored);
+  const parsed = await parseCommitSummaryPaths(
+    rootDir,
+    plan.content,
+    isIgnored,
+  );
   return parsed;
 };
 
@@ -8709,12 +8748,11 @@ const parseGitStatusChangedFileEntries = (
     if (filePath.length > 0) {
       entries.push({
         path: filePath,
-        change:
-          status.includes("D")
-            ? "deleted"
-            : status.includes("A") || status === "??"
-              ? "created"
-              : "modified",
+        change: status.includes("D")
+          ? "deleted"
+          : status.includes("A") || status === "??"
+            ? "created"
+            : "modified",
       });
     }
   }
@@ -9151,7 +9189,10 @@ const readOtherFileOwnershipArtifacts = async (
         path.join(rootDir, otherPlanPath),
         "utf8",
       );
-      const extractedStatus = extractSectionValue(otherPlanContent, "## Status");
+      const extractedStatus = extractSectionValue(
+        otherPlanContent,
+        "## Status",
+      );
       if (extractedStatus !== null) {
         const rawStatus = normalizeWorkflowStateValue(extractedStatus);
         if (isStatus(rawStatus) && rawStatus === "draft") {
@@ -9635,7 +9676,10 @@ const isWorkflowFileLockStale = (
   now = Date.now(),
 ): boolean => {
   const leaseAt = Date.parse(metadata.heartbeatAt ?? metadata.createdAt);
-  return Number.isFinite(leaseAt) && now - leaseAt > WORKFLOW_FILE_LOCK_STALE_AFTER_MS;
+  return (
+    Number.isFinite(leaseAt) &&
+    now - leaseAt > WORKFLOW_FILE_LOCK_STALE_AFTER_MS
+  );
 };
 
 const isProcessAlive = (pid: number): boolean => {
@@ -9936,7 +9980,10 @@ const logFields = ({
     ],
     ["latestStageTotalTokens", latestStageTokenUsage?.totalTokens],
     ["cumulativeInputTokens", cumulativeTokenUsage?.inputTokens],
-    ["cumulativeUncachedInputTokens", cumulativeTokenUsage?.uncachedInputTokens],
+    [
+      "cumulativeUncachedInputTokens",
+      cumulativeTokenUsage?.uncachedInputTokens,
+    ],
     ["cumulativeTotalTokens", cumulativeTokenUsage?.totalTokens],
     ["result", result],
     ["exitCode", exitCode],
@@ -10184,7 +10231,9 @@ export const runWorkflowRunner = async (
       : reasonWithHint;
     logger.error(`FAILED: ${reason}`);
     if (ownershipResetHint) {
-      logger.error(formatWorkflowOwnershipResetHint(ownershipResetHint, colorOutput));
+      logger.error(
+        formatWorkflowOwnershipResetHint(ownershipResetHint, colorOutput),
+      );
     }
     if (releaseFailure) {
       logger.error(`FAILED: ${releaseFailure}`);
@@ -10324,8 +10373,8 @@ export const runWorkflowRunner = async (
           description: selectedTask
             ? readableTaskProgressDescription(selectedTask)
             : "task commits complete",
-          }
-        : undefined;
+        }
+      : undefined;
     const selectedTaskArtifactPath = selectedTask
       ? await currentTaskArtifactRelativePath(
           rootDir,
@@ -10584,6 +10633,27 @@ export const runWorkflowRunner = async (
         rootDir,
         paths,
         processRunner,
+      );
+      reviewCleanup = cleanup.cleanup;
+      if (!cleanup.ok) {
+        return { ok: false, reason: cleanup.reason };
+      }
+      return { ok: true };
+    };
+    const cleanupCommitSummaryPaths = async (
+      paths: string[] | undefined,
+    ): Promise<{ ok: true } | Failure> => {
+      if (!paths || paths.length === 0 || reviewCleanup) {
+        return { ok: true };
+      }
+      const cleanup = await runReviewUnstageForPaths(
+        rootDir,
+        paths,
+        processRunner,
+        {
+          operationLabel: "commit-summary cleanup",
+          promptPath: "git-commit-summary-unstage",
+        },
       );
       reviewCleanup = cleanup.cleanup;
       if (!cleanup.ok) {
@@ -10921,7 +10991,9 @@ export const runWorkflowRunner = async (
           processRunner,
         );
         if (!staged.ok) {
-          const cleanup = await cleanupReviewStagingPaths(staged.staging?.paths);
+          const cleanup = await cleanupReviewStagingPaths(
+            staged.staging?.paths,
+          );
           const stopReason = cleanup.ok
             ? staged.reason
             : `${staged.reason}; ${cleanup.reason}`;
@@ -11062,7 +11134,9 @@ export const runWorkflowRunner = async (
             processRunner,
           );
           if (!staged.ok) {
-            const cleanup = await cleanupReviewStagingPaths(staged.staging?.paths);
+            const cleanup = await cleanupReviewStagingPaths(
+              staged.staging?.paths,
+            );
             const stopReason = cleanup.ok
               ? staged.reason
               : `${staged.reason}; ${cleanup.reason}`;
@@ -11463,7 +11537,10 @@ export const runWorkflowRunner = async (
           }
         }
       }
-      const cleanup = await cleanupReviewStagingPaths(reviewStagingPaths);
+      const cleanup =
+        route.promptPath === rel(".ai", "prompts", "commit-summary.md")
+          ? await cleanupCommitSummaryPaths(commitSummaryPaths)
+          : await cleanupReviewStagingPaths(reviewStagingPaths);
       const finalStopReason = cleanup.ok
         ? stopReason
         : `${stopReason}; ${cleanup.reason}`;
@@ -11493,11 +11570,7 @@ export const runWorkflowRunner = async (
         processRunner,
       );
       if (!cleanCheck.ok) {
-        const unstage = await runReviewUnstageForPaths(
-          rootDir,
-          commitSummaryPaths ?? [],
-          processRunner,
-        );
+        const unstage = await cleanupCommitSummaryPaths(commitSummaryPaths);
         if (!unstage.ok) {
           return await finishFailure(`${cleanCheck.reason}; ${unstage.reason}`);
         }

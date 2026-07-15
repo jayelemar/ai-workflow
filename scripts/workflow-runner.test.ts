@@ -484,10 +484,11 @@ N/A: internal workflow automation only.
             unresolvedFindings: ["Fix the artifact state reader."],
           },
         },
-        history: overrides.rawHistory ?? overrides.history ?? [
-          ".ai/artifacts/artifact-state/events/validation-v2.md",
-          ".ai/artifacts/artifact-state/events/review-v3.md",
-        ],
+        history: overrides.rawHistory ??
+          overrides.history ?? [
+            ".ai/artifacts/artifact-state/events/validation-v2.md",
+            ".ai/artifacts/artifact-state/events/review-v3.md",
+          ],
         unresolvedBlockers: overrides.activeBlockers ?? [
           "Blocker v1 | owner plan still active",
         ],
@@ -764,7 +765,10 @@ const readInstruction = (name: string) =>
 const readPlanTemplate = () =>
   readFile(join(process.cwd(), ".ai", "templates", "plan.template.md"), "utf8");
 const readWorkflowRunnerSource = (name: string) =>
-  readFile(join(process.cwd(), ".ai", "scripts", "workflow-runner", name), "utf8");
+  readFile(
+    join(process.cwd(), ".ai", "scripts", "workflow-runner", name),
+    "utf8",
+  );
 
 const compactEvidencePromptNames = [
   "execute-plan.md",
@@ -786,11 +790,26 @@ test("workflow prompts define compact evidence and forbid raw event artifact bod
   for (const promptName of compactEvidencePromptNames) {
     const prompt = await readWorkflowPrompt(promptName);
 
-    assertPromptContract(promptName, prompt, /compact evidence/i, "compact evidence guidance");
+    assertPromptContract(
+      promptName,
+      prompt,
+      /compact evidence/i,
+      "compact evidence guidance",
+    );
     assertPromptContract(promptName, prompt, /\bcommand\b/i, "command concept");
     assertPromptContract(promptName, prompt, /\bresult\b/i, "result concept");
-    assertPromptContract(promptName, prompt, /short excerpt/i, "short excerpt concept");
-    assertPromptContract(promptName, prompt, /evidence path/i, "evidence path concept");
+    assertPromptContract(
+      promptName,
+      prompt,
+      /short excerpt/i,
+      "short excerpt concept",
+    );
+    assertPromptContract(
+      promptName,
+      prompt,
+      /evidence path/i,
+      "evidence path concept",
+    );
     assertPromptContract(
       promptName,
       prompt,
@@ -827,7 +846,10 @@ test("workflow prompts define compact evidence and forbid raw event artifact bod
 test("thin-plan event artifact size limits remain documented in source", async () => {
   const source = await readWorkflowRunnerSource("thin-plan.ts");
 
-  assert.match(source, /WORKFLOW_EVENT_ARTIFACT_MAX_BYTES\s*=\s*20\s*\*\s*1024/);
+  assert.match(
+    source,
+    /WORKFLOW_EVENT_ARTIFACT_MAX_BYTES\s*=\s*20\s*\*\s*1024/,
+  );
   assert.match(source, /20 KB/);
   assert.match(source, /WORKFLOW_EVENT_ARTIFACT_SUMMARY_MAX_BYTES\s*=\s*1024/);
   assert.match(source, /1 KB/);
@@ -878,7 +900,10 @@ test("create-plan prompt gates flow artifacts and records N/A when end-to-end ma
     instructions,
     /missing, stale,[\s\S]*inconsistent with the spec/i,
   );
-  assert.match(instructions, /read the validated user journey before phase planning/i);
+  assert.match(
+    instructions,
+    /read the validated user journey before phase planning/i,
+  );
   assert.match(instructions, /When flow-trace artifacts are not required/i);
   assert.match(instructions, /exactly\s+`N\/A:/i);
   assert.match(instructions, /end-to-end flow mapping is unnecessary/i);
@@ -889,18 +914,24 @@ test("create-plan prompt completes implementation-map preflight before finalizin
   const instructions = await readInstruction("shared/flow-trace-artifacts.md");
 
   assert.match(prompt, /run the create-plan preflight from/i);
-  assert.match(instructions, /During plan creation, and during any draft preflight/i);
+  assert.match(
+    instructions,
+    /During plan creation, and during any draft preflight/i,
+  );
   assert.match(instructions, /1\.\s+derive the plan name from the spec path/i);
-  assert.match(instructions, /2\.\s+classify the scope using this instruction/i);
+  assert.match(
+    instructions,
+    /2\.\s+classify the scope using this instruction/i,
+  );
   assert.match(
     instructions,
     /create or regenerate `?user-journey\.md`? by applying[\s\S]*`?\.ai\/prompts\/generate-user-flow\.md`?/i,
   );
+  assert.match(instructions, /derive or repair `?implementation-map\.md`?/i);
   assert.match(
     instructions,
-    /derive or repair `?implementation-map\.md`?/i,
+    /5\.\s+before returning a draft plan, self-check/i,
   );
-  assert.match(instructions, /5\.\s+before returning a draft plan, self-check/i);
   assert.match(
     instructions,
     /each implementation-map row has implementation and validation coverage/i,
@@ -914,7 +945,10 @@ test("create-plan prompt self-checks savepoints and spec behavior ownership befo
     instructions,
     /each `?\[task:[\s\S]+?chunk can pass, be reviewed, and be committed\s+independently/i,
   );
-  assert.match(instructions, /no lifecycle-only or red-test-only savepoints remain/i);
+  assert.match(
+    instructions,
+    /no lifecycle-only or red-test-only savepoints remain/i,
+  );
   assert.match(instructions, /each spec-required behavior/i);
   assert.match(
     instructions,
@@ -961,7 +995,10 @@ test("create-plan uses sync-plan-artifacts only for runner-managed plans", async
   const wrapper = await readWorkflowWrapper("create-plan.md");
 
   assert.match(template, /## Next Action\s*\n\s*sync-plan-artifacts/);
-  assert.match(prompt, /For `runner-managed` plans, new draft plans MUST start at:/i);
+  assert.match(
+    prompt,
+    /For `runner-managed` plans, new draft plans MUST start at:/i,
+  );
   assert.match(prompt, /Next Action\s*=\s*sync-plan-artifacts/i);
   assert.match(prompt, /draft \+ sync-plan-artifacts/i);
   assert.match(
@@ -969,7 +1006,10 @@ test("create-plan uses sync-plan-artifacts only for runner-managed plans", async
     /For `manual` plans, keep the plan manifest structure but do not require\s+runner-managed workflow state before execution/i,
   );
   assert.match(wrapper, /sync-plan-artifacts/i);
-  assert.match(wrapper, /If execution mode is `runner-managed`, the workflow runner performs the\s+`sync-plan-artifacts` stage before validation/i);
+  assert.match(
+    wrapper,
+    /If execution mode is `runner-managed`, the workflow runner performs the\s+`sync-plan-artifacts` stage before validation/i,
+  );
 });
 
 test("plan template requires artifact pointers for implementation map and state files", async () => {
@@ -1000,29 +1040,69 @@ test("plan template requires artifact pointers for implementation map and state 
   assert.match(template, /tests/i);
 });
 
-test("plan creation and validation reserve task savepoints for independently reviewable chunks", async () => {
+test("plan creation and validation define atomic runner task savepoints", async () => {
   const prompt = await readWorkflowPrompt("create-plan.md");
   const template = await readPlanTemplate();
   const validator = await readWorkflowPrompt("plan-validator.md");
   const workflowInstructions = await readInstruction("ai-workflow.md");
+  const flowInstructions = await readInstruction(
+    "shared/flow-trace-artifacts.md",
+  );
 
   for (const content of [prompt, validator, workflowInstructions]) {
     assert.match(content, /\[task:(?:NN|01)-readable-words\]/);
-    assert.match(content, /independently reviewable/i);
-    assert.match(content, /meaningful commit milestones/i);
-    assert.match(content, /coherent behavior\/subsystem boundaries/i);
+    assert.match(content, /independently implementable\s+and validatable/i);
+    assert.match(content, /distinct reason(?:s)? to review or revert/i);
     assert.match(content, /do not split tasks only by lifecycle\s+phase/i);
     assert.match(content, /implementation-only/i);
     assert.match(content, /validation-only/i);
     assert.match(content, /tiny checklist/i);
-    assert.match(content, /3-5 meaningful savepoints/i);
-    assert.match(content, /red tests/i);
-    assert.match(content, /validation commands/i);
-    assert.match(content, /simple bugfix/i);
-    assert.match(content, /task savepoints/i);
+    assert.match(content, /no\s+fixed (?:savepoint|task) count/i);
+    assert.doesNotMatch(content, /3-5 meaningful savepoints/i);
+    for (const field of [
+      "Behavior",
+      "Files",
+      "Validation",
+      "Depends on",
+      "Completes",
+      "Coupling rationale",
+      "Size warning",
+      "Atomization warning",
+    ]) {
+      assert.match(content, new RegExp(`- ${field}:`));
+    }
   }
-  assert.match(validator, /mark as CRITICAL/i);
-  assert.match(validator, /cannot pass and commit independently/i);
+
+  for (const content of [prompt, validator, workflowInstructions, template]) {
+    assert.match(content, /maximum 50 characters/i);
+    assert.match(content, /More than 8 commit paths/);
+    assert.match(content, /None — prerequisite for <later task ID>/);
+  }
+
+  for (const content of [prompt, validator, workflowInstructions]) {
+    assert.match(content, /only earlier task IDs/i);
+    assert.match(content, /must not create a cycle/i);
+    assert.match(content, /each acceptance criterion/i);
+    assert.match(content, /exactly one task/i);
+    assert.match(content, /one atomic outcome/i);
+    assert.match(content, /omit.*\[task:/is);
+    assert.match(content, /manual.*not.*required/is);
+    assert.match(content, /active.*review.*blocked.*completed/is);
+    assert.match(content, /shared source, test, migration, or generated paths/i);
+    assert.match(content, /resolved concrete commit\s+path/i);
+    assert.match(content, /paths marked `\(assumed\)` still count/i);
+    assert.match(
+      content,
+      /Preparation and final aggregate validation MUST remain untagged/i,
+    );
+  }
+
+  assert.match(validator, /old draft's long single-line task/i);
+  assert.match(validator, /convert[\s\S]*structured fields/i);
+  assert.match(flowInstructions, /new or\s+`draft` runner-managed plans/i);
+  assert.match(flowInstructions, /one bounded repair pass/i);
+  assert.match(flowInstructions, /Atomization warning/i);
+  assert.match(flowInstructions, /normal operator approval/i);
   assert.match(template, /^## Phases$/m);
 });
 
@@ -1070,10 +1150,19 @@ test("execute-plan allows narrow compatibility fixes for current-task contract c
   assert.match(executePrompt, /changes a shared contract/i);
   assert.match(executePrompt, /existing\s+call site from a later task/i);
   assert.match(executePrompt, /smallest compatibility path/i);
-  assert.match(executePrompt, /do not implement the later task's full feature/i);
-  assert.match(executePrompt, /missing backend RPC, migration, generated\s+database type, or database regression test/i);
+  assert.match(
+    executePrompt,
+    /do not implement the later task's full feature/i,
+  );
+  assert.match(
+    executePrompt,
+    /missing backend RPC, migration, generated\s+database type, or database regression test/i,
+  );
   assert.match(executePrompt, /access\/security invariant/i);
-  assert.match(executePrompt, /add the exact\s+file to the current plan's ownership\/inventory artifacts and continue/i);
+  assert.match(
+    executePrompt,
+    /add the exact\s+file to the current plan's ownership\/inventory artifacts and continue/i,
+  );
   assert.match(
     executePrompt,
     /do not output `STOP` solely because the minimal compatibility edit touches a\s+file named in a later `\[task:\.\.\.\]` item/i,
@@ -1220,18 +1309,12 @@ test("plan-validator prompt excludes spec issue routes from generic critical rou
 test("plan-validator prompt allows only bounded minor spec repairs during preflight", async () => {
   const prompt = await readWorkflowPrompt("plan-validator.md");
 
-  assert.match(
-    prompt,
-    /`MINOR SPEC REPAIR` applies ONLY to:/,
-  );
+  assert.match(prompt, /`MINOR SPEC REPAIR` applies ONLY to:/);
   assert.match(
     prompt,
     /Spec edits are allowed ONLY for `MINOR SPEC REPAIR` findings/i,
   );
-  assert.match(
-    prompt,
-    /one bounded repair pass/i,
-  );
+  assert.match(prompt, /one bounded repair pass/i);
   assert.match(
     prompt,
     /edit only the named spec file and named spec section\(s\)/i,
@@ -1254,15 +1337,12 @@ test("plan-validator prompt runs the same authoring preflight before approval", 
     prompt,
     /repair missing action rows and\s+under-scoped behavior ownership/i,
   );
+  assert.match(prompt, /rewrite bad task savepoints/i);
+  assert.match(prompt, /remove task IDs/i);
   assert.match(
     prompt,
-    /rewrite bad task savepoints/i,
+    /do not limit repairs to patching only the cited lines/i,
   );
-  assert.match(
-    prompt,
-    /remove task IDs/i,
-  );
-  assert.match(prompt, /do not limit repairs to patching only the cited lines/i);
 });
 
 test("plan-validator prompt updates thin-plan workflow sidecar when bounded preflight stops or approves", async () => {
@@ -1381,10 +1461,7 @@ test("plan-validator prompt forbids unclassified or unresolved major spec-origin
     prompt,
     /If a finding is marked `MAJOR SPEC DECISION REQUIRED`, STOP only when the issue still requires user authority after this codebase reclassification check\./,
   );
-  assert.match(
-    prompt,
-    /If a spec-origin finding is unclassified:[\s\S]*STOP/,
-  );
+  assert.match(prompt, /If a spec-origin finding is unclassified:[\s\S]*STOP/);
   assert.match(
     prompt,
     /If a `MINOR SPEC REPAIR` finding lacks exact allowed spec sections:[\s\S]*STOP/,
@@ -1569,7 +1646,10 @@ test("workflow prompts load native shared guidance instead of retired Superpower
 test("create-plan prompt defines artifact state as the planning-time boundary", async () => {
   const prompt = await readWorkflowPrompt("create-plan.md");
 
-  assert.match(prompt, /These artifact-state files are required only for `runner-managed` mode/i);
+  assert.match(
+    prompt,
+    /These artifact-state files are required only for `runner-managed` mode/i,
+  );
   assert.match(prompt, /If execution mode is `manual`:/i);
   assert.match(prompt, /N\/A: manual plan-bound execution/);
   assert.match(prompt, /state\/file-ownership\.json/);
@@ -1886,6 +1966,17 @@ test("commit-summary prompt creates one local completed commit and forbids auto-
   );
   assert.match(prompt, /execution-summary\.md/);
   assert.match(prompt, /sole writer[\s\S]*execution-summary\.md/i);
+  assert.match(prompt, /task title.*semantic intent/i);
+  assert.match(prompt, /reviewed staged diff.*factual source/i);
+  assert.match(prompt, /narrowest stable subsystem/i);
+  assert.match(prompt, /target 50 characters/i);
+  assert.match(prompt, /never exceed 72 characters/i);
+  assert.match(prompt, /two to four concise `-` bullets/i);
+  assert.match(prompt, /wrapped at 72 characters/i);
+  assert.match(prompt, /security, migration, or breaking-change context/i);
+  assert.match(prompt, /<type>\(<scope>\): <imperative summary>/i);
+  assert.match(prompt, /MUST NOT include runner task IDs/i);
+  assert.match(prompt, /MUST NOT add a task-intent mismatch stop/i);
   assert.doesNotMatch(prompt, /git commit -m "<generated message>"/);
   assert.match(prompt, /MUST NOT push/);
 });
@@ -4065,7 +4156,10 @@ test("generates manual workflow prompts for every prompt action", () => {
       prompt,
       new RegExp(`^Use ${promptPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`),
     );
-    assert.match(prompt, /load: \.ai\/instructions\/shared\/reasoning-quality\.md/);
+    assert.match(
+      prompt,
+      /load: \.ai\/instructions\/shared\/reasoning-quality\.md/,
+    );
     assert.match(prompt, /load: \.ai\/instructions\/shared\/debugging\.md/);
     assert.match(
       prompt,
@@ -4098,7 +4192,9 @@ test("generates manual workflow prompts for every prompt action", () => {
     assert.match(prompt, /Workflow prompt controller:/);
     assert.match(
       prompt,
-      new RegExp(`Follow ${promptPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} exactly\\.`),
+      new RegExp(
+        `Follow ${promptPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} exactly\\.`,
+      ),
     );
     assert.match(
       prompt,
@@ -4401,7 +4497,10 @@ test("review prompt treats generated artifacts as summary-only", () => {
 
   assert.match(prompt, /generated artifacts are summary-only/i);
   assert.match(prompt, /packages\/db\/generated\.ts/);
-  assert.match(prompt, /Do not spend the primary full-diff budget on generated output/i);
+  assert.match(
+    prompt,
+    /Do not spend the primary full-diff budget on generated output/i,
+  );
 });
 
 test("review prompt can reject missing primary full diff paths", () => {
@@ -4489,12 +4588,21 @@ test("review scope excludes generated output from the full-diff budget", async (
     return;
   }
   assert.deepEqual(result.scope.summaryOnlyPaths, [generatedPath]);
-  assert.deepEqual(result.scope.reviewPrimaryPaths, [migrationPath, servicePath]);
-  assert.equal(result.scope.diffBytes, Buffer.byteLength("small non-generated diff"));
+  assert.deepEqual(result.scope.reviewPrimaryPaths, [
+    migrationPath,
+    servicePath,
+  ]);
+  assert.equal(
+    result.scope.diffBytes,
+    Buffer.byteLength("small non-generated diff"),
+  );
   const primaryDiffCall = calls.find(
     (call) => call.promptPath === "git-review-primary-diff-size",
   );
-  assert.deepEqual(primaryDiffCall?.args.slice(-2), [migrationPath, servicePath]);
+  assert.deepEqual(primaryDiffCall?.args.slice(-2), [
+    migrationPath,
+    servicePath,
+  ]);
 });
 
 test("workflow auto-narrow uses only reviewable diff size, not token telemetry", () => {
@@ -4518,7 +4626,12 @@ test("review staging clears stale staged path then re-adds before review", async
     calls.push(call);
     if (call.args[0] === "status") {
       statusCallCount += 1;
-      return { launched: true, exitCode: 0, stdout: "M  src/a.ts\n", stderr: "" };
+      return {
+        launched: true,
+        exitCode: 0,
+        stdout: "M  src/a.ts\n",
+        stderr: "",
+      };
     }
     if (call.args.slice(0, 3).join(" ") === "diff --cached --name-only") {
       return { launched: true, exitCode: 0, stdout: "src/a.ts\n", stderr: "" };
@@ -4526,7 +4639,11 @@ test("review staging clears stale staged path then re-adds before review", async
     return { launched: true, exitCode: 0, stdout: "M  src/a.ts\n", stderr: "" };
   };
 
-  const result = await runReviewStagingForPaths("/tmp/repo", ["src/a.ts"], runner);
+  const result = await runReviewStagingForPaths(
+    "/tmp/repo",
+    ["src/a.ts"],
+    runner,
+  );
 
   assert.equal(result.ok, true);
   assert.deepEqual(
@@ -4580,12 +4697,21 @@ test("review staging skips plan paths that are no longer changed", async () => {
 test("review staging fails when path remains mixed staged and unstaged", async () => {
   const runner: ProcessRunner = async (call) => {
     if (call.args[0] === "status") {
-      return { launched: true, exitCode: 0, stdout: "MM src/a.ts\n", stderr: "" };
+      return {
+        launched: true,
+        exitCode: 0,
+        stdout: "MM src/a.ts\n",
+        stderr: "",
+      };
     }
     return { launched: true, exitCode: 0, stdout: "", stderr: "" };
   };
 
-  const result = await runReviewStagingForPaths("/tmp/repo", ["src/a.ts"], runner);
+  const result = await runReviewStagingForPaths(
+    "/tmp/repo",
+    ["src/a.ts"],
+    runner,
+  );
 
   assert.equal(result.ok, false);
   assert.match(result.ok ? "" : result.reason, /mixed staged\/unstaged/);
@@ -4623,7 +4749,10 @@ test("scope cleanup skips Codex when staged diff exceeds 80 KB", async () => {
     });
 
     assert.equal(result.skippedLargeDiff, true);
-    assert.equal(calls.some((call) => call.command === "codex"), false);
+    assert.equal(
+      calls.some((call) => call.command === "codex"),
+      false,
+    );
   } finally {
     await workspace.cleanup();
   }
@@ -4667,7 +4796,9 @@ test("scope cleanup batches oversized aggregate diffs", async () => {
           return {
             launched: true,
             exitCode: 0,
-            stdout: scopedPaths.map((scopedPath) => diffs[scopedPath] ?? "").join("\n"),
+            stdout: scopedPaths
+              .map((scopedPath) => diffs[scopedPath] ?? "")
+              .join("\n"),
             stderr: "",
           };
         }
@@ -5117,7 +5248,10 @@ test("workflow prompt uses native guidance without Superpowers skill roots", () 
     planContent: planWith("active", "execute-plan"),
   });
 
-  assert.match(prompt, /load: \.ai\/instructions\/shared\/reasoning-quality\.md/);
+  assert.match(
+    prompt,
+    /load: \.ai\/instructions\/shared\/reasoning-quality\.md/,
+  );
   assert.match(prompt, /load: \.ai\/instructions\/shared\/debugging\.md/);
   assert.doesNotMatch(prompt, /Superpower skill root:/);
   assert.doesNotMatch(prompt, /\/home\/jetermulo\/\.agents\/skills/);
@@ -5136,7 +5270,10 @@ test("review workflow prompt defaults to harness-only review without subagents",
   });
 
   assert.match(prompt, /Harness review policy:/);
-  assert.match(prompt, /Use the harness review prompt as the only review system/);
+  assert.match(
+    prompt,
+    /Use the harness review prompt as the only review system/,
+  );
   assert.doesNotMatch(prompt, /use sub-agents/i);
   assert.doesNotMatch(prompt, /subagent-driven-development\/SKILL\.md/);
   assert.doesNotMatch(prompt, /full-history fork/i);
@@ -5154,7 +5291,10 @@ test("non-review workflow prompts do not inject default subagent guidance", () =
   assert.doesNotMatch(prompt, /use sub-agents/i);
   assert.doesNotMatch(prompt, /subagent-driven-development\/SKILL\.md/);
   assert.doesNotMatch(prompt, /full-history fork/i);
-  assert.doesNotMatch(prompt, /omit `agent_type`, `model`, and `reasoning_effort`/);
+  assert.doesNotMatch(
+    prompt,
+    /omit `agent_type`, `model`, and `reasoning_effort`/,
+  );
   assert.doesNotMatch(prompt, /spawn without a full-history fork/);
 });
 
@@ -5206,7 +5346,10 @@ test("review workflow prompt includes plan-scoped staged diff commands for plan-
     prompt,
     /git diff --staged -- \.ai\/scripts\/workflow-runner\.ts \.ai\/scripts\/workflow-runner\.test\.ts/,
   );
-  assert.doesNotMatch(prompt, /No narrowed primary full-diff paths for this pass/);
+  assert.doesNotMatch(
+    prompt,
+    /No narrowed primary full-diff paths for this pass/,
+  );
   assert.match(prompt, /Ignore staged files outside this path list/);
 });
 
@@ -5276,9 +5419,15 @@ test("workflow prompt includes task savepoint current task and aggregate-only co
   assert.match(taskPrompt, /Task Stage: implementing/);
   assert.match(taskPrompt, /Do not start another `\[task:\.\.\.\]` item/);
   assert.match(taskPrompt, /smallest compatibility path needed/i);
-  assert.match(taskPrompt, /missing backend RPC, migration, generated database type, or database regression test/i);
+  assert.match(
+    taskPrompt,
+    /missing backend RPC, migration, generated database type, or database regression test/i,
+  );
   assert.match(taskPrompt, /current task's access\/security invariant/i);
-  assert.match(taskPrompt, /add the exact file to the current plan's ownership\/inventory artifacts and continue/i);
+  assert.match(
+    taskPrompt,
+    /add the exact file to the current plan's ownership\/inventory artifacts and continue/i,
+  );
   assert.match(
     taskPrompt,
     /Do not output `STOP` solely because that minimal compatibility fix touches a file named in a later `\[task:\.\.\.\]` item/,
@@ -5770,7 +5919,10 @@ test("review prompt requires unresolved blockers for a failed thin-plan-v2 revie
   const prompt = await readWorkflowPrompt("review-changes.md");
 
   assert.match(prompt, /NEEDS FIX[\s\S]*unresolvedBlockers/i);
-  assert.match(prompt, /do not write `\[\]` while the failed review is latest/i);
+  assert.match(
+    prompt,
+    /do not write `\[\]` while the failed review is latest/i,
+  );
 });
 
 test("parsePlan accepts thin-plan-v2 remediated failed review with empty blockers", async () => {
@@ -6836,7 +6988,11 @@ test("routes only spec-defined executable pairs and sends blocked plans through 
     assert.equal(undefinedPair.success, false);
     assert.match(undefinedPair.reason, /undefined status\/next action pair/);
 
-    await writePlan(workspace.root, "unsupported-fix", planWith("draft", "fix-plan"));
+    await writePlan(
+      workspace.root,
+      "unsupported-fix",
+      planWith("draft", "fix-plan"),
+    );
     const unsupportedFix = await runWorkflowRunner({
       planName: planArg("unsupported-fix"),
       rootDir: workspace.root,
@@ -7051,10 +7207,7 @@ test("thin-plan-v2 review and commit-summary stage plan-owned paths from files.j
       calls
         .filter((call) => call.command === CODEX_COMMAND)
         .map((call) => call.promptPath),
-      [
-        ".ai/prompts/review-changes.md",
-        ".ai/prompts/commit-summary.md",
-      ],
+      [".ai/prompts/review-changes.md", ".ai/prompts/commit-summary.md"],
     );
     assertCallSubsequence(
       calls.filter((call) => call.command === "git"),
@@ -7099,7 +7252,10 @@ test("completed commit-summary preserves its resume point when plan-owned change
     });
 
     assert.equal(result.success, false);
-    assert.match(result.reason, /plan-owned changes remain after commit-summary/);
+    assert.match(
+      result.reason,
+      /plan-owned changes remain after commit-summary/,
+    );
     assert.deepEqual(
       calls
         .filter((call) => call.command === CODEX_COMMAND)
@@ -7115,11 +7271,70 @@ test("completed commit-summary preserves its resume point when plan-owned change
       1,
     );
     assert.equal(
-      calls.filter((call) => call.command === "git" && call.args[0] === "restore").length,
+      calls.filter(
+        (call) => call.command === "git" && call.args[0] === "restore",
+      ).length,
       1,
     );
     const completedPlan = await readFile(
       join(workspace.root, ".ai", "plans", "dirty-summary.md"),
+      "utf8",
+    );
+    assert.match(completedPlan, /## Status\s*\n\s*completed/);
+    assert.match(completedPlan, /## Next Action\s*\n\s*commit-summary/);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test(`completed commit-summary ${CODEX_COMMAND} STOP unstages plan-owned paths and preserves its resume point`, async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(
+      workspace.root,
+      "stopped-summary",
+      planWithFileScope("completed", "commit-summary", {
+        modified: ["src/file.ts"],
+      }),
+    );
+    const calls: Parameters<ProcessRunner>[0][] = [];
+    const result = await runWorkflowRunner({
+      planName: planArg("stopped-summary"),
+      rootDir: workspace.root,
+      processRunner: async (call) => {
+        calls.push(call);
+        if (call.command === CODEX_COMMAND) {
+          return {
+            launched: true,
+            stdout: "STOP — `pnpm lint-staged` failed.",
+            stderr: "",
+            exitCode: 0,
+          };
+        }
+        return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+      },
+    });
+
+    assert.equal(result.success, false);
+    assert.match(
+      result.reason,
+      /output contained STOP: `pnpm lint-staged` failed/,
+    );
+    assertCallSubsequence(calls, [
+      [CODEX_COMMAND, "exec", ".ai/prompts/commit-summary.md"],
+      ["git", "restore", "git-commit-summary-unstage"],
+    ]);
+    const unstageCall = calls.find(
+      (call) => call.promptPath === "git-commit-summary-unstage",
+    );
+    assert.deepEqual(unstageCall?.args, [
+      "restore",
+      "--staged",
+      "--",
+      "src/file.ts",
+    ]);
+    const completedPlan = await readFile(
+      join(workspace.root, ".ai", "plans", "stopped-summary.md"),
       "utf8",
     );
     assert.match(completedPlan, /## Status\s*\n\s*completed/);
@@ -9805,9 +10020,12 @@ test("below-threshold, malformed latest, and non-finite latest ledgers do not ad
         scenario.name,
         planWith("active", "execute-plan"),
       );
-      mkdirSync(join(workspace.root, ".ai", "artifacts", scenario.name, "logs"), {
-        recursive: true,
-      });
+      mkdirSync(
+        join(workspace.root, ".ai", "artifacts", scenario.name, "logs"),
+        {
+          recursive: true,
+        },
+      );
       writeFileSync(
         join(
           workspace.root,
@@ -11722,11 +11940,7 @@ test(`removed compact CLI mode stops before ${CODEX_EXEC_LABEL}`, async () => {
     assert.match(missingCodexProfile.reason, /--profile requires a value/);
 
     const invalidCodexProfile = await runWorkflowRunner({
-      argv: [
-        "--profile",
-        "../codex-personal",
-        ".ai/plans/workflow-runner.md",
-      ],
+      argv: ["--profile", "../codex-personal", ".ai/plans/workflow-runner.md"],
       rootDir: workspace.root,
       processRunner,
     });
@@ -11945,10 +12159,7 @@ test("CLI failure output includes the stop reason and workflow log path", async 
       ),
       true,
     );
-    assert.equal(
-      lines.includes("- Workflow log:"),
-      true,
-    );
+    assert.equal(lines.includes("- Workflow log:"), true);
     assert.equal(
       lines.includes("  .ai/artifacts/workflow-runner/logs/runner.log"),
       true,
@@ -12462,7 +12673,11 @@ test("transition guards enforce bounded plan-validator preflight outcomes", asyn
     ] as const;
 
     for (const [name, status, nextAction, shouldFailTransition] of cases) {
-      await writePlan(workspace.root, name, planWith("draft", "plan-validator"));
+      await writePlan(
+        workspace.root,
+        name,
+        planWith("draft", "plan-validator"),
+      );
       const result = await runWorkflowRunner({
         planName: planArg(name),
         rootDir: workspace.root,
@@ -12850,9 +13065,7 @@ test("execute-plan recovers thin-plan review handoff when state is unchanged aft
     assert.doesNotMatch(result.reason, /plan content unchanged/);
     assert.match(result.reason, /output contained STOP/);
     assert(
-      calls.some(
-        (call) => call.promptPath === ".ai/prompts/review-changes.md",
-      ),
+      calls.some((call) => call.promptPath === ".ai/prompts/review-changes.md"),
     );
 
     const manifest = await readFile(
@@ -13469,7 +13682,10 @@ test("commit-summary uses thin-plan-v2 files artifact instead of inline files", 
     await writeThinPlanV2Artifacts(workspace.root, {
       status: "completed",
       nextAction: "commit-summary",
-      modified: ["src/artifact-state.ts", ".ai/artifacts/artifact-state/logs/runner.log"],
+      modified: [
+        "src/artifact-state.ts",
+        ".ai/artifacts/artifact-state/logs/runner.log",
+      ],
       changedFiles: [
         "src/artifact-state.ts",
         ".ai/artifacts/artifact-state/logs/runner.log",
@@ -13825,7 +14041,10 @@ test("runner rejects split-review evidence", async () => {
 
     assert.equal(result.success, false);
     assert.match(result.reason, /events\/review-v1\.md/i);
-    assert.equal(calls.filter((call) => call.command === CODEX_COMMAND).length, 0);
+    assert.equal(
+      calls.filter((call) => call.command === CODEX_COMMAND).length,
+      0,
+    );
   } finally {
     await workspace.cleanup();
   }
@@ -13928,7 +14147,10 @@ test("review staging auto-unstages unrelated hunks before review prompt runs", a
     const applyCall = calls.find(
       (call) => call.promptPath === "git-scope-cleanup-unstage",
     );
-    assert.equal(applyCall?.input.includes('const unrelated = "remove";'), true);
+    assert.equal(
+      applyCall?.input.includes('const unrelated = "remove";'),
+      true,
+    );
   } finally {
     await workspace.cleanup();
   }

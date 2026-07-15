@@ -91,7 +91,7 @@ For every allowed git commit, generate exactly one conventional-commit subject l
 
 Format:
 
-<type>(<feature>): <summary>
+<type>(<scope>): <imperative summary>
 
 Allowed types:
 
@@ -105,9 +105,13 @@ Allowed types:
 Rules:
 
 * lowercase
-* concise
 * specific
-* derived from actual completed work
+* Task title provides semantic intent; reviewed staged diff remains the factual source for type, scope, and final wording.
+* If staged work is narrower than the task title or needs more accurate wording, refine the subject and continue.
+* Use the narrowest stable subsystem that owns the diff. Use feature scope only for genuinely cross-cutting work.
+* Target 50 characters and never exceed 72 characters.
+* MUST NOT include runner task IDs, workflow-only plan names, artifact paths, or stage names.
+* MUST NOT add a task-intent mismatch stop. Existing unrelated-scope checks remain authoritative.
 * MUST NOT mention implementation details unnecessarily
 * MUST NOT include multiple commit messages
 
@@ -124,7 +128,7 @@ refactor(payment): simplify invoice calculation flow
 For every created commit, generate:
 
 * one conventional-commit subject line
-* one concise GitHub-readable body
+* one concise GitHub-readable body with two to four concise `-` bullets
 
 Use this exact command shape:
 
@@ -138,9 +142,10 @@ EOF
 
 Body rules:
 
-* 1-3 short paragraphs or 2-4 bullets.
-* Explain what changed and why it matters.
-* Mention important validation in one sentence only when useful.
+* Always use two to four concise `-` bullets wrapped at 72 characters.
+* State the outcome and why it matters.
+* Mention useful validation when it adds review value.
+* Include security, migration, or breaking-change context when applicable.
 * Do not include workflow metadata such as plan name, task ID, task words, task artifact path, changed-file inventory, runner stage names, or `.ai/` artifact paths.
 * Do not paste long file lists. The diff already records changed files.
 * Do not include sections named `Plan`, `Task ID`, `Task words`, `Task artifact path`, `Changed files`, `Validation summary`, or `Review result`.
@@ -148,9 +153,9 @@ Body rules:
 Allowed body example:
 
 ```text
-Connects the issue widget to real support-ticket creation, including inline validation, attachment rollback handling, draft cleanup, and navigation to the created ticket.
-
-Validated with lint-staged before commit.
+- Connect issue widget to real support-ticket creation.
+- Preserve attachment rollback and draft cleanup on failure.
+- Validate staged changes with lint-staged before commit.
 ```
 
 ---

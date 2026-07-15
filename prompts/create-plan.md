@@ -9,6 +9,7 @@ This prompt creates a structured implementation plan only.
 Read:
 
 - `.codex/AGENTS.md`
+- `.ai/instructions/ai-workflow.md`
 - `.ai/instructions/shared/reasoning-quality.md`
 - `.ai/instructions/shared/flow-trace-artifacts.md`
 - relevant `.ai/instructions/**/*.md`
@@ -163,31 +164,68 @@ Each phase MUST include:
 
 ### Task Savepoints
 
-Task savepoints are meaningful commit milestones for independently reviewable
-chunks only. Use `[task:...]` only for coherent behavior/subsystem boundaries,
-not every numbered checklist item.
+Apply this contract only to new or `draft` runner-managed plans. Manual plans
+are not required to use the commit-savepoint structure or commit guarantees.
+Never rewrite task IDs, task boundaries, or runner artifacts for plans already
+in `active`, `review`, `blocked`, or `completed` status.
 
-Required task syntax:
+Two outcomes MUST be separate tasks when they are independently implementable
+and validatable and have distinct reasons to review or revert. There is no
+fixed savepoint count.
 
-`1. [task:01-readable-words] Do the first task`
+For multiple atomic outcomes, use this exact structure under
+`### Implementation`:
+
+```text
+1. [task:NN-readable-words] <imperative title, maximum 50 characters>
+   - Behavior: <one exact outcome>
+   - Files: <exact repo-relative paths>
+   - Validation: <exact runnable commands>
+   - Depends on: None | <earlier task IDs>
+   - Completes: <exact acceptance-criterion text> | None — prerequisite for <later task ID>
+   - Coupling rationale: N/A | <exact reason the listed work cannot be split safely>
+   - Size warning: N/A | More than 8 commit paths
+   - Atomization warning: N/A | <exact unresolved split boundary>
+```
+
+For one atomic outcome, use the same fields but omit the `[task:...]` ID and
+retain the existing single final-commit behavior.
 
 Rules:
 
-- Default a simple bugfix to one final-commit task without task IDs, even when
-  the task includes red tests, implementation, and validation commands.
-- Use task savepoints only when every task can pass, be reviewed, and be
-  committed independently.
-- Prefer no task IDs for simple fixes.
-- Prefer 3-5 meaningful savepoints for larger multi-subsystem plans.
+- Use unique stable two-digit IDs with lowercase hyphenated words only when
+  multiple atomic outcomes exist.
+- Titles MUST be imperative, describe one outcome, exclude file lists and
+  workflow metadata, and contain a maximum 50 characters.
+- `Depends on` may name only earlier task IDs and must not create a cycle.
+- Every intermediate dependent commit MUST pass its declared validation.
+- Exact focused validation commands, implementation, and regression coverage
+  for one outcome MUST remain in the same task.
 - Do not split tasks only by lifecycle phase, app layer, isolated red-test
   work, implementation-only work, validation-only work, or tiny checklist
   items.
-- Use two-digit increasing numeric prefixes: `01`, `02`, `03`.
-- Use lowercase readable words separated by hyphens after the numeric prefix.
-- Keep task IDs stable after plan creation, even if task wording changes.
-- Do not reuse a task ID.
-- Single-step and simple bugfix plans keep the existing final-commit behavior
-  and do not require task IDs.
+- Tested foundations MAY be earlier tasks when independently validated and
+  distinctly reviewable; use `None — prerequisite for <later task ID>` when
+  they complete no acceptance criterion.
+- Each acceptance criterion MUST become fully satisfied in exactly one task.
+  Inseparable criteria MAY share one task; independently achievable criteria
+  MUST not.
+- Shared source, test, migration, or generated paths MAY appear in multiple
+  ordered tasks. Count each unique expected commit path once per task.
+- Expected directory ownership contributes every resolved concrete commit
+  path. Paths marked `(assumed)` still count.
+- Ignore `.ai/` paths excluded from implementation commits when calculating
+  task size. Nine or more unique commit paths require `Size warning: More than
+  8 commit paths` and a concrete coupling rationale. Eight or fewer use
+  `Size warning: N/A`.
+- If a valid split remains uncertain after bounded repair, keep the task
+  executable, explain the fallback in `Coupling rationale`, record the exact
+  unresolved boundary in `Atomization warning`, and continue to normal
+  operator approval. Otherwise use `Atomization warning: N/A`.
+- Do not use generic coupling wording such as `related changes` or `same
+  feature`.
+- Preparation and final aggregate validation MUST remain untagged and MUST NOT
+  become commit savepoints.
 - Task savepoint artifacts will be written by the runner under `.ai/artifacts/<plan-name>/tasks/`.
 - The runner will write the live task pointer at `.ai/artifacts/<plan-name>/state/current-task.md`.
 

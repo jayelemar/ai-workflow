@@ -64,6 +64,24 @@ sync-plan-artifacts
   1. <step-by-step implementation task with concrete file paths where applicable>
 * Expected outcome: <expected implementation outcome>
 
+For a runner-managed plan with multiple atomic outcomes, replace the generic
+implementation task above with ordered tasks using this exact structure:
+
+```text
+1. [task:NN-readable-words] <imperative title, maximum 50 characters>
+   - Behavior: <one exact outcome>
+   - Files: <exact repo-relative paths>
+   - Validation: <exact runnable commands>
+   - Depends on: None | <earlier task IDs>
+   - Completes: <exact acceptance-criterion text> | None — prerequisite for <later task ID>
+   - Coupling rationale: N/A | <exact reason the listed work cannot be split safely>
+   - Size warning: N/A | More than 8 commit paths
+   - Atomization warning: N/A | <exact unresolved split boundary>
+```
+
+For one atomic runner-managed outcome, use the same fields without a
+`[task:...]` ID. Manual plans are not required to use this structure.
+
 ### Validation
 
 * Objective: <validation objective>

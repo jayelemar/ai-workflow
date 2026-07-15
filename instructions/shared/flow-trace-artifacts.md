@@ -1,5 +1,5 @@
-Version: 1.0
-Last Updated: 2026-07-09
+Version: 1.1
+Last Updated: 2026-07-15
 
 # Flow-Trace Artifact Instructions
 
@@ -100,17 +100,30 @@ creation:
    - derive or repair `implementation-map.md`
 4. if flow-trace artifacts are not required:
    - write the required `N/A: <concrete reason>` values
-5. before returning a draft plan, self-check that:
+5. before returning a draft plan, self-check task boundaries; for new or
+   `draft` runner-managed plans, apply the atomic task contract in
+   `.ai/instructions/ai-workflow.md` and verify that:
    - each `[task:..]` chunk can pass, be reviewed, and be committed
      independently
+   - independently implementable and validatable outcomes with distinct
+     reasons to review or revert are separate tasks
+   - every structured field, dependency, acceptance owner, size calculation,
+     and warning is valid
    - no lifecycle-only or red-test-only savepoints remain
    - each spec-required behavior, especially visible validation and
      failure-state behavior, is assigned to a concrete task
    - each implementation-map row has implementation and validation coverage
 6. auto-correct missing action rows, bad savepoints, and under-scoped behavior
-   ownership when possible
-7. stop only when the preflight still cannot satisfy these rules without
+   ownership with one bounded repair pass when possible
+7. when a valid split remains uncertain after that pass, keep the task
+   executable, set a concrete `Atomization warning` and `Coupling rationale`,
+   and continue to normal operator approval
+8. stop only when the preflight still cannot satisfy these rules without
    inventing behavior beyond the spec
+
+Manual plans and runner-managed plans already in `active`, `review`, `blocked`,
+or `completed` status are not rewrite targets for this task-savepoint
+preflight.
 
 ### Sync Contract
 
