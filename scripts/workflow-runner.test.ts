@@ -2170,6 +2170,23 @@ test("codex JSON STOP reason extraction accepts inline-code STOP agent directive
   );
 });
 
+test("codex JSON STOP reason extraction accepts Unicode and mojibake dash directives", () => {
+  assert.equal(
+    codexOutputStopReason(
+      codexAgentMessageLine("STOP — file outside plan scope"),
+      "",
+    ),
+    `${CODEX_EXEC_LABEL} output contained STOP: file outside plan scope`,
+  );
+  assert.equal(
+    codexOutputStopReason(
+      codexAgentMessageLine("STOP ΓÇö file outside plan scope"),
+      "",
+    ),
+    `${CODEX_EXEC_LABEL} output contained STOP: file outside plan scope`,
+  );
+});
+
 test("codex JSON STOP reason extraction ignores STOP text in command output", () => {
   assert.equal(
     codexOutputStopReason(

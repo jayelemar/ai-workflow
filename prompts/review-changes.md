@@ -159,7 +159,7 @@ list:
 If the required fix needs a file outside the current plan path list and no owner
 plan can be identified:
 
--> STOP (`file outside plan scope`)
+-> output exactly `STOP: file outside plan scope`
 
 ### File Ownership Releases
 

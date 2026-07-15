@@ -3202,7 +3202,7 @@ const createWorkflowFailureDebugRecord = ({
 };
 
 const normalizeStopDirectiveLine = (line: string): string => {
-  const trimmed = line.trim();
+  const trimmed = line.trim().replace(/ΓÇö/g, "—");
   const inlineCodeMatch = /^`([^`]+)`(.*)$/.exec(trimmed);
   if (!inlineCodeMatch) {
     return trimmed;
@@ -3221,7 +3221,9 @@ const containsStopDirective = (text: string): boolean =>
       trimmed.startsWith("STOP:") ||
       trimmed.startsWith("STOP (") ||
       trimmed.startsWith("STOP `") ||
-      trimmed.startsWith("STOP -")
+      trimmed.startsWith("STOP -") ||
+      trimmed.startsWith("STOP –") ||
+      trimmed.startsWith("STOP —")
     );
   });
 
@@ -3246,7 +3248,7 @@ const stripStopDirectivePrefix = (line: string): string | undefined => {
   }
 
   let excerpt = trimmed.replace(/^STOP\b/, "").trim();
-  excerpt = excerpt.replace(/^[:\-\s]+/, "").trim();
+  excerpt = excerpt.replace(/^[:\-–—\s]+/, "").trim();
   if (excerpt.startsWith("(") && excerpt.endsWith(")")) {
     excerpt = excerpt.slice(1, -1).trim();
   }
