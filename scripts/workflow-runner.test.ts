@@ -7053,7 +7053,7 @@ test("thin-plan-v2 review and commit-summary stage plan-owned paths from files.j
   }
 });
 
-test("completed commit-summary fails when plan-owned changes remain dirty after successful summary", async () => {
+test("completed commit-summary preserves its resume point when plan-owned changes remain dirty", async () => {
   const workspace = await setupWorkspace();
   try {
     await writePlan(
@@ -7082,43 +7082,31 @@ test("completed commit-summary fails when plan-owned changes remain dirty after 
     });
 
     assert.equal(result.success, false);
-    assert.match(
-      result.reason,
-      /plan-owned changes remain after commit-summary/,
-    );
+    assert.match(result.reason, /plan-owned changes remain after commit-summary/);
     assert.deepEqual(
       calls
         .filter((call) => call.command === CODEX_COMMAND)
         .map((call) => call.promptPath),
       [".ai/prompts/commit-summary.md"],
     );
-    assert.deepEqual(
-      calls.filter((call) => call.command === "git").map((call) => call.args),
-      [["status", "--short", "--", "src/file.ts"]],
+    assert.equal(
+      calls.filter(
+        (call) =>
+          call.command === "git" &&
+          call.promptPath === "git-commit-summary-clean-check",
+      ).length,
+      1,
     );
-    const log = await readFile(
-      join(
-        workspace.root,
-        ".ai",
-        "artifacts",
-        "dirty-summary",
-        "logs",
-        "runner.log",
-      ),
-      "utf8",
+    assert.equal(
+      calls.filter((call) => call.command === "git" && call.args[0] === "restore").length,
+      1,
     );
-    assertFailureMetadata(log, {
-      kind: "dirty-plan-owned-paths",
-      reason: /failureReason: plan-owned changes remain after commit-summary/,
-      nextSuggestedAction:
-        /nextSuggestedAction: fix commit preflight errors, then rerun workflow-runner; plan returned to active \+ execute-plan/,
-    });
-    const recoveredPlan = await readFile(
+    const completedPlan = await readFile(
       join(workspace.root, ".ai", "plans", "dirty-summary.md"),
       "utf8",
     );
-    assert.match(recoveredPlan, /## Status\s*\n\s*active/);
-    assert.match(recoveredPlan, /## Next Action\s*\n\s*execute-plan/);
+    assert.match(completedPlan, /## Status\s*\n\s*completed/);
+    assert.match(completedPlan, /## Next Action\s*\n\s*commit-summary/);
   } finally {
     await workspace.cleanup();
   }
@@ -8148,6 +8136,88 @@ feat(api): add backend endpoints
     assert.match(manifest, /## Next Action\n\nexecute-plan/);
     assert.equal(workflow.status, "active");
     assert.equal(workflow.nextAction, "execute-plan");
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("task savepoint mode preserves an existing uncommitted task at commit-summary", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(
+      workspace.root,
+      "task-savepoint-summary-resume",
+      planWithTaskSavepoints("completed", "commit-summary"),
+    );
+
+    const firstTaskArtifact = join(
+      workspace.root,
+      ".ai",
+      "artifacts",
+      "task-savepoint-summary-resume",
+      "tasks",
+      "01-backend-endpoints-v1.md",
+    );
+    const secondTaskArtifact = join(
+      workspace.root,
+      ".ai",
+      "artifacts",
+      "task-savepoint-summary-resume",
+      "tasks",
+      "02-web-surface-v1.md",
+    );
+    mkdirSync(dirname(firstTaskArtifact), { recursive: true });
+    writeFileSync(
+      firstTaskArtifact,
+      `# Task Savepoint: 01-backend-endpoints
+
+## Commit SHA
+
+abc1234
+`,
+      "utf8",
+    );
+    writeFileSync(
+      secondTaskArtifact,
+      `# Task Savepoint: 02-web-surface
+
+## Stage
+
+implementing
+
+## Commit SHA
+
+(pending)
+`,
+      "utf8",
+    );
+
+    const promptCalls: string[] = [];
+    const result = await runWorkflowRunner({
+      planName: planArg("task-savepoint-summary-resume"),
+      rootDir: workspace.root,
+      processRunner: async (call) => {
+        if (call.command === "git") {
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
+        promptCalls.push(call.promptPath);
+        if (call.promptPath === ".ai/prompts/commit-summary.md") {
+          return {
+            launched: true,
+            stdout: codexAgentMessageLine(
+              "STOP: commit preflight failed for current task",
+            ),
+            stderr: "",
+            exitCode: 0,
+          };
+        }
+        return { launched: true, stdout: "ok", stderr: "", exitCode: 0 };
+      },
+    });
+
+    assert.equal(result.success, false);
+    assert.match(result.reason, /commit preflight failed for current task/);
+    assert.deepEqual(promptCalls, [".ai/prompts/commit-summary.md"]);
   } finally {
     await workspace.cleanup();
   }

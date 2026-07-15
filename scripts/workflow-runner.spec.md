@@ -18,6 +18,9 @@ the runner state machine.
 - The runner currently extracts spec paths from plan `## Spec` only when they
   match `.ai/specs/...`, which excludes workflow companion specs that live
   elsewhere in the repository.
+- A failed commit-summary clean check currently resets the plan to
+  `active + execute-plan`, making a manual rerun unnecessarily repeat execution
+  and review before returning to the commit stage.
 
 ## Expected Behavior
 
@@ -33,6 +36,10 @@ the runner state machine.
   - no plan file is required
   - no workflow state or `.ai/artifacts` are updated
   - the non-test diff approval gate still applies before writes
+- When a commit-summary clean check finds plan-owned changes after a failed
+  commit preflight, the runner unstages only those plan-owned paths, retains
+  `completed + commit-summary`, and stops with the hook diagnostics. Once the
+  failure is repaired, a manual rerun resumes the commit stage directly.
 - Draft preflight plan/spec repairs remain allowed without preview approval only
   when they follow existing `plan-validator` / `fix-plan` rules.
 
@@ -70,6 +77,8 @@ the runner state machine.
   `plan-validator` / `fix-plan` semantics.
 - Keep execution and validation artifacts plus the workflow context snapshot
   compatible with `review-changes.md`.
+- Do not bypass lint-staged, force the commit, or remove the normal iteration
+  limit while recovering from a failed commit preflight.
 
 ## File Scope
 
@@ -94,6 +103,9 @@ the runner state machine.
   and state that it does not use plan state or `.ai/artifacts`.
 - The approval gate is documented as execution-only and not applicable to
   allowed draft-preflight plan/spec repairs.
+- A commit-preflight clean-check failure preserves `completed + commit-summary`
+  and unstages only plan-owned paths, so the next runner invocation starts at
+  commit-summary rather than replaying execution or review.
 
 ## Validation Expectations
 

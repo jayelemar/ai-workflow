@@ -1,5 +1,5 @@
-Version: 1.16
-Last Updated: 2026-07-14
+Version: 1.17
+Last Updated: 2026-07-15
 
 # Workflow State Instructions
 
@@ -232,6 +232,12 @@ Review system boundary:
 * The combined harness review may approve `completed + commit-summary` or return to `active + execute-plan`.
 
 Completed `commit-summary` is the terminal safe-to-merge path. It creates the local plan-scoped commit and runner success represents that no further next action is required.
+
+Commit-preflight recovery:
+
+* If `pnpm lint-staged`, the local commit hook, or `git commit` rejects a commit-summary attempt, the runner MUST preserve the hook failure, unstage only the plan-owned paths, and retain `completed + commit-summary` so the next invocation resumes the commit stage directly.
+* The runner MUST NOT bypass the hook, force a commit, or report completion until the plan-owned paths are clean after a successful commit summary.
+* The runner MUST stop that invocation after the rejected preflight because commit-summary does not modify product code. The next invocation may resume only after the hook failure is repaired.
 
 Review safe but final validation requires deployed, manual, or external code:
 

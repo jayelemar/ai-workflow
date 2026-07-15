@@ -3348,7 +3348,7 @@ const classifyFailureForLog = (reason: string): FailureMetadataLogFields => {
       failureKind: "dirty-plan-owned-paths",
       failureReason: reason,
       nextSuggestedAction:
-        "fix commit preflight errors, then rerun workflow-runner; plan returned to active + execute-plan",
+        "fix commit preflight errors, then rerun workflow-runner; plan remains completed + commit-summary",
     };
   }
   if (
@@ -10403,7 +10403,7 @@ export const runWorkflowRunner = async (
       route.promptPath === rel(".ai", "prompts", "commit-summary.md") &&
       selectedTask &&
       completedTaskCommits > 0 &&
-      selectedTaskStage !== "commit-message" &&
+      !selectedTaskStage &&
       !currentTaskContext
     ) {
       const reopened = await reopenPlanForNextTask(parsedPlan);
@@ -11490,19 +11490,19 @@ export const runWorkflowRunner = async (
         processRunner,
       );
       if (!cleanCheck.ok) {
-        const reopened = await reopenPlanForNextTask(parsedPlan);
-        if (!reopened.ok) {
-          return await finishFailure(reopened.reason);
+        const unstage = await runReviewUnstageForPaths(
+          rootDir,
+          commitSummaryPaths ?? [],
+          processRunner,
+        );
+        if (!unstage.ok) {
+          return await finishFailure(`${cleanCheck.reason}; ${unstage.reason}`);
         }
-        const updated = await parsePlan({ planName: planArgument, rootDir });
-        if (!updated.ok) {
-          return await finishFailure(updated.reason);
-        }
-        const logResult = await appendIterationLog(cleanCheck.reason, updated);
+        const logResult = await appendIterationLog(cleanCheck.reason);
         if (!logResult.ok) {
           return await finishFailure(logResult.reason);
         }
-        const snapshotResult = await syncWorkflowSnapshot(updated);
+        const snapshotResult = await syncWorkflowSnapshot(parsedPlan);
         if (!snapshotResult.ok) {
           return await finishFailure(snapshotResult.reason);
         }

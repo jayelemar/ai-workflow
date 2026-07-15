@@ -286,7 +286,7 @@ EOF
 ```
 
 8. MUST NOT push.
-9. If `pnpm lint-staged` or `git commit` fails, output `STOP` and state the failure.
+9. If `pnpm lint-staged` or `git commit` fails, output `STOP` with the exact failure. The runner records the failed preflight, unstages the plan-owned paths, preserves `completed + commit-summary`, and lets the next runner invocation resume this stage without bypassing the hook.
 10. Do not write `.ai/artifacts/<plan-name>/execution-summary.md`; the runner refreshes it from completed task artifacts after each task savepoint commit.
 11. After the commit succeeds, read the commit SHA and current branch.
 12. Output the created commit SHA, branch, commit subject, and user-facing summary.

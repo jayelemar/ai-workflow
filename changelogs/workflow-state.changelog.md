@@ -1,5 +1,10 @@
 # Workflow State Instruction Changelog
 
+## v1.17 — 2026-07-15
+
+* Added resumable handling for lint-staged, hook, and local commit failures,
+  including plan-scoped unstaging without replaying execution and review.
+
 ## v1.16 — 2026-07-14
 
 * Removed the retired split-review compatibility route; `review + review-plan`
