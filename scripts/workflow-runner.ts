@@ -479,6 +479,12 @@ type WorkflowFailureDebugRecord = {
 
 type CodexTerminalFormatOptions = {
   color?: boolean;
+  commitBoundaryProgress?: {
+    taskPosition: number;
+    taskTotal: number;
+    taskLabel: string;
+    boundaryTotal: number;
+  };
 };
 
 type CodexLiveOutputFlushOptions = {
@@ -2637,6 +2643,44 @@ export const formatCommitProgressLine = ({
 }: CommitProgress): string =>
   `[${completed}/${total}] ${compactTerminalProgressDetail(description)}`;
 
+const formatTaskCommitBoundaryProgressLine = ({
+  taskPosition,
+  taskTotal,
+  taskLabel,
+  boundaryPosition,
+  boundaryTotal,
+  state,
+}: {
+  taskPosition: number;
+  taskTotal: number;
+  taskLabel: string;
+  boundaryPosition: number;
+  boundaryTotal: number;
+  state: "creating" | "created";
+}): string =>
+  `[COMMITTING] Task ${taskPosition} of ${taskTotal} — ${taskLabel}\nProgress: ${
+    taskPosition - 1
+  } tasks committed · ${state === "creating" ? "Creating" : "Created"} commit ${
+    boundaryPosition
+  } of ${boundaryTotal}`;
+
+const formatTaskCompletedProgressLine = ({
+  taskPosition,
+  taskTotal,
+  taskLabel,
+  commitTotal,
+  nextTaskPosition,
+}: {
+  taskPosition: number;
+  taskTotal: number;
+  taskLabel: string;
+  commitTotal: number;
+  nextTaskPosition?: number;
+}): string =>
+  `[TASK COMPLETE] Task ${taskPosition} of ${taskTotal} — ${taskLabel}\nProgress: ${taskPosition} tasks committed · Created ${commitTotal} ${
+    commitTotal === 1 ? "commit" : "commits"
+  }${nextTaskPosition ? ` · Next: Task ${nextTaskPosition} of ${taskTotal}` : ""}`;
+
 export const WORKFLOW_WAIT_NOTICE_INTERVAL_MS = 120_000;
 
 const formatWorkflowWaitElapsedTime = (elapsedMs: number): string => {
@@ -2855,6 +2899,38 @@ export const createCodexLiveOutputFormatter = (
   let lastCommandBlock = "";
   let pendingReadBlock = "";
   let pendingTurnCompletedBlock = "";
+  let completedBoundaryCommits = 0;
+  let boundaryCommitInProgress = false;
+
+  const boundaryCommitEvent = (
+    line: string,
+  ): "started" | "completed" | undefined => {
+    if (!options.commitBoundaryProgress) {
+      return undefined;
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(line.trim());
+    } catch {
+      return undefined;
+    }
+    const event = asRecord(parsed);
+    const item = asRecord(event?.item);
+    if (toDisplayString(item?.type) !== "command_execution") {
+      return undefined;
+    }
+    const command = toDisplayString(item?.command) ?? "";
+    if (!/\bgit\s+commit(?:\s|$)/.test(command)) {
+      return undefined;
+    }
+    const eventType = toDisplayString(event?.type);
+    const status = toDisplayString(item?.status);
+    if (eventType === "item.started" || status === "in_progress") {
+      return "started";
+    }
+    const exitCode = item?.exit_code;
+    return isFiniteNumber(exitCode) && exitCode === 0 ? "completed" : undefined;
+  };
 
   const isExploredBlock = (formatted: string): boolean => {
     const firstLine = formatted.split(/\r?\n/, 1)[0] ?? "";
@@ -2953,6 +3029,43 @@ export const createCodexLiveOutputFormatter = (
       const lines = stdoutBuffer.split(/\r?\n/);
       stdoutBuffer = lines.pop() ?? "";
       for (const line of lines) {
+        const commitEvent = boundaryCommitEvent(line);
+        if (commitEvent === "started") {
+          if (boundaryCommitInProgress) {
+            continue;
+          }
+          boundaryCommitInProgress = true;
+          const progress = options.commitBoundaryProgress;
+          if (progress && completedBoundaryCommits < progress.boundaryTotal) {
+            writeFormattedOutput(
+              formatTerminalEventBlock(
+                formatTaskCommitBoundaryProgressLine({
+                  ...progress,
+                  boundaryPosition: completedBoundaryCommits + 1,
+                  state: "creating",
+                }),
+              ),
+            );
+          }
+          continue;
+        }
+        if (commitEvent === "completed") {
+          boundaryCommitInProgress = false;
+          completedBoundaryCommits += 1;
+          const progress = options.commitBoundaryProgress;
+          if (progress && completedBoundaryCommits <= progress.boundaryTotal) {
+            writeFormattedOutput(
+              formatTerminalEventBlock(
+                formatTaskCommitBoundaryProgressLine({
+                  ...progress,
+                  boundaryPosition: completedBoundaryCommits,
+                  state: "created",
+                }),
+              ),
+            );
+          }
+          continue;
+        }
         const formatted = formatCodexJsonlEventForTerminal(line, options);
         writeFormattedOutput(formatted);
       }
@@ -3616,6 +3729,28 @@ export const parsePlanTasks = (content: string): PlanTask[] => {
   }
 
   return tasks;
+};
+
+const taskCommitBoundaryCount = (
+  planContent: string,
+  taskId: string,
+): number | undefined => {
+  const lines = planSectionLines(planContent, "## Commit Boundaries");
+  const taskHeading = `### [task:${taskId}]`;
+  const taskStart = lines.findIndex((line) => line.trim() === taskHeading);
+  if (taskStart === -1) {
+    return undefined;
+  }
+  let count = 0;
+  for (const line of lines.slice(taskStart + 1)) {
+    if (line.trim().startsWith("### ")) {
+      break;
+    }
+    if (/^\s*\d+\.\s+\S/.test(line)) {
+      count += 1;
+    }
+  }
+  return count >= 2 ? count : undefined;
 };
 
 const repoRelativeSpecPathPattern =
@@ -5936,18 +6071,61 @@ const latestTaskArtifactRelativePath = async (
   return rel(taskArtifactsRelativeDir(planName), latestArtifact.entry);
 };
 
+const humanizeTaskWords = (words: string): string => words.replace(/-/g, " ");
+
+const readableTaskLabel = (task: PlanTask): string => {
+  const words = humanizeTaskWords(task.words);
+  return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
+};
+
 const formatTaskProgressLine = ({
   task,
   stage,
   detail,
+  taskPosition,
+  taskTotal,
+  completedTasks,
+  boundaryTotal,
 }: {
   task: PlanTask;
   stage: TaskStage;
   detail: string;
-}): string =>
-  `TASK ${task.id} | ${stage} | ${compactTerminalProgressDetail(detail)}`;
-
-const humanizeTaskWords = (words: string): string => words.replace(/-/g, " ");
+  taskPosition: number;
+  taskTotal: number;
+  completedTasks: number;
+  boundaryTotal?: number;
+}): string => {
+  const reviewScopeMatch = detail.match(/^staged\s+(\d+)\s+(file|files)$/);
+  const label =
+    stage === "implementing"
+      ? "EXECUTE"
+      : stage === "validating"
+        ? "VALIDATE"
+        : stage === "reviewing"
+          ? "REVIEW"
+          : stage === "commit-message"
+            ? "COMMITTING"
+            : "COMMITTED";
+  const action =
+    stage === "implementing"
+      ? "Implementing planned scope"
+      : stage === "validating"
+        ? `Running ${compactTerminalProgressDetail(detail)}`
+      : stage === "reviewing"
+          ? `Review scope: ${
+              reviewScopeMatch
+                ? `${reviewScopeMatch[1]} staged ${reviewScopeMatch[2]}`
+                : compactTerminalProgressDetail(detail)
+            }`
+          : boundaryTotal
+            ? `Creating ${boundaryTotal} boundary commits`
+            : stage === "commit-message"
+              ? "Creating 1 commit"
+              : `Created ${compactTerminalProgressDetail(detail)}`;
+  return `[${label}] Task ${taskPosition} of ${taskTotal} — ${readableTaskLabel(
+    task,
+  )}\nProgress: ${completedTasks} tasks committed · ${action}`;
+};
 
 const readableTaskProgressDescription = (task: PlanTask): string => {
   const normalizedName = task.name.replace(/\s+/g, " ").trim();
@@ -10559,6 +10737,19 @@ export const runWorkflowRunner = async (
             : "task commits complete",
         }
       : undefined;
+    const taskCommitBoundaryTotal =
+      selectedTask && route.promptPath === COMMIT_SUMMARY_PROMPT_PATH
+        ? taskCommitBoundaryCount(parsedPlan.content, selectedTask.id)
+        : undefined;
+    const commitBoundaryProgress =
+      selectedTask && taskCommitBoundaryTotal
+        ? {
+            taskPosition: completedTaskCommits + 1,
+            taskTotal: planTasks.length,
+            taskLabel: readableTaskLabel(selectedTask),
+            boundaryTotal: taskCommitBoundaryTotal,
+          }
+        : undefined;
     const selectedTaskArtifactPath = selectedTask
       ? await currentTaskArtifactRelativePath(
           rootDir,
@@ -10659,14 +10850,40 @@ export const runWorkflowRunner = async (
     if (!selectedTask) {
       currentTaskContext = undefined;
     }
+    let deferredTaskProgress:
+      | { stage: TaskStage; detail: string }
+      | undefined;
+    const emitTaskProgress = ({
+      stage,
+      detail,
+    }: {
+      stage: TaskStage;
+      detail: string;
+    }) => {
+      if (!selectedTask) {
+        return;
+      }
+      const taskProgressLine = formatTaskProgressLine({
+        task: selectedTask,
+        stage,
+        detail,
+        taskPosition: completedTaskCommits + 1,
+        taskTotal: planTasks.length,
+        completedTasks: completedTaskCommits,
+        boundaryTotal: taskCommitBoundaryTotal,
+      });
+      logger.log(streamOutput ? `${taskProgressLine}\n` : taskProgressLine);
+    };
     const setTaskStage = async ({
       stage,
       detail,
       commitSha,
+      logProgress = true,
     }: {
       stage: TaskStage;
       detail: string;
       commitSha?: string;
+      logProgress?: boolean;
     }): Promise<{ ok: true } | Failure> => {
       if (!selectedTask || !selectedTaskArtifactPath) {
         currentTaskContext = undefined;
@@ -10696,12 +10913,9 @@ export const runWorkflowRunner = async (
       if (!pointer.ok) {
         return pointer;
       }
-      const taskProgressLine = formatTaskProgressLine({
-        task: selectedTask,
-        stage,
-        detail,
-      });
-      logger.log(streamOutput ? `${taskProgressLine}\n` : taskProgressLine);
+      if (logProgress) {
+        emitTaskProgress({ stage, detail });
+      }
       return { ok: true };
     };
     const startingHeadSha = await workflowHeadSha(rootDir, processRunner);
@@ -10793,7 +11007,7 @@ export const runWorkflowRunner = async (
           color: colorOutput,
         }),
       );
-      if (commitProgress) {
+      if (commitProgress && !selectedTask) {
         logger.log(
           streamOutput
             ? `${formatCommitProgressLine(commitProgress)}\n`
@@ -10801,6 +11015,10 @@ export const runWorkflowRunner = async (
         );
       }
       progressLogged = true;
+      if (deferredTaskProgress) {
+        emitTaskProgress(deferredTaskProgress);
+        deferredTaskProgress = undefined;
+      }
     };
     const cleanupReviewStagingPaths = async (
       paths: string[] | undefined,
@@ -10908,10 +11126,15 @@ export const runWorkflowRunner = async (
       const taskStage = await setTaskStage({
         stage: "implementing",
         detail: selectedTask.name,
+        logProgress: false,
       });
       if (!taskStage.ok) {
         return await finishFailure(taskStage.reason);
       }
+      deferredTaskProgress = {
+        stage: "implementing",
+        detail: selectedTask.name,
+      };
     }
     if (
       route.promptPath === rel(".ai", "prompts", "commit-summary.md") &&
@@ -10920,10 +11143,15 @@ export const runWorkflowRunner = async (
       const taskStage = await setTaskStage({
         stage: "commit-message",
         detail: "generating commit",
+        logProgress: false,
       });
       if (!taskStage.ok) {
         return await finishFailure(taskStage.reason);
       }
+      deferredTaskProgress = {
+        stage: "commit-message",
+        detail: "generating commit",
+      };
     }
     if (
       route.promptPath === rel(".ai", "prompts", "execute-plan.md") ||
@@ -11421,7 +11649,7 @@ export const runWorkflowRunner = async (
               outputStream.stderr(chunk);
             },
           },
-          { color: colorOutput },
+          { color: colorOutput, commitBoundaryProgress },
         )
       : undefined;
     waitNotice.start();
@@ -11854,6 +12082,7 @@ export const runWorkflowRunner = async (
           stage: "committed",
           detail: shaResult.sha,
           commitSha: shaResult.sha,
+          logProgress: false,
         });
         if (!taskStage.ok) {
           return await finishFailure(taskStage.reason);
@@ -11916,6 +12145,26 @@ export const runWorkflowRunner = async (
         if (!bossSummary.ok) {
           return await finishFailure(bossSummary.reason);
         }
+        const nextTaskPosition = nextTask
+          ? planTasks.findIndex((task) => task.id === nextTask.id) + 1
+          : undefined;
+        logger.log(
+          streamOutput
+            ? `${formatTaskCompletedProgressLine({
+                taskPosition: completedTaskCommits + 1,
+                taskTotal: planTasks.length,
+                taskLabel: readableTaskLabel(selectedTask),
+                commitTotal: taskCommitBoundaryTotal ?? 1,
+                nextTaskPosition,
+              })}\n`
+            : formatTaskCompletedProgressLine({
+                taskPosition: completedTaskCommits + 1,
+                taskTotal: planTasks.length,
+                taskLabel: readableTaskLabel(selectedTask),
+                commitTotal: taskCommitBoundaryTotal ?? 1,
+                nextTaskPosition,
+              }),
+        );
         const remainingTask = await nextIncompleteTask(
           rootDir,
           parsedPlan.planName,

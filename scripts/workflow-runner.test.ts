@@ -3781,6 +3781,45 @@ test("codex live output formatter buffers partial JSONL chunks and passes throug
   );
 });
 
+test("codex live output formatter reports every atomized commit boundary", () => {
+  let stdout = "";
+  const formatter = createCodexLiveOutputFormatter(
+    {
+      stdout: (chunk) => {
+        stdout += chunk;
+      },
+      stderr: () => {},
+    },
+    {
+      commitBoundaryProgress: {
+        taskPosition: 3,
+        taskTotal: 5,
+        taskLabel: "Workspace shell and active enforcement",
+        boundaryTotal: 2,
+      },
+    },
+  );
+
+  formatter.stdout(`${codexCommandStartedLine("git commit -F message")}\n`);
+  formatter.stdout(`${codexCommandOutputLine("", "git commit -F message")}\n`);
+  formatter.stdout(`${codexCommandStartedLine("git commit -F message")}\n`);
+  formatter.stdout(`${codexCommandOutputLine("", "git commit -F message")}\n`);
+  formatter.flush();
+
+  assert.match(
+    stdout,
+    /\[COMMITTING\] Task 3 of 5 — Workspace shell and active enforcement\nProgress: 2 tasks committed · Creating commit 1 of 2/,
+  );
+  assert.match(
+    stdout,
+    /\[COMMITTING\] Task 3 of 5 — Workspace shell and active enforcement\nProgress: 2 tasks committed · Created commit 1 of 2/,
+  );
+  assert.match(
+    stdout,
+    /\[COMMITTING\] Task 3 of 5 — Workspace shell and active enforcement\nProgress: 2 tasks committed · Created commit 2 of 2/,
+  );
+});
+
 test("codex live output formatter inserts a blank line before formatted event blocks after raw output", () => {
   let combined = "";
   const formatter = createCodexLiveOutputFormatter({
@@ -7581,19 +7620,24 @@ test("task savepoint mode commits each reviewed task, writes artifacts, logs tas
     const consoleOutput = output.lines.join("\n");
     assert.match(
       consoleOutput,
-      /TASK 01-backend-endpoints \| implementing \| Add backend endpoints/,
+      /\[EXECUTE\] Task 1 of 2 — Backend endpoints\nProgress: 0 tasks committed · Implementing planned scope/,
     );
-    assert.match(consoleOutput, /\[0\/2\] Add backend endpoints/);
+    const executeStageIndex = consoleOutput.indexOf("[1/100] STAGE EXECUTE");
+    const executeTaskIndex = consoleOutput.indexOf(
+      "[EXECUTE] Task 1 of 2 — Backend endpoints",
+    );
+    assert.ok(executeStageIndex >= 0);
+    assert.ok(executeTaskIndex > executeStageIndex);
     assert.match(
       consoleOutput,
-      /TASK 01-backend-endpoints \| reviewing \| staged 1 file/,
+      /\[REVIEW\] Task 1 of 2 — Backend endpoints\nProgress: 0 tasks committed · Review scope: 1 staged file/,
     );
     const tokenWarningIndex = consoleOutput.indexOf(
       "WARNING: Stage token usage is high; the next guarded workflow stage will use snapshot-first guidance.",
     );
     const reviewStageIndex = consoleOutput.indexOf("[2/100] STAGE REVIEW");
     const reviewTaskIndex = consoleOutput.indexOf(
-      "TASK 01-backend-endpoints | reviewing | staged 1 file",
+      "[REVIEW] Task 1 of 2 — Backend endpoints",
     );
     assert.ok(tokenWarningIndex >= 0);
     assert.ok(reviewStageIndex > tokenWarningIndex);
@@ -7604,14 +7648,16 @@ test("task savepoint mode commits each reviewed task, writes artifacts, logs tas
     );
     assert.match(
       consoleOutput,
-      /TASK 01-backend-endpoints \| commit-message \| generating commit/,
+      /\[COMMITTING\] Task 1 of 2 — Backend endpoints\nProgress: 0 tasks committed · Creating 1 commit/,
     );
     assert.match(
       consoleOutput,
-      /TASK 01-backend-endpoints \| committed \| abc1234/,
+      /\[TASK COMPLETE\] Task 1 of 2 — Backend endpoints\nProgress: 1 tasks committed · Created 1 commit · Next: Task 2 of 2/,
     );
-    assert.match(consoleOutput, /\[1\/2\] Add web surface/);
-    assert.match(consoleOutput, /TASK 02-web-surface \| committed \| def5678/);
+    assert.match(
+      consoleOutput,
+      /\[TASK COMPLETE\] Task 2 of 2 — Web surface\nProgress: 2 tasks committed · Created 1 commit/,
+    );
     assert.match(consoleOutput, /\[2\/2\] task commits complete/);
 
     const currentTask = await readFile(
@@ -8780,7 +8826,7 @@ ${extra}`,
     const consoleOutput = output.lines.join("\n");
     assert.match(
       consoleOutput,
-      /TASK 01-backend-prompt-search-guidance \| implementing \| Goal update only the prompt search planning savepoint so it owns prompt wording and prompt query assertions for preserving the existing market research section model source backed competitor\.\.\./,
+      /\[EXECUTE\] Task 1 of 2 — Backend prompt search guidance\nProgress: 0 tasks committed · Implementing planned scope/,
     );
     assert.doesNotMatch(
       consoleOutput,
@@ -13878,7 +13924,7 @@ test("task savepoint review output expands ellipsized goals and spaces task stat
     assert.equal(result.success, false);
     assert.match(
       output,
-      /\[0\/2\] Add and pass regression coverage in option management\n\nTASK 01-option-management \| reviewing \| staged 1 file\n\nReading additional input from stdin\.\.\.\n\n\[codex\] thread started thread_review/,
+      /\[REVIEW\] Task 1 of 2 — Option management\nProgress: 0 tasks committed · Review scope: 1 staged file\n\nReading additional input from stdin\.\.\.\n\n\[codex\] thread started thread_review/,
     );
   } finally {
     await workspace.cleanup();
