@@ -159,7 +159,17 @@ list:
 If the required fix needs a file outside the current plan path list and no owner
 plan can be identified:
 
--> output exactly `STOP: file outside plan scope`
+* Check whether it qualifies under the current task's `Compatibility Regression
+  Carve-Out` in `execute-plan.md`: it must be the smallest repair required to
+  keep an existing call site compatible with a shared contract, service
+  invariant, schema, payload shape, generated type, or backend enforcement
+  rule changed by the current task.
+* If it qualifies, classify it as a `compatibility scope repair`, record the
+  exact required file path and the current-task compatibility rationale in the
+  review artifact, and set `Status = active` and `Next Action = execute-plan`.
+  Do not output `STOP` for this eligible repair. The next execution stage must
+  claim the exact file in both scope artifacts before editing it.
+* If it does not qualify, output exactly `STOP: file outside plan scope`.
 
 ### File Ownership Releases
 

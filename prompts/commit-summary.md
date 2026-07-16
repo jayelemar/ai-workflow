@@ -319,6 +319,13 @@ EOF
 ```
 
 8. MUST NOT push.
+9. Immediately run the runner-injected path-scoped `git status --short --`
+   command. If it is clean, continue. If it contains only mechanical formatter
+   or linter output from this commit path, repeat the scoped
+   add/lint-staged/restage sequence, amend the just-created commit with
+   `git commit --amend --no-edit`, and rerun that status check. Do not amend
+   product behavior edited after review: output `STOP` with reason
+   `plan-owned changes remain after commit-summary` instead.
 
 Rules:
 

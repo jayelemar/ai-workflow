@@ -244,11 +244,12 @@ broken because of the current task:
 * do not output `STOP` solely because the minimal compatibility edit touches a
   file named in a later `[task:...]` item
 * when review feedback identifies a missing backend RPC, migration, generated
-  database type, or database regression test required to uphold the current
-  task's access/security invariant, treat it as this compatibility repair
-* if such a file is not currently listed in the plan file inventory and no
-  active owner plan or live workflow-runner file lock claims it, add the exact
-  file to the current plan's ownership/inventory artifacts and continue
+  database type, database regression test, or compatibility call-site repair
+  required to uphold the current task's invariant, including an access/security invariant, treat it as this
+  compatibility repair
+* if such a file is absent from either the current plan ownership or changed-
+  file inventory artifact and no active owner plan or live workflow-runner
+  file lock claims it, add the exact file to both artifacts and continue
 * do not output `STOP` solely because the required minimal backend contract
   repair touches a migration, generated database contract file, or database
   test outside the original current-task file list

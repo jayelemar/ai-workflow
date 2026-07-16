@@ -39,6 +39,7 @@ import {
   selectReviewPrimaryPaths,
   stagedStatusHasMixedReviewPath,
   supportsWorkflowAnsiColor,
+  validateTaskCommitBoundaries,
   WORKFLOW_WAIT_NOTICE_INTERVAL_MS,
   WORKFLOW_RUNNER_CODEX_FALLBACK_MODEL,
   WORKFLOW_RUNNER_CODEX_PROFILE,
@@ -1156,6 +1157,41 @@ test("workflow prompts define task savepoint execution, review, commit, and aggr
   assert.match(commitPrompt, /invalid commit boundaries/i);
 });
 
+test("commit boundaries cover each dirty task path exactly once", () => {
+  const plan = `${planWithTaskSavepoints("completed", "commit-summary")}
+## Commit Boundaries
+
+### [task:01-backend-endpoints]
+
+1. **Backend contract** — \`src/backend/{contracts,intake}/**\`
+2. **Web surface** — \`src/web/**\`
+`;
+  const covered = validateTaskCommitBoundaries({
+    planContent: plan,
+    taskId: "01-backend-endpoints",
+    planOwnedDirtyPaths: [
+      "src/backend/contracts/dispatch.ts",
+      "src/backend/intake/handler.ts",
+      "src/web/page.tsx",
+    ],
+  });
+  assert.equal(covered.ok, true);
+
+  const invalid = validateTaskCommitBoundaries({
+    planContent: plan,
+    taskId: "01-backend-endpoints",
+    planOwnedDirtyPaths: [
+      "src/backend/contracts/dispatch.ts",
+      "src/unassigned-worker.ts",
+    ],
+  });
+  assert.equal(invalid.ok, false);
+  assert.match(
+    invalid.ok ? "" : invalid.reason,
+    /invalid commit boundaries.*unassigned plan-owned paths.*src\/unassigned-worker\.ts/i,
+  );
+});
+
 test("execute-plan allows narrow compatibility fixes for current-task contract changes", async () => {
   const executePrompt = await readWorkflowPrompt("execute-plan.md");
 
@@ -1169,12 +1205,12 @@ test("execute-plan allows narrow compatibility fixes for current-task contract c
   );
   assert.match(
     executePrompt,
-    /missing backend RPC, migration, generated\s+database type, or database regression test/i,
+    /missing backend RPC, migration, generated\s+database type, database regression test, or compatibility call-site repair/i,
   );
   assert.match(executePrompt, /access\/security invariant/i);
   assert.match(
     executePrompt,
-    /add the exact\s+file to the current plan's ownership\/inventory artifacts and continue/i,
+    /add the exact file to both artifacts and continue/i,
   );
   assert.match(
     executePrompt,
@@ -1859,6 +1895,17 @@ test("review-changes prompt treats required out-of-scope owner-plan fixes as dep
   assert.match(prompt, /owned by another active plan/);
   assert.match(prompt, /Status = active/);
   assert.match(prompt, /Next Action = execute-plan/);
+});
+
+test("review-changes prompt returns unowned compatibility scope repairs to execution", async () => {
+  const prompt = await readWorkflowPrompt("review-changes.md");
+
+  assert.match(prompt, /Compatibility Regression\s+Carve-Out/);
+  assert.match(prompt, /compatibility scope repair/i);
+  assert.match(prompt, /exact required file path/i);
+  assert.match(prompt, /Status = active/);
+  assert.match(prompt, /Next Action = execute-plan/);
+  assert.match(prompt, /Do not output `STOP` for this eligible repair/i);
 });
 
 test("review-changes prompt owns deferred external validation and completed handoff", async () => {
@@ -4256,6 +4303,41 @@ test("generates manual workflow prompts for every prompt action", () => {
     assert.doesNotMatch(prompt, /<workflow-prompt>/);
     assert.doesNotMatch(prompt, new RegExp(promptContent));
   }
+});
+
+test("execute workflow prompt requires a terminal stage summary", () => {
+  const prompt = generateWorkflowPrompt({
+    promptPath: ".ai/prompts/execute-plan.md",
+    planPath: ".ai/plans/workflow-runner.md",
+    promptContent: "EXECUTE PLAN PROMPT",
+  });
+
+  assert.match(
+    prompt,
+    /Before completing this execute stage, emit the controlling prompt's `## Output \(MANDATORY\)` response as the final agent message\./,
+  );
+  assert.match(
+    prompt,
+    /Include the `\*\*Plan\*\*`, `\*\*Summary\*\*`, `\*\*Key Details\*\*`, `\*\*Validation\*\*`, and `\*\*Next\*\*` sections with this stage's actual results\./,
+  );
+  assert.match(
+    prompt,
+    /Do not end the turn with only a tool-style change list, an empty response, or a bare completion acknowledgement\./,
+  );
+});
+
+test("commit workflow prompt verifies and safely recovers post-commit formatter output", () => {
+  const prompt = generateWorkflowPrompt({
+    promptPath: ".ai/prompts/commit-summary.md",
+    planPath: ".ai/plans/workflow-runner.md",
+    promptContent: "COMMIT SUMMARY PROMPT",
+    commitSummaryPaths: ["src/file.ts"],
+  });
+
+  assert.match(prompt, /git status --short -- src\/file\.ts/);
+  assert.match(prompt, /mechanical formatter or linter output/i);
+  assert.match(prompt, /git commit --amend --no-edit/);
+  assert.match(prompt, /Do not amend product behavior that was edited after review/i);
 });
 
 test("review prompt requires compact terminal output", async () => {

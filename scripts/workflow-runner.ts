@@ -3731,26 +3731,157 @@ export const parsePlanTasks = (content: string): PlanTask[] => {
   return tasks;
 };
 
-const taskCommitBoundaryCount = (
+type ParsedTaskCommitBoundaries = {
+  declared: boolean;
+  boundaries: Array<{
+    number: number;
+    patterns: string[];
+  }>;
+};
+
+const parseTaskCommitBoundaries = (
   planContent: string,
   taskId: string,
-): number | undefined => {
+): ParsedTaskCommitBoundaries => {
   const lines = planSectionLines(planContent, "## Commit Boundaries");
   const taskHeading = `### [task:${taskId}]`;
   const taskStart = lines.findIndex((line) => line.trim() === taskHeading);
   if (taskStart === -1) {
-    return undefined;
+    return { declared: false, boundaries: [] };
   }
-  let count = 0;
+
+  const boundaries: ParsedTaskCommitBoundaries["boundaries"] = [];
+  let currentBoundary: (typeof boundaries)[number] | undefined;
   for (const line of lines.slice(taskStart + 1)) {
     if (line.trim().startsWith("### ")) {
       break;
     }
-    if (/^\s*\d+\.\s+\S/.test(line)) {
-      count += 1;
+    const boundary = line.match(/^\s*(\d+)\.\s+\S/);
+    if (boundary) {
+      currentBoundary = {
+        number: Number(boundary[1]),
+        patterns: [...line.matchAll(/`([^`]+)`/g)].map((match) => match[1]),
+      };
+      boundaries.push(currentBoundary);
+      continue;
+    }
+    if (currentBoundary) {
+      currentBoundary.patterns.push(
+        ...[...line.matchAll(/`([^`]+)`/g)].map((match) => match[1]),
+      );
     }
   }
-  return count >= 2 ? count : undefined;
+
+  return { declared: true, boundaries };
+};
+
+const taskCommitBoundaryCount = (
+  planContent: string,
+  taskId: string,
+): number | undefined => {
+  const { boundaries } = parseTaskCommitBoundaries(planContent, taskId);
+  return boundaries.length >= 2 ? boundaries.length : undefined;
+};
+
+const expandCommitBoundaryPattern = (pattern: string): string[] => {
+  const brace = pattern.match(/\{([^{}]+)\}/);
+  if (!brace || brace.index === undefined) {
+    return [pattern];
+  }
+  return brace[1]
+    .split(",")
+    .flatMap((value) =>
+      expandCommitBoundaryPattern(
+        `${pattern.slice(0, brace.index)}${value}${pattern.slice(brace.index + brace[0].length)}`,
+      ),
+    );
+};
+
+const commitBoundaryPatternMatchesPath = (
+  pattern: string,
+  filePath: string,
+): boolean => {
+  let expression = "^";
+  for (let index = 0; index < pattern.length; index += 1) {
+    const character = pattern[index];
+    if (character === "*") {
+      if (pattern[index + 1] === "*") {
+        expression += ".*";
+        index += 1;
+      } else {
+        expression += "[^/]*";
+      }
+      continue;
+    }
+    expression += character.replace(/[|\\{}()[\]^$+?.]/g, "\\$&");
+  }
+  expression += "$";
+  return new RegExp(expression).test(filePath);
+};
+
+export const validateTaskCommitBoundaries = ({
+  planContent,
+  taskId,
+  planOwnedDirtyPaths,
+}: {
+  planContent: string;
+  taskId: string;
+  planOwnedDirtyPaths: string[];
+}): { ok: true } | Failure => {
+  const parsed = parseTaskCommitBoundaries(planContent, taskId);
+  if (!parsed.declared) {
+    return { ok: true };
+  }
+  if (parsed.boundaries.length < 2 || parsed.boundaries.length > 12) {
+    return {
+      ok: false,
+      reason: `invalid commit boundaries for task ${taskId}: expected two to twelve boundaries, found ${parsed.boundaries.length}`,
+    };
+  }
+  const emptyBoundaries = parsed.boundaries
+    .filter((boundary) => boundary.patterns.length === 0)
+    .map((boundary) => boundary.number);
+  if (emptyBoundaries.length > 0) {
+    return {
+      ok: false,
+      reason: `invalid commit boundaries for task ${taskId}: boundaries without paths: ${emptyBoundaries.join(", ")}`,
+    };
+  }
+
+  const assignments = new Map<string, number[]>();
+  for (const filePath of uniquePaths(planOwnedDirtyPaths)) {
+    const matchingBoundaries = parsed.boundaries
+      .filter((boundary) =>
+        boundary.patterns
+          .flatMap(expandCommitBoundaryPattern)
+          .some((pattern) => commitBoundaryPatternMatchesPath(pattern, filePath)),
+      )
+      .map((boundary) => boundary.number);
+    assignments.set(filePath, matchingBoundaries);
+  }
+
+  const unassigned = [...assignments.entries()]
+    .filter(([, boundaries]) => boundaries.length === 0)
+    .map(([filePath]) => filePath);
+  const duplicated = [...assignments.entries()]
+    .filter(([, boundaries]) => boundaries.length > 1)
+    .map(([filePath, boundaries]) => `${filePath} (boundaries ${boundaries.join(", ")})`);
+  if (unassigned.length === 0 && duplicated.length === 0) {
+    return { ok: true };
+  }
+
+  const details = [
+    unassigned.length > 0
+      ? `unassigned plan-owned paths: ${boundedInlineExcerpt(unassigned.join(", "))}`
+      : "",
+    duplicated.length > 0
+      ? `paths assigned more than once: ${boundedInlineExcerpt(duplicated.join(", "))}`
+      : "",
+  ].filter(Boolean);
+  return {
+    ok: false,
+    reason: `invalid commit boundaries for task ${taskId}: ${details.join("; ")}`,
+  };
 };
 
 const repoRelativeSpecPathPattern =
@@ -5815,11 +5946,13 @@ git commit --cleanup=verbatim -F - <<'EOF'
 
 <generated body>
 EOF
+git status --short -- ${shellPathspecs(commitSummaryPaths)}
 
 Do not stage .ai files. Do not stage unrelated paths as commit candidates.
 Before committing, the full staged path list must contain only paths from the plan-owned implementation list above.
 If any staged path falls outside this path list, output \`STOP\` with reason \`non plan-scoped staged changes detected\`.
 If no files are staged by the path-scoped git add, output \`STOP\` with reason \`no plan-related files to stage\`.
+After the commit, the path-scoped status must be clean. If the only remaining changes are mechanical formatter or linter output from this commit path, repeat the scoped add/lint-staged/restage sequence, amend the just-created commit with \`git commit --amend --no-edit\`, then rerun the path-scoped status check. Do not amend product behavior that was edited after review; output \`STOP\` with reason \`plan-owned changes remain after commit-summary\` instead.
 `
       : "";
   const taskSavepointBoundary = taskContext
@@ -5876,6 +6009,16 @@ The previous stage exceeded token thresholds.
 - This guardrail does not override required spec reads, path-scoped staged diff reads, latest validation evidence, workflow state reads, or other correctness-critical prompt inputs.
 `
       : "";
+  const terminalOutputRequirement =
+    promptPath === EXECUTE_PLAN_PROMPT_PATH
+      ? `
+End-of-stage output requirement:
+- Before completing this execute stage, emit the controlling prompt's \`## Output (MANDATORY)\` response as the final agent message.
+- Include the \`**Plan**\`, \`**Summary**\`, \`**Key Details**\`, \`**Validation**\`, and \`**Next**\` sections with this stage's actual results.
+- This terminal summary is required even when tool events already reported edited files or validation commands.
+- Do not end the turn with only a tool-style change list, an empty response, or a bare completion acknowledgement.
+`
+      : "";
   const promptIsReview = isReviewPrompt(promptPath);
   const reviewPolicy = promptIsReview
     ? `
@@ -5896,6 +6039,7 @@ ${reviewPolicy}
 
 ${activeContextPacket({ promptPath, planPath, planContent, contextSnapshotPath })}
 ${workflowGuardrail}
+${terminalOutputRequirement}
 
 ${taskSavepointBoundary}${taskAggregateBoundary}
 
@@ -9105,6 +9249,49 @@ export const parseCommitSummaryPathsForPlan = async (
   return parsed;
 };
 
+const readDirtyPlanOwnedPaths = async (
+  rootDir: string,
+  paths: string[],
+  processRunner: ProcessRunner,
+): Promise<{ ok: true; paths: string[] } | Failure> => {
+  const result = await processRunner({
+    command: "git",
+    args: ["status", "--short", "--", ...paths],
+    cwd: rootDir,
+    input: "",
+    promptPath: "git-commit-boundary-preflight",
+  }).catch(
+    (error): ProcessResult => ({
+      launched: false,
+      stdout: "",
+      stderr: "",
+      error: String(error),
+    }),
+  );
+  if (!result.launched) {
+    return {
+      ok: false,
+      reason: `could not launch commit-boundary git status: ${result.error}`,
+    };
+  }
+  if (result.exitCode !== 0) {
+    const details = [result.stderr.trim(), result.stdout.trim()]
+      .filter(Boolean)
+      .join("\n");
+    return {
+      ok: false,
+      reason: `commit-boundary git status exited with code ${result.exitCode}${details ? `: ${details}` : ""}`,
+    };
+  }
+  const dirtyPaths = [result.stdout, result.stderr]
+    .join("\n")
+    .split(/\r?\n/)
+    .filter((line) => line.length >= 4)
+    .map((line) => line.slice(3).trim())
+    .filter(Boolean);
+  return { ok: true, paths: uniquePaths(dirtyPaths) };
+};
+
 const verifyCommitSummaryPathsClean = async (
   rootDir: string,
   paths: string[],
@@ -11665,6 +11852,27 @@ export const runWorkflowRunner = async (
         );
       }
       commitSummaryPaths = parsedPaths.paths;
+      if (
+        selectedTask &&
+        parseTaskCommitBoundaries(parsedPlan.content, selectedTask.id).declared
+      ) {
+        const dirtyPaths = await readDirtyPlanOwnedPaths(
+          rootDir,
+          commitSummaryPaths,
+          processRunner,
+        );
+        if (!dirtyPaths.ok) {
+          return await finishFailure(dirtyPaths.reason);
+        }
+        const boundaries = validateTaskCommitBoundaries({
+          planContent: parsedPlan.content,
+          taskId: selectedTask.id,
+          planOwnedDirtyPaths: dirtyPaths.paths,
+        });
+        if (!boundaries.ok) {
+          return await finishFailure(boundaries.reason);
+        }
+      }
       const acquired = await acquireWorkflowFileOwnershipForPaths({
         rootDir,
         planPath: parsedPlan.planPath,
