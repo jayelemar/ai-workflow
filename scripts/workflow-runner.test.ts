@@ -8827,6 +8827,103 @@ test("task savepoint mode recovers missing task artifact from existing task comm
   }
 });
 
+test("task savepoint mode recovers a later thin-plan task from its saved commit parent", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(
+      workspace.root,
+      "artifact-state",
+      `${thinPlanV2Manifest("completed", "commit-summary")}
+## Phases
+
+### Implementation
+
+* Objective: Complete task-savepoint work.
+* Tasks:
+  1. [task:01-backend-endpoints] Add backend endpoints
+  2. [task:02-web-surface] Add web surface
+`,
+    );
+    await writeThinPlanV2Artifacts(workspace.root, {
+      status: "completed",
+      nextAction: "commit-summary",
+      modified: ["src/task-work.ts"],
+      changedFiles: ["src/task-work.ts"],
+      owns: ["src/task-work.ts"],
+    });
+
+    const taskDir = join(
+      workspace.root,
+      ".ai",
+      "artifacts",
+      "artifact-state",
+      "tasks",
+    );
+    mkdirSync(taskDir, { recursive: true });
+    writeFileSync(
+      join(taskDir, "01-backend-endpoints-v1.md"),
+      `# Task Savepoint: 01-backend-endpoints
+
+## Commit SHA
+
+abc1234
+`,
+      "utf8",
+    );
+
+    const promptCalls: string[] = [];
+    const result = await runWorkflowRunner({
+      planName: planArg("artifact-state"),
+      rootDir: workspace.root,
+      console: collectConsole().console,
+      processRunner: async (call) => {
+        if (call.command === "git" && call.args[0] === "log") {
+          return {
+            launched: true,
+            stdout: [
+              "def5678def5678def5678def5678def5678",
+              "abc123",
+              "feat(web): add support ticket surface",
+            ].join("\n"),
+            stderr: "",
+            exitCode: 0,
+          };
+        }
+        if (call.command === "git") {
+          return {
+            launched: true,
+            stdout: call.args[0] === "rev-parse" ? "def5678\n" : "",
+            stderr: "",
+            exitCode: 0,
+          };
+        }
+        promptCalls.push(call.promptPath);
+        if (call.promptPath === ".ai/prompts/commit-summary.md") {
+          const prompt = call.args.at(-1) ?? "";
+          assert.match(prompt, /Task savepoint aggregate summary/);
+          return {
+            launched: true,
+            stdout: "aggregate summary",
+            stderr: "",
+            exitCode: 0,
+          };
+        }
+        return { launched: true, stdout: "ok", stderr: "", exitCode: 0 };
+      },
+    });
+
+    assert.equal(result.success, true);
+    assert.deepEqual(promptCalls, [".ai/prompts/commit-summary.md"]);
+    const recoveredTask = await readFile(
+      join(taskDir, "02-web-surface-v1.md"),
+      "utf8",
+    );
+    assert.match(recoveredTask, /Commit SHA\n\ndef5678de/);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
 test("task savepoint mode stops failed review before commit and keeps current task active", async () => {
   const workspace = await setupWorkspace();
   try {

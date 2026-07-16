@@ -6594,19 +6594,21 @@ const readHeadTaskCommit = async ({
   planName,
   planPath,
   task,
+  expectedParentSha,
   processRunner,
 }: {
   rootDir: string;
   planName: string;
   planPath: string;
   task: PlanTask;
+  expectedParentSha?: string;
   processRunner: ProcessRunner;
 }): Promise<
   { ok: true; commit?: { sha: string; message: string } } | Failure
 > => {
   const result = await processRunner({
     command: "git",
-    args: ["log", "-1", "--format=%H%n%B"],
+    args: ["log", "-1", "--format=%H%n%P%n%B"],
     cwd: rootDir,
     input: "",
     promptPath: "git-head-task-commit",
@@ -6625,11 +6627,19 @@ const readHeadTaskCommit = async ({
 
   const lines = result.stdout.split(/\r?\n/);
   const sha = lines.shift()?.trim();
+  const parents =
+    lines[0] && /^[0-9a-f]+(?:\s+[0-9a-f]+)*$/i.test(lines[0].trim())
+      ? (lines.shift()?.trim().split(/\s+/) ?? [])
+      : [];
   const message = lines.join("\n").trim();
+  const hasTaskMetadata =
+    message.includes(task.id) &&
+    (message.includes(planName) || message.includes(planPath));
+  const matchesExpectedParent =
+    !!expectedParentSha && parents.includes(expectedParentSha);
   if (
     !sha ||
-    !message.includes(task.id) ||
-    (!message.includes(planName) && !message.includes(planPath))
+    (!hasTaskMetadata && !matchesExpectedParent)
   ) {
     return { ok: true };
   }
@@ -6641,6 +6651,32 @@ const readHeadTaskCommit = async ({
       message,
     },
   };
+};
+
+const readTaskCommitRecoveryParent = async ({
+  rootDir,
+  plan,
+}: {
+  rootDir: string;
+  plan: ParsedPlan;
+}): Promise<{ ok: true; headSha?: string } | Failure> => {
+  if (plan.thinPlanContract !== "thin-plan-v2") {
+    return { ok: true };
+  }
+  const filesPath = thinPlanV2ArtifactPath(
+    plan.planName,
+    "state",
+    "files.json",
+  );
+  const filesRaw = await readJsonArtifact(rootDir, filesPath);
+  if (isFailure(filesRaw)) {
+    return filesRaw;
+  }
+  const files = parseThinPlanV2FilesState(filesRaw, filesPath);
+  if (isFailure(files)) {
+    return files;
+  }
+  return { ok: true, headSha: files.headSha || undefined };
 };
 
 const nextTaskAfter = async (
@@ -11038,14 +11074,21 @@ export const runWorkflowRunner = async (
       taskSavepointMode &&
       route.promptPath === rel(".ai", "prompts", "commit-summary.md") &&
       selectedTask &&
-      completedTaskCommits === 0 &&
       !currentTaskContext
     ) {
+      const recoveryParent = await readTaskCommitRecoveryParent({
+        rootDir,
+        plan: parsedPlan,
+      });
+      if (!recoveryParent.ok) {
+        return await finishFailure(recoveryParent.reason);
+      }
       const recoveredCommit = await readHeadTaskCommit({
         rootDir,
         planName: parsedPlan.planName,
         planPath: parsedPlan.planPath,
         task: selectedTask,
+        expectedParentSha: recoveryParent.headSha,
         processRunner,
       });
       if (!recoveredCommit.ok) {
