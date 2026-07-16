@@ -9211,9 +9211,18 @@ const parseThinPlanV2CommitSummaryPaths = async (
     isIgnored ??
     ((relativePath: string) => defaultIsIgnored(rootDir, relativePath));
   const released = new Set(files.released);
+  const absentCreated = new Set(
+    files.created.filter(
+      (changedFile) => !existsSync(path.join(rootDir, changedFile)),
+    ),
+  );
   const paths: string[] = [];
   for (const changedFile of files.changedFiles) {
-    if (changedFile.startsWith(".ai/") || released.has(changedFile)) {
+    if (
+      changedFile.startsWith(".ai/") ||
+      released.has(changedFile) ||
+      absentCreated.has(changedFile)
+    ) {
       continue;
     }
     if (!(await ignored(changedFile))) {

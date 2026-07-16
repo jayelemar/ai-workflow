@@ -14396,6 +14396,46 @@ test("commit-summary uses thin-plan-v2 files artifact instead of inline files", 
   }
 });
 
+test("commit-summary omits absent planned-created files from its thin-plan-v2 scope", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writeThinPlanV2Artifacts(workspace.root, {
+      status: "completed",
+      nextAction: "commit-summary",
+      created: ["src/future-test.ts"],
+      modified: ["src/current.ts"],
+      changedFiles: ["src/current.ts", "src/future-test.ts"],
+    });
+
+    const parsed = await parseCommitSummaryPathsForPlan(
+      workspace.root,
+      {
+        planName: "artifact-state",
+        planPath: ".ai/plans/artifact-state.md",
+        absolutePlanPath: join(
+          workspace.root,
+          ".ai",
+          "plans",
+          "artifact-state.md",
+        ),
+        manifestContent: thinPlanV2Manifest("completed", "commit-summary"),
+        content: planWithFileScope("completed", "commit-summary", {
+          modified: ["src/inline-should-not-be-used.ts"],
+        }),
+        thinPlanContract: "thin-plan-v2",
+        status: "completed",
+        nextAction: "commit-summary",
+        warnings: [],
+      },
+      async () => false,
+    );
+
+    assert.deepEqual(parsed.ok && parsed.paths, ["src/current.ts"]);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
 test("review staging ignores Files section rule bullets after concrete file lists", async () => {
   const parsed = await parseReviewStagingPaths({
     content: `## Files (MANDATORY)
