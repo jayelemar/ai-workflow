@@ -8682,7 +8682,7 @@ const runReviewUnstageForPaths = async (
       cleanup?: ReviewCleanupProcess;
     }
 > => {
-  const args = ["restore", "--staged", "--", ...paths];
+  const args = ["reset", "--quiet", "--", ...paths];
   const result = await processRunner({
     command: "git",
     args,
@@ -8698,7 +8698,7 @@ const runReviewUnstageForPaths = async (
     }),
   );
   const cleanup: ReviewCleanupProcess = {
-    command: `git restore --staged -- ${shellPathspecs(paths)}`,
+    command: `git reset --quiet -- ${shellPathspecs(paths)}`,
     args,
     stdout: result.stdout,
     stderr: result.stderr,
@@ -8708,10 +8708,10 @@ const runReviewUnstageForPaths = async (
     const operationLabel = options.operationLabel ?? "review cleanup";
     return {
       ok: false,
-      reason: `could not launch ${operationLabel} git restore: ${result.error}`,
+      reason: `could not launch ${operationLabel} git reset: ${result.error}`,
       cleanup: {
         ...cleanup,
-        stopReason: `could not launch ${operationLabel} git restore: ${result.error}`,
+        stopReason: `could not launch ${operationLabel} git reset: ${result.error}`,
       },
     };
   }
@@ -8720,7 +8720,7 @@ const runReviewUnstageForPaths = async (
       .filter(Boolean)
       .join("\n");
     const operationLabel = options.operationLabel ?? "review cleanup";
-    const reason = `${operationLabel} git restore exited with code ${result.exitCode}${details ? `: ${details}` : ""}`;
+    const reason = `${operationLabel} git reset exited with code ${result.exitCode}${details ? `: ${details}` : ""}`;
     return {
       ok: false,
       reason,
@@ -9247,9 +9247,12 @@ const parseThinPlanV2CommitSummaryPaths = async (
     isIgnored ??
     ((relativePath: string) => defaultIsIgnored(rootDir, relativePath));
   const released = new Set(files.released);
-  const absentCreated = new Set(
-    files.created.filter(
-      (changedFile) => !existsSync(path.join(rootDir, changedFile)),
+  const deleted = new Set(files.deleted);
+  const absentNonDeleted = new Set(
+    files.changedFiles.filter(
+      (changedFile) =>
+        !deleted.has(changedFile) &&
+        !existsSync(path.join(rootDir, changedFile)),
     ),
   );
   const paths: string[] = [];
@@ -9257,7 +9260,7 @@ const parseThinPlanV2CommitSummaryPaths = async (
     if (
       changedFile.startsWith(".ai/") ||
       released.has(changedFile) ||
-      absentCreated.has(changedFile)
+      absentNonDeleted.has(changedFile)
     ) {
       continue;
     }

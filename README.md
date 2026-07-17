@@ -308,6 +308,12 @@ In `runner-managed` mode, new draft plans start at
 user-journey artifact, implementation map, and thin-plan-v2 state before
 moving to validation.
 
+Before invoking the runner, review every `runner-managed` plan with
+`.ai/wrappers/review-high-risk-plan.md` in a fresh Plan Mode or analysis-only
+session. Repair material findings in Agent Mode and repeat the independent
+review until it returns `OKAY`. The operator must then review the finalized
+spec and plan and reply `APPROVE IMPLEMENTATION`.
+
 In `manual` mode, keep the spec and plan discipline but do not create
 runner-only state artifacts just to continue execution.
 
@@ -347,6 +353,9 @@ pnpm exec tsx .ai/scripts/workflow-runner.ts --profile codex-personal .ai/plans/
 
 Runner expectations:
 
+- the latest independent review of the finalized spec and plan returned
+  `OKAY`
+- the operator replied `APPROVE IMPLEMENTATION` after that review
 - the plan path must be exactly `.ai/plans/<plan-name>.md`
 - run from the parent repository root
 - `pnpm exec tsx ...` must resolve in the parent repository environment

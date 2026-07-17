@@ -991,6 +991,31 @@ test("create-plan prompt defines manual and runner-managed execution modes", asy
   assert.doesNotMatch(wrapper, /Default when omitted:\s*`manual`/i);
 });
 
+test("runner-managed workflow requires independent review before invocation", async () => {
+  const reviewWrapper = await readWorkflowWrapper("review-high-risk-plan.md");
+  const wrappersReadme = await readWorkflowWrapper("README.md");
+  const workflowReadme = await readFile(
+    new URL("../README.md", import.meta.url),
+    "utf8",
+  );
+  const operatorGuide = await readFile(
+    new URL("../docs/operator-gated-workflow.md", import.meta.url),
+    "utf8",
+  );
+
+  for (const content of [
+    reviewWrapper,
+    wrappersReadme,
+    workflowReadme,
+    operatorGuide,
+  ]) {
+    assert.match(content, /every\s+`runner-managed` plan/i);
+    assert.match(content, /fresh (?:Plan Mode|independent)/i);
+    assert.match(content, /`OKAY`/);
+    assert.match(content, /`APPROVE IMPLEMENTATION`/);
+  }
+});
+
 test("create-plan uses sync-plan-artifacts only for runner-managed plans", async () => {
   const prompt = await readWorkflowPrompt("create-plan.md");
   const template = await readPlanTemplate();
@@ -7378,6 +7403,11 @@ test("review safe path routes to completed commit-summary and succeeds after pla
 test("thin-plan-v2 review and commit-summary stage plan-owned paths from files.json", async () => {
   const workspace = await setupWorkspace();
   try {
+    mkdirSync(join(workspace.root, "src"), { recursive: true });
+    await writeFile(
+      join(workspace.root, "src", "artifact-state.ts"),
+      "artifact state\n",
+    );
     await writeThinPlanV2Artifacts(workspace.root, {
       status: "review",
       nextAction: "review-plan",
@@ -7513,7 +7543,7 @@ test("completed commit-summary preserves its resume point when plan-owned change
     );
     assert.equal(
       calls.filter(
-        (call) => call.command === "git" && call.args[0] === "restore",
+        (call) => call.command === "git" && call.args[0] === "reset",
       ).length,
       1,
     );
@@ -7563,14 +7593,14 @@ test(`completed commit-summary ${CODEX_COMMAND} STOP unstages plan-owned paths a
     );
     assertCallSubsequence(calls, [
       [CODEX_COMMAND, "exec", ".ai/prompts/commit-summary.md"],
-      ["git", "restore", "git-commit-summary-unstage"],
+      ["git", "reset", "git-commit-summary-unstage"],
     ]);
     const unstageCall = calls.find(
       (call) => call.promptPath === "git-commit-summary-unstage",
     );
     assert.deepEqual(unstageCall?.args, [
-      "restore",
-      "--staged",
+      "reset",
+      "--quiet",
       "--",
       "src/file.ts",
     ]);
@@ -8830,6 +8860,11 @@ test("task savepoint mode recovers missing task artifact from existing task comm
 test("task savepoint mode recovers a later thin-plan task from its saved commit parent", async () => {
   const workspace = await setupWorkspace();
   try {
+    mkdirSync(join(workspace.root, "src"), { recursive: true });
+    await writeFile(
+      join(workspace.root, "src", "task-work.ts"),
+      "task work\n",
+    );
     await writePlan(
       workspace.root,
       "artifact-state",
@@ -12492,6 +12527,11 @@ for (const branch of ["feature/workflow", "HEAD"]) {
     const workspace = await setupWorkspace();
     try {
       mkdirSync(join(workspace.root, ".git"), { recursive: true });
+      mkdirSync(join(workspace.root, "src"), { recursive: true });
+      await writeFile(
+        join(workspace.root, "src", "artifact-state.ts"),
+        "artifact state\n",
+      );
       await writeThinPlanV2Artifacts(workspace.root, {
         status: "completed",
         nextAction: "commit-summary",
@@ -12934,7 +12974,7 @@ test("review STOP with active execute handoff continues workflow", async () => {
     assert.doesNotMatch(result.reason, /output contained STOP/);
     assertCallSubsequence(calls, [
       [CODEX_COMMAND, "exec", ".ai/prompts/review-changes.md"],
-      ["git", "restore", "git-review-unstage"],
+      ["git", "reset", "git-review-unstage"],
       [CODEX_COMMAND, "exec", ".ai/prompts/execute-plan.md"],
     ]);
   } finally {
@@ -14452,6 +14492,11 @@ test("commit-summary excludes transferred file ownership releases from commit bo
 test("commit-summary uses thin-plan-v2 files artifact instead of inline files", async () => {
   const workspace = await setupWorkspace();
   try {
+    mkdirSync(join(workspace.root, "src"), { recursive: true });
+    await writeFile(
+      join(workspace.root, "src", "artifact-state.ts"),
+      "artifact state\n",
+    );
     await writeThinPlanV2Artifacts(workspace.root, {
       status: "completed",
       nextAction: "commit-summary",
@@ -14493,15 +14538,23 @@ test("commit-summary uses thin-plan-v2 files artifact instead of inline files", 
   }
 });
 
-test("commit-summary omits absent planned-created files from its thin-plan-v2 scope", async () => {
+test("commit-summary omits absent non-deleted files from its thin-plan-v2 scope", async () => {
   const workspace = await setupWorkspace();
   try {
+    mkdirSync(join(workspace.root, "src"), { recursive: true });
+    await writeFile(join(workspace.root, "src", "current.ts"), "current\n");
     await writeThinPlanV2Artifacts(workspace.root, {
       status: "completed",
       nextAction: "commit-summary",
       created: ["src/future-test.ts"],
-      modified: ["src/current.ts"],
-      changedFiles: ["src/current.ts", "src/future-test.ts"],
+      modified: ["src/current.ts", "src/stale-test.ts"],
+      deleted: ["src/deleted.ts"],
+      changedFiles: [
+        "src/current.ts",
+        "src/future-test.ts",
+        "src/stale-test.ts",
+        "src/deleted.ts",
+      ],
     });
 
     const parsed = await parseCommitSummaryPathsForPlan(
@@ -14527,7 +14580,10 @@ test("commit-summary omits absent planned-created files from its thin-plan-v2 sc
       async () => false,
     );
 
-    assert.deepEqual(parsed.ok && parsed.paths, ["src/current.ts"]);
+    assert.deepEqual(parsed.ok && parsed.paths, [
+      "src/current.ts",
+      "src/deleted.ts",
+    ]);
   } finally {
     await workspace.cleanup();
   }
@@ -15328,14 +15384,14 @@ test(`review ${CODEX_COMMAND} failure after staging unstages plan-owned files be
       ["git", "diff", "git-pre-review-staged-check"],
       ["git", "add", "git-staging"],
       [CODEX_COMMAND, "exec", ".ai/prompts/review-changes.md"],
-      ["git", "restore", "git-review-unstage"],
+      ["git", "reset", "git-review-unstage"],
     ]);
     const unstageCall = calls.find(
       (call) => call.promptPath === "git-review-unstage",
     );
     assert.deepEqual(unstageCall?.args, [
-      "restore",
-      "--staged",
+      "reset",
+      "--quiet",
       "--",
       ".ai/scripts/workflow-runner.test.ts",
       ".ai/scripts/workflow-runner.ts",
@@ -15388,7 +15444,7 @@ test("review cleanup failures write staging and cleanup command evidence to the 
           }
           return { launched: true, stdout: "", stderr: "", exitCode: 0 };
         }
-        if (call.command === "git" && call.args[0] === "restore") {
+        if (call.command === "git" && call.args[0] === "reset") {
           return {
             launched: true,
             stdout: "",
@@ -15440,7 +15496,7 @@ test("review cleanup failures write staging and cleanup command evidence to the 
     assert.match(String(recentCommands[0]?.command ?? ""), /git add --all --/);
     assert.match(
       String(recentCommands[1]?.command ?? ""),
-      /git restore --staged --/,
+      /git reset --quiet --/,
     );
     assert.match(
       String(recentCommands[1]?.stderrExcerpt ?? ""),
@@ -15522,7 +15578,7 @@ test(`review changes failure resumes execute-plan after unstaging review paths`,
       ["git", "add", "git-staging"],
       ["git", "diff", "git-scope-cleanup-diff"],
       [CODEX_COMMAND, "exec", ".ai/prompts/review-changes.md"],
-      ["git", "restore", "git-review-unstage"],
+      ["git", "reset", "git-review-unstage"],
       [CODEX_COMMAND, "exec", ".ai/prompts/execute-plan.md"],
     ]);
   } finally {

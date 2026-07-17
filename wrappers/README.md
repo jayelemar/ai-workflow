@@ -47,9 +47,12 @@ intake/RCA approval -> spec -> plan -> final approval -> (manual execute | sync 
      `Execution mode: runner-managed` in the request.
    - Plan questions should cover only undiscoverable technical, rollback, or
      task-boundary decisions. Do not repeat the completed product interview.
-5. For high-risk, cross-system, contract, security, or data-risk plans, use
-   `.ai/wrappers/review-high-risk-plan.md` in a fresh analysis-only session.
-   Repair material findings before the final operator review.
+5. For every `runner-managed` plan, use
+   `.ai/wrappers/review-high-risk-plan.md` in a fresh Plan Mode or
+   analysis-only session. Also use it for a `manual` plan when the work is
+   high-risk, cross-system, contract, security, or data-risk. Repair material
+   findings in Agent Mode, then repeat the independent review in a fresh
+   session until it returns `OKAY`.
 6. The operator reviews the finalized spec and plan, then replies
    `APPROVE IMPLEMENTATION` before any code changes or workflow execution.
 7. Use the selected post-plan path:
@@ -75,6 +78,8 @@ Manual post-plan path:
 
 Runner-managed post-plan path:
 
+- Complete the mandatory independent plan review and receive
+  `APPROVE IMPLEMENTATION` before invoking the runner.
 - The runner first performs `sync-plan-artifacts`, then continues to
   validation.
 
@@ -136,6 +141,9 @@ pnpm exec tsx .ai/scripts/workflow-runner.ts --compact .ai/plans/<plan-name>.md
 - After a plan exists, the workflow runner is the default path only for plans
   that explicitly chose `runner-managed` execution or already use
   runner-managed state for the same task.
+- Every `runner-managed` plan requires a fresh independent plan review that
+  returns `OKAY` after the latest material planning repair, followed by
+  `APPROVE IMPLEMENTATION`, before the runner command is invoked.
 - Manual plans may continue execution in the same conversation without
   `sync-plan-artifacts`, `plan-validator`, or runner-managed state files.
 - Review stages use harness review only. Do not add a separate subagent or

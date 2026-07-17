@@ -103,12 +103,14 @@ analysis-only session. Create specs and plans in an agent session because Plan
 Mode must not write files.
 
 Use `.ai/wrappers/feature-intake.md` or `.ai/wrappers/bug-intake-rca.md` for
-the first gate. Use `.ai/wrappers/review-high-risk-plan.md` when an independent
-review is required.
+the first gate. Use `.ai/wrappers/review-high-risk-plan.md` for every
+`runner-managed` plan before invoking the runner.
 
-Use an independent fresh Codex session for plan review only when the task is
+Use an independent fresh Plan Mode or analysis-only session for every
+`runner-managed` plan. Also use one for a `manual` plan when the task is
 high-risk, crosses systems, changes contracts, or has meaningful security/data
-risk. Do not add this reviewer by default; it duplicates context and cost.
+risk. Repair material findings in Agent Mode and repeat the independent review
+in a fresh session until it returns `OKAY`.
 
 Use this request:
 
@@ -134,8 +136,9 @@ completed.
 - No code before evidence or requirements, Codex analysis, and operator
   approval.
 - No harness by default. Use it only for explicit high-risk workflow control.
-- No independent reviewer by default. Use it when its additional perspective
-  outweighs duplicated context cost.
+- Every runner-managed plan requires an independent pre-run review. Manual
+  plans require one only for high-risk, cross-system, contract, security, or
+  meaningful data-risk work.
 - Record the selected risk class and execution mode in the spec or plan so the
   routing decision can be audited with token usage later.
 
