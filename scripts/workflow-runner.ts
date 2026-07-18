@@ -46,24 +46,24 @@ import {
   validateThinPlanContract,
   type ThinPlanContractVersion,
 } from "./workflow-runner/thin-plan.ts";
-type CodexProfile = string;
-type CodexModel =
-  | "gpt-5.6-terra"
-  | "gpt-5.6-luna"
-  | "gpt-5.6-sol"
-  | "gpt-5.5"
-  | "gpt-5.4"
-  | "gpt-5.4-mini"
-  | "gpt-5.3-codex-spark";
-type ReasoningEffort = "medium" | "high" | "xhigh";
-type CodexExecutionConfig = {
-  model: CodexModel;
-  reasoning: ReasoningEffort;
-};
+import {
+  CODEX_SELECTED_MODEL_CAPACITY_FALLBACK_ATTEMPTS,
+  CODEX_SELECTED_MODEL_CAPACITY_MESSAGE,
+  CODEX_SELECTED_MODEL_CAPACITY_PRIMARY_ATTEMPTS,
+  codexCapacityFallbackConfig,
+  codexExecutionConfig,
+  WORKFLOW_RUNNER_CODEX_PROFILE,
+  type CodexExecutionConfig,
+  type CodexModel,
+  type CodexProfile,
+  type ReasoningEffort,
+} from "./workflow-runner/codex-config.ts";
+export {
+  codexExecutionConfig,
+  WORKFLOW_RUNNER_CODEX_FALLBACK_MODEL,
+  WORKFLOW_RUNNER_CODEX_PROFILE,
+} from "./workflow-runner/codex-config.ts";
 
-export const WORKFLOW_RUNNER_CODEX_PROFILE: CodexProfile =
-  "codex-work" as const;
-export const WORKFLOW_RUNNER_CODEX_FALLBACK_MODEL: CodexModel = "gpt-5.5";
 const CODEX_PROFILE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 
 const PLAN_VALIDATOR_PROMPT_PATH = ".ai/prompts/plan-validator.md";
@@ -74,36 +74,6 @@ const REVIEW_CHANGES_PROMPT_PATH = ".ai/prompts/review-changes.md";
 const REOPEN_PLAN_PROMPT_PATH = ".ai/prompts/reopen-plan.md";
 const COMMIT_SUMMARY_PROMPT_PATH = ".ai/prompts/commit-summary.md";
 const SCOPE_CLEANUP_PROMPT_PATH = ".ai/prompts/scope-cleanup.md";
-
-// Previous routing kept for rollback/reference:
-// sync-plan-artifacts -> gpt-5.6-luna medium
-// plan-validator      -> gpt-5.6-terra medium
-// execute-plan        -> gpt-5.6-terra high
-// unblock-plan        -> gpt-5.6-luna medium
-// review-changes      -> gpt-5.6-terra xhigh
-// reopen-plan         -> gpt-5.6-luna medium
-// commit-summary      -> gpt-5.6-terra medium
-// scope-cleanup       -> gpt-5.6-terra high
-const PROMPT_CODEX_EXECUTION_OVERRIDES: Record<string, CodexExecutionConfig> = {
-  [SYNC_PLAN_ARTIFACTS_PROMPT_PATH]: {
-    model: "gpt-5.6-luna",
-    reasoning: "medium",
-  },
-  [PLAN_VALIDATOR_PROMPT_PATH]: { model: "gpt-5.6-terra", reasoning: "medium" },
-  [EXECUTE_PLAN_PROMPT_PATH]: { model: "gpt-5.5", reasoning: "high" },
-  [UNBLOCK_PLAN_PROMPT_PATH]: { model: "gpt-5.6-luna", reasoning: "medium" },
-  [REVIEW_CHANGES_PROMPT_PATH]: { model: "gpt-5.6-terra", reasoning: "xhigh" },
-  [REOPEN_PLAN_PROMPT_PATH]: { model: "gpt-5.6-luna", reasoning: "medium" },
-  [COMMIT_SUMMARY_PROMPT_PATH]: {
-    model: "gpt-5.6-terra",
-    reasoning: "medium",
-  },
-  [SCOPE_CLEANUP_PROMPT_PATH]: { model: "gpt-5.6-terra", reasoning: "high" },
-};
-const CODEX_SELECTED_MODEL_CAPACITY_MESSAGE =
-  "Selected model is at capacity" as const;
-const CODEX_SELECTED_MODEL_CAPACITY_PRIMARY_ATTEMPTS = 3;
-const CODEX_SELECTED_MODEL_CAPACITY_FALLBACK_ATTEMPTS = 2;
 
 const VALID_STATUSES = [
   "draft",
@@ -3587,18 +3557,6 @@ export const codexOutputContainsStop = (
   stderr: string,
 ): boolean => codexOutputStopReason(stdout, stderr) !== undefined;
 
-export const codexExecutionConfig = (
-  promptPath: string,
-): CodexExecutionConfig => {
-  const config = PROMPT_CODEX_EXECUTION_OVERRIDES[promptPath];
-  if (!config) {
-    throw new Error(
-      `workflow runner codex config missing for prompt: ${promptPath}`,
-    );
-  }
-  return config;
-};
-
 const codexExecArgs = ({
   executionConfig,
   promptPath,
@@ -3635,18 +3593,6 @@ const codexResultContainsSelectedModelCapacity = (
   `${result.stdout}\n${result.stderr}`.includes(
     CODEX_SELECTED_MODEL_CAPACITY_MESSAGE,
   );
-
-const codexCapacityFallbackConfig = (
-  executionConfig: CodexExecutionConfig,
-): CodexExecutionConfig | undefined => {
-  if (executionConfig.model === WORKFLOW_RUNNER_CODEX_FALLBACK_MODEL) {
-    return undefined;
-  }
-  return {
-    ...executionConfig,
-    model: WORKFLOW_RUNNER_CODEX_FALLBACK_MODEL,
-  };
-};
 
 const promptRoutes: Record<string, string> = {
   "draft|sync-plan-artifacts": SYNC_PLAN_ARTIFACTS_PROMPT_PATH,

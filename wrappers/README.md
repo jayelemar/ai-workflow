@@ -14,7 +14,7 @@ For cloning, installation, publishing, runner setup, and troubleshooting, use
 Canonical lifecycle:
 
 ```text
-intake/RCA approval -> spec -> plan -> final approval -> (manual execute | sync artifacts -> validator/runner)
+spec -> optional user-journey artifact -> plan -> (manual execute | sync artifacts -> validator/runner)
 ```
 
 1. Run an analysis-only intake. This is the first operator gate and must not

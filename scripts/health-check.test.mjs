@@ -88,7 +88,8 @@ test("--runner-tests includes workflow-runner tests", async () => {
     calls.some(
       (call) =>
         call.command === "pnpm" &&
-        call.args.join(" ") === "exec tsx --test .ai/scripts/workflow-runner.test.ts",
+        call.args.join(" ") ===
+          "exec tsx --test .ai/scripts/workflow-runner.test.ts .ai/scripts/workflow-runner/codex-config.test.ts",
     ),
     true,
   );
@@ -101,7 +102,11 @@ test("--full includes workflow-runner tests", async () => {
 
   assert.equal(result.ok, true);
   assert.equal(
-    calls.some((call) => call.args.join(" ") === "exec tsx --test .ai/scripts/workflow-runner.test.ts"),
+    calls.some(
+      (call) =>
+        call.args.join(" ") ===
+        "exec tsx --test .ai/scripts/workflow-runner.test.ts .ai/scripts/workflow-runner/codex-config.test.ts",
+    ),
     true,
   );
 });

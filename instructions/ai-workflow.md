@@ -112,6 +112,20 @@ Rules:
 - The runner will write the live task pointer at
   `.ai/artifacts/<plan-name>/state/current-task.md`.
 
+## Commit Boundaries
+
+The default is exactly one local commit for each reviewed task savepoint. Split
+independently implementable and validatable outcomes into separate task
+savepoints before adding commit boundaries.
+
+`## Commit Boundaries` is an exception for one runner-managed task that must
+remain one execution and review savepoint but needs an atomized commit history.
+List two to twelve dependency-ordered boundaries. Every changed plan-owned
+implementation path must belong to exactly one boundary, and each boundary must
+keep its focused tests with the matching implementation. Do not use commit
+boundaries for manual plans, one-final-commit plans, or final aggregate
+validation.
+
 ## Validation
 
 - Validate workflow prompt or script changes with `.ai/scripts/health-check.mjs`

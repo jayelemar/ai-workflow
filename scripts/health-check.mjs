@@ -49,7 +49,13 @@ const DEFAULT_COMMANDS = [
 const RUNNER_TEST_COMMAND = {
   label: "workflow runner tests",
   command: "pnpm",
-  args: ["exec", "tsx", "--test", ".ai/scripts/workflow-runner.test.ts"],
+  args: [
+    "exec",
+    "tsx",
+    "--test",
+    ".ai/scripts/workflow-runner.test.ts",
+    ".ai/scripts/workflow-runner/codex-config.test.ts",
+  ],
 };
 
 const quoteCommandPart = (part) => {

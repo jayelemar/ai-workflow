@@ -7115,7 +7115,7 @@ test("routes only spec-defined executable pairs and sends blocked plans through 
         "approved",
         "execute-plan",
         ".ai/prompts/execute-plan.md",
-        "gpt-5.6-terra",
+        "gpt-5.5",
         "high",
       ],
       [
@@ -7123,7 +7123,7 @@ test("routes only spec-defined executable pairs and sends blocked plans through 
         "active",
         "execute-plan",
         ".ai/prompts/execute-plan.md",
-        "gpt-5.6-terra",
+        "gpt-5.5",
         "high",
       ],
       [
@@ -7163,7 +7163,7 @@ test("routes only spec-defined executable pairs and sends blocked plans through 
         "completed",
         "commit-summary",
         ".ai/prompts/commit-summary.md",
-        "gpt-5.6-luna",
+        "gpt-5.6-terra",
         "medium",
       ],
     ] as const;
@@ -9092,7 +9092,7 @@ test("task savepoint mode stops failed review before commit and keeps current ta
     );
     assert.match(currentTask, /Task ID: 01-backend-endpoints/);
     assert.match(currentTask, /Stage: reviewing/);
-    assert.doesNotMatch(output.lines.join("\n"), /committed/);
+    assert.doesNotMatch(output.lines.join("\n"), /\[TASK COMPLETE\]|Created \d+ commit/i);
   } finally {
     await workspace.cleanup();
   }
