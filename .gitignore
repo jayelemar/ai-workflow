@@ -5,9 +5,6 @@
 !/.gitignore
 !/README.md
 !/AGENTS.md
-!/v7/
-!/v7/**
-
 # Allowlisted source directories
 !/changelogs/
 !/changelogs/**
