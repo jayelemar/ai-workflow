@@ -11,6 +11,7 @@ export { V7_CODEX_EXECUTION_POLICY, v7CodexExecutionConfig, type V7CodexExecutio
 
 export const buildV7CodexArgs = ({ promptPath, prompt, rootDir, executionConfig = v7CodexExecutionConfig(promptPath) }: { promptPath: string; prompt: string; rootDir: string; executionConfig?: V7CodexExecutionConfig }): string[] => {
   const args = ["exec", "--json", "--model", executionConfig.model, "-c", `model_reasoning_effort=\"${executionConfig.reasoning}\"`];
+  if (executionConfig.sandbox) args.push("--sandbox", executionConfig.sandbox);
   if (promptPath === ".ai/prompts/commit-summary.md") args.push("--add-dir", path.join(rootDir, ".git"));
   return [...args, prompt];
 };
@@ -52,6 +53,24 @@ export const runDedicatedCodexStage = async ({
   codexHome?: string;
   runProcess?: (input: { command?: string; args: string[]; cwd: string; input: string; env?: NodeJS.ProcessEnv }) => Promise<CodexProcessResult>;
 }): Promise<ExactSessionCheckpoint> => {
+  const result = await runDedicatedCodexStageWithOutput({ rootDir, promptPath, prompt, codexHome, runProcess });
+  return result.checkpoint;
+};
+
+/** Exact session evidence plus raw JSONL output for V7-native controllers. */
+export const runDedicatedCodexStageWithOutput = async ({
+  rootDir,
+  promptPath,
+  prompt,
+  codexHome = process.env.CODEX_HOME?.trim() ?? path.join(homedir(), ".codex-work"),
+  runProcess = runCodexProcess,
+}: {
+  rootDir: string;
+  promptPath: string;
+  prompt: string;
+  codexHome?: string;
+  runProcess?: (input: { command?: string; args: string[]; cwd: string; input: string; env?: NodeJS.ProcessEnv }) => Promise<CodexProcessResult>;
+}): Promise<{ checkpoint: ExactSessionCheckpoint; output: string }> => {
   const primary = v7CodexExecutionConfig(promptPath);
   const configs = [...Array(3).fill(primary), ...Array(2).fill({ ...primary, model: V7_CODEX_EXECUTION_POLICY.fallbackModel })];
   let last: CodexProcessResult | undefined;
@@ -65,7 +84,7 @@ export const runDedicatedCodexStage = async ({
     }
     const sessionId = exactSessionIdFromCodexOutput(result.stdout);
     if (!sessionId) throw new Error(`V7 Codex process did not return an exact session ID for ${promptPath}`);
-    return readExactSessionCheckpoint({ sessionId, rootDir, codexHome, invocationStartedAt });
+    return { checkpoint: await readExactSessionCheckpoint({ sessionId, rootDir, codexHome, invocationStartedAt }), output: result.stdout };
   }
   throw new Error(`V7 Codex capacity retries exhausted for ${promptPath}: ${last?.stderr || last?.stdout || "no process result"}`);
 };

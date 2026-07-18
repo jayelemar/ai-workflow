@@ -12,6 +12,7 @@ import { lifecycleRevisionDir, readLifecycleState, writeLifecycleState } from ".
 import { abandonIntegrityInterruptedV7Workflow, checkpointV7Lifecycle, createV7Workflow, parseLifecycleOutcome, reopenCompletedV7Workflow, reopenIntakeForRouteChange, requireV7PlanSetupLifecycle } from "../lifecycle/workflow-lifecycle.ts";
 import { readTaskRemediationResult } from "../lifecycle/task-remediation.ts";
 import { verifyWorkflowDocumentBinding, writeWorkflowDocumentBinding } from "../lifecycle/workflow-binding.ts";
+import { runAutomaticV7Plan } from "../runner/automatic-runner.ts";
 import type { LifecycleState } from "../lifecycle/lifecycle.ts";
 
 const value = (args: string[], flag: string): string | undefined => {
@@ -24,6 +25,10 @@ const success = (command: string, state: LifecycleState, extra: Record<string, u
   message: JSON.stringify({ ok: true, command, workflowId: state.workflowId, runRevision: state.runRevision, status: state.runOutcome, stage: state.currentStage, ...extra }),
 });
 const errorCode = (message: string): number => /usage-unavailable|blocked/i.test(message) ? 5 : /integrity|tamper|proof/i.test(message) ? 4 : /lock|conflict|active V7 workflow/i.test(message) ? 3 : /Usage:|invalid|requires|rejects|mismatch|missing/i.test(message) ? 2 : 1;
+const publicError = (message: string): string => message
+  .replace(/[\r\n\t]+/g, " ")
+  .replace(/(api[_-]?key|authorization|bearer|token|password)\s*[=:]\s*[^\s,;]+/gi, "$1=[redacted]")
+  .slice(0, 1_000);
 const documentBindsWorkflow = async (documentPath: string, workflowName: string): Promise<boolean> => {
   if (!path.isAbsolute(documentPath)) return false;
   try {
@@ -40,6 +45,7 @@ const intakeStageForRoute = (route: string): "feature-intake" | "bug-intake-root
 const isUuid = (value: string | undefined): value is string => Boolean(value && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value));
 
 export const V7_USAGE = `Usage:
+  pnpm exec tsx .ai/v7/workflow-runner.ts <plan-path.md>
   pnpm exec tsx .ai/v7/workflow-runner.ts create --workflow <name> --route <feature|bug> --intake-revision 1 --spec <absolute-path> --plan <absolute-path> --intake-artifact <absolute-path> --intake-session <uuid> --intake-invocation-start <RFC3339> --workflow-root <absolute-path>
   pnpm exec tsx .ai/v7/workflow-runner.ts checkpoint --workflow <name> --revision <n> --stage <stage> --outcome <outcome> (--session <id> --invocation-start <RFC3339> --workflow-root <absolute-path> | --reason <non-empty>)
   pnpm exec tsx .ai/v7/workflow-runner.ts reopen --workflow <name> --source-revision <n> --spec <absolute-path> --plan <absolute-path>
@@ -54,6 +60,16 @@ export const V7_USAGE = `Usage:
 export const runV7Cli = async (argv: string[], rootDir = process.cwd()): Promise<{ exitCode: number; message: string }> => {
   const [command, ...args] = argv;
   try {
+    if (command?.endsWith(".md")) {
+      if (args.length) throw new Error(V7_USAGE);
+      const result = await runAutomaticV7Plan({ rootDir, planInput: command });
+      const decision = result.stage === "decision-needed";
+      const completed = result.status === "completed";
+      return {
+        exitCode: completed ? 0 : decision ? 6 : 5,
+        message: JSON.stringify({ ok: completed, command: "run", workflowId: result.workflowId, runRevision: result.runRevision, status: result.status, stage: result.stage, reportPath: result.reportPath, decisionPath: result.decisionPath }),
+      };
+    }
     if (command === "create") {
       const workflowName = value(args, "--workflow");
       const route = value(args, "--route");
@@ -302,7 +318,7 @@ export const runV7Cli = async (argv: string[], rootDir = process.cwd()): Promise
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const code = errorCode(message);
-    return { exitCode: code, message: JSON.stringify({ ok: false, code, message: `V7 command rejected (${message.length} characters withheld).` }) };
+    return { exitCode: code, message: JSON.stringify({ ok: false, code, message: `V7 command rejected: ${publicError(message)}` }) };
   }
 };
 

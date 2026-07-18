@@ -10,7 +10,8 @@ import { buildV7CodexArgs, exactSessionIdFromCodexOutput, runDedicatedCodexStage
 test("V7 preserves current routing policy values", () => {
   assert.equal(V7_CODEX_EXECUTION_POLICY.profile, "codex-work");
   assert.equal(V7_CODEX_EXECUTION_POLICY.command, "codex");
-  assert.equal(Object.keys(V7_CODEX_EXECUTION_POLICY.promptModels).length, 8);
+  assert.equal(Object.keys(V7_CODEX_EXECUTION_POLICY.promptModels).length, 18);
+  assert.equal(v7CodexExecutionConfig(".ai/v7/wrappers/stages/task-implementation.md").sandbox, "workspace-write");
   assert.equal(v7CodexExecutionConfig(".ai/prompts/execute-plan.md").model, "gpt-5.5");
   assert.equal(v7CodexExecutionConfig(".ai/prompts/review-changes.md").reasoning, "xhigh");
 });

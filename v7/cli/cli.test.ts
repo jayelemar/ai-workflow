@@ -73,6 +73,13 @@ test("CLI records missing exact-session inputs as usage-unavailable instead of z
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
+test("CLI exposes sanitized rejection reason for operator diagnosis", async () => {
+  const result = await runV7Cli(["missing-command"], process.cwd());
+  const payload = JSON.parse(result.message) as { message: string };
+  assert.match(payload.message, /Usage:/);
+  assert.doesNotMatch(payload.message, /characters withheld/);
+});
+
 test("strict reopen and reroute require bound source evidence", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "v7-cli-revisions-"));
   try {
