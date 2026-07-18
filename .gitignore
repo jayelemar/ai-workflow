@@ -10,21 +10,11 @@
 
 # Allowlisted source directories
 !/changelogs/
-!/changelogs/security.changelog.md
-!/changelogs/testing.changelog.md
-!/changelogs/workflow-state.changelog.md
-!/changelogs/reasoning-quality.changelog.md
-!/changelogs/debugging.changelog.md
+!/changelogs/**
 !/docs/
 !/docs/**
 !/instructions/
-!/instructions/shared/
-!/instructions/shared/security.md
-!/instructions/shared/testing.md
-!/instructions/shared/workflow-state.md
-!/instructions/shared/reasoning-quality.md
-!/instructions/shared/debugging.md
-!/instructions/shared/flow-trace-artifacts.md
+!/instructions/**
 !/prompts/
 !/prompts/**
 !/scripts/
@@ -33,7 +23,6 @@
 !/templates/**
 !/wrappers/
 !/wrappers/**
-!/changelogs/flow-trace-artifacts.changelog.md
 
 # Dynamic/local-only workflow data
 /artifacts/
