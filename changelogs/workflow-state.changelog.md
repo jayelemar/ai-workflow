@@ -1,5 +1,10 @@
 # Workflow State Instruction Changelog
 
+## v1.20 — 2026-07-18
+
+* Documented deterministic completion for declared artifact-only thin plans with
+  no committable paths.
+
 ## v1.19 — 2026-07-16
 
 * Required execute stages to persist a blocked runtime-validation handoff before

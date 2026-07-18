@@ -1,5 +1,5 @@
-Version: 1.19
-Last Updated: 2026-07-15
+Version: 1.20
+Last Updated: 2026-07-18
 
 # Workflow State Instructions
 
@@ -245,6 +245,12 @@ Review system boundary:
 * The combined harness review may approve `completed + commit-summary` or return to `active + execute-plan`.
 
 Completed `commit-summary` is the terminal safe-to-merge path. It creates the local plan-scoped commit and runner success represents that no further next action is required.
+
+Declared artifact-only no-commit review:
+
+* A thin-plan-v2 plan may complete without staging, review Codex, or commit-summary Codex only when its `## Commit Boundaries` explicitly starts with `N/A` and every active changed ownership path is under `.ai/`.
+* The runner records a deterministic `review-vN.md`, sets `completed + commit-summary` in both state locations, then reports success without a commit.
+* This exception applies only to declared read-only plans. Any non-`.ai/` changed path continues through normal staged review and commit-summary.
 
 Commit-preflight recovery:
 

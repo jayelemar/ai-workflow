@@ -7494,6 +7494,78 @@ test("thin-plan-v2 review and commit-summary stage plan-owned paths from files.j
   }
 });
 
+test("artifact-only no-commit thin plan completes review without staging or Codex", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    const artifactPath = ".ai/artifacts/artifact-state/events/execution-v1.md";
+    await writeThinPlanV2Artifacts(workspace.root, {
+      status: "review",
+      nextAction: "review-plan",
+      modified: [artifactPath],
+      changedFiles: [artifactPath],
+    });
+    await writePlan(
+      workspace.root,
+      "artifact-state",
+      thinPlanV2Manifest(
+        "review",
+        "review-plan",
+        "## Commit Boundaries\n\nN/A: read-only verification creates no committable paths.\n",
+      ),
+    );
+    const calls: Parameters<ProcessRunner>[0][] = [];
+
+    const result = await runWorkflowRunner({
+      planName: planArg("artifact-state"),
+      rootDir: workspace.root,
+      processRunner: async (call) => {
+        calls.push(call);
+        return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+      },
+    });
+
+    assert.equal(result.success, true, result.success ? "" : result.reason);
+    assert.equal(
+      calls.some((call) =>
+        ["git-staging", ".ai/prompts/review-changes.md", ".ai/prompts/commit-summary.md"].includes(
+          call.promptPath,
+        ),
+      ),
+      false,
+    );
+    const workflow = JSON.parse(
+      await readFile(
+        join(
+          workspace.root,
+          ".ai",
+          "artifacts",
+          "artifact-state",
+          "state",
+          "workflow.json",
+        ),
+        "utf8",
+      ),
+    ) as Record<string, unknown>;
+    assert.equal(workflow.status, "completed");
+    assert.equal(workflow.nextAction, "commit-summary");
+    assert.equal(
+      existsSync(
+        join(
+          workspace.root,
+          ".ai",
+          "artifacts",
+          "artifact-state",
+          "events",
+          "review-v1.md",
+        ),
+      ),
+      true,
+    );
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
 test("completed commit-summary preserves its resume point when plan-owned changes remain dirty", async () => {
   const workspace = await setupWorkspace();
   try {

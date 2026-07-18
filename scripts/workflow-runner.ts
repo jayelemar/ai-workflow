@@ -7174,7 +7174,7 @@ const nextWorkflowEventVersion = async ({
 }: {
   rootDir: string;
   planName: string;
-  kind: "execution" | "validation";
+  kind: "execution" | "validation" | "review";
 }): Promise<number> => {
   const eventsDir = path.join(
     rootDir,
@@ -7215,6 +7215,173 @@ ${summary}
 
 ${evidenceLines.length > 0 ? evidenceLines.map((line) => `* ${line}`).join("\n") : "* No evidence recorded."}
 `;
+
+const declaresNoCommitBoundary = (content: string): boolean =>
+  /^## Commit Boundaries\s*\n\s*N\/A\b/im.test(content);
+
+const isArtifactOnlyNoCommitReview = ({
+  plan,
+  artifact,
+}: {
+  plan: ParsedPlan;
+  artifact: FileOwnershipArtifact | undefined;
+}): boolean =>
+  plan.thinPlanContract === "thin-plan-v2" &&
+  declaresNoCommitBoundary(plan.manifestContent) &&
+  (artifact?.changedFiles.length ?? 0) > 0 &&
+  artifact!.changedFiles.every((filePath) => filePath.startsWith(".ai/"));
+
+const completeArtifactOnlyNoCommitReview = async ({
+  rootDir,
+  plan,
+  timestamp,
+}: {
+  rootDir: string;
+  plan: ParsedPlan;
+  timestamp: () => string;
+}): Promise<{ ok: true } | Failure> => {
+  const workflowPath = thinPlanV2ArtifactPath(
+    plan.planName,
+    "state",
+    "workflow.json",
+  );
+  const workflowRaw = await readJsonArtifact(rootDir, workflowPath);
+  if (isFailure(workflowRaw)) {
+    return workflowRaw;
+  }
+  const workflow = parseThinPlanV2WorkflowState(
+    workflowRaw,
+    plan.planPath,
+    workflowPath,
+  );
+  if (isFailure(workflow)) {
+    return workflow;
+  }
+  const workflowRecord = asRecord(workflowRaw);
+  if (!workflowRecord) {
+    return {
+      ok: false,
+      reason: `thin-plan-v2 workflow state is malformed: ${workflowPath}`,
+    };
+  }
+
+  let reviewVersion: number;
+  try {
+    reviewVersion = await nextWorkflowEventVersion({
+      rootDir,
+      planName: plan.planName,
+      kind: "review",
+    });
+  } catch (error) {
+    return {
+      ok: false,
+      reason: `workflow review event version cannot be selected: ${String(error)}`,
+    };
+  }
+
+  const reviewPath = thinPlanV2ArtifactPath(
+    plan.planName,
+    "events",
+    `review-v${reviewVersion}.md`,
+  );
+  const latest = {
+    ...(asRecord(workflowRecord.latest) ?? {}),
+    review: {
+      version: reviewVersion,
+      summary:
+        "Runner accepted declared artifact-only review; no committable paths exist.",
+      decision: "completed",
+      result: "PASS",
+      evidence: reviewPath,
+      noCommit: true,
+      unresolvedFindings: [],
+    },
+  };
+  const history = uniquePaths([
+    ...(normalizeWorkflowEventHistory(workflowRecord.history) ?? []),
+    reviewPath,
+  ]);
+  const now = timestamp();
+
+  try {
+    await mkdir(path.join(rootDir, path.dirname(reviewPath)), {
+      recursive: true,
+    });
+    await writeFile(
+      path.join(rootDir, reviewPath),
+      workflowEventBody({
+        title: `# Review v${reviewVersion}`,
+        summary:
+          "Declared read-only plan has only .ai artifact changes and no commit boundary.",
+        evidenceLines: [
+          "All active plan-owned changed paths are under .ai/.",
+          "Plan Commit Boundaries explicitly declares N/A.",
+          "Runner skipped git staging, review Codex execution, and commit-summary Codex execution.",
+        ],
+      }),
+      "utf8",
+    );
+    await writeFile(
+      path.join(rootDir, workflowPath),
+      `${JSON.stringify(
+        {
+          ...workflowRecord,
+          status: "completed",
+          nextAction: "commit-summary",
+          latest,
+          history,
+          unresolvedBlockers: [],
+          updatedAt: now,
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    await writeFile(
+      plan.absolutePlanPath,
+      replaceSectionValueInPlan(
+        replaceSectionValueInPlan(plan.manifestContent, "## Status", "completed"),
+        "## Next Action",
+        "commit-summary",
+      ),
+      "utf8",
+    );
+  } catch (error) {
+    return {
+      ok: false,
+      reason: `artifact-only no-commit review completion failed: ${String(error)}`,
+    };
+  }
+
+  return { ok: true };
+};
+
+const hasArtifactOnlyNoCommitReview = async ({
+  rootDir,
+  plan,
+}: {
+  rootDir: string;
+  plan: ParsedPlan;
+}): Promise<{ ok: true; noCommit: boolean } | Failure> => {
+  if (
+    plan.thinPlanContract !== "thin-plan-v2" ||
+    !declaresNoCommitBoundary(plan.manifestContent)
+  ) {
+    return { ok: true, noCommit: false };
+  }
+  const workflowPath = thinPlanV2ArtifactPath(
+    plan.planName,
+    "state",
+    "workflow.json",
+  );
+  const workflowRaw = await readJsonArtifact(rootDir, workflowPath);
+  if (isFailure(workflowRaw)) {
+    return workflowRaw;
+  }
+  const review = asRecord(asRecord(workflowRaw)?.latest)?.review;
+  return { ok: true, noCommit: asRecord(review)?.noCommit === true };
+};
 
 const recoverThinPlanV2ExecuteHandoff = async ({
   rootDir,
@@ -11309,6 +11476,7 @@ export const runWorkflowRunner = async (
     let fileOwnershipPreflight: FileOwnershipPreflight | undefined;
     let workflowTokenGuardrail: WorkflowTokenGuardrail | undefined;
     let reviewAutoNarrowReason: string | undefined;
+    let noCommitReviewCompletion = false;
     let progressLogged = false;
     const logWorkflowProgress = () => {
       if (progressLogged) {
@@ -11539,6 +11707,28 @@ export const runWorkflowRunner = async (
     }
     if (isReviewPrompt(route.promptPath)) {
       if (isReviewPrompt(route.promptPath)) {
+        if (
+          isArtifactOnlyNoCommitReview({
+            plan: parsedPlan,
+            artifact: fileOwnershipPreflight?.artifact,
+          })
+        ) {
+          logWorkflowProgress();
+          const completed = await completeArtifactOnlyNoCommitReview({
+            rootDir,
+            plan: parsedPlan,
+            timestamp,
+          });
+          if (!completed.ok) {
+            return await finishFailure(completed.reason);
+          }
+          const updated = await parsePlan({ planName: planArgument, rootDir });
+          if (!updated.ok) {
+            return await finishFailure(updated.reason);
+          }
+          parsedPlan = updated;
+          continue;
+        }
         const parsedPaths =
           fileOwnershipPreflight?.hasOwnershipScope &&
           fileOwnershipPreflight.reviewStagingPaths
@@ -11896,49 +12086,99 @@ export const runWorkflowRunner = async (
       }
     }
     if (route.promptPath === rel(".ai", "prompts", "commit-summary.md")) {
-      const parsedPaths = await parseCommitSummaryPathsForPlan(
+      const noCommit = await hasArtifactOnlyNoCommitReview({
         rootDir,
-        parsedPlan,
-        options.isIgnored,
-      );
-      if (!parsedPaths.ok) {
-        return await finishFailure(
-          `commit summary file scope invalid: ${parsedPaths.reason}`,
-        );
-      }
-      commitSummaryPaths = parsedPaths.paths;
-      if (
-        selectedTask &&
-        parseTaskCommitBoundaries(parsedPlan.content, selectedTask.id).declared
-      ) {
-        const dirtyPaths = await readDirtyPlanOwnedPaths(
-          rootDir,
-          commitSummaryPaths,
-          processRunner,
-        );
-        if (!dirtyPaths.ok) {
-          return await finishFailure(dirtyPaths.reason);
-        }
-        const boundaries = validateTaskCommitBoundaries({
-          planContent: parsedPlan.content,
-          taskId: selectedTask.id,
-          planOwnedDirtyPaths: dirtyPaths.paths,
-        });
-        if (!boundaries.ok) {
-          return await finishFailure(boundaries.reason);
-        }
-      }
-      const acquired = await acquireWorkflowFileOwnershipForPaths({
-        rootDir,
-        planPath: parsedPlan.planPath,
-        paths: commitSummaryPaths,
-        heldLockPaths: heldWorkflowFileLockPaths,
-        now: timestamp,
+        plan: parsedPlan,
       });
-      if (!acquired.ok) {
-        return await finishFailure(acquired.reason);
+      if (!noCommit.ok) {
+        return await finishFailure(noCommit.reason);
       }
-      startWorkflowFileLockHeartbeat();
+      noCommitReviewCompletion = noCommit.noCommit;
+      if (!noCommitReviewCompletion) {
+        const parsedPaths = await parseCommitSummaryPathsForPlan(
+          rootDir,
+          parsedPlan,
+          options.isIgnored,
+        );
+        if (!parsedPaths.ok) {
+          return await finishFailure(
+            `commit summary file scope invalid: ${parsedPaths.reason}`,
+          );
+        }
+        commitSummaryPaths = parsedPaths.paths;
+        if (
+          selectedTask &&
+          parseTaskCommitBoundaries(parsedPlan.content, selectedTask.id).declared
+        ) {
+          const dirtyPaths = await readDirtyPlanOwnedPaths(
+            rootDir,
+            commitSummaryPaths,
+            processRunner,
+          );
+          if (!dirtyPaths.ok) {
+            return await finishFailure(dirtyPaths.reason);
+          }
+          const boundaries = validateTaskCommitBoundaries({
+            planContent: parsedPlan.content,
+            taskId: selectedTask.id,
+            planOwnedDirtyPaths: dirtyPaths.paths,
+          });
+          if (!boundaries.ok) {
+            return await finishFailure(boundaries.reason);
+          }
+        }
+        const acquired = await acquireWorkflowFileOwnershipForPaths({
+          rootDir,
+          planPath: parsedPlan.planPath,
+          paths: commitSummaryPaths,
+          heldLockPaths: heldWorkflowFileLockPaths,
+          now: timestamp,
+        });
+        if (!acquired.ok) {
+          return await finishFailure(acquired.reason);
+        }
+        startWorkflowFileLockHeartbeat();
+      }
+    }
+    if (route.terminal && noCommitReviewCompletion) {
+      logWorkflowProgress();
+      const snapshotResult = await syncWorkflowSnapshot(parsedPlan);
+      if (!snapshotResult.ok) {
+        return await finishFailure(snapshotResult.reason);
+      }
+      const logResult = await appendLog(
+        rootDir,
+        parsedPlan.planName,
+        logFields({
+          timestamp: timestamp(),
+          iteration: iterations,
+          planPath: parsedPlan.planPath,
+          status: parsedPlan.status,
+          nextAction: parsedPlan.nextAction,
+          promptPath: route.promptPath,
+          model: executionConfig.model,
+          reasoning: executionConfig.reasoning,
+          contextUsage: unavailableContextUsage,
+          result: "artifact-only-completed",
+          exitCode: 0,
+          durationMs: Math.max(0, now() - attemptStartedAt),
+          stdout: "",
+          stderr: "",
+          taskContext: currentTaskContext,
+          currentBranch,
+          startingHeadSha,
+          endingHeadSha: await workflowHeadSha(rootDir, processRunner),
+          commitProgress,
+        }),
+      );
+      if (!logResult.ok) {
+        return await finishFailure(logResult.reason);
+      }
+      markWorkflowLogCreated(parsedPlan.planName);
+      return await finishSuccess(
+        "completed artifact-only no-commit workflow",
+        iterations,
+      );
     }
 
     logWorkflowProgress();
