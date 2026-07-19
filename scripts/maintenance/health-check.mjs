@@ -18,7 +18,7 @@ const REQUIRED_SOURCE_PATHS = [
   ".ai/templates",
   ".ai/scripts",
   ".ai/scripts/workflow/runner.ts",
-  ".ai/scripts/workflow/runner.test.ts",
+  ".ai/scripts/workflow/runner/__tests__/integration/runner.test.ts",
   ".ai/scripts/workflow/runner.spec.md",
   ".ai/scripts/workflow/config/codex.ts",
   ".ai/scripts/workflow/config/codex.test.ts",
@@ -72,9 +72,9 @@ const RUNNER_TEST_COMMAND = {
     "exec",
     "tsx",
     "--test",
-    ".ai/scripts/workflow/runner.test.ts",
-    ".ai/scripts/workflow/config/codex.test.ts",
+    "$(find .ai/scripts/workflow -type f -name '*.test.*' -print | sort)",
   ],
+  shell: true,
 };
 
 const FULL_WORKFLOW_TEST_COMMAND = {

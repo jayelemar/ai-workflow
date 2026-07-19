@@ -19,7 +19,7 @@ Define the canonical plan workflow state machine: plan statuses, next actions, a
 - `.ai/prompts/reopen-plan.md`
 - `.ai/prompts/commit-summary.md`
 - `.ai/scripts/workflow/runner.ts`
-- `.ai/scripts/workflow/runner.test.ts`
+- `.ai/scripts/workflow/runner/__tests__/integration/runner.test.ts`
 - `.ai/plans/*.md`
 
 ## Rules
@@ -317,7 +317,7 @@ Next Action = execute-plan
 - Verify this file has `Version` and `Last Updated` headers.
 - Verify `.ai/templates/plan.template.md` contains a `## Workflow State Rules` section that references this file.
 - Verify every state-machine prompt explicitly loads `.ai/instructions/shared/workflow-state.md`.
-- Verify status values, next-action values, prompt routes, and workflow transitions stay aligned with `.ai/scripts/workflow/runner.ts` and `.ai/scripts/workflow/runner.test.ts`.
+- Verify status values, next-action values, prompt routes, and workflow transitions stay aligned with `.ai/scripts/workflow/runner.ts` and runner integration coverage.
 
 ## Anti-Patterns
 

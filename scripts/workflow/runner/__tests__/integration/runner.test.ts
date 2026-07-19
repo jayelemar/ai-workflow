@@ -39,13 +39,13 @@ import {
   writeProcessInput,
   parsePlanTasks,
   type ProcessRunner,
-} from "./runner.ts";
+} from "../../../runner.ts";
 import {
   collectWorkflowThresholdWarnings,
   decideWorkflowAutoNarrow,
   exceedsWorkflowTokenThresholds,
   WORKFLOW_REVIEW_FULL_DIFF_BYTE_LIMIT,
-} from "./telemetry/token-warnings.ts";
+} from "../../../telemetry/token-warnings.ts";
 
 type Workspace = {
   root: string;
@@ -86,7 +86,7 @@ ${nextAction}
 
 ### Created files
 
-* .ai/scripts/workflow/runner.test.ts
+* .ai/scripts/workflow/runner/__tests__/integration/runner.test.ts
 
 ### Modified files
 
@@ -905,34 +905,35 @@ test("create-plan prompt completes implementation-map preflight before finalizin
   assert.match(instructions, /derive or repair `?implementation-map\.md`?/i);
   assert.match(
     instructions,
-    /5\.\s+before returning a draft plan, self-check/i,
+    /5\.\s+before returning a draft plan, apply the complete atomic task and commit\s+contract/i,
   );
   assert.match(
     instructions,
-    /each implementation-map row has implementation and validation coverage/i,
+    /each mapped user action must include applicable coverage/i,
   );
 });
 
 test("create-plan prompt self-checks savepoints and spec behavior ownership before returning", async () => {
-  const instructions = await readInstruction("shared/flow-trace-artifacts.md");
+  const [instructions, flowInstructions] = await Promise.all([
+    readWorkflowPrompt("create-plan.md"),
+    readInstruction("shared/flow-trace-artifacts.md"),
+  ]);
 
+  assert.match(instructions, /Task Savepoints/);
+  assert.match(instructions, /\[task:NN-readable-words\]/);
   assert.match(
     instructions,
-    /each `?\[task:[\s\S]+?chunk can pass, be reviewed, and be committed\s+independently/i,
+    /independently implementable\s+and validatable/i,
+  );
+  assert.match(instructions, /- Behavior: <one exact outcome>/);
+  assert.match(instructions, /- Validation: <exact runnable commands>/);
+  assert.match(
+    instructions,
+    /- Completes: <exact acceptance-criterion text>/,
   );
   assert.match(
-    instructions,
-    /no lifecycle-only or red-test-only savepoints remain/i,
-  );
-  assert.match(instructions, /each spec-required behavior/i);
-  assert.match(
-    instructions,
-    /visible validation and\s+failure-state behavior/i,
-  );
-  assert.match(instructions, /assigned to a concrete task/i);
-  assert.match(
-    instructions,
-    /each implementation-map row has implementation and validation coverage/i,
+    flowInstructions,
+    /each mapped user action must include applicable coverage/i,
   );
 });
 
@@ -940,7 +941,7 @@ test("create-plan prompt auto-corrects preflight defects and STOPs only when unr
   const instructions = await readInstruction("shared/flow-trace-artifacts.md");
 
   assert.match(instructions, /auto-correct/i);
-  assert.match(instructions, /bad savepoints/i);
+  assert.match(instructions, /task-contract defects/i);
   assert.match(
     instructions,
     /stop only when the preflight still cannot satisfy these rules/i,
@@ -968,11 +969,11 @@ test("runner-managed workflow requires independent review before invocation", as
   const reviewWrapper = await readWorkflowWrapper("review-high-risk-plan.md");
   const wrappersReadme = await readWorkflowWrapper("README.md");
   const workflowReadme = await readFile(
-    new URL("../../README.md", import.meta.url),
+    new URL("../../../../../README.md", import.meta.url),
     "utf8",
   );
   const operatorGuide = await readFile(
-    new URL("../../docs/operator-gated-workflow.md", import.meta.url),
+    new URL("../../../../../docs/operator-gated-workflow.md", import.meta.url),
     "utf8",
   );
 
@@ -982,8 +983,8 @@ test("runner-managed workflow requires independent review before invocation", as
     workflowReadme,
     operatorGuide,
   ]) {
-    assert.match(content, /every\s+`runner-managed` plan/i);
-    assert.match(content, /fresh (?:Plan Mode|independent)/i);
+    assert.match(content, /(?:review every|every).*`?runner-managed`? plan/i);
+    assert.match(content, /fresh (?:Plan Mode|analysis-only|independent)/i);
     assert.match(content, /`OKAY`/);
     assert.match(content, /`APPROVE IMPLEMENTATION`/);
   }
@@ -1111,7 +1112,7 @@ test("plan creation and validation define atomic runner task savepoints", async 
 
   assert.match(validator, /old draft's long single-line task/i);
   assert.match(validator, /convert[\s\S]*structured fields/i);
-  assert.match(flowInstructions, /new or\s+`draft` runner-managed plans/i);
+  assert.match(workflowInstructions, /new or\s+`draft` runner-managed plans/i);
   assert.match(flowInstructions, /one bounded repair pass/i);
   assert.match(flowInstructions, /Atomization warning/i);
   assert.match(flowInstructions, /normal operator approval/i);
@@ -1211,7 +1212,7 @@ test("execute-plan allows narrow compatibility fixes for current-task contract c
   assert.match(executePrompt, /access\/security invariant/i);
   assert.match(
     executePrompt,
-    /add the exact file to both artifacts and continue/i,
+    /add the exact\s+file to both artifacts and continue/i,
   );
   assert.match(
     executePrompt,
@@ -4363,12 +4364,12 @@ test("non-review prompts use the shared terminal output contract", async () => {
   }
 
   assert.match(prompts[2], /\*\*Validation\*\*/);
-  assert.match(prompts[6], /single conventional-commit subject line/i);
+  assert.match(prompts[5], /single conventional-commit subject line/i);
   assert.match(
-    prompts[6],
+    prompts[5],
     /short user-facing summary list prefixed with `--`/i,
   );
-  assert.match(prompts[6], /do not include a branch line/i);
+  assert.match(prompts[5], /do not include a branch line/i);
 });
 
 test("native reasoning guidance describes analysis as shared instruction, not a missing skill", async () => {
@@ -5143,26 +5144,26 @@ test("review workflow prompt includes plan-scoped staged diff commands for plan-
     promptContent: "REVIEW CHANGES PROMPT",
     reviewStagingPaths: [
       ".ai/scripts/workflow/runner.ts",
-      ".ai/scripts/workflow/runner.test.ts",
+      ".ai/scripts/workflow/runner/__tests__/integration/runner.test.ts",
     ],
     reviewPrimaryPaths: [
       ".ai/scripts/workflow/runner.ts",
-      ".ai/scripts/workflow/runner.test.ts",
+      ".ai/scripts/workflow/runner/__tests__/integration/runner.test.ts",
     ],
   });
 
   assert.match(prompt, /Plan-scoped diff boundary:/);
   assert.match(
     prompt,
-    /git diff --staged --name-status -- \.ai\/scripts\/workflow\/runner\.ts \.ai\/scripts\/workflow\/runner\.test\.ts/,
+    /git diff --staged --name-status -- \.ai\/scripts\/workflow\/runner\.ts \.ai\/scripts\/workflow\/runner\/__tests__\/integration\/runner\.test\.ts/,
   );
   assert.match(
     prompt,
-    /git diff --staged --stat -- \.ai\/scripts\/workflow\/runner\.ts \.ai\/scripts\/workflow\/runner\.test\.ts/,
+    /git diff --staged --stat -- \.ai\/scripts\/workflow\/runner\.ts \.ai\/scripts\/workflow\/runner\/__tests__\/integration\/runner\.test\.ts/,
   );
   assert.match(
     prompt,
-    /git diff --staged -- \.ai\/scripts\/workflow\/runner\.ts \.ai\/scripts\/workflow\/runner\.test\.ts/,
+    /git diff --staged -- \.ai\/scripts\/workflow\/runner\.ts \.ai\/scripts\/workflow\/runner\/__tests__\/integration\/runner\.test\.ts/,
   );
   assert.doesNotMatch(
     prompt,
@@ -6165,7 +6166,7 @@ test("parsePlan accepts bounded thin-plan entries with matching artifact evidenc
       version: 1,
       summary: "Implementation finished.",
       evidence:
-        "rtk pnpm exec tsx --test-name-pattern thin-plan .ai/scripts/workflow/runner.test.ts",
+        "rtk pnpm exec tsx --test-name-pattern thin-plan .ai/scripts/workflow/runner/__tests__/integration/runner.test.ts",
     });
     await writePlan(
       workspace.root,
@@ -9403,11 +9404,11 @@ test(`${CODEX_EXEC_LABEL} uses prompt-tier model and reasoning policy`, async ()
     );
     assert.match(
       codexCalls[1].args[6],
-      /git diff --staged -- \.ai\/scripts\/workflow\/runner\.test\.ts \.ai\/scripts\/workflow\/runner\.ts/,
+      /git diff --staged -- \.ai\/scripts\/workflow\/runner\/__tests__\/integration\/runner\.test\.ts \.ai\/scripts\/workflow\/runner\.ts/,
     );
     assert.match(
       codexCalls[1].args[6],
-      /git diff --staged --name-status -- \.ai\/scripts\/workflow\/runner\.test\.ts \.ai\/scripts\/workflow\/runner\.ts/,
+      /git diff --staged --name-status -- \.ai\/scripts\/workflow\/runner\/__tests__\/integration\/runner\.test\.ts \.ai\/scripts\/workflow\/runner\.ts/,
     );
     assert.match(
       codexCalls[1].args[6],
@@ -13347,7 +13348,7 @@ test("logs are append-only and include required iteration and review staging fie
           return {
             launched: true,
             stdout: [
-              " M .ai/scripts/workflow/runner.test.ts",
+              " M .ai/scripts/workflow/runner/__tests__/integration/runner.test.ts",
               " M .ai/scripts/workflow/runner.ts",
             ].join("\n"),
             stderr: "",
@@ -13769,7 +13770,7 @@ test(`review staging git add runs before review ${CODEX_COMMAND}, unstages plan-
           return {
             launched: true,
             stdout: [
-              " M .ai/scripts/workflow/runner.test.ts",
+              " M .ai/scripts/workflow/runner/__tests__/integration/runner.test.ts",
               " M .ai/scripts/workflow/runner.ts",
             ].join("\n"),
             stderr: "",
@@ -13802,7 +13803,7 @@ test(`review staging git add runs before review ${CODEX_COMMAND}, unstages plan-
       "add",
       "--all",
       "--",
-      ".ai/scripts/workflow/runner.test.ts",
+      ".ai/scripts/workflow/runner/__tests__/integration/runner.test.ts",
       ".ai/scripts/workflow/runner.ts",
     ]);
     const log = await readFile(
@@ -14468,7 +14469,7 @@ test(`review ${CODEX_COMMAND} failure after staging unstages plan-owned files be
       "reset",
       "--quiet",
       "--",
-      ".ai/scripts/workflow/runner.test.ts",
+      ".ai/scripts/workflow/runner/__tests__/integration/runner.test.ts",
       ".ai/scripts/workflow/runner.ts",
     ]);
   } finally {
@@ -14492,7 +14493,7 @@ test("review cleanup failures write staging and cleanup command evidence to the 
           return {
             launched: true,
             stdout: [
-              " M .ai/scripts/workflow/runner.test.ts",
+              " M .ai/scripts/workflow/runner/__tests__/integration/runner.test.ts",
               " M .ai/scripts/workflow/runner.ts",
             ].join("\n"),
             stderr: "",
@@ -14510,7 +14511,7 @@ test("review cleanup failures write staging and cleanup command evidence to the 
             return {
               launched: true,
               stdout: [
-                ".ai/scripts/workflow/runner.test.ts",
+                ".ai/scripts/workflow/runner/__tests__/integration/runner.test.ts",
                 ".ai/scripts/workflow/runner.ts",
               ].join("\n"),
               stderr: "",

@@ -18,6 +18,9 @@ const createWorkspace = async ({ includeAi = true } = {}) => {
     await mkdir(join(root, ".ai", "scripts", "workflow", "config"), { recursive: true });
     await mkdir(join(root, ".ai", "scripts", "workflow", "contracts"), { recursive: true });
     await mkdir(join(root, ".ai", "scripts", "workflow", "runner"), { recursive: true });
+    await mkdir(join(root, ".ai", "scripts", "workflow", "runner", "__tests__", "integration"), {
+      recursive: true,
+    });
     await mkdir(join(root, ".ai", "scripts", "workflow", "telemetry"), { recursive: true });
     await mkdir(join(root, ".ai", "scripts", "workflow", "ownership"), { recursive: true });
     await mkdir(join(root, ".ai", "scripts", "maintenance"), { recursive: true });
@@ -32,7 +35,7 @@ const createWorkspace = async ({ includeAi = true } = {}) => {
     await writeFile(join(root, ".ai", "wrappers", "generate-user-flow.md"), "# Generate User Flow Wrapper\n");
     await Promise.all([
       "workflow/runner.ts",
-      "workflow/runner.test.ts",
+      "workflow/runner/__tests__/integration/runner.test.ts",
       "workflow/runner.spec.md",
       "workflow/config/codex.ts",
       "workflow/config/codex.test.ts",
@@ -117,7 +120,7 @@ test("--runner-tests includes workflow runner tests", async () => {
       (call) =>
         call.command === "pnpm" &&
         call.args.join(" ") ===
-          "exec tsx --test .ai/scripts/workflow/runner.test.ts .ai/scripts/workflow/config/codex.test.ts",
+          "exec tsx --test $(find .ai/scripts/workflow -type f -name '*.test.*' -print | sort)",
     ),
     true,
   );

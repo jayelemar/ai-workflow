@@ -14,7 +14,7 @@ workflow artifacts.
 - `.ai/artifacts/**`
 - `.ai/prompts/*.md`
 - `.ai/scripts/workflow/runner.ts`
-- `.ai/scripts/workflow/runner.test.ts`
+- `.ai/scripts/workflow/runner/__tests__/integration/runner.test.ts`
 - `.ai/templates/plan.template.md`
 - `.ai/wrappers/README.md`
 - `.ai/README.md`

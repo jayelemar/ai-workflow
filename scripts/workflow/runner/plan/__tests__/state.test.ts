@@ -9,16 +9,16 @@ import {
   extractSpecPaths,
   parsePlanTasks,
   validateTaskCommitBoundaries,
-} from "./parser.ts";
+} from "../parser.ts";
 import {
   generateWorkflowContextSnapshot,
   writeWorkflowContextSnapshot,
-} from "./context-snapshot.ts";
+} from "../context-snapshot.ts";
 import {
   generateScopeCleanupPrompt,
   generateWorkflowPrompt,
-} from "./prompt.ts";
-import { parsePlan } from "./state.ts";
+} from "../prompt.ts";
+import { parsePlan } from "../state.ts";
 
 type Workspace = {
   root: string;

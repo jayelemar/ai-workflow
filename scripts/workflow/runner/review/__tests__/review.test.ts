@@ -7,24 +7,24 @@ import test from "node:test";
 
 import {
   parseCommitSummaryPathsForPlan,
-} from "./commit.ts";
+} from "../commit.ts";
 import {
   parseReviewStagingPaths,
   runReviewStagingForPaths,
   stagedStatusHasMixedReviewPath,
-} from "./staging.ts";
+} from "../staging.ts";
 import {
   buildReviewScopeMetadata,
   runScopeCleanupForPathBatches,
   runScopeCleanupForPaths,
   selectReviewPrimaryPaths,
-} from "./scope.ts";
+} from "../scope.ts";
 import {
   WORKFLOW_REVIEW_FULL_DIFF_BYTE_LIMIT,
   WORKFLOW_REVIEW_PRIMARY_PATH_LIMIT,
-} from "../../telemetry/token-warnings.ts";
-import { WORKFLOW_RUNNER_CODEX_PROFILE } from "../../config/codex.ts";
-import type { ProcessRunner } from "../types.ts";
+} from "../../../telemetry/token-warnings.ts";
+import { WORKFLOW_RUNNER_CODEX_PROFILE } from "../../../config/codex.ts";
+import type { ProcessRunner } from "../../types.ts";
 
 type Workspace = {
   root: string;
@@ -68,7 +68,7 @@ ${nextAction}
 
 ### Created files
 
-* .ai/scripts/workflow/runner.test.ts
+* .ai/scripts/workflow/runner/__tests__/integration/runner.test.ts
 
 ### Modified files
 
