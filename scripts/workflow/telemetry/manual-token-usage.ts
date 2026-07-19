@@ -2,7 +2,7 @@ import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { tokenUsageLedgerRelativePath } from "./workflow-runner/token-ledger.ts";
+import { tokenUsageLedgerRelativePath } from "./token-ledger.ts";
 
 export type ManualTokenUsageStage = "spec" | "plan" | "execute";
 
@@ -674,7 +674,7 @@ export const runManualTokenUsageCli = async (
   const args = parseArgs(argv);
   if (!args.planName || !args.stage) {
     stderr.write(
-      "Usage: pnpm exec tsx .ai/scripts/manual-token-usage.ts --plan <plan-name> --stage <spec|plan|execute> [--session <session-id>] [--codex-home <path>] [--root-dir <path>]\n",
+      "Usage: pnpm exec tsx .ai/scripts/workflow/telemetry/manual-token-usage.ts --plan <plan-name> --stage <spec|plan|execute> [--session <session-id>] [--codex-home <path>] [--root-dir <path>]\n",
     );
     return 1;
   }

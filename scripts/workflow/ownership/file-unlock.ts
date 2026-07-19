@@ -2,7 +2,7 @@ import { readFile, readdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { workflowFileLockPath } from "./workflow-runner.ts";
+import { workflowFileLockDir, workflowFileLockPath } from "./file-locks.ts";
 
 type UnlockFailure = {
   ok: false;
@@ -29,7 +29,7 @@ type WorkflowFileLockMetadata = {
 };
 
 const WORKFLOW_FILE_UNLOCK_USAGE =
-  "Usage: pnpm exec tsx .ai/scripts/workflow-file-unlock.ts .ai/plans/<plan-name>.md [repo-relative-file-path]";
+  "Usage: pnpm exec tsx .ai/scripts/workflow/ownership/file-unlock.ts .ai/plans/<plan-name>.md [repo-relative-file-path]";
 const WORKFLOW_FILE_LOCK_STALE_AFTER_MS = 30 * 60_000;
 
 const shellQuote = (value: string): string => {
@@ -102,11 +102,8 @@ const defaultIsProcessAlive = (pid: number): boolean => {
   }
 };
 
-const workflowFileLockDir = (rootDir: string): string =>
-  path.join(rootDir, ".ai", "artifacts", "file-locks");
-
 export const workflowFileUnlockPathHint = (planPath: string): string =>
-  `run this on the terminal:\npnpm exec tsx .ai/scripts/workflow-file-unlock.ts ${shellQuote(planPath)}`;
+  `run this on the terminal:\npnpm workflow:unlock ${shellQuote(planPath)}`;
 
 export const unlockWorkflowFileLock = async ({
   rootDir,

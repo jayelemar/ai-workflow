@@ -10,8 +10,8 @@ import {
   unlockWorkflowFileLocksForPlan,
   unlockWorkflowFileLock,
   workflowFileUnlockPathHint,
-} from "./workflow-file-unlock.ts";
-import { workflowFileLockPath } from "./workflow-runner.ts";
+} from "./file-unlock.ts";
+import { workflowFileLockPath } from "./file-locks.ts";
 
 const setupWorkspace = async () => {
   const root = await mkdtemp(join(tmpdir(), "workflow-file-unlock-"));
@@ -37,6 +37,32 @@ const writeWorkflowFileLock = async (
   );
   return lockPath;
 };
+
+test("workflowFileLockPath keeps live locks outside plan artifacts", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    const lockPath = await writeWorkflowFileLock(
+      workspace.root,
+      "src/owned.ts",
+      {
+        planPath: ".ai/plans/active-plan.md",
+        pid: 2147483647,
+        createdAt: "2026-07-18T00:00:00.000Z",
+        path: "src/owned.ts",
+      },
+    );
+
+    await rm(join(workspace.root, ".ai", "artifacts", "active-plan"), {
+      recursive: true,
+      force: true,
+    });
+
+    assert.match(lockPath, /\.ai[\\/]workflow-state[\\/]file-locks[\\/]/);
+    assert.equal(existsSync(lockPath), true);
+  } finally {
+    await workspace.cleanup();
+  }
+});
 
 test("unlockWorkflowFileLock removes a stale same-plan lock", async () => {
   const workspace = await setupWorkspace();
@@ -238,6 +264,6 @@ test("runWorkflowFileUnlock unlocks all stale same-plan locks when only plan pat
 test("workflowFileUnlockPathHint prints the direct unlock command", () => {
   assert.equal(
     workflowFileUnlockPathHint(".ai/plans/current-plan.md"),
-    "run this on the terminal:\npnpm exec tsx .ai/scripts/workflow-file-unlock.ts .ai/plans/current-plan.md",
+    "run this on the terminal:\npnpm workflow:unlock .ai/plans/current-plan.md",
   );
 });

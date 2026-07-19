@@ -17,8 +17,30 @@ const REQUIRED_SOURCE_PATHS = [
   ".ai/wrappers/generate-user-flow.md",
   ".ai/templates",
   ".ai/scripts",
-  ".ai/scripts/workflow-runner.ts",
-  ".ai/scripts/workflow-runner.test.ts",
+  ".ai/scripts/workflow/runner.ts",
+  ".ai/scripts/workflow/runner.test.ts",
+  ".ai/scripts/workflow/runner.spec.md",
+  ".ai/scripts/workflow/config/codex.ts",
+  ".ai/scripts/workflow/config/codex.test.ts",
+  ".ai/scripts/workflow/contracts/stage.ts",
+  ".ai/scripts/workflow/contracts/stage.test.ts",
+  ".ai/scripts/workflow/runner/cli.ts",
+  ".ai/scripts/workflow/runner/instruction-router.ts",
+  ".ai/scripts/workflow/runner/instruction-router.test.ts",
+  ".ai/scripts/workflow/runner/thin-plan.ts",
+  ".ai/scripts/workflow/runner/runner.manual-plan.test.ts",
+  ".ai/scripts/workflow/telemetry/manual-token-usage.ts",
+  ".ai/scripts/workflow/telemetry/manual-token-usage.test.ts",
+  ".ai/scripts/workflow/telemetry/token-ledger.ts",
+  ".ai/scripts/workflow/telemetry/token-usage.ts",
+  ".ai/scripts/workflow/telemetry/token-warnings.ts",
+  ".ai/scripts/workflow/ownership/file-locks.ts",
+  ".ai/scripts/workflow/ownership/file-unlock.ts",
+  ".ai/scripts/workflow/ownership/file-unlock.test.ts",
+  ".ai/scripts/workflow/ownership/reset-file-ownership.mjs",
+  ".ai/scripts/workflow/ownership/reset-file-ownership.test.mjs",
+  ".ai/scripts/maintenance/health-check.mjs",
+  ".ai/scripts/maintenance/health-check.test.mjs",
 ];
 
 const LOCAL_ONLY_PATHS = [".ai/artifacts", ".ai/plans", ".ai/specs"];
@@ -42,7 +64,7 @@ const DEFAULT_COMMANDS = [
   {
     label: "workflow runner help",
     command: "pnpm",
-    args: ["exec", "tsx", ".ai/scripts/workflow-runner.ts", "--help"],
+    args: ["exec", "tsx", ".ai/scripts/workflow/runner.ts", "--help"],
   },
 ];
 
@@ -53,8 +75,22 @@ const RUNNER_TEST_COMMAND = {
     "exec",
     "tsx",
     "--test",
-    ".ai/scripts/workflow-runner.test.ts",
-    ".ai/scripts/workflow-runner/codex-config.test.ts",
+    ".ai/scripts/workflow/runner.test.ts",
+    ".ai/scripts/workflow/config/codex.test.ts",
+  ],
+};
+
+const FULL_WORKFLOW_TEST_COMMAND = {
+  label: "full workflow script tests",
+  command: "pnpm",
+  // `find` produces all nested target test paths. Paths are fixed internal
+  // source paths, not user-provided values.
+  shell: true,
+  args: [
+    "exec",
+    "tsx",
+    "--test",
+    "$(find .ai/scripts -type f -name '*.test.*' -print | sort)",
   ],
 };
 
@@ -86,11 +122,18 @@ const pathIsDirectory = async (path) => {
 
 const runCommand = (command) =>
   new Promise((resolve) => {
-    const child = spawn(command.command, command.args, {
-      cwd: command.cwd,
-      env: process.env,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+    const child = command.shell
+      ? spawn([command.command, ...command.args].join(" "), {
+          cwd: command.cwd,
+          env: process.env,
+          shell: true,
+          stdio: ["ignore", "pipe", "pipe"],
+        })
+      : spawn(command.command, command.args, {
+          cwd: command.cwd,
+          env: process.env,
+          stdio: ["ignore", "pipe", "pipe"],
+        });
     let stdout = "";
     let stderr = "";
 
@@ -111,17 +154,21 @@ const runCommand = (command) =>
   });
 
 export const parseHealthCheckArgs = (args) => {
-  const options = { runnerTests: false };
+  const options = { runnerTests: false, full: false };
 
   for (const arg of args) {
-    if (arg === "--runner-tests" || arg === "--full") {
+    if (arg === "--runner-tests") {
       options.runnerTests = true;
       continue;
     }
-    if (arg === "-h" || arg === "--help") {
-      return { help: true, runnerTests: false };
+    if (arg === "--full") {
+      options.full = true;
+      continue;
     }
-    return { error: `Unknown option: ${arg}`, runnerTests: false };
+    if (arg === "-h" || arg === "--help") {
+      return { help: true, runnerTests: false, full: false };
+    }
+    return { error: `Unknown option: ${arg}`, runnerTests: false, full: false };
   }
 
   return options;
@@ -179,13 +226,13 @@ export const runHealthCheck = async ({
   const options = parseHealthCheckArgs(args);
 
   if (options.help) {
-    stdout(`Usage: node .ai/scripts/health-check.mjs [--runner-tests|--full]
+    stdout(`Usage: node .ai/scripts/maintenance/health-check.mjs [--runner-tests|--full]
 
 Checks the private .ai workflow source from the parent repository root.
 
 Options:
-  --runner-tests  Include .ai/scripts/workflow-runner.test.ts
-  --full          Alias for default checks plus --runner-tests`);
+  --runner-tests  Include workflow runner tests
+  --full          Run the complete workflow test command`);
     return { ok: true };
   }
 
@@ -235,7 +282,11 @@ Options:
     }
   }
 
-  const commands = options.runnerTests ? [...DEFAULT_COMMANDS, RUNNER_TEST_COMMAND] : DEFAULT_COMMANDS;
+  const commands = options.full
+    ? [...DEFAULT_COMMANDS, FULL_WORKFLOW_TEST_COMMAND]
+    : options.runnerTests
+      ? [...DEFAULT_COMMANDS, RUNNER_TEST_COMMAND]
+      : DEFAULT_COMMANDS;
 
   for (const command of commands) {
     if (!(await runStepCommand({ label: command.label, command, cwd, runner, stderr }))) {

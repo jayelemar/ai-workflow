@@ -15,7 +15,12 @@ const createWorkspace = async ({ includeAi = true } = {}) => {
     await mkdir(join(root, ".ai", "wrappers"), { recursive: true });
     await mkdir(join(root, ".ai", "prompts"), { recursive: true });
     await mkdir(join(root, ".ai", "templates"), { recursive: true });
-    await mkdir(join(root, ".ai", "scripts"), { recursive: true });
+    await mkdir(join(root, ".ai", "scripts", "workflow", "config"), { recursive: true });
+    await mkdir(join(root, ".ai", "scripts", "workflow", "contracts"), { recursive: true });
+    await mkdir(join(root, ".ai", "scripts", "workflow", "runner"), { recursive: true });
+    await mkdir(join(root, ".ai", "scripts", "workflow", "telemetry"), { recursive: true });
+    await mkdir(join(root, ".ai", "scripts", "workflow", "ownership"), { recursive: true });
+    await mkdir(join(root, ".ai", "scripts", "maintenance"), { recursive: true });
     await mkdir(join(root, ".ai", "artifacts"), { recursive: true });
     await mkdir(join(root, ".ai", "plans"), { recursive: true });
     await mkdir(join(root, ".ai", "specs"), { recursive: true });
@@ -25,8 +30,34 @@ const createWorkspace = async ({ includeAi = true } = {}) => {
     await writeFile(join(root, ".ai", ".gitignore"), "*\n");
     await writeFile(join(root, ".ai", "prompts", "generate-user-flow.md"), "# Generate User Flow\n");
     await writeFile(join(root, ".ai", "wrappers", "generate-user-flow.md"), "# Generate User Flow Wrapper\n");
-    await writeFile(join(root, ".ai", "scripts", "workflow-runner.ts"), "export {};\n");
-    await writeFile(join(root, ".ai", "scripts", "workflow-runner.test.ts"), "export {};\n");
+    await Promise.all([
+      "workflow/runner.ts",
+      "workflow/runner.test.ts",
+      "workflow/runner.spec.md",
+      "workflow/config/codex.ts",
+      "workflow/config/codex.test.ts",
+      "workflow/contracts/stage.ts",
+      "workflow/contracts/stage.test.ts",
+      "workflow/runner/cli.ts",
+      "workflow/runner/instruction-router.ts",
+      "workflow/runner/instruction-router.test.ts",
+      "workflow/runner/thin-plan.ts",
+      "workflow/runner/runner.manual-plan.test.ts",
+      "workflow/telemetry/manual-token-usage.ts",
+      "workflow/telemetry/manual-token-usage.test.ts",
+      "workflow/telemetry/token-ledger.ts",
+      "workflow/telemetry/token-usage.ts",
+      "workflow/telemetry/token-warnings.ts",
+      "workflow/ownership/file-locks.ts",
+      "workflow/ownership/file-unlock.ts",
+      "workflow/ownership/file-unlock.test.ts",
+      "workflow/ownership/reset-file-ownership.mjs",
+      "workflow/ownership/reset-file-ownership.test.mjs",
+      "maintenance/health-check.mjs",
+      "maintenance/health-check.test.mjs",
+    ].map((relativePath) =>
+      writeFile(join(root, ".ai", "scripts", relativePath), "export {};\n"),
+    ));
   }
 
   return {
@@ -60,13 +91,13 @@ const runWith = async ({ args = [], runner = successfulRunner([]), includeAi = t
   }
 };
 
-test("parseHealthCheckArgs treats --full as default plus runner tests", () => {
-  assert.deepEqual(parseHealthCheckArgs([]), { runnerTests: false });
-  assert.deepEqual(parseHealthCheckArgs(["--runner-tests"]), { runnerTests: true });
-  assert.deepEqual(parseHealthCheckArgs(["--full"]), { runnerTests: true });
+test("parseHealthCheckArgs keeps --full distinct from the runner-test subset", () => {
+  assert.deepEqual(parseHealthCheckArgs([]), { runnerTests: false, full: false });
+  assert.deepEqual(parseHealthCheckArgs(["--runner-tests"]), { runnerTests: true, full: false });
+  assert.deepEqual(parseHealthCheckArgs(["--full"]), { runnerTests: false, full: true });
 });
 
-test("default mode skips workflow-runner tests", async () => {
+test("default mode skips workflow runner tests", async () => {
   const calls = [];
 
   const { result } = await runWith({ runner: successfulRunner(calls) });
@@ -78,7 +109,7 @@ test("default mode skips workflow-runner tests", async () => {
   );
 });
 
-test("--runner-tests includes workflow-runner tests", async () => {
+test("--runner-tests includes workflow runner tests", async () => {
   const calls = [];
 
   const { result } = await runWith({ args: ["--runner-tests"], runner: successfulRunner(calls) });
@@ -89,13 +120,13 @@ test("--runner-tests includes workflow-runner tests", async () => {
       (call) =>
         call.command === "pnpm" &&
         call.args.join(" ") ===
-          "exec tsx --test .ai/scripts/workflow-runner.test.ts .ai/scripts/workflow-runner/codex-config.test.ts",
+          "exec tsx --test .ai/scripts/workflow/runner.test.ts .ai/scripts/workflow/config/codex.test.ts",
     ),
     true,
   );
 });
 
-test("--full includes workflow-runner tests", async () => {
+test("--full includes every workflow-script test pattern", async () => {
   const calls = [];
 
   const { result } = await runWith({ args: ["--full"], runner: successfulRunner(calls) });
@@ -105,7 +136,8 @@ test("--full includes workflow-runner tests", async () => {
     calls.some(
       (call) =>
         call.args.join(" ") ===
-        "exec tsx --test .ai/scripts/workflow-runner.test.ts .ai/scripts/workflow-runner/codex-config.test.ts",
+          "exec tsx --test $(find .ai/scripts -type f -name '*.test.*' -print | sort)" &&
+        call.shell === true,
     ),
     true,
   );

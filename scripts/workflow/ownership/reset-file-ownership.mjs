@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const USAGE =
-  "Usage: node .ai/scripts/reset-file-ownership.mjs .ai/plans/<plan-name>.md --force";
+  "Usage: node .ai/scripts/workflow/ownership/reset-file-ownership.mjs .ai/plans/<plan-name>.md --force";
 
 const okPlanPath = (planPath) =>
   typeof planPath === "string" &&

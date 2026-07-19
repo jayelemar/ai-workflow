@@ -5,7 +5,7 @@ import {
   codexCapacityFallbackConfig,
   codexExecutionConfig,
   WORKFLOW_RUNNER_CODEX_FALLBACK_MODEL,
-} from "./codex-config.ts";
+} from "./codex.ts";
 
 test("Codex routing selects the configured model and reasoning for every workflow stage", () => {
   assert.deepEqual(codexExecutionConfig(".ai/prompts/execute-plan.md"), {
