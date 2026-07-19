@@ -27,7 +27,6 @@ export { analyzeTokenUsageLedger } from "../../telemetry/token-ledger.ts";
 import {
   collectWorkflowThresholdWarnings,
   decideWorkflowAutoNarrow,
-  exceedsWorkflowTokenThresholds,
 } from "../../telemetry/token-warnings.ts";
 import {
   CODEX_SELECTED_MODEL_CAPACITY_FALLBACK_ATTEMPTS,
@@ -46,7 +45,7 @@ import { classifyFailureForLog, codexOutputStopReason, createCodexLiveOutputForm
 import { compactCapturedOutputForLog, createWorkflowWaitNotice, formatCommitProgressLine, formatEditedFilesForLog, formatEditedFilesForTerminal, formatTaskCompletedProgressLine, formatWorkflowElapsedTime, formatWorkflowOwnershipResetHint, formatWorkflowProgressLine, supportsWorkflowAnsiColor } from "../terminal/formatters.ts";
 import { parsePlanTasks, parseTaskCommitBoundaries, taskCommitBoundaryCount, validateTaskCommitBoundaries } from "../plan/parser.ts";
 import { writeWorkflowContextSnapshot } from "../plan/context-snapshot.ts";
-import { generateWorkflowPrompt, isReviewPrompt, isWorkflowTokenGuardedPrompt, readPrompt, shellQuote } from "../plan/prompt.ts";
+import { generateWorkflowPrompt, isReviewPrompt, readPrompt } from "../plan/prompt.ts";
 import { normalizeWorkflowEventHistory, parsePlan, parseThinPlanV2WorkflowState, preflightManualPlanExecutionMode, readJsonArtifact, recoverThinPlanV2BlockedValidationHandoff, recoverThinPlanV2PartialExecuteReviewHandoff, repairThinPlanV2ManifestStateFromWorkflow, thinPlanV2ArtifactPath } from "../plan/state.ts";
 import { completedTaskCommitCount, currentTaskArtifactRelativePath, formatTaskProgressLine, nextIncompleteTask, nextTaskAfter, nextTaskArtifactRelativePath, readHeadTaskCommit, readableTaskLabel, readableTaskProgressDescription, readTaskArtifactStage, readTaskCommitRecoveryParent, writeCurrentTaskPointer, writeTaskArtifact, writeTaskStageArtifact } from "../tasks/savepoints.ts";
 import { extractCommitSummarySubject, extractSummaryLines, readCompletedTaskSavepoints, writeBossSummary, writeExecutionSummary } from "../tasks/summaries.ts";
@@ -58,74 +57,20 @@ import { protectedBranchPreflight, workflowHeadSha } from "./preflight.ts";
 import { appendLog } from "./logging.ts";
 import { replacePlanSectionValue } from "./recovery.ts";
 import { createZeroTokenUsageTotals } from "./telemetry.ts";
-import type { CommitProgress, ConsoleLike, EditedFileSnapshot, EditedFileSummary, Failure, FileOwnershipArtifact, FileOwnershipPreflight, NextAction, OutputStream, ParsedPlan, ProcessResult, ProcessRunner, ReviewCleanupProcess, ReviewScopeMetadata, ReviewStagingProcess, RunnerResult, Status, TaskStage, TokenUsageTotals, WorkflowContextSnapshotResult, WorkflowContextSnapshotTokenUsage, WorkflowFailureDebugRecord, WorkflowTaskContext, WorkflowTokenGuardrail } from "../types.ts";
+import { addTokenUsageToTotals, appendFailureDebugLedger, appendTokenUsageLedger, readLatestTokenUsage, readTokenUsageTotals, readWorkflowTokenGuardrail, tokenUsageLedgerRelativePath } from "./records.ts";
+import { blockedPlanDetail, blockedReasonSummary } from "./outcomes.ts";
+import { parseEditedFileSummaryPaths, readEditedFileSnapshot, summarizeEditedFiles } from "./iteration.ts";
+import { defaultConsole, failure, MAX_WORKFLOW_ITERATIONS, success, type RunWorkflowOptions, WORKFLOW_RUNNER_USAGE, workflowFileOwnershipResetPathHint } from "./lifecycle.ts";
+import type { CommitProgress, EditedFileSummary, Failure, FileOwnershipArtifact, FileOwnershipPreflight, NextAction, ParsedPlan, ProcessResult, ProcessRunner, ReviewCleanupProcess, ReviewScopeMetadata, ReviewStagingProcess, RunnerResult, Status, TaskStage, TokenUsageTotals, WorkflowContextSnapshotResult, WorkflowTaskContext } from "../types.ts";
 import {
   asRecord,
   boundedInlineExcerpt,
   isFailure,
-  isFiniteNumber,
-  toDisplayString,
 } from "../types.ts";
-
-const MAX_ITERATIONS = 100;
-const WORKFLOW_RUNNER_USAGE = `Usage: pnpm exec tsx .ai/scripts/workflow/runner.ts [options] .ai/plans/<plan-name>.md
-
-Options:
-  --profile <name>       Use a Codex profile override
-  --unblock-note <text>  Add operator context for unblock-plan
-  -h, --help             Show this help message`;
 
 const rel = (...segments: string[]) => segments.join("/");
 
-const workflowFileOwnershipResetPathHint = (reason: string): string | null => {
-  const match =
-    /workflow file ownership conflict: .+ is already owned by (?<planPath>\.ai\/plans\/[^\s)]+\.md)/.exec(
-      reason,
-    );
-  const planPath = match?.groups?.planPath;
-  return planPath
-    ? `- Ownership reset command: rtk node .ai/scripts/workflow/ownership/reset-file-ownership.mjs ${shellQuote(planPath)} --force`
-    : null;
-};
-
-type RunWorkflowOptions = {
-  argv?: string[];
-  planName?: string;
-  rootDir?: string;
-  console?: ConsoleLike;
-  codexProfile?: string;
-  unblockNote?: string;
-  processRunner?: ProcessRunner;
-  now?: () => number;
-  timestamp?: () => string;
-  streamOutput?: boolean;
-  outputStream?: OutputStream;
-  abortSignal?: AbortSignal;
-  interruptSignal?: () => NodeJS.Signals | undefined;
-  isIgnored?: (relativePath: string) => Promise<boolean>;
-};
-
 type TokenUsageLedgerResult = "success" | "failed" | "interrupted";
-
-const defaultConsole: ConsoleLike = console;
-
-const failure = (
-  reason: string,
-  iterations = 0,
-  exitCode = 1,
-): RunnerResult => ({
-  success: false,
-  reason,
-  iterations,
-  exitCode,
-});
-
-const success = (reason: string, iterations: number): RunnerResult => ({
-  success: true,
-  reason,
-  iterations,
-  exitCode: 0,
-});
 
 const gitHeadShortSha = async (
   rootDir: string,
@@ -716,436 +661,6 @@ const recoverThinPlanV2ExecuteHandoff = async ({
   }
 
   return { ok: true, recovered: true };
-};
-
-const failureDebugLedgerRelativePath = (planName: string): string =>
-  rel(".ai", "artifacts", planName, "logs", "failure.jsonl");
-
-const failureDebugLedgerAbsolutePath = (
-  rootDir: string,
-  planName: string,
-): string => path.join(rootDir, failureDebugLedgerRelativePath(planName));
-
-const appendFailureDebugLedger = async (
-  rootDir: string,
-  planName: string,
-  entry: WorkflowFailureDebugRecord,
-): Promise<{ ok: true; pointer: string } | Failure> => {
-  const logPath = failureDebugLedgerAbsolutePath(rootDir, planName);
-  let existingLineCount = 0;
-
-  try {
-    const existing = await readFile(logPath, "utf8");
-    existingLineCount = existing.split(/\r?\n/).filter(Boolean).length;
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code !== "ENOENT") {
-      return {
-        ok: false,
-        reason: `workflow failure debug log cannot be read: ${String(error)}`,
-      };
-    }
-  }
-
-  try {
-    await mkdir(path.dirname(logPath), { recursive: true });
-    await writeFile(logPath, `${JSON.stringify(entry)}\n`, { flag: "a" });
-    return {
-      ok: true,
-      pointer: `${failureDebugLedgerRelativePath(planName)}#L${existingLineCount + 1}`,
-    };
-  } catch (error) {
-    return {
-      ok: false,
-      reason: `workflow failure debug log cannot be created or appended: ${String(error)}`,
-    };
-  }
-};
-
-const tokenUsageLedgerRelativePath = (planName: string): string =>
-  rel(".ai", "artifacts", planName, "logs", "token-usage.jsonl");
-
-const tokenUsageLedgerAbsolutePath = (
-  rootDir: string,
-  planName: string,
-): string => path.join(rootDir, tokenUsageLedgerRelativePath(planName));
-
-const tokenUsageTotalsFromRecord = (
-  record: Record<string, unknown>,
-): TokenUsageTotals | undefined => {
-  const totals = {
-    inputTokens: record.inputTokens,
-    cachedInputTokens: record.cachedInputTokens,
-    uncachedInputTokens: record.uncachedInputTokens,
-    outputTokens: record.outputTokens,
-    reasoningOutputTokens: record.reasoningOutputTokens,
-    totalTokens: record.totalTokens,
-  };
-  return Object.values(totals).every(
-    (value) => isFiniteNumber(value) && value >= 0,
-  )
-    ? (totals as TokenUsageTotals)
-    : undefined;
-};
-
-const readTokenUsageTotals = async (
-  rootDir: string,
-  planName: string,
-): Promise<TokenUsageTotals> => {
-  try {
-    const content = await readFile(
-      tokenUsageLedgerAbsolutePath(rootDir, planName),
-      "utf8",
-    );
-    const lines = content.trim().split(/\r?\n/).filter(Boolean).reverse();
-    for (const line of lines) {
-      try {
-        const parsed = asRecord(JSON.parse(line));
-        if (!parsed) {
-          continue;
-        }
-        const totals = tokenUsageTotalsFromRecord(parsed);
-        if (totals) {
-          return totals;
-        }
-      } catch {
-        continue;
-      }
-    }
-  } catch {
-    return createZeroTokenUsageTotals();
-  }
-  return createZeroTokenUsageTotals();
-};
-
-const toWorkflowContextSnapshotTokenUsage = (
-  record: Record<string, unknown>,
-): WorkflowContextSnapshotTokenUsage => ({
-  iteration: isFiniteNumber(record.iteration) ? record.iteration : undefined,
-  promptPath: toDisplayString(record.promptPath),
-  model: toDisplayString(record.model),
-  reasoning: toDisplayString(record.reasoning),
-  stageInputTokens: isFiniteNumber(record.stageInputTokens)
-    ? record.stageInputTokens
-    : null,
-  stageCachedInputTokens: isFiniteNumber(record.stageCachedInputTokens)
-    ? record.stageCachedInputTokens
-    : null,
-  stageUncachedInputTokens: isFiniteNumber(record.stageUncachedInputTokens)
-    ? record.stageUncachedInputTokens
-    : null,
-  stageOutputTokens: isFiniteNumber(record.stageOutputTokens)
-    ? record.stageOutputTokens
-    : null,
-  stageReasoningOutputTokens: isFiniteNumber(record.stageReasoningOutputTokens)
-    ? record.stageReasoningOutputTokens
-    : null,
-  stageTotalTokens: isFiniteNumber(record.stageTotalTokens)
-    ? record.stageTotalTokens
-    : null,
-  totalTokens: isFiniteNumber(record.totalTokens) ? record.totalTokens : null,
-});
-
-const readLatestTokenUsage = async (
-  rootDir: string,
-  planName: string,
-): Promise<WorkflowContextSnapshotTokenUsage | undefined> => {
-  try {
-    const content = await readFile(
-      tokenUsageLedgerAbsolutePath(rootDir, planName),
-      "utf8",
-    );
-    const lines = content.trim().split(/\r?\n/).filter(Boolean);
-    const latestLine = lines.at(-1);
-    if (!latestLine) {
-      return undefined;
-    }
-    try {
-      const parsed = asRecord(JSON.parse(latestLine));
-      return parsed ? toWorkflowContextSnapshotTokenUsage(parsed) : undefined;
-    } catch {
-      return undefined;
-    }
-  } catch {
-    return undefined;
-  }
-};
-
-const readWorkflowTokenGuardrail = async ({
-  rootDir,
-  planName,
-  promptPath,
-}: {
-  rootDir: string;
-  planName: string;
-  promptPath: string;
-}): Promise<WorkflowTokenGuardrail | undefined> => {
-  if (!isWorkflowTokenGuardedPrompt(promptPath)) {
-    return undefined;
-  }
-
-  const latestTokenUsage = await readLatestTokenUsage(rootDir, planName);
-  if (!exceedsWorkflowTokenThresholds(latestTokenUsage)) {
-    return undefined;
-  }
-
-  return {
-    stageInputTokens: latestTokenUsage?.stageInputTokens,
-    stageUncachedInputTokens: latestTokenUsage?.stageUncachedInputTokens,
-  };
-};
-
-const addTokenUsageToTotals = (
-  totals: TokenUsageTotals,
-  usage: CodexTokenUsage,
-): TokenUsageTotals => {
-  if (!usage.usageAvailable) {
-    return totals;
-  }
-  return {
-    inputTokens: totals.inputTokens + (usage.inputTokens ?? 0),
-    cachedInputTokens:
-      totals.cachedInputTokens + (usage.cachedInputTokens ?? 0),
-    uncachedInputTokens:
-      totals.uncachedInputTokens + (usage.uncachedInputTokens ?? 0),
-    outputTokens: totals.outputTokens + (usage.outputTokens ?? 0),
-    reasoningOutputTokens:
-      totals.reasoningOutputTokens + (usage.reasoningOutputTokens ?? 0),
-    totalTokens: totals.totalTokens + (usage.totalTokens ?? 0),
-  };
-};
-
-const appendTokenUsageLedger = async (
-  rootDir: string,
-  planName: string,
-  entry: Record<string, unknown>,
-): Promise<{ ok: true } | Failure> => {
-  try {
-    await mkdir(path.dirname(tokenUsageLedgerAbsolutePath(rootDir, planName)), {
-      recursive: true,
-    });
-    await writeFile(
-      tokenUsageLedgerAbsolutePath(rootDir, planName),
-      `${JSON.stringify(entry)}\n`,
-      {
-        flag: "a",
-      },
-    );
-    return { ok: true };
-  } catch (error) {
-    return {
-      ok: false,
-      reason: `token usage ledger cannot be created or appended: ${String(error)}`,
-    };
-  }
-};
-
-const sectionLines = (content: string, heading: string): string[] | null => {
-  const lines = content.split(/\r?\n/);
-  const start = lines.findIndex((line) => line.trim() === heading);
-  if (start === -1) {
-    return null;
-  }
-  const collected: string[] = [];
-  for (const line of lines.slice(start + 1)) {
-    if (line.trim().startsWith("## ")) {
-      break;
-    }
-    collected.push(line);
-  }
-  return collected;
-};
-
-const extractLatestUnresolvedBlockerDetail = (
-  content: string,
-): string | undefined => {
-  const lines = sectionLines(content, "## Blockers");
-  if (lines === null) {
-    return undefined;
-  }
-
-  const blockerSections: Array<{ heading: string; lines: string[] }> = [];
-  let current: { heading: string; lines: string[] } | undefined;
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (/^###\s+Blocker\b/i.test(trimmed)) {
-      current = { heading: trimmed, lines: [] };
-      blockerSections.push(current);
-      continue;
-    }
-    current?.lines.push(line);
-  }
-
-  const sections =
-    blockerSections.length > 0
-      ? blockerSections
-      : [{ heading: "## Blockers", lines }];
-  for (const blocker of sections.slice().reverse()) {
-    const resolved =
-      /\bresolved\b/i.test(blocker.heading) ||
-      blocker.lines.some((line) =>
-        /^\*\s*Status:\s*resolved\b/i.test(line.trim()),
-      );
-    if (resolved) {
-      continue;
-    }
-
-    const values = new Map<string, string>();
-    for (const line of blocker.lines) {
-      const match = line
-        .trim()
-        .match(/^\*\s*(Description|Required Action|Next Step):\s*(.+)$/i);
-      if (match) {
-        values.set(match[1].toLowerCase(), match[2]);
-      }
-    }
-    for (const field of ["description", "required action", "next step"]) {
-      const value = values.get(field);
-      const excerpt = value ? boundedInlineExcerpt(value) : undefined;
-      if (excerpt) {
-        return excerpt;
-      }
-    }
-  }
-
-  return undefined;
-};
-
-const hasBrowserValidationBlockerSignal = (content: string): boolean => {
-  const lines = sectionLines(content, "## Blockers");
-  if (lines === null) {
-    return false;
-  }
-  return /\b(browser|manual|viewport|devtools|computed-style|computed style)\b/i.test(
-    lines.join("\n"),
-  );
-};
-
-const simplifyBrowserValidationDetail = (detail: string): string =>
-  detail
-    .replace(/^mandatory\s+/i, "")
-    .replace(/^browser validation cannot be performed because\s+/i, "")
-    .replace(/^validation cannot be performed because\s+/i, "")
-    .replace(/\.$/, "")
-    .trim();
-
-const blockedPlanDetail = (content: string): string => {
-  const detail =
-    extractLatestUnresolvedBlockerDetail(content) ??
-    "Plan needs unblock evidence before execution can continue";
-  if (
-    !hasBrowserValidationBlockerSignal(content) ||
-    /^browser validation:/i.test(detail)
-  ) {
-    return detail;
-  }
-  return `Browser validation: ${simplifyBrowserValidationDetail(detail)}`;
-};
-
-const blockedReasonSummary = (
-  detail: string,
-): { category: string; detail: string } => {
-  const browserPrefix = "Browser validation:";
-  if (detail.toLowerCase().startsWith(browserPrefix.toLowerCase())) {
-    return {
-      category: "BROWSER VALIDATION",
-      detail: detail.slice(browserPrefix.length).trim(),
-    };
-  }
-  return {
-    category: "BLOCKED",
-    detail,
-  };
-};
-const uniquePaths = (paths: string[]): string[] => [...new Set(paths)];
-
-const parseEditedFileSummaryPaths = async (
-  rootDir: string,
-  content: string,
-): Promise<string[]> => {
-  const parsed = await parseReviewStagingPaths({
-    content,
-    rootDir,
-    isIgnored: async () => false,
-  });
-  return parsed.ok ? uniquePaths(parsed.paths) : [];
-};
-
-const readEditedFileSnapshot = async (
-  rootDir: string,
-  paths: string[],
-): Promise<EditedFileSnapshot> => {
-  const snapshot: EditedFileSnapshot = new Map();
-  for (const relativePath of paths) {
-    try {
-      snapshot.set(
-        relativePath,
-        await readFile(path.join(rootDir, relativePath), "utf8"),
-      );
-    } catch {
-      snapshot.set(relativePath, undefined);
-    }
-  }
-  return snapshot;
-};
-
-const splitDiffLines = (content: string | undefined): string[] => {
-  if (content === undefined || content.length === 0) {
-    return [];
-  }
-  return content.replace(/\r\n/g, "\n").replace(/\n$/, "").split("\n");
-};
-
-const commonLineCount = (
-  beforeLines: string[],
-  afterLines: string[],
-): number => {
-  const previous = new Array(afterLines.length + 1).fill(0);
-  const current = new Array(afterLines.length + 1).fill(0);
-  for (const beforeLine of beforeLines) {
-    for (let index = 0; index < afterLines.length; index += 1) {
-      current[index + 1] =
-        beforeLine === afterLines[index]
-          ? previous[index] + 1
-          : Math.max(previous[index + 1], current[index]);
-    }
-    previous.splice(0, previous.length, ...current);
-    current.fill(0);
-  }
-  return previous[afterLines.length] ?? 0;
-};
-
-const summarizeEditedFiles = async (
-  rootDir: string,
-  beforeSnapshot: EditedFileSnapshot,
-): Promise<EditedFileSummary[]> => {
-  const summaries: EditedFileSummary[] = [];
-  for (const [relativePath, beforeContent] of beforeSnapshot) {
-    let afterContent: string | undefined;
-    try {
-      afterContent = await readFile(path.join(rootDir, relativePath), "utf8");
-    } catch {
-      afterContent = undefined;
-    }
-    if (beforeContent === afterContent) {
-      continue;
-    }
-    const beforeLines = splitDiffLines(beforeContent);
-    const afterLines = splitDiffLines(afterContent);
-    const commonLines = commonLineCount(beforeLines, afterLines);
-    summaries.push({
-      action:
-        beforeContent === undefined
-          ? "Added"
-          : afterContent === undefined
-            ? "Deleted"
-            : "Edited",
-      path: relativePath,
-      additions: afterLines.length - commonLines,
-      deletions: beforeLines.length - commonLines,
-    });
-  }
-  return summaries;
 };
 
 const logFields = ({
@@ -1791,8 +1306,8 @@ export const runWorkflowRunner = async (
       return { ok: true };
     };
     const startingHeadSha = await workflowHeadSha(rootDir, processRunner);
-    if (iterations >= MAX_ITERATIONS) {
-      const reason = `maximum iterations ${MAX_ITERATIONS} reached`;
+    if (iterations >= MAX_WORKFLOW_ITERATIONS) {
+      const reason = `maximum iterations ${MAX_WORKFLOW_ITERATIONS} reached`;
       const logTimestamp = timestamp();
       const failureMetadata = classifyFailureForLog(reason);
       const failureDebugResult = await appendFailureDebugLedger(
@@ -1870,7 +1385,7 @@ export const runWorkflowRunner = async (
       logger.log(
         formatWorkflowProgressLine({
           iteration: iterations,
-          maxIterations: MAX_ITERATIONS,
+          maxIterations: MAX_WORKFLOW_ITERATIONS,
           status: parsedPlan.status,
           nextAction: parsedPlan.nextAction,
           promptPath: route.promptPath,

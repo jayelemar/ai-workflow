@@ -585,13 +585,17 @@ If follow-up stages lose context:
 - avoid broad `.ai/artifacts/**` reads unless you are debugging the current
   plan
 
-## Next Workflow Optimization
+## Workflow Optimization Priorities
+
+The executable façade remains `.ai/scripts/workflow/runner.ts`. Runtime
+lifecycle, terminal formatting, ownership, review, telemetry, and task
+savepoint concerns live behind focused workflow modules.
 
 Current priority:
 
-- token pathology reduction in `.ai/scripts/workflow/runner.ts`
+- token pathology reduction across workflow stages
 
-Prioritize these before runner module splitting:
+Prioritize:
 
 - improve token-warning diagnostics. If the plan is small but stage input
   tokens are huge, identify likely stage/context/tool-output growth without
@@ -606,12 +610,6 @@ Prioritize these before runner module splitting:
   for needed evidence, and avoid broad `.ai/artifacts/**` reads
 - split long execute/review stages earlier when cached input grows excessively,
   even when the plan is already thin
-
-Secondary priority:
-
-- runner module split: move snapshot generation, artifact validation,
-  token-warning logic, and CLI parsing into focused modules so
-  `.ai/scripts/workflow/runner.ts` stays easier to test and review
 
 Manual cleanup:
 

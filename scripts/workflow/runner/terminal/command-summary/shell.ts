@@ -1,5 +1,13 @@
 import path from "node:path";
 import type { CommandTerminalSummary, FailedTestCommandSummary } from "../../types.ts";
+import {
+  summarizeJestRunCommand,
+  summarizeVitestRunCommand,
+} from "./test-runs.ts";
+import {
+  summarizeGitDiffCommand,
+  summarizeStagedGitShowPipeline,
+} from "./git.ts";
 
 const TERMINAL_FILE_DETAIL_LIMIT = 3;
 
@@ -455,72 +463,6 @@ const commandOptionValue = (
 const commandTestFiles = (tokens: string[]): string[] =>
   tokens.filter((token) => looksLikeExplicitTestFile(token));
 
-const summarizeVitestRunCommand = (
-  tokens: string[],
-): CommandTerminalSummary | null => {
-  const vitestIndex = tokens.indexOf("vitest");
-  if (vitestIndex < 0 || tokens[vitestIndex + 1] !== "run") {
-    return null;
-  }
-
-  const files = tokens
-    .slice(vitestIndex + 2)
-    .filter(
-      (token) =>
-        token !== "--" &&
-        !token.startsWith("-") &&
-        looksLikeExplicitTestFile(token),
-    );
-
-  if (files.length === 0) {
-    return null;
-  }
-
-  return {
-    group: "Ran",
-    description: "tests",
-    files,
-  };
-};
-
-const summarizeJestRunCommand = (
-  tokens: string[],
-): CommandTerminalSummary | null => {
-  const jestIndex = tokens.indexOf("jest");
-  if (jestIndex < 0) {
-    return null;
-  }
-
-  const runTestsByPathIndex = tokens.indexOf("--runTestsByPath");
-  if (runTestsByPathIndex < 0) {
-    return null;
-  }
-
-  const files: string[] = [];
-  for (let index = runTestsByPathIndex + 1; index < tokens.length; index += 1) {
-    const token = tokens[index] ?? "";
-    if (token === "--") {
-      continue;
-    }
-    if (token.startsWith("-")) {
-      break;
-    }
-    if (looksLikeExplicitTestFile(token)) {
-      files.push(token);
-    }
-  }
-
-  if (files.length === 0) {
-    return null;
-  }
-
-  return {
-    group: "Ran",
-    description: "tests",
-    files,
-  };
-};
-
 const summarizeLineCountCommand = (
   tokens: string[],
 ): CommandTerminalSummary | null => {
@@ -609,118 +551,6 @@ const summarizeFilteredPnpmCommand = (
     description,
     files: files.length > 0 ? files : undefined,
   };
-};
-
-const summarizeGitDiffCommand = (
-  tokens: string[],
-): CommandTerminalSummary | null => {
-  if (tokens[0] !== "git" || tokens[1] !== "diff") {
-    return null;
-  }
-
-  const separatorIndex = tokens.indexOf("--");
-  if (separatorIndex < 0) {
-    return null;
-  }
-
-  const paths = tokens
-    .slice(separatorIndex + 1)
-    .filter((token) => token.length > 0 && token !== "--");
-
-  if (paths.length === 0) {
-    return null;
-  }
-
-  const isSummaryDiff =
-    tokens.includes("--name-status") ||
-    tokens.includes("--name-only") ||
-    tokens.includes("--stat");
-  return {
-    group: "Ran",
-    description: tokens.includes("--staged")
-      ? isSummaryDiff
-        ? "staged diff summary"
-        : "staged diff"
-      : isSummaryDiff
-        ? "git diff summary"
-        : "git diff",
-    files: paths,
-  };
-};
-
-const ripgrepPatternFromTokens = (tokens: string[]): string | undefined => {
-  const args = tokens.slice(1);
-  let pattern: string | undefined;
-  for (let index = 0; index < args.length; index += 1) {
-    const token = args[index] ?? "";
-    if (token === "--") {
-      continue;
-    }
-    if (token === "-e" || token === "--regexp") {
-      return args[index + 1];
-    }
-    if (rgOptionsWithSkippedValue.has(token)) {
-      index += 1;
-      continue;
-    }
-    if (token.startsWith("-")) {
-      continue;
-    }
-    pattern = token;
-    break;
-  }
-  return pattern;
-};
-
-const formatStagedSearchTerms = (terms: string[]): string => {
-  const visibleTerms = terms.slice(0, TERMINAL_FILE_DETAIL_LIMIT);
-  const remainingCount = terms.length - visibleTerms.length;
-  return [
-    "terms:",
-    ...visibleTerms.map((term) => `- ${term}`),
-    ...(remainingCount > 0 ? [`  +${remainingCount} more`] : []),
-  ].join("\n");
-};
-
-const summarizeStagedGitShowPipeline = (
-  tokens: string[],
-): CommandTerminalSummary | null => {
-  if (tokens[0] !== "git" || tokens[1] !== "show") {
-    return null;
-  }
-  const stagedPathToken = tokens[2] ?? "";
-  if (!stagedPathToken.startsWith(":") || stagedPathToken.length === 1) {
-    return null;
-  }
-
-  const stagedPath = stagedPathToken.slice(1);
-  const rgIndex = tokens.indexOf("rg");
-  if (rgIndex >= 0) {
-    const pattern = ripgrepPatternFromTokens(tokens.slice(rgIndex));
-    const terms = pattern ? splitAlternationSearchTerms(pattern) : null;
-    const termsLine = terms ? `\n${formatStagedSearchTerms(terms)}` : "";
-    return {
-      group: "Ran",
-      description: `git show search\n- ${stagedPath}${termsLine}`,
-    };
-  }
-
-  const sedIndex = tokens.indexOf("sed");
-  if (sedIndex >= 0) {
-    const rangeToken = tokens
-      .slice(sedIndex + 1)
-      .find((token) => /^\d+,\d+p$/.test(token));
-    const rangeMatch = rangeToken?.match(/^(\d+),(\d+)p$/);
-    const pathWithRange = rangeMatch
-      ? `${stagedPath}:${rangeMatch[1]}-${rangeMatch[2]}`
-      : stagedPath;
-    return {
-      group: "Ran",
-      description: `git show\n- ${pathWithRange}`,
-    };
-  }
-
-  return null;
 };
 
 export const commandTerminalSummary = (command: string): CommandTerminalSummary => {
@@ -847,4 +677,3 @@ const summarizeInlineTsxCommand = (
     failureCommand: `${prefixTokens.join(" ")} <inline script>`,
   };
 };
-

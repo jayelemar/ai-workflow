@@ -3,32 +3,16 @@ import os from "node:os";
 import path from "node:path";
 
 import { tokenUsageLedgerRelativePath } from "./token-ledger.ts";
+import {
+  parseSessionTokenSnapshot,
+  type ContextUsage,
+  type SessionTokenSnapshot,
+  type TokenUsageTotals,
+} from "./session-snapshot.ts";
+
+export { parseSessionTokenSnapshot } from "./session-snapshot.ts";
 
 export type ManualTokenUsageStage = "spec" | "plan" | "execute";
-
-type TokenUsageTotals = {
-  inputTokens: number;
-  cachedInputTokens: number;
-  uncachedInputTokens: number;
-  outputTokens: number;
-  reasoningOutputTokens: number;
-  totalTokens: number;
-};
-
-type ContextUsage = {
-  contextWindowTokens: number | "unavailable";
-  contextWindowUsedTokens: number | "unavailable";
-  contextWindowUsedPercent: string;
-};
-
-type SessionTokenSnapshot = {
-  sessionId: string;
-  sessionFilePath: string;
-  timestamp: string;
-  model: string;
-  totals: TokenUsageTotals;
-  contextUsage: ContextUsage;
-};
 
 type ManualTokenLedgerRecord = TokenUsageTotals &
   ContextUsage & {
@@ -90,12 +74,6 @@ const zeroTotals = (): TokenUsageTotals => ({
   totalTokens: 0,
 });
 
-const unavailableContextUsage = (): ContextUsage => ({
-  contextWindowTokens: "unavailable",
-  contextWindowUsedTokens: "unavailable",
-  contextWindowUsedPercent: "unavailable",
-});
-
 const asRecord = (value: unknown): Record<string, unknown> | null =>
   typeof value === "object" && value !== null
     ? (value as Record<string, unknown>)
@@ -103,8 +81,6 @@ const asRecord = (value: unknown): Record<string, unknown> | null =>
 
 const isFiniteNumber = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);
-
-const clampNonNegative = (value: number): number => Math.max(0, value);
 
 const manualPromptPath = (stage: ManualTokenUsageStage): string => {
   switch (stage) {
@@ -117,7 +93,7 @@ const manualPromptPath = (stage: ManualTokenUsageStage): string => {
   }
 };
 
-const defaultCodexHome = (): string => {
+export const defaultCodexHome = (): string => {
   const envCodexHome = process.env.CODEX_HOME?.trim();
   if (envCodexHome) {
     return path.resolve(envCodexHome);
@@ -148,154 +124,6 @@ const readJsonlRecords = async (
       }
     })
     .filter((record): record is Record<string, unknown> => record !== null);
-};
-
-const toSessionTotals = (usage: Record<string, unknown>): TokenUsageTotals | null => {
-  const inputTokens = usage.input_tokens;
-  const cachedInputTokens = usage.cached_input_tokens;
-  const outputTokens = usage.output_tokens;
-  const reasoningOutputTokens = usage.reasoning_output_tokens;
-  const totalTokens = usage.total_tokens;
-  if (
-    !isFiniteNumber(inputTokens) ||
-    !isFiniteNumber(cachedInputTokens) ||
-    !isFiniteNumber(outputTokens) ||
-    !isFiniteNumber(reasoningOutputTokens) ||
-    !isFiniteNumber(totalTokens)
-  ) {
-    return null;
-  }
-
-  return {
-    inputTokens: clampNonNegative(inputTokens),
-    cachedInputTokens: clampNonNegative(cachedInputTokens),
-    uncachedInputTokens: clampNonNegative(inputTokens - cachedInputTokens),
-    outputTokens: clampNonNegative(outputTokens),
-    reasoningOutputTokens: clampNonNegative(reasoningOutputTokens),
-    totalTokens: clampNonNegative(totalTokens),
-  };
-};
-
-export const parseSessionTokenSnapshot = (
-  content: string,
-  sessionFilePath: string,
-  targetCwd: string,
-): SessionTokenSnapshot | null => {
-  let sessionId: string | undefined;
-  let sessionCwd: string | undefined;
-  let latestTurnContextModel: string | undefined;
-  let latestTokenTotals: TokenUsageTotals | undefined;
-  let latestContextUsage: ContextUsage | undefined;
-  let latestTimestamp: string | undefined;
-  let sawTargetCwd = false;
-
-  for (const line of content.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed) {
-      continue;
-    }
-
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(trimmed);
-    } catch {
-      continue;
-    }
-
-    const event = asRecord(parsed);
-    if (!event) {
-      continue;
-    }
-
-    if (event.type === "session_meta") {
-      const payload = asRecord(event.payload);
-      const payloadSessionId =
-        typeof payload?.session_id === "string"
-          ? payload.session_id
-          : typeof payload?.id === "string"
-            ? payload.id
-            : undefined;
-      const payloadCwd =
-        typeof payload?.cwd === "string" ? payload.cwd : undefined;
-      const payloadTimestamp =
-        typeof payload?.timestamp === "string"
-          ? payload.timestamp
-          : typeof event.timestamp === "string"
-            ? event.timestamp
-            : undefined;
-
-      sessionId ??= payloadSessionId;
-      sessionCwd ??= payloadCwd;
-      latestTimestamp ??= payloadTimestamp;
-      if (payloadCwd === targetCwd) {
-        sawTargetCwd = true;
-      }
-      continue;
-    }
-
-    const payload = asRecord(event.payload);
-    if (!payload) {
-      continue;
-    }
-
-    if (event.type === "turn_context") {
-      const cwd = typeof payload.cwd === "string" ? payload.cwd : undefined;
-      if (cwd === targetCwd) {
-        sawTargetCwd = true;
-      }
-      if (typeof payload.model === "string" && payload.model.length > 0) {
-        latestTurnContextModel = payload.model;
-      }
-      continue;
-    }
-
-    if (event.type !== "event_msg" || payload.type !== "token_count") {
-      continue;
-    }
-
-    const info = asRecord(payload.info);
-    const totalTokenUsage = asRecord(info?.total_token_usage);
-    const lastTokenUsage = asRecord(info?.last_token_usage);
-    const totals = totalTokenUsage ? toSessionTotals(totalTokenUsage) : null;
-    if (!totals) {
-      continue;
-    }
-
-    const lastTotalTokens = lastTokenUsage?.total_tokens;
-    const contextWindowTokens = info?.model_context_window;
-    latestTokenTotals = totals;
-    latestTimestamp =
-      typeof event.timestamp === "string" ? event.timestamp : latestTimestamp;
-    if (
-      isFiniteNumber(lastTotalTokens) &&
-      isFiniteNumber(contextWindowTokens) &&
-      contextWindowTokens > 0
-    ) {
-      latestContextUsage = {
-        contextWindowTokens,
-        contextWindowUsedTokens: clampNonNegative(lastTotalTokens),
-        contextWindowUsedPercent: (
-          (clampNonNegative(lastTotalTokens) / contextWindowTokens) *
-          100
-        ).toFixed(2),
-      };
-    } else {
-      latestContextUsage = unavailableContextUsage();
-    }
-  }
-
-  if (!sawTargetCwd || !sessionId || !latestTokenTotals || !latestTimestamp) {
-    return null;
-  }
-
-  return {
-    sessionId,
-    sessionFilePath,
-    timestamp: latestTimestamp,
-    model: latestTurnContextModel ?? "unknown",
-    totals: latestTokenTotals,
-    contextUsage: latestContextUsage ?? unavailableContextUsage(),
-  };
 };
 
 const relativeSessionPath = (codexHome: string, absolutePath: string): string => {
@@ -614,93 +442,3 @@ export const appendManualTokenUsageCheckpoint = async ({
     entry,
   };
 };
-
-const parseArgs = (
-  argv: string[],
-): {
-  planName?: string;
-  stage?: ManualTokenUsageStage;
-  sessionId?: string;
-  codexHome?: string;
-  rootDir?: string;
-} => {
-  const parsed: {
-    planName?: string;
-    stage?: ManualTokenUsageStage;
-    sessionId?: string;
-    codexHome?: string;
-    rootDir?: string;
-  } = {};
-
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
-    const next = argv[index + 1];
-    switch (arg) {
-      case "--plan":
-        parsed.planName = next;
-        index += 1;
-        break;
-      case "--stage":
-        if (next === "spec" || next === "plan" || next === "execute") {
-          parsed.stage = next;
-        }
-        index += 1;
-        break;
-      case "--session":
-        parsed.sessionId = next;
-        index += 1;
-        break;
-      case "--codex-home":
-        parsed.codexHome = next;
-        index += 1;
-        break;
-      case "--root-dir":
-        parsed.rootDir = next;
-        index += 1;
-        break;
-      default:
-        break;
-    }
-  }
-
-  return parsed;
-};
-
-export const runManualTokenUsageCli = async (
-  argv: string[],
-  stdout: Pick<typeof process.stdout, "write"> = process.stdout,
-  stderr: Pick<typeof process.stderr, "write"> = process.stderr,
-): Promise<number> => {
-  const args = parseArgs(argv);
-  if (!args.planName || !args.stage) {
-    stderr.write(
-      "Usage: pnpm exec tsx .ai/scripts/workflow/telemetry/manual-token-usage.ts --plan <plan-name> --stage <spec|plan|execute> [--session <session-id>] [--codex-home <path>] [--root-dir <path>]\n",
-    );
-    return 1;
-  }
-
-  const result = await appendManualTokenUsageCheckpoint({
-    rootDir: path.resolve(args.rootDir ?? process.cwd()),
-    planName: args.planName,
-    stage: args.stage,
-    sessionId: args.sessionId,
-    codexHome: args.codexHome ? path.resolve(args.codexHome) : defaultCodexHome(),
-  });
-
-  if (!result.ok) {
-    stderr.write(`${result.reason}\n`);
-    return 1;
-  }
-
-  if (result.status === "skipped") {
-    stdout.write(`Skipped: ${result.reason}\n`);
-    return 0;
-  }
-
-  stdout.write(
-    `Appended manual ${args.stage} token checkpoint to ${result.ledgerPath} (${result.entry.stageTotalTokens} tokens)\n`,
-  );
-  return 0;
-};
-
-

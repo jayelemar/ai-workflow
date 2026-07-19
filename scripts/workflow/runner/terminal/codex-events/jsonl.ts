@@ -1,5 +1,5 @@
 import { WORKFLOW_RUNNER_CODEX_PROFILE } from "../../../config/codex.ts";
-import type { CodexLiveOutputFlushOptions, CodexTerminalFormatOptions, CommandExitCode, FailureMetadataLogFields, OutputStream, WorkflowFailureDebugCommandRecord, WorkflowFailureDebugRecord } from "../../types.ts";
+import type { CodexLiveOutputFlushOptions, CodexTerminalFormatOptions, CommandExitCode, FailureMetadataLogFields, OutputStream, WorkflowFailureDebugRecord } from "../../types.ts";
 import { asRecord, boundedInlineExcerpt, isFiniteNumber, toDisplayString } from "../../types.ts";
 import {
   failureDebugOutputSummary,
@@ -15,6 +15,10 @@ import {
   stripAnsiSequences,
   stripNonSgrAnsiSequences,
 } from "../formatters.ts";
+import {
+  codexRecentCommandRecords,
+  commandRecordFromProcessCapture,
+} from "./command-records.ts";
 
 const workflowRunnerCodexExecLabel = (codexProfile: string): string => `${codexProfile} exec`;
 export const formatCodexJsonlEventForTerminal = (
@@ -373,89 +377,6 @@ export const stdoutContainsJsonEvents = (stdout: string): boolean => {
   return false;
 };
 
-const commandRecordFromCodexEvent = (
-  command: string,
-  exitCode: number | "unknown",
-  output: string,
-): WorkflowFailureDebugCommandRecord => {
-  const summary = failureDebugOutputSummary(output);
-  return {
-    source: "codex-command",
-    command,
-    exitCode,
-    outputByteCount: summary?.byteCount ?? 0,
-    outputLineCount: summary?.lineCount ?? 0,
-    outputExcerpt: summary?.excerpt,
-    outputTruncated: summary?.truncated ?? false,
-  };
-};
-
-export const commandRecordFromProcessCapture = (
-  source: "review-staging" | "review-cleanup",
-  command: string,
-  exitCode: number | "unknown",
-  stdout: string,
-  stderr: string,
-): WorkflowFailureDebugCommandRecord => {
-  const stdoutSummary = failureDebugOutputSummary(stdout);
-  const stderrSummary = failureDebugOutputSummary(stderr);
-  return {
-    source,
-    command,
-    exitCode,
-    stdoutByteCount: stdoutSummary?.byteCount ?? 0,
-    stdoutLineCount: stdoutSummary?.lineCount ?? 0,
-    stdoutExcerpt: stdoutSummary?.excerpt,
-    stdoutTruncated: stdoutSummary?.truncated ?? false,
-    stderrByteCount: stderrSummary?.byteCount ?? 0,
-    stderrLineCount: stderrSummary?.lineCount ?? 0,
-    stderrExcerpt: stderrSummary?.excerpt,
-    stderrTruncated: stderrSummary?.truncated ?? false,
-  };
-};
-
-export const codexRecentCommandRecords = (
-  stdout: string,
-): WorkflowFailureDebugCommandRecord[] => {
-  const commands: WorkflowFailureDebugCommandRecord[] = [];
-  for (const line of stdout.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed) {
-      continue;
-    }
-
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(trimmed);
-    } catch {
-      continue;
-    }
-
-    const event = asRecord(parsed);
-    const item = asRecord(event?.item);
-    if (item?.type !== "command_execution") {
-      continue;
-    }
-
-    const command = toDisplayString(item.command);
-    if (!command) {
-      continue;
-    }
-    const status = toDisplayString(item.status);
-    if (event?.type === "item.started" || status === "in_progress") {
-      continue;
-    }
-    const rawExitCode = item.exit_code;
-    const exitCode: number | "unknown" = isFiniteNumber(rawExitCode)
-      ? rawExitCode
-      : "unknown";
-    const output = toDisplayString(item.aggregated_output) ?? "";
-    commands.push(commandRecordFromCodexEvent(command, exitCode, output));
-  }
-
-  return commands.slice(-3);
-};
-
 const failureStopExcerpt = (stopReason: string): string | undefined => {
   const match =
     /^(?<label>[A-Za-z0-9][A-Za-z0-9_-]* exec) output contained STOP:?\s*/.exec(
@@ -623,119 +544,6 @@ const formatStopReason = (
 ): string =>
   `${codexExecLabel} output contained STOP${excerpt ? `: ${excerpt}` : ""}`;
 
-export const REVIEW_ENTRY_STAGED_WORK_REASON_PREFIX =
-  "review blocked before review-plan because staged files already exist; human may manually unstage them, then rerun workflow-runner so it owns review staging";
-
-export const classifyFailureForLog = (reason: string): FailureMetadataLogFields => {
-  const stopMatch =
-    /^(?<label>[A-Za-z0-9][A-Za-z0-9_-]* exec) output contained STOP:?\s*/.exec(
-      reason,
-    );
-  if (stopMatch) {
-    return {
-      failureKind: "codex-stop",
-      failureReason: reason.slice(stopMatch[0].length).trim() || "STOP",
-      nextSuggestedAction:
-        "inspect STOP reason, fix code or workflow evidence, then rerun workflow-runner",
-    };
-  }
-  if (/^could not launch [A-Za-z0-9][A-Za-z0-9_-]* exec(?::|$)/.test(reason)) {
-    return {
-      failureKind: "codex-launch",
-      failureReason: reason,
-      nextSuggestedAction:
-        "fix Codex launch environment, then rerun workflow-runner",
-    };
-  }
-  if (/^[A-Za-z0-9][A-Za-z0-9_-]* exec exited with code\b/.test(reason)) {
-    return {
-      failureKind: "codex-exit",
-      failureReason: reason,
-      nextSuggestedAction:
-        "inspect workflow log, fix runtime failure, then rerun workflow-runner",
-    };
-  }
-  if (reason.startsWith(REVIEW_ENTRY_STAGED_WORK_REASON_PREFIX)) {
-    return {
-      failureKind: "review-entry-staged-work",
-      failureReason: reason,
-      nextSuggestedAction:
-        "human may manually unstage existing staged work before starting review-plan, then rerun workflow-runner",
-    };
-  }
-  if (
-    reason.startsWith("review staging git add") ||
-    reason.startsWith("could not launch review staging git add")
-  ) {
-    return {
-      failureKind: "review-staging",
-      failureReason: reason,
-      nextSuggestedAction:
-        "fix review staging paths or git error, then rerun workflow-runner",
-    };
-  }
-  if (reason.startsWith("review hunk ownership incomplete")) {
-    return {
-      failureKind: "review-hunk-ownership",
-      failureReason: reason,
-      nextSuggestedAction:
-        "update ## Hunk Ownership for shared-file hunks, then rerun workflow-runner",
-    };
-  }
-  if (
-    reason.startsWith("review cleanup git restore") ||
-    reason.startsWith("could not launch review cleanup git restore")
-  ) {
-    return {
-      failureKind: "review-unstage",
-      failureReason: reason,
-      nextSuggestedAction:
-        "fix review cleanup git error or manually unstage plan paths, then rerun workflow-runner",
-    };
-  }
-  if (reason.startsWith("plan-owned changes remain after commit-summary")) {
-    return {
-      failureKind: "dirty-plan-owned-paths",
-      failureReason: reason,
-      nextSuggestedAction:
-        "fix commit preflight errors, then rerun workflow-runner; plan remains completed + commit-summary",
-    };
-  }
-  if (
-    reason ===
-    "plan content unchanged after successful nonterminal workflow action"
-  ) {
-    return {
-      failureKind: "unchanged-plan",
-      failureReason: reason,
-      nextSuggestedAction:
-        "inspect workflow output and update plan state, then rerun workflow-runner",
-    };
-  }
-  if (reason.includes("may only hand off")) {
-    return {
-      failureKind: "invalid-transition",
-      failureReason: reason,
-      nextSuggestedAction:
-        "fix plan status and next action, then rerun workflow-runner",
-    };
-  }
-  if (reason.startsWith("maximum iterations ")) {
-    return {
-      failureKind: "max-iterations",
-      failureReason: reason,
-      nextSuggestedAction:
-        "inspect plan progress, then resume with workflow-runner if still valid",
-    };
-  }
-  return {
-    failureKind: "runner-failure",
-    failureReason: reason,
-    nextSuggestedAction:
-      "inspect workflow log, resolve failure, then rerun workflow-runner",
-  };
-};
-
 export const codexOutputStopReason = (
   stdout: string,
   stderr: string,
@@ -786,4 +594,3 @@ export const codexOutputContainsStop = (
   stdout: string,
   stderr: string,
 ): boolean => codexOutputStopReason(stdout, stderr) !== undefined;
-

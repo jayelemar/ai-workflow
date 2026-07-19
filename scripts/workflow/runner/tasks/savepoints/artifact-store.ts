@@ -1,41 +1,26 @@
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import {
-  parseThinPlanV2FilesState,
-  readJsonArtifact,
-  thinPlanV2ArtifactPath,
-} from "../../plan/state.ts";
 import type {
   Failure,
-  ParsedPlan,
   PlanTask,
-  ProcessResult,
-  ProcessRunner,
-  TaskStage,
   WorkflowTaskContext,
 } from "../../types.ts";
-import { isFailure } from "../../types.ts";
 
-const TERMINAL_PROGRESS_DETAIL_LIMIT = 200;
+export {
+  formatTaskProgressLine,
+  readableTaskLabel,
+  readableTaskProgressDescription,
+} from "./task-progress.ts";
+export {
+  readHeadTaskCommit,
+  readTaskCommitRecoveryParent,
+} from "./commit-recovery.ts";
 
 const rel = (...segments: string[]): string => segments.join("/");
 
 const escapeRegExp = (value: string): string =>
   value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-const compactTerminalProgressDetail = (detail: string): string => {
-  const normalized = detail.replace(/\s+/g, " ").trim();
-  if (normalized.length <= TERMINAL_PROGRESS_DETAIL_LIMIT) {
-    return normalized;
-  }
-
-  const shortened = normalized
-    .slice(0, TERMINAL_PROGRESS_DETAIL_LIMIT - 3)
-    .replace(/\s+\S*$/, "")
-    .trimEnd();
-  return `${shortened || normalized.slice(0, TERMINAL_PROGRESS_DETAIL_LIMIT - 3)}...`;
-};
 
 export const taskArtifactsRelativeDir = (planName: string): string =>
   rel(".ai", "artifacts", planName, "tasks");
@@ -253,86 +238,6 @@ export const latestTaskArtifactRelativePath = async (
   return rel(taskArtifactsRelativeDir(planName), latestArtifact.entry);
 };
 
-const humanizeTaskWords = (words: string): string => words.replace(/-/g, " ");
-
-export const readableTaskLabel = (task: PlanTask): string => {
-  const words = humanizeTaskWords(task.words);
-  return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
-};
-
-export const formatTaskProgressLine = ({
-  task,
-  stage,
-  detail,
-  taskPosition,
-  taskTotal,
-  completedTasks,
-  boundaryTotal,
-}: {
-  task: PlanTask;
-  stage: TaskStage;
-  detail: string;
-  taskPosition: number;
-  taskTotal: number;
-  completedTasks: number;
-  boundaryTotal?: number;
-}): string => {
-  const reviewScopeMatch = detail.match(/^staged\s+(\d+)\s+(file|files)$/);
-  const label =
-    stage === "implementing"
-      ? "EXECUTE"
-      : stage === "validating"
-        ? "VALIDATE"
-        : stage === "reviewing"
-          ? "REVIEW"
-          : stage === "commit-message"
-            ? "COMMITTING"
-            : "COMMITTED";
-  const action =
-    stage === "implementing"
-      ? "Implementing planned scope"
-      : stage === "validating"
-        ? `Running ${compactTerminalProgressDetail(detail)}`
-        : stage === "reviewing"
-          ? `Review scope: ${
-              reviewScopeMatch
-                ? `${reviewScopeMatch[1]} staged ${reviewScopeMatch[2]}`
-                : compactTerminalProgressDetail(detail)
-            }`
-          : boundaryTotal
-            ? `Creating ${boundaryTotal} boundary commits`
-            : stage === "commit-message"
-              ? "Creating 1 commit"
-              : `Created ${compactTerminalProgressDetail(detail)}`;
-  return `[${label}] Task ${taskPosition} of ${taskTotal} — ${readableTaskLabel(
-    task,
-  )}\nProgress: ${completedTasks} tasks committed · ${action}`;
-};
-
-export const readableTaskProgressDescription = (task: PlanTask): string => {
-  const normalizedName = task.name.replace(/\s+/g, " ").trim();
-  if (!normalizedName.endsWith("...")) {
-    return normalizedName;
-  }
-
-  const taskWords = humanizeTaskWords(task.words);
-  const baseName = normalizedName.replace(/\s*\.\.\.$/, "").trimEnd();
-  if (!baseName) {
-    return taskWords;
-  }
-  if (new RegExp(`\\b${escapeRegExp(taskWords)}\\b`, "i").test(baseName)) {
-    return baseName;
-  }
-  if (
-    /\b(?:in|for|on|with|around|to|into|through|across|from|by)$/i.test(
-      baseName,
-    )
-  ) {
-    return `${baseName} ${taskWords}`;
-  }
-  return `${baseName} for ${taskWords}`;
-};
-
 export const writeTaskStageArtifact = async ({
   rootDir,
   planPath,
@@ -488,93 +393,6 @@ ${nextTask ? nextTask.id : "(none)"}
       reason: `task artifact cannot be written: ${String(error)}`,
     };
   }
-};
-
-export const readHeadTaskCommit = async ({
-  rootDir,
-  planName,
-  planPath,
-  task,
-  expectedParentSha,
-  processRunner,
-}: {
-  rootDir: string;
-  planName: string;
-  planPath: string;
-  task: PlanTask;
-  expectedParentSha?: string;
-  processRunner: ProcessRunner;
-}): Promise<
-  { ok: true; commit?: { sha: string; message: string } } | Failure
-> => {
-  const result = await processRunner({
-    command: "git",
-    args: ["log", "-1", "--format=%H%n%P%n%B"],
-    cwd: rootDir,
-    input: "",
-    promptPath: "git-head-task-commit",
-  }).catch(
-    (error): ProcessResult => ({
-      launched: false,
-      stdout: "",
-      stderr: "",
-      error: String(error),
-    }),
-  );
-
-  if (!result.launched || result.exitCode !== 0) {
-    return { ok: true };
-  }
-
-  const lines = result.stdout.split(/\r?\n/);
-  const sha = lines.shift()?.trim();
-  const parents =
-    lines[0] && /^[0-9a-f]+(?:\s+[0-9a-f]+)*$/i.test(lines[0].trim())
-      ? (lines.shift()?.trim().split(/\s+/) ?? [])
-      : [];
-  const message = lines.join("\n").trim();
-  const hasTaskMetadata =
-    message.includes(task.id) &&
-    (message.includes(planName) || message.includes(planPath));
-  const matchesExpectedParent =
-    !!expectedParentSha && parents.includes(expectedParentSha);
-  if (!sha || (!hasTaskMetadata && !matchesExpectedParent)) {
-    return { ok: true };
-  }
-
-  return {
-    ok: true,
-    commit: {
-      sha,
-      message,
-    },
-  };
-};
-
-export const readTaskCommitRecoveryParent = async ({
-  rootDir,
-  plan,
-}: {
-  rootDir: string;
-  plan: ParsedPlan;
-}): Promise<{ ok: true; headSha?: string } | Failure> => {
-  if (plan.thinPlanContract !== "thin-plan-v2") {
-    return { ok: true };
-  }
-  const filesPath = thinPlanV2ArtifactPath(
-    plan.planName,
-    "state",
-    "files.json",
-  );
-  const filesRaw = await readJsonArtifact(rootDir, filesPath);
-  if (isFailure(filesRaw)) {
-    return filesRaw;
-  }
-  const files = parseThinPlanV2FilesState(filesRaw, filesPath);
-  if (isFailure(files)) {
-    return files;
-  }
-  return { ok: true, headSha: files.headSha || undefined };
 };
 
 export const nextTaskAfter = async (

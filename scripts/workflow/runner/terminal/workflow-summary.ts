@@ -13,6 +13,15 @@ import {
   formatTerminalAction,
   terminalOutputStats,
 } from "./command-output.ts";
+import {
+  formatCodePreviewLines,
+  type CodePreviewHighlightState,
+} from "./code-preview.ts";
+import {
+  parseWorkflowSections,
+  trimBlankLines,
+  workflowSummarySectionHeading,
+} from "./workflow-summary/sections.ts";
 
 const TERMINAL_FILE_DETAIL_LIMIT = 3;
 
@@ -29,44 +38,11 @@ export {
   terminalOutputStats,
 } from "./command-output.ts";
 
-export const trimBlankLines = (lines: string[]): string[] => {
-  let start = 0;
-  let end = lines.length;
-  while (start < end && lines[start]?.trim() === "") {
-    start += 1;
-  }
-  while (end > start && lines[end - 1]?.trim() === "") {
-    end -= 1;
-  }
-  return lines.slice(start, end);
-};
-
-export const workflowSummarySectionHeading = (
-  line: string,
-): string | null => {
-  const match = line.match(/^\*\*(.+)\*\*$/);
-  return match?.[1] ?? null;
-};
-
-export const parseWorkflowSections = (
-  text: string,
-  headingForLine: (line: string) => string | null,
-): Map<string, string[]> => {
-  const sections = new Map<string, string[]>();
-  let currentSection: string | null = null;
-  for (const line of text.split(/\r?\n/)) {
-    const heading = headingForLine(line);
-    if (heading) {
-      currentSection = heading;
-      sections.set(currentSection, []);
-      continue;
-    }
-    if (currentSection) {
-      sections.get(currentSection)?.push(line);
-    }
-  }
-  return sections;
-};
+export {
+  parseWorkflowSections,
+  trimBlankLines,
+  workflowSummarySectionHeading,
+} from "./workflow-summary/sections.ts";
 
 const compactWorkflowValidationLine = (line: string): string => {
   const knownLimitationPrefix = "* Known limitation: ";
@@ -472,13 +448,9 @@ const highlightPlainTsxCodePreviewText = (
   return renderCodePreviewSegments(segments);
 };
 
-type TsxCodePreviewHighlightState = {
-  inBlockComment: boolean;
-};
-
 const highlightTsxCodePreviewLine = (
   line: string,
-  state: TsxCodePreviewHighlightState,
+  state: CodePreviewHighlightState,
 ): string => {
   const isJsxLine = /<\/?[A-Za-z][\w.]*/.test(line);
   const segments: CodePreviewSegment[] = [];
@@ -560,41 +532,6 @@ const highlightTsxCodePreviewLine = (
   return renderCodePreviewSegments(segments);
 };
 
-const codePreviewFenceLanguage = (line: string): string | null => {
-  const match = line.match(/^```([A-Za-z0-9_-]*)\s*$/);
-  return match ? (match[1] ?? "").toLowerCase() : null;
-};
-
-const formatCodePreviewLines = (lines: string[], color: boolean): string[] => {
-  if (!color) {
-    return trimBlankLines(lines);
-  }
-
-  const output: string[] = [];
-  let activeFenceLanguage: string | null = null;
-  let highlightState: TsxCodePreviewHighlightState = {
-    inBlockComment: false,
-  };
-
-  for (const line of trimBlankLines(lines)) {
-    const fenceLanguage = codePreviewFenceLanguage(line);
-    if (fenceLanguage !== null) {
-      activeFenceLanguage = activeFenceLanguage === null ? fenceLanguage : null;
-      highlightState = { inBlockComment: false };
-      output.push(line);
-      continue;
-    }
-
-    output.push(
-      activeFenceLanguage === "ts" || activeFenceLanguage === "tsx"
-        ? highlightTsxCodePreviewLine(line, highlightState)
-        : line,
-    );
-  }
-
-  return output;
-};
-
 const formatWorkflowApprovalPreviewSummary = (
   trimmedText: string,
   color = false,
@@ -623,7 +560,11 @@ const formatWorkflowApprovalPreviewSummary = (
       return nextSectionLines(sections.get("Next") ?? []);
     }
     if (heading === "Code Preview") {
-      return formatCodePreviewLines(sections.get("Code Preview") ?? [], color);
+      return formatCodePreviewLines({
+        lines: sections.get("Code Preview") ?? [],
+        color,
+        highlightTsxLine: highlightTsxCodePreviewLine,
+      });
     }
     return trimBlankLines(sections.get(heading) ?? []);
   };
