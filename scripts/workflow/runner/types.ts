@@ -173,14 +173,6 @@ export type FileOwnershipPreflight =
       artifact: FileOwnershipArtifact;
       reviewStagingPaths: string[];
     };
-export type WorkflowFileLockMetadata = {
-  planPath: string;
-  pid: number;
-  createdAt: string;
-  heartbeatAt?: string;
-  path: string;
-};
-
 export type WorkflowFailureDebugCommandRecord = {
   source: "codex-command" | "review-staging" | "review-cleanup";
   command: string;

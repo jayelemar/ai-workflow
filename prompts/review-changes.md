@@ -149,7 +149,7 @@ If unrelated changes remain after runner cleanup inside the path-scoped diff:
 If review finds that a required fix needs a file outside the current plan path
 list:
 
-* Determine whether that file is owned by another active plan or a live workflow-runner file lock.
+* Determine whether that file is owned by another active plan.
 * If the file is owned by another active plan, classify the finding as `plan dependency`.
 * Record the required file path and owner plan path in the review issue.
 * Do not approve the current plan.

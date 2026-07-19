@@ -5,7 +5,6 @@ export {
   parseRunnerCliArgs,
   normalizePlanArgument,
 } from "./runner/cli.ts";
-export { workflowFileLockPath } from "./ownership/file-locks.ts";
 export {
   codexWorkEnvironment,
   processStdioForInput,

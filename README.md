@@ -542,9 +542,6 @@ pnpm exec tsx .ai/scripts/workflow/runner.ts .ai/plans/<plan-name>.md
 # Run the default workflow path with a one-off Codex profile override
 pnpm exec tsx .ai/scripts/workflow/runner.ts --profile codex-personal .ai/plans/<plan-name>.md
 
-# Remove stale locks for a plan only after confirming its prior runner stopped
-pnpm workflow:unlock .ai/plans/<plan-name>.md
-
 # List local workflow files, including ignored ones
 rg --files -uu .ai
 

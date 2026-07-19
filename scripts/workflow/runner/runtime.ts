@@ -10,15 +10,8 @@ import {
   parseRunnerCliArgs,
 } from "./cli.ts";
 import {
-  acquireWorkflowFileOwnershipForPaths,
-  refreshWorkflowFileLockHeartbeats,
-  releaseWorkflowFileLocks,
-  WORKFLOW_FILE_LOCK_HEARTBEAT_INTERVAL_MS,
-} from "../ownership/file-locks.ts";
-import {
   canonicalFileOwnershipArtifact,
   parseFileOwnershipArtifact,
-  parseWorkflowFileOwnershipPaths,
   readGitChangedFileEntries,
   readGitHeadSha,
   readThinPlanV2FileOwnershipPreflight,
@@ -86,9 +79,6 @@ Options:
   -h, --help             Show this help message`;
 
 const rel = (...segments: string[]) => segments.join("/");
-
-const workflowFileUnlockPathHint = (planPath: string): string =>
-  `run this on the terminal:\npnpm workflow:unlock ${shellQuote(planPath)}`;
 
 const workflowFileOwnershipResetPathHint = (reason: string): string | null => {
   const match =
@@ -1516,8 +1506,6 @@ export const runWorkflowRunner = async (
   let workflowLogPath: string | undefined;
   let tokenUsageLogPath: string | undefined;
   let tokenUsageTotals = { ...zeroTokenUsageTotals };
-  const heldWorkflowFileLockPaths = new Set<string>();
-  let workflowFileLockHeartbeat: ReturnType<typeof setInterval> | undefined;
   const emittedWorkflowWarnings = new Set<string>();
   let currentTaskContext: WorkflowTaskContext | undefined;
   let carriedReviewStagingPaths: string[] | undefined;
@@ -1557,48 +1545,21 @@ export const runWorkflowRunner = async (
     logger.error(`  ${value}`);
     return true;
   };
-  const releaseHeldWorkflowFileLocks = async (): Promise<
-    string | undefined
-  > => {
-    if (workflowFileLockHeartbeat) {
-      clearInterval(workflowFileLockHeartbeat);
-      workflowFileLockHeartbeat = undefined;
-    }
-    const released = await releaseWorkflowFileLocks(heldWorkflowFileLockPaths);
-    return released.ok ? undefined : released.reason;
-  };
-  const startWorkflowFileLockHeartbeat = () => {
-    if (workflowFileLockHeartbeat) {
-      return;
-    }
-    workflowFileLockHeartbeat = setInterval(() => {
-      void refreshWorkflowFileLockHeartbeats({
-        lockPaths: heldWorkflowFileLockPaths,
-      });
-    }, WORKFLOW_FILE_LOCK_HEARTBEAT_INTERVAL_MS);
-    workflowFileLockHeartbeat.unref();
-  };
   const finishFailure = async (
     reason: string,
     completedIterations = iterations,
     exitCode = 1,
   ): Promise<RunnerResult> => {
-    const releaseFailure = await releaseHeldWorkflowFileLocks();
     const ownershipResetHint = workflowFileOwnershipResetPathHint(reason);
     const reasonWithHint = ownershipResetHint
       ? `${reason}\n${ownershipResetHint}`
       : reason;
-    const finalReason = releaseFailure
-      ? `${reasonWithHint}; ${releaseFailure}`
-      : reasonWithHint;
+    const finalReason = reasonWithHint;
     logger.error(`FAILED: ${reason}`);
     if (ownershipResetHint) {
       logger.error(
         formatWorkflowOwnershipResetHint(ownershipResetHint, colorOutput),
       );
-    }
-    if (releaseFailure) {
-      logger.error(`FAILED: ${releaseFailure}`);
     }
     let loggedSpacedFailurePath = false;
     if (workflowLogPath) {
@@ -1629,10 +1590,6 @@ export const runWorkflowRunner = async (
     reason: string,
     completedIterations: number,
   ): Promise<RunnerResult> => {
-    const releaseFailure = await releaseHeldWorkflowFileLocks();
-    if (releaseFailure) {
-      return finishFailure(releaseFailure, completedIterations);
-    }
     logger.log("SUCCESS");
     if (workflowLogPath) {
       logger.log(`- Workflow log: ${workflowLogPath}`);
@@ -1649,10 +1606,7 @@ export const runWorkflowRunner = async (
     planPath: string,
     completedIterations = iterations,
   ): Promise<RunnerResult> => {
-    const releaseFailure = await releaseHeldWorkflowFileLocks();
-    const finalReason = releaseFailure
-      ? `${reason}; ${releaseFailure}`
-      : reason;
+    const finalReason = reason;
     const summary = blockedReasonSummary(detail);
     logger.error("BLOCKED");
     logger.error(`- Reason: ${summary.category}`);
@@ -1667,9 +1621,6 @@ export const runWorkflowRunner = async (
     }
     if (tokenUsageLogPath) {
       logger.error(`- Token usage ledger: ${tokenUsageLogPath}`);
-    }
-    if (releaseFailure) {
-      logger.error(`FAILED: ${releaseFailure}`);
     }
     logger.error(elapsedLine());
     return failure(finalReason, completedIterations);
@@ -2260,37 +2211,6 @@ export const runWorkflowRunner = async (
       planName: parsedPlan.planName,
       promptPath: route.promptPath,
     });
-    if (route.promptPath === rel(".ai", "prompts", "execute-plan.md")) {
-      const ownershipPaths =
-        fileOwnershipPreflight?.hasOwnershipScope &&
-        fileOwnershipPreflight.artifact
-          ? {
-              ok: true as const,
-              paths: fileOwnershipPreflight.artifact.resolvedFiles,
-            }
-          : await parseWorkflowFileOwnershipPaths(
-              rootDir,
-              parsedPlan.content,
-              options.isIgnored,
-            );
-      if (!ownershipPaths.ok) {
-        return await finishFailure(
-          `workflow file ownership scope invalid: ${ownershipPaths.reason}`,
-        );
-      }
-      const acquired = await acquireWorkflowFileOwnershipForPaths({
-        rootDir,
-        planPath: parsedPlan.planPath,
-        paths: ownershipPaths.paths,
-        heldLockPaths: heldWorkflowFileLockPaths,
-        now: timestamp,
-        unlockHintForPlanPath: workflowFileUnlockPathHint,
-      });
-      if (!acquired.ok) {
-        return await finishFailure(acquired.reason);
-      }
-      startWorkflowFileLockHeartbeat();
-    }
     if (isReviewPrompt(route.promptPath)) {
       if (isReviewPrompt(route.promptPath)) {
         if (
@@ -2514,18 +2434,6 @@ export const runWorkflowRunner = async (
             return await finishFailure(taskStage.reason);
           }
         }
-        const acquired = await acquireWorkflowFileOwnershipForPaths({
-          rootDir,
-          planPath: parsedPlan.planPath,
-          paths: parsedPaths.paths,
-          heldLockPaths: heldWorkflowFileLockPaths,
-          now: timestamp,
-        unlockHintForPlanPath: workflowFileUnlockPathHint,
-        });
-        if (!acquired.ok) {
-          return await finishFailure(acquired.reason);
-        }
-        startWorkflowFileLockHeartbeat();
         if (!selectedTask) {
           logger.log(
             `Staging ${parsedPaths.paths.length} plan-owned ${
@@ -2658,18 +2566,6 @@ export const runWorkflowRunner = async (
               return await finishFailure(taskStage.reason);
             }
           }
-          const acquired = await acquireWorkflowFileOwnershipForPaths({
-            rootDir,
-            planPath: parsedPlan.planPath,
-            paths: parsedPaths.paths,
-            heldLockPaths: heldWorkflowFileLockPaths,
-            now: timestamp,
-        unlockHintForPlanPath: workflowFileUnlockPathHint,
-          });
-          if (!acquired.ok) {
-            return await finishFailure(acquired.reason);
-          }
-          startWorkflowFileLockHeartbeat();
           if (!selectedTask) {
             logger.log(
               `Staging ${parsedPaths.paths.length} plan-owned ${
@@ -2754,18 +2650,6 @@ export const runWorkflowRunner = async (
             return await finishFailure(boundaries.reason);
           }
         }
-        const acquired = await acquireWorkflowFileOwnershipForPaths({
-          rootDir,
-          planPath: parsedPlan.planPath,
-          paths: commitSummaryPaths,
-          heldLockPaths: heldWorkflowFileLockPaths,
-          now: timestamp,
-        unlockHintForPlanPath: workflowFileUnlockPathHint,
-        });
-        if (!acquired.ok) {
-          return await finishFailure(acquired.reason);
-        }
-        startWorkflowFileLockHeartbeat();
       }
     }
     if (route.terminal && noCommitReviewCompletion) {

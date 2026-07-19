@@ -248,8 +248,8 @@ broken because of the current task:
   required to uphold the current task's invariant, including an access/security invariant, treat it as this
   compatibility repair
 * if such a file is absent from either the current plan ownership or changed-
-  file inventory artifact and no active owner plan or live workflow-runner
-  file lock claims it, add the exact file to both artifacts and continue
+  file inventory artifact and no active owner plan claims it, add the exact
+  file to both artifacts and continue
 * do not output `STOP` solely because the required minimal backend contract
   repair touches a migration, generated database contract file, or database
   test outside the original current-task file list
@@ -275,7 +275,7 @@ For each phase:
 
 If required execution or bugfix work needs a file outside the current plan-owned paths:
 
-* First determine whether the file is owned by another active plan or by a live workflow-runner file lock.
+* First determine whether the file is owned by another active plan.
 * If the edit qualifies under Compatibility Regression Carve-Out and the file
   is unowned, claim the exact file in the current plan's ownership/inventory
   artifacts and continue instead of stopping.

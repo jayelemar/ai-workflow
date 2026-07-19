@@ -206,7 +206,7 @@ Task savepoint rules:
 - If the current task changed a shared contract, service invariant, schema, payload shape, generated type, or backend enforcement rule, fix the smallest compatibility path needed to keep existing later-task call sites from submitting invalid data.
 - Do not output \`STOP\` solely because that minimal compatibility fix touches a file named in a later \`[task:...]\` item.
 - If review feedback identifies a missing backend RPC, migration, generated database type, or database regression test required to uphold the current task's access/security invariant, treat it as that smallest compatibility repair.
-- If such a file is not currently listed in the plan file inventory and no active owner plan or live workflow-runner file lock claims it, add the exact file to the current plan's ownership/inventory artifacts and continue.
+- If such a file is not currently listed in the plan file inventory and no active owner plan claims it, add the exact file to the current plan's ownership/inventory artifacts and continue.
 - Do not output \`STOP\` solely because the required minimal backend contract repair touches a migration, generated database contract file, or database test outside the original current-task file list.
 - Keep \`.ai/\` artifacts out of git commits.
 - The runner owns .ai/artifacts/<plan-name>/execution-summary.md; do not edit it directly.
