@@ -2,7 +2,6 @@ import path from 'node:path';
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import {
-  COMMIT_SUMMARY_PROMPT_PATH,
   EXECUTE_PLAN_PROMPT_PATH,
   PLAN_VALIDATOR_PROMPT_PATH,
   REVIEW_CHANGES_PROMPT_PATH,
@@ -18,7 +17,7 @@ const rel = (...segments: string[]) => segments.join('/');
 
 export const shellQuote = (value: string): string => {
   if (/^[A-Za-z0-9_./:@%+=,-]+$/.test(value)) return value;
-  return `'${value.replace(/'/g, `'\''`)}'`;
+  return `'${value.replace(/'/g, "'\\''")}'`;
 };
 
 export const shellPathspecs = (paths: string[]): string => paths.map(shellQuote).join(' ');

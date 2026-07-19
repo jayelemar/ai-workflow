@@ -15,7 +15,7 @@ import {
   summarizeMeaningfulLines,
   uniquePaths,
 } from './parser.ts';
-import { latestNumber, latestRecord, latestString, parseThinPlanV2WorkflowState, readJsonArtifact, selectRelevantWorkflowEvent, thinPlanV2ArtifactPath, workflowReviewSupersededByProgress } from './state.ts';
+import { parseThinPlanV2WorkflowState, readJsonArtifact, selectRelevantWorkflowEvent, thinPlanV2ArtifactPath } from './state.ts';
 
 const rel = (...segments: string[]) => segments.join('/');
 const stateMachinePromptPaths = new Set<string>([...workflowStagePromptPaths]);
