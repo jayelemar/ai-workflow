@@ -72,7 +72,7 @@ Manual post-plan path:
 - Those auto-checkpoints are valid only when the matching spec or plan file was
   actually written; marker text alone should not count as a completed stage.
 - Manual fallback remains:
-  `pnpm exec tsx .ai/scripts/manual-token-usage.ts --plan <plan-name> --stage <spec|plan|execute>`
+  `pnpm exec tsx .ai/scripts/workflow/telemetry/manual-token-usage.ts --plan <plan-name> --stage <spec|plan|execute>`
 - For cleaner apples-to-apples measurements, start manual `spec -> plan -> execute`
   work in a fresh conversation when possible.
 
@@ -86,31 +86,14 @@ Runner-managed post-plan path:
 Default runner path:
 
 ```bash
-pnpm exec tsx .ai/scripts/workflow-runner.ts .ai/plans/<plan-name>.md
+pnpm exec tsx .ai/scripts/workflow/runner.ts .ai/plans/<plan-name>.md
 ```
 
 One-off Codex profile override:
 
 ```bash
-pnpm exec tsx .ai/scripts/workflow-runner.ts --profile codex-personal .ai/plans/<plan-name>.md
+pnpm exec tsx .ai/scripts/workflow/runner.ts --profile codex-personal .ai/plans/<plan-name>.md
 ```
-
-Plan preview path:
-
-```text
-Use '.ai/prompts/plan-preview-before-apply.md'
-
-Plan:
-.ai/plans/<plan-name>.md
-```
-
-Plan preview rules:
-
-- `draft` plans self-run artifact sync plus bounded `plan-validator` preflight
-  until they either STOP on a real blocker or become ready for execution.
-- `approved` and `active` plans enter execution immediately.
-- The non-test diff approval gate starts only when execution is about to write
-  a non-test file.
 
 Standalone manual preview path:
 
@@ -127,12 +110,6 @@ Standalone manual preview does not require plan state, does not create
 Repeated review-remediation loops use the runner snapshot at `.ai/artifacts/<plan-name>/state/context.md` as the hot-path context. In particular, follow-up `execute-plan` runs should consume the snapshot's latest unresolved review findings first, while the live plan remains the source of truth for exact edits and history.
 That snapshot is intentionally compact: prefer its `## Summary`, `## Key Details`, `## Validation`, `## Review`, and `## Latest Review Remediation Context` sections before opening the full plan or event artifacts.
 
-Optional quiet mode:
-
-```bash
-pnpm exec tsx .ai/scripts/workflow-runner.ts --compact .ai/plans/<plan-name>.md
-```
-
 ## Rules
 
 - Install and publish the workflow using the setup steps in `.ai/README.md`.
@@ -148,15 +125,7 @@ pnpm exec tsx .ai/scripts/workflow-runner.ts --compact .ai/plans/<plan-name>.md
   `sync-plan-artifacts`, `plan-validator`, or runner-managed state files.
 - Review stages use harness review only. Do not add a separate subagent or
   plugin review system inside the default runner review path.
-- `plan-preview-before-apply` and `manual-preview` are available only through
-  explicit prompt-file invocation; they are not keyword-triggered workflow
-  modes.
-- `plan-preview-before-apply` is a manual post-plan controller, not an
-  execution-only helper.
 - `manual-preview` is a standalone ad hoc helper, not a workflow stage.
-- `plan-preview-before-apply` should keep execution/validation artifacts and
-  the workflow context snapshot current if you plan to use the normal review
-  flow afterward.
 - If you manually invoke a runner-oriented post-plan workflow prompt anyway,
   you must supply the current plan, spec, snapshot, and routed instruction
   files yourself because those prompts are runner-oriented.

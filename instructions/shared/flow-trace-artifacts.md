@@ -1,5 +1,5 @@
-Version: 1.1
-Last Updated: 2026-07-15
+Version: 1.2
+Last Updated: 2026-07-19
 
 # Flow-Trace Artifact Instructions
 
@@ -100,23 +100,10 @@ creation:
    - derive or repair `implementation-map.md`
 4. if flow-trace artifacts are not required:
    - write the required `N/A: <concrete reason>` values
-5. before returning a draft plan, self-check task boundaries; for new or
-   `draft` runner-managed plans, apply the atomic task contract in
-   `.ai/instructions/ai-workflow.md` and verify that:
-   - each `[task:..]` chunk can pass, be reviewed, and be committed
-     independently
-   - independently implementable and validatable outcomes with distinct
-     reasons to review or revert are separate tasks
-   - every structured field, dependency, acceptance owner, size calculation,
-     and warning is valid
-   - any explicit `## Commit Boundaries` entry is a valid exception to the
-     one-commit task default: it is task-scoped, ordered, complete,
-     non-overlapping, and keeps focused tests with implementation
-   - no lifecycle-only or red-test-only savepoints remain
-   - each spec-required behavior, especially visible validation and
-     failure-state behavior, is assigned to a concrete task
-   - each implementation-map row has implementation and validation coverage
-6. auto-correct missing action rows, bad savepoints, and under-scoped behavior
+5. before returning a draft plan, apply the complete atomic task and commit
+   contract in `.ai/instructions/ai-workflow.md`; verify each
+   implementation-map row has implementation and validation coverage.
+6. auto-correct missing action rows, task-contract defects, and under-scoped behavior
    ownership with one bounded repair pass when possible
 7. when a valid split remains uncertain after that pass, keep the task
    executable, set a concrete `Atomization warning` and `Coupling rationale`,

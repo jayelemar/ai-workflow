@@ -1,5 +1,5 @@
-Version: 1.20
-Last Updated: 2026-07-18
+Version: 1.21
+Last Updated: 2026-07-19
 
 # Workflow State Instructions
 
@@ -16,11 +16,10 @@ Define the canonical plan workflow state machine: plan statuses, next actions, a
 - `.ai/prompts/execute-plan.md`
 - `.ai/prompts/unblock-plan.md`
 - `.ai/prompts/review-changes.md`
-- `.ai/prompts/fix-review.md`
 - `.ai/prompts/reopen-plan.md`
 - `.ai/prompts/commit-summary.md`
-- `.ai/scripts/workflow-runner.ts`
-- `.ai/scripts/workflow-runner.test.ts`
+- `.ai/scripts/workflow/runner.ts`
+- `.ai/scripts/workflow/runner.test.ts`
 - `.ai/plans/*.md`
 
 ## Rules
@@ -106,6 +105,9 @@ active
 
 blocked
 → unblock-plan
+→ execute-plan for legacy blocked plans only; runner routes this pair through
+  `unblock-plan`, which must migrate it to `blocked + unblock-plan` or
+  `active + execute-plan`
 
 review
 → review-plan
@@ -115,6 +117,23 @@ reopening
 
 completed
 → commit-summary
+
+### Runner Route Matrix
+
+`scripts/workflow/contracts/stage.ts` is the executable route source. This
+table is machine-checked against it by `stage.test.ts`.
+
+| Status | Next Action | Stage | Notes |
+| --- | --- | --- | --- |
+| `draft` | `sync-plan-artifacts` | sync-plan-artifacts | New runner-managed plans |
+| `draft` | `plan-validator` | plan-validator | Synced or existing drafts |
+| `approved` | `execute-plan` | execute-plan | Approved plan |
+| `active` | `execute-plan` | execute-plan | Implementation continues |
+| `blocked` | `execute-plan` | unblock-plan | Legacy compatibility only |
+| `blocked` | `unblock-plan` | unblock-plan | Default blocked route |
+| `review` | `review-plan` | review-changes | Runner review |
+| `reopening` | `reopen-plan` | reopen-plan | Post-completion repair |
+| `completed` | `commit-summary` | commit-summary | Commit or aggregate summary |
 
 ---
 
@@ -244,7 +263,14 @@ Review system boundary:
   transition.
 * The combined harness review may approve `completed + commit-summary` or return to `active + execute-plan`.
 
-Completed `commit-summary` is the terminal safe-to-merge path. It creates the local plan-scoped commit and runner success represents that no further next action is required.
+For one-final-commit plans, `completed + commit-summary` creates the local
+plan-scoped commit and is terminal on success.
+
+For task-savepoint plans, `completed + commit-summary` first creates the
+reviewed task's local commit. The runner then returns to `active +
+execute-plan` for the next incomplete task. After the final task commit, the
+runner executes one aggregate commit-summary stage with no new commit, writes
+the execution summary, and exits successfully.
 
 Declared artifact-only no-commit review:
 
@@ -291,7 +317,7 @@ Next Action = execute-plan
 - Verify this file has `Version` and `Last Updated` headers.
 - Verify `.ai/templates/plan.template.md` contains a `## Workflow State Rules` section that references this file.
 - Verify every state-machine prompt explicitly loads `.ai/instructions/shared/workflow-state.md`.
-- Verify status values, next-action values, prompt routes, and workflow transitions stay aligned with `.ai/scripts/workflow-runner.ts` and `.ai/scripts/workflow-runner.test.ts`.
+- Verify status values, next-action values, prompt routes, and workflow transitions stay aligned with `.ai/scripts/workflow/runner.ts` and `.ai/scripts/workflow/runner.test.ts`.
 
 ## Anti-Patterns
 

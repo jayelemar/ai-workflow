@@ -1,5 +1,10 @@
 # Testing Instruction Changelog
 
+## v1.1 — 2026-07-19
+
+* Kept repository commands and test-layout facts local; delegated portable test
+  strategy, reporting, and environment policy to `shared/testing.md`.
+
 ## v1.3 — 2026-07-09
 
 * Added the behavior-change and bugfix rule to confirm or add a failing

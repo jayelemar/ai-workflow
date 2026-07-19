@@ -1,5 +1,5 @@
-Version: 1.1
-Last Updated: 2026-07-15
+Version: 1.2
+Last Updated: 2026-07-19
 
 # AI Workflow Instructions
 
@@ -13,8 +13,8 @@ workflow artifacts.
 - `.ai/plans/*.md`
 - `.ai/artifacts/**`
 - `.ai/prompts/*.md`
-- `.ai/scripts/workflow-runner.ts`
-- `.ai/scripts/workflow-runner.test.ts`
+- `.ai/scripts/workflow/runner.ts`
+- `.ai/scripts/workflow/runner.test.ts`
 - `.ai/templates/plan.template.md`
 - `.ai/wrappers/README.md`
 - `.ai/README.md`
@@ -128,9 +128,25 @@ validation.
 
 ## Validation
 
-- Validate workflow prompt or script changes with `.ai/scripts/health-check.mjs`
+- Validate workflow prompt or script changes with `.ai/scripts/maintenance/health-check.mjs`
   or the relevant `.ai/scripts/*.test.*` tests.
 - Verify task-savepoint wording contains no lifecycle-only, implementation-only,
   validation-only, red tests-only, or tiny checklist savepoints.
 - Verify every task savepoint can pass, be reviewed, and be committed
   independently.
+
+## Placement
+
+- Keep plan task structure, artifact locations, and savepoint rules in this
+  file.
+- Keep canonical workflow state transitions in
+  `.ai/instructions/shared/workflow-state.md`.
+- Keep user-journey and implementation-map contracts in
+  `.ai/instructions/shared/flow-trace-artifacts.md`.
+
+## Anti-Patterns
+
+- Repeating workflow-state transitions or flow-trace artifact contracts in
+  plan-specific workflow rules.
+- Using an un-routed workflow instruction instead of the index-selected
+  instruction set.

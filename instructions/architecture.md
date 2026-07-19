@@ -1,5 +1,5 @@
-Version: 1.3
-Last Updated: 2026-07-13
+Version: 1.4
+Last Updated: 2026-07-19
 
 # Architecture Instructions
 
@@ -65,7 +65,7 @@ root
 - Use `src/app/**/_components` only for route-private glue that cannot reasonably belong to an existing feature namespace.
 - For new support issue UI, UI models, and component tests, use `src/features/support-issue/components/`.
 - Use `src/app/support-tickets/_components` only for route-private glue; keep support ticket route files focused on route entry composition unless the user explicitly asks for route-local files.
-- Keep generated or database-shaped types in `src/types/`; normalize database rows through mapper functions before exposing domain objects.
+- Keep generated or database-shaped types in `src/types/`; follow `data-services.md` for mapper and domain-object rules.
 - Use the `@/*` path alias for imports from `src/`, matching `tsconfig.json`.
 - Keep Supabase database state under `supabase/migrations/`, local configuration under `supabase/config.toml`, Edge Functions under `supabase/functions/`, and database tests under `supabase/tests/database/`.
 - Keep browser workflow tests under `e2e/`; unit and component tests are colocated as `*.test.ts` or `*.test.tsx`.

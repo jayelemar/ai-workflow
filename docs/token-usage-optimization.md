@@ -46,8 +46,8 @@ Static files inspected:
 - `.ai/AGENTS.md`
 - `.ai/instructions/index.md`
 - `.ai/instructions/ai-workflow.md`
-- `.ai/scripts/workflow-runner.ts`
-- `.ai/scripts/workflow-runner/*.ts`
+- `.ai/scripts/workflow/runner.ts`
+- `.ai/scripts/workflow/**/*.ts`
 - `.ai/prompts/*.md`
 - `.ai/wrappers/*.md`
 - Native shared guidance under `.ai/instructions/shared/*.md`
@@ -568,9 +568,9 @@ Avoid for:
 Manual checkpoint commands:
 
 ```bash
-pnpm exec tsx .ai/scripts/manual-token-usage.ts --plan <plan-name> --stage spec
-pnpm exec tsx .ai/scripts/manual-token-usage.ts --plan <plan-name> --stage plan
-pnpm exec tsx .ai/scripts/manual-token-usage.ts --plan <plan-name> --stage execute
+pnpm exec tsx .ai/scripts/workflow/telemetry/manual-token-usage.ts --plan <plan-name> --stage spec
+pnpm exec tsx .ai/scripts/workflow/telemetry/manual-token-usage.ts --plan <plan-name> --stage plan
+pnpm exec tsx .ai/scripts/workflow/telemetry/manual-token-usage.ts --plan <plan-name> --stage execute
 ```
 
 Manual checkpoint resolution:

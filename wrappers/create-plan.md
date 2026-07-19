@@ -42,7 +42,7 @@ handing off to `plan-validator`.
 If execution mode is `manual`, create the plan and planning artifacts only, and
 do not create runner-only workflow state just to continue execution. After
 saving the plan, append:
-`pnpm exec tsx .ai/scripts/manual-token-usage.ts --plan <feature-or-bug-name> --stage plan`
+`pnpm exec tsx .ai/scripts/workflow/telemetry/manual-token-usage.ts --plan <feature-or-bug-name> --stage plan`
 
 Strict Constraints:
 - For `manual` mode, you are only allowed to create or update:

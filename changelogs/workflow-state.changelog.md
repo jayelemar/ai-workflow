@@ -1,5 +1,11 @@
 # Workflow State Instruction Changelog
 
+## v1.21 — 2026-07-19
+
+* Added a machine-checked runner route matrix, documented the legacy blocked
+  route, and aligned task-savepoint and aggregate commit-summary semantics with
+  the current runner.
+
 ## v1.20 — 2026-07-18
 
 * Documented deterministic completion for declared artifact-only thin plans with

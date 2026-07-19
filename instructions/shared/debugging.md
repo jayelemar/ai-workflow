@@ -1,5 +1,5 @@
-Version: 1.0
-Last Updated: 2026-07-09
+Version: 1.1
+Last Updated: 2026-07-19
 
 # Debugging Instructions
 
@@ -33,9 +33,8 @@ work.
 
 ## Validation
 
-- For bug fixes or behavior changes, confirm or add a failing regression test
-  before implementation whenever the repository has a practical test layer for
-  the behavior.
+- Follow `shared/testing.md` for regression-test policy and test-layer
+  selection before implementation.
 - Verify the original failure mode is covered by the final validation command.
 - If validation cannot run, state the environment blocker, residual risk, and
   the smallest command that should be run later.

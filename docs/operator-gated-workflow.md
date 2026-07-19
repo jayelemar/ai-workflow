@@ -55,7 +55,7 @@ For medium or high-risk bugs, use existing wrappers in this order:
 2. `.ai/wrappers/create-plan.md`, selecting `manual` or `runner-managed`
 3. For `manual` only: `.ai/wrappers/manual-execute-plan.md`
 
-Do not invoke `workflow-runner.ts` for low or medium work unless the operator
+Do not invoke `.ai/scripts/workflow/runner.ts` for low or medium work unless the operator
 explicitly escalates it. `manual` retains `spec -> plan -> execute` discipline
 without runner state, retry loops, or stage context rehydration.
 

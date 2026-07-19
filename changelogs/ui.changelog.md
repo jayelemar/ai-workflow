@@ -1,5 +1,10 @@
 # UI Instruction Changelog
 
+## v1.5 — 2026-07-19
+
+* Removed duplicate feature and support-ticket placement rules; UI placement
+  now references `architecture.md`.
+
 ## v1.4 — 2026-07-13
 
 * Aligned support issue placement with feature-first architecture guidance.

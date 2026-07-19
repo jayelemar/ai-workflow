@@ -1,5 +1,5 @@
-Version: 1.0
-Last Updated: 2026-06-05
+Version: 1.1
+Last Updated: 2026-07-19
 
 # Testing Instructions
 
@@ -29,13 +29,8 @@ integration code, Playwright specs, Vitest specs, and `.ai` workflow tests.
   captures trace on first retry, and currently targets Desktop Chrome.
 - `pnpm check` runs typecheck, lint, format check, and Vitest in run mode; it
   does not run Playwright.
-- In the Codex sandbox, Node/Playwright local network or browser-server
-  operations may require command-level escalation. Request escalation for the
-  specific command when needed and explain that the command needs local network
-  or browser access.
-- Do not use `yolo` or broad sandbox bypasses for validation.
-- For `.ai` instruction-only changes, verify instruction metadata and Prettier
-  formatting instead of running application tests as the completion gate.
+- Follow `shared/testing.md` for test-layer selection, regression-test policy,
+  skipped-validation reporting, and environment constraints.
 
 ## Placement
 
@@ -49,23 +44,16 @@ integration code, Playwright specs, Vitest specs, and `.ai` workflow tests.
 
 ## Validation
 
-- For source-only changes, start with the narrowest command that covers the
-  touched area, then broaden to `pnpm check` when shared behavior or
-  cross-module contracts changed.
-- For route or browser behavior, run `pnpm e2e` or a focused Playwright command
-  after unit-level validation.
 - For formatting-only or instruction-only changes, run
   `pnpm exec prettier --check <paths>`.
-- Always report commands run and any commands skipped, including why they were
-  skipped.
+- Use `pnpm check` only when shared behavior or cross-module contracts require
+  repository-wide static and Vitest validation.
 
 ## Anti-Patterns
 
 - Claiming `pnpm check` covers Playwright.
 - Adding tests outside the configured Vitest include pattern and assuming they
   run through `pnpm test`.
-- Skipping validation silently because a command needs local network,
-  Playwright, or sandbox escalation.
 - Running broad app validation for `.ai` instruction-only edits and presenting
   it as required by the change.
 - Mutating application data or external services just to validate a static or

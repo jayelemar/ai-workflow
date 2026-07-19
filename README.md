@@ -94,7 +94,7 @@ pnpm add -D tsx prettier
 6. Verify the runner entry from the parent repository root.
 
 ```bash
-pnpm exec tsx .ai/scripts/workflow-runner.ts --help
+pnpm exec tsx .ai/scripts/workflow/runner.ts --help
 ```
 
 If `pnpm exec tsx ...` resolves and the runner entry responds, the workflow is
@@ -106,9 +106,9 @@ Run this from the parent repository root when you want to verify the private
 `.ai` workflow source and local-only boundaries:
 
 ```bash
-node .ai/scripts/health-check.mjs
-node .ai/scripts/health-check.mjs --runner-tests
-node .ai/scripts/health-check.mjs --full
+node .ai/scripts/maintenance/health-check.mjs
+node .ai/scripts/maintenance/health-check.mjs --runner-tests
+node .ai/scripts/maintenance/health-check.mjs --full
 ```
 
 The default check confirms that the parent repository contains `.ai/`, that the
@@ -204,11 +204,11 @@ Default locations:
   `.ai/artifacts/<name>/user-journey.md`
 - plans: `.ai/plans/<name>.md`
 - prompts: `.ai/prompts/*.md`
-- runner: `.ai/scripts/workflow-runner.ts`
+- runner: `.ai/scripts/workflow/runner.ts`
 
 Plan `## Spec` entries may also point to any repo-relative `*.spec.md` path
 when a workflow companion spec belongs elsewhere, such as
-`.ai/scripts/workflow-runner.spec.md`.
+`.ai/scripts/workflow/runner.spec.md`.
 
 ## Standard Workflow
 
@@ -319,36 +319,29 @@ runner-only state artifacts just to continue execution.
 
 ### Choose A Post-Plan Path
 
-You have three options:
+You have two options:
 
 - manual execution in the same conversation
 - default runner path
-- manual `plan-preview-before-apply` path
 
 ## Workflow Runner
 
 Default post-plan path:
 
 ```bash
-pnpm exec tsx .ai/scripts/workflow-runner.ts .ai/plans/<plan-name>.md
+pnpm exec tsx .ai/scripts/workflow/runner.ts .ai/plans/<plan-name>.md
 ```
 
 Example:
 
 ```bash
-pnpm exec tsx .ai/scripts/workflow-runner.ts .ai/plans/add-billing-retries.md
-```
-
-Quiet terminal mode:
-
-```bash
-pnpm exec tsx .ai/scripts/workflow-runner.ts --compact .ai/plans/<plan-name>.md
+pnpm exec tsx .ai/scripts/workflow/runner.ts .ai/plans/add-billing-retries.md
 ```
 
 One-off Codex profile override:
 
 ```bash
-pnpm exec tsx .ai/scripts/workflow-runner.ts --profile codex-personal .ai/plans/<plan-name>.md
+pnpm exec tsx .ai/scripts/workflow/runner.ts --profile codex-personal .ai/plans/<plan-name>.md
 ```
 
 Runner expectations:
@@ -382,9 +375,9 @@ Default stage routing:
 | --- | --- | --- |
 | `sync-plan-artifacts` | `gpt-5.6-luna` | `medium` |
 | `plan-validator` | `gpt-5.6-terra` | `medium` |
-| `execute-plan` | `gpt-5.6-terra` | `high` |
+| `execute-plan` | `gpt-5.5` | `high` |
 | `unblock-plan` | `gpt-5.6-luna` | `medium` |
-| `review-changes` | `gpt-5.6-terra` | `high` |
+| `review-changes` | `gpt-5.6-terra` | `xhigh` |
 | `reopen-plan` | `gpt-5.6-luna` | `medium` |
 | `commit-summary` | `gpt-5.6-terra` | `medium` |
 | `scope-cleanup` | `gpt-5.6-terra` | `high` |
@@ -401,19 +394,6 @@ Notes:
   implementation correctness validation.
 - `scope-cleanup` is not a visible workflow state, but the runner uses it
   before review and commit-summary cleanup decisions, so it has its own routing.
-
-Previous stage routing:
-
-```text
-sync-plan-artifacts -> gpt-5.4 medium
-plan-validator      -> gpt-5.4 high
-execute-plan        -> gpt-5.4 high
-unblock-plan        -> gpt-5.4 medium
-review-changes      -> gpt-5.5 xhigh
-reopen-plan         -> gpt-5.4 medium
-commit-summary      -> gpt-5.3-codex-spark medium
-scope-cleanup       -> gpt-5.5 xhigh
-```
 
 The runner writes a hot-path context snapshot for each plan:
 
@@ -440,8 +420,9 @@ Snapshot sections are intentionally compact and stage-aligned. Expect:
 - `## Review`
 - `## Latest Review Remediation Context`
 
-Workflow plans use `thin-plan-v1`. Versioned workflow history entries stay
-short and point to event artifacts:
+New workflow plans use `thin-plan-v2`. Existing `thin-plan-v1` plans remain
+supported as legacy input and are not migrated by the runner. Versioned
+workflow history entries stay short and point to event artifacts:
 
 ```text
 .ai/artifacts/<plan-name>/events/<kind>-v<N>.md
@@ -491,9 +472,9 @@ prompts can do this automatically after successful stage completion.
 Manual fallback:
 
 ```bash
-pnpm exec tsx .ai/scripts/manual-token-usage.ts --plan <plan-name> --stage spec
-pnpm exec tsx .ai/scripts/manual-token-usage.ts --plan <plan-name> --stage plan
-pnpm exec tsx .ai/scripts/manual-token-usage.ts --plan <plan-name> --stage execute
+pnpm exec tsx .ai/scripts/workflow/telemetry/manual-token-usage.ts --plan <plan-name> --stage spec
+pnpm exec tsx .ai/scripts/workflow/telemetry/manual-token-usage.ts --plan <plan-name> --stage plan
+pnpm exec tsx .ai/scripts/workflow/telemetry/manual-token-usage.ts --plan <plan-name> --stage execute
 ```
 
 The workflow runner does not backfill pre-runner planning turns. If you want
@@ -514,46 +495,6 @@ Non-review workflow stages share one terminal-facing output contract:
 - `**Next**`
 
 `review-changes` remains the only specialized output shape.
-
-## Plan Preview Before Apply
-
-Use this when you have a workflow plan and want exact non-test execution diffs
-previewed before they are written.
-
-Invoke it explicitly with a plan:
-
-```text
-Use '.ai/prompts/plan-preview-before-apply.md'
-
-Plan:
-.ai/plans/<plan-name>.md
-```
-
-Behavior:
-
-- `draft` plans run artifact sync plus the same bounded `plan-validator`
-  preflight that the runner uses
-- `approved` plans transition into `active + execute-plan` in the same
-  invocation
-- `active` plans resume the current execution step
-- the approval gate starts only when execution is about to write a non-test
-  file
-- test-only writes may proceed without the non-test approval gate
-- plan/spec repairs allowed during `draft` preflight do not require diff
-  approval
-- review-compatible execution/validation artifacts and the workflow context
-  snapshot stay current when work will continue into review
-
-Use it when:
-
-- you want exact planned execution diffs before apply
-- you want manual approval per workflow step
-- you still want runner-compatible execution and validation artifacts
-
-Avoid it when:
-
-- you just want the default automated workflow loop
-- you do not need manual approval before non-test execution writes
 
 ## Manual Preview
 
@@ -596,13 +537,13 @@ Common commands from the parent repository root:
 
 ```bash
 # Run the default workflow path
-pnpm exec tsx .ai/scripts/workflow-runner.ts .ai/plans/<plan-name>.md
-
-# Run the default workflow path with compact terminal output
-pnpm exec tsx .ai/scripts/workflow-runner.ts --compact .ai/plans/<plan-name>.md
+pnpm exec tsx .ai/scripts/workflow/runner.ts .ai/plans/<plan-name>.md
 
 # Run the default workflow path with a one-off Codex profile override
-pnpm exec tsx .ai/scripts/workflow-runner.ts --profile codex-personal .ai/plans/<plan-name>.md
+pnpm exec tsx .ai/scripts/workflow/runner.ts --profile codex-personal .ai/plans/<plan-name>.md
+
+# Remove stale locks for a plan only after confirming its prior runner stopped
+pnpm workflow:unlock .ai/plans/<plan-name>.md
 
 # List local workflow files, including ignored ones
 rg --files -uu .ai
@@ -633,14 +574,6 @@ If the runner does not start:
 - confirm `pnpm exec tsx` resolves locally
 - confirm `.codex/AGENTS.md` exists and points at `.ai/AGENTS.md`
 
-If `plan-preview-before-apply` behaves unexpectedly:
-
-- confirm the prompt was invoked explicitly with
-  `Use '.ai/prompts/plan-preview-before-apply.md'`
-- confirm the plan is in `draft`, `approved`, or `active`
-- confirm the plan `## Spec` section points to valid repo-relative
-  `*.spec.md` files
-
 If `manual-preview` behaves unexpectedly:
 
 - confirm the prompt was invoked explicitly with
@@ -659,7 +592,7 @@ If follow-up stages lose context:
 
 Current priority:
 
-- token pathology reduction in `workflow-runner.ts`
+- token pathology reduction in `.ai/scripts/workflow/runner.ts`
 
 Prioritize these before runner module splitting:
 
@@ -681,7 +614,7 @@ Secondary priority:
 
 - runner module split: move snapshot generation, artifact validation,
   token-warning logic, and CLI parsing into focused modules so
-  `workflow-runner.ts` stays easier to test and review
+  `.ai/scripts/workflow/runner.ts` stays easier to test and review
 
 Manual cleanup:
 

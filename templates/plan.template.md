@@ -26,7 +26,7 @@ draft
 
 ## Next Action
 
-sync-plan-artifacts
+N/A: manual plan-bound execution
 
 ---
 

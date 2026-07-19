@@ -15,13 +15,11 @@ external skill prompts or plugin-specific paths.
 - `.ai/prompts/plan-validator.md`
 - `.ai/prompts/execute-plan.md`
 - `.ai/prompts/review-changes.md`
-- `.ai/prompts/fix-review.md`
 - `.ai/prompts/unblock-plan.md`
 - `.ai/prompts/reopen-plan.md`
-- `.ai/prompts/plan-preview-before-apply.md`
 - `.ai/prompts/manual-preview.md`
 - `.ai/prompts/generate-user-flow.md`
-- `.ai/scripts/workflow-runner.ts`
+- `.ai/scripts/workflow/runner.ts`
 
 ## Rules
 

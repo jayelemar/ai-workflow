@@ -1,5 +1,10 @@
 # Flow-Trace Artifact Instruction Changelog
 
+## v1.2 — 2026-07-19
+
+* Replaced duplicated atomic-task checks with a reference to the canonical AI
+  workflow contract while retaining implementation-map coverage checks.
+
 ## v1.1 — 2026-07-15
 
 * Scoped atomic savepoint preflight to new and draft runner-managed plans and

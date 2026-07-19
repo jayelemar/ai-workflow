@@ -81,7 +81,7 @@ Save the finalized spec to:
 .ai/specs/<bug-name>.spec.md
 
 Then append the manual token checkpoint:
-`pnpm exec tsx .ai/scripts/manual-token-usage.ts --plan <bug-name> --stage spec`
+`pnpm exec tsx .ai/scripts/workflow/telemetry/manual-token-usage.ts --plan <bug-name> --stage spec`
 
 If the spec is completed successfully, end the final response with exactly:
 `Spec saved to .ai/specs/<bug-name>.spec.md`

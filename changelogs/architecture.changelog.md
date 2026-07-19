@@ -1,5 +1,10 @@
 # Architecture Instruction Changelog
 
+## v1.4 — 2026-07-19
+
+* Delegated row-mapper behavior to `data-services.md`; retained only the
+  structure-level type ownership rule.
+
 ## v1.3 — 2026-07-13
 
 * Expanded key folder map with representative subfolders and route/service/test files.

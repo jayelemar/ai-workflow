@@ -1,5 +1,5 @@
-Version: 1.4
-Last Updated: 2026-07-13
+Version: 1.5
+Last Updated: 2026-07-19
 
 # UI Instructions
 
@@ -18,8 +18,7 @@ Changes under `src/app`, `src/components/layout`, `src/components/shared`,
 - Wrap main protected route content with `PageContainer` from
   `src/components/layout/page-container.tsx`.
 - Check existing primitives and wrappers in `src/components/ui` before creating
-  a new UI component. If no matching local component exists, check available
-  shadcn skills before building custom UI.
+  a new UI component.
 - Use `PageHeading`, `EmptyState`, `LoadingSpinner`, `MetricCard`,
   `NativeSelect`, `PersonAvatar`, `ProgressBar`, `SearchInput`, and
   `StatusBadge` from `src/components/shared` when those patterns match the UI.
@@ -39,12 +38,8 @@ Changes under `src/app`, `src/components/layout`, `src/components/shared`,
 - Keep route pages responsible for page-specific state, filtering, sorting,
   dialog state, and render composition; move repeated UI to shared components
   only after it appears across routes.
-- Prefer feature-owned UI under `src/features/<feature>/components/` when a
-  feature namespace exists. Keep `src/app/**/_components` for route-private glue
-  only.
-- For new support issue UI, UI models, and component tests, use
-  `src/features/support-issue/components/`.
-- Use `src/app/support-tickets/_components` only for route-private glue.
+- Do not create a route-local `_components` folder when `architecture.md`
+  assigns the UI to an existing feature namespace.
 - Preserve established loading and empty states with `Skeleton`,
   `LoadingSpinner`, and `EmptyState` instead of ad hoc placeholders.
 
@@ -56,8 +51,7 @@ Changes under `src/app`, `src/components/layout`, `src/components/shared`,
 - Layout shell and container pieces belong in `src/components/layout`.
 - Route-specific UI that is not reused can remain in its `src/app/<route>`
   page file.
-- Route-local `_components` folders are allowed only for route-private glue when
-  no existing `src/features/<feature>/components` namespace owns the UI.
+- Follow `architecture.md` for feature-owned and route-private UI placement.
 
 ## Validation
 
