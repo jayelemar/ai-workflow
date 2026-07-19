@@ -56,7 +56,7 @@ canonical state machine.
 
 - `.ai/prompts/manual-preview.md`
 - `.ai/scripts/workflow/runner.ts`
-- `.ai/scripts/workflow/runner.test.ts`
+- `.ai/scripts/workflow/runner/__tests__/integration/runner.test.ts`
 - `.ai/instructions/ai-workflow.md`
 - `.ai/templates/plan.template.md`
 - `.ai/wrappers/README.md`
@@ -75,4 +75,4 @@ canonical state machine.
 ## Validation Expectations
 
 - `pnpm exec prettier --check .ai/instructions .ai/changelogs .ai/wrappers .ai/README.md .ai/prompts`
-- `pnpm exec tsx --test .ai/scripts/workflow/runner.test.ts`
+- `pnpm exec tsx --test .ai/scripts/workflow/runner/__tests__/integration/runner.test.ts`
