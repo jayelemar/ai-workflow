@@ -49,7 +49,7 @@ Execute the plan manually in this conversation.
 When manual execution completes successfully, append the manual token
 checkpoint:
 
-`pnpm exec tsx .ai/scripts/manual-token-usage.ts --plan <plan-name> --stage execute`
+`pnpm exec tsx .ai/scripts/workflow/telemetry/manual-token-usage.ts --plan <plan-name> --stage execute`
 
 When manual execution completes successfully, end the final response with
 exactly:

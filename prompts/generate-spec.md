@@ -146,7 +146,7 @@ Generate:
 
 After saving the spec, append the manual token checkpoint:
 
-`pnpm exec tsx .ai/scripts/manual-token-usage.ts --plan <feature> --stage spec`
+`pnpm exec tsx .ai/scripts/workflow/telemetry/manual-token-usage.ts --plan <feature> --stage spec`
 
 When the spec is completed successfully, end the final response with exactly:
 

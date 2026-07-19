@@ -71,11 +71,11 @@ plans may still use inline file sections.
 
 Workflow-runner owns review staging. When review fails and routes back to execution, remediation must tell the operator or next execution agent to fix the working tree and leave files unstaged, then rerun workflow-runner. Do not tell the operator to stage or restage review fixes; pre-staged files block the next review entry.
 
-Use the path-scoped staged diff command injected by `workflow-runner.ts`:
+Use the path-scoped staged diff command injected by `.ai/scripts/workflow/runner.ts`:
 
 git diff --staged -- <plan-owned paths>
 
-Use the path-scoped staged summary command injected by `workflow-runner.ts`
+Use the path-scoped staged summary command injected by `.ai/scripts/workflow/runner.ts`
 before the full diff when you only need file status:
 
 git diff --staged --name-status -- <plan-owned paths>

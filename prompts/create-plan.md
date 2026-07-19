@@ -66,7 +66,7 @@ For `manual` plans, keep the plan manifest structure but do not require
 runner-managed workflow state before execution.
 After saving a manual plan, append the manual token checkpoint:
 
-`pnpm exec tsx .ai/scripts/manual-token-usage.ts --plan <plan-name> --stage plan`
+`pnpm exec tsx .ai/scripts/workflow/telemetry/manual-token-usage.ts --plan <plan-name> --stage plan`
 
 ---
 

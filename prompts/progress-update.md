@@ -176,7 +176,6 @@ Use these mappings when estimating progress:
 * `active` with some completed tasks: implementation in progress range
 * `review`: review / cleanup range
 * `completed + commit-summary`: final validation / ready to ship range
-* `completed` with no required next action: 100%
 
 When status and next action conflict, choose the lower credible percentage and
 base bullets only on completed work.

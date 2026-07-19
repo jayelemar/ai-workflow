@@ -20,6 +20,9 @@ Shared baseline exceptions:
 * `.ai/changelogs/testing.changelog.md`
 * `.ai/changelogs/workflow-state.changelog.md`
 
+Treat shared baseline exceptions as read-only. Inspect them when routed, but
+report needed baseline changes instead of editing them.
+
 Do NOT modify:
 
 * `.codex/AGENTS.md`
@@ -41,12 +44,32 @@ When updating existing instruction content, also read:
 * the matching existing `.ai/changelogs/*.changelog.md` files
 * shared baseline instruction files named by `.ai/instructions/index.md`, including `.ai/instructions/shared/security.md` when routed for the task
 
+Before editing, read every project-local instruction file and matching
+changelog, plus each routed shared baseline file.
+
 Rules:
 
 * treat `.ai/instructions/index.md` as the repository instruction routing entrypoint
 * if `.ai/instructions/index.md` does not exist, bootstrap it first in the same run before using it for routing
 * use the index to discover existing repo-specific area files before deciding what to create, update, or skip
 * do not assume a missing area just because it is not mentioned in `.codex/AGENTS.md`
+
+---
+
+## Instruction-Set Coherence (MANDATORY)
+
+Before creating or updating files:
+
+* inventory every project-local instruction file, matching changelog, and index route
+* verify every maintained local instruction has a narrow route in `index.md`
+* compare rules by meaning, not only exact wording, for duplicate ownership
+* keep portable policy in shared baselines, repository structure in `architecture.md`, and implementation-specific rules in area files
+* replace lower-authority duplicate rules with a concise reference to the owner
+* keep overlapping validation commands only when the area needs a concrete, narrower command
+* do not delete an existing instruction file without explicit user approval; report an un-routed or unsupported file instead
+
+For read-only shared baseline exceptions, report duplicate or stale baseline
+rules as follow-up work; do not edit them.
 
 ---
 
@@ -155,6 +178,7 @@ Rules:
 * do NOT create files based only on these examples
 * keep shared baseline files portable; do not add repository-specific paths or commands to `shared/security.md`, `shared/testing.md`, or `shared/workflow-state.md`
 * keep `.ai/instructions/index.md` aligned with shared baseline files that must always load or be explicitly routed, including `shared/security.md` when the repository wants a security baseline in normal instruction selection
+* route every maintained project-local instruction file in `.ai/instructions/index.md`; use a narrow scope rather than a catch-all route
 
 If an example is not supported by the codebase:
 
@@ -221,6 +245,13 @@ If overlap:
 
 → keep rule in highest authority file
 → reference instead of duplicating
+
+Authority order for this prompt:
+
+1. routed shared baseline for portable policy
+2. `architecture.md` for repository structure and ownership
+3. area instruction for implementation-specific behavior
+4. `testing.md` for repository validation commands
 
 ---
 
@@ -345,7 +376,16 @@ Only STOP if:
 
 ---
 
-### 7. Coverage Summary
+### 7. Instruction-Set Coherence
+
+* routed local files
+* duplicate rules removed or replaced with references, naming the owner
+* duplicate rules retained only when scopes are materially different
+* un-routed, unsupported, or read-only baseline issues left for follow-up
+
+---
+
+### 8. Coverage Summary
 
 * strong areas (high confidence)
 * partial areas (limited evidence)
