@@ -128,20 +128,10 @@ If unrelated changes remain after runner cleanup inside the path-scoped diff:
 
 -> STOP (`non plan-scoped changes detected`)
 
-### Cross-Plan Required Fixes
+### Required Out-of-Scope Fixes
 
 If review finds that a required fix needs a file outside the current plan path
 list:
-
-* Determine whether that file is owned by another active plan.
-* If the file is owned by another active plan, classify the finding as `plan dependency`.
-* Record the required file path and owner plan path in the review issue.
-* Do not approve the current plan.
-* Do not expand the current review scope to include the other plan's file.
-* Set `workflowState = active` so the next execution run can update the plan into a `plan dependency` blocker with `workflowState = blocked`.
-
-If the required fix needs a file outside the current plan path list and no owner
-plan can be identified:
 
 * Check whether it qualifies under the current task's `Compatibility Regression
   Carve-Out` in `execute-plan.md`: it must be the smallest repair required to

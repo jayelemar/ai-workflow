@@ -1,13 +1,12 @@
 import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { mkdirSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { tmpdir } from "node:os";
 import test from "node:test";
 
 import {
   canonicalFileOwnershipArtifact,
-  detectFileOwnershipArtifactConflict,
   parseFileOwnershipArtifact,
   parseGitStatusChangedFileEntries,
   refreshAndCheckFileOwnershipArtifact,
@@ -25,56 +24,6 @@ const setupWorkspace = async () => {
     root,
     cleanup: () => rm(root, { recursive: true, force: true }),
   };
-};
-
-const writeArtifact = async (
-  root: string,
-  planName: string,
-  artifact: Record<string, unknown>,
-) => {
-  const artifactPath = join(
-    root,
-    ".ai",
-    "artifacts",
-    planName,
-    "state",
-    "file-ownership.json",
-  );
-  mkdirSync(dirname(artifactPath), { recursive: true });
-  await writeFile(artifactPath, `${JSON.stringify(artifact, null, 2)}\n`, "utf8");
-  return artifactPath;
-};
-
-const writeWorkflow = async (
-  root: string,
-  planName: string,
-  workflowState = "active",
-) => {
-  const workflowPath = join(
-    root,
-    ".ai",
-    "artifacts",
-    planName,
-    "state",
-    "workflow.json",
-  );
-  mkdirSync(dirname(workflowPath), { recursive: true });
-  await writeFile(
-    workflowPath,
-    `${JSON.stringify(
-      {
-        planPath: `.ai/plans/${planName}.md`,
-        workflowState,
-        latest: {},
-        history: [],
-        unresolvedBlockers: [],
-        updatedAt: "2026-07-19T00:00:00.000Z",
-      },
-      null,
-      2,
-    )}\n`,
-    "utf8",
-  );
 };
 
 const parsedPlan = (content: string): ParsedPlan => ({
@@ -203,50 +152,6 @@ test("file ownership refresh resolves globs to changed files and writes sidecar"
       ),
     ) as FileOwnershipArtifact;
     assert.equal(written.headSha, "headsha");
-  } finally {
-    await workspace.cleanup();
-  }
-});
-
-test("file ownership conflict detection uses canonical workflow state", async () => {
-  const workspace = await setupWorkspace();
-  try {
-    await writeArtifact(workspace.root, "other-plan", {
-      planPath: ".ai/plans/other-plan.md",
-      status: "completed",
-      nextAction: "commit-summary",
-      owns: ["src/shared.ts"],
-      released: [],
-      resolvedFiles: ["src/shared.ts"],
-      changedFiles: ["src/shared.ts"],
-      headSha: "otherhead",
-      updatedAt: "2026-07-19T00:00:00.000Z",
-    });
-    await writeWorkflow(
-      workspace.root,
-      "other-plan",
-      "active",
-    );
-
-    const conflict = await detectFileOwnershipArtifactConflict({
-      rootDir: workspace.root,
-      current: {
-        planPath: ".ai/plans/current-plan.md",
-        owns: ["src/shared.ts"],
-        released: [],
-        resolvedFiles: ["src/shared.ts"],
-        changedFiles: ["src/shared.ts"],
-        headSha: "currenthead",
-        updatedAt: "2026-07-19T00:01:00.000Z",
-      },
-      changedFiles: ["src/shared.ts"],
-      dirtyFiles: [],
-    });
-
-    if (conflict.ok) {
-      assert.fail("expected ownership conflict");
-    }
-    assert.match(conflict.reason, /\.ai\/plans\/other-plan\.md/);
   } finally {
     await workspace.cleanup();
   }

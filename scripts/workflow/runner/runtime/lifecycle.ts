@@ -1,4 +1,3 @@
-import { shellQuote } from "../plan/prompt.ts";
 import type {
   ConsoleLike,
   OutputStream,
@@ -14,19 +13,6 @@ Options:
   --profile <name>       Use a Codex profile override
   --unblock-note <text>  Add operator context for unblock-plan
   -h, --help             Show this help message`;
-
-export const workflowFileOwnershipResetPathHint = (
-  reason: string,
-): string | null => {
-  const match =
-    /workflow file ownership conflict: .+ is already owned by (?<planPath>\.ai\/plans\/[^\s)]+\.md)/.exec(
-      reason,
-    );
-  const planPath = match?.groups?.planPath;
-  return planPath
-    ? `- Ownership reset command: rtk node .ai/scripts/workflow/ownership/reset-file-ownership.mjs ${shellQuote(planPath)} --force`
-    : null;
-};
 
 export type RunWorkflowOptions = {
   argv?: string[];

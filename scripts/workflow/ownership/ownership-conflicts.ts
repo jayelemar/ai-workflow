@@ -1,11 +1,7 @@
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import {
-  extractSectionValue,
-  normalizeWorkflowStateValue,
-  uniquePaths,
-} from "../runner/plan/parser.ts";
+import { uniquePaths } from "../runner/plan/parser.ts";
 import {
   defaultIsIgnored,
   parseReviewStagingPaths,
@@ -36,7 +32,6 @@ const rel = (...segments: string[]) => segments.join("/");
 
 import {
   parseThinPlanV2FilesState,
-  parseThinPlanV2WorkflowState,
   readJsonArtifact,
   thinPlanV2ArtifactPath,
 } from "../runner/plan/thin-plan-sidecars.ts";
@@ -124,193 +119,6 @@ export const refreshCurrentFileOwnershipArtifact = async ({
   };
 };
 
-const blockingOwnershipStates = new Set<import("../runner/types.ts").WorkflowState>([
-  "active",
-  "review",
-  "blocked",
-  "reopening",
-]);
-
-export const readOtherFileOwnershipArtifacts = async (
-  rootDir: string,
-  currentPlanPath: string,
-): Promise<{ ok: true; artifacts: FileOwnershipArtifact[] } | Failure> => {
-  const artifactsRoot = path.join(rootDir, ".ai", "artifacts");
-  let entries: string[];
-  try {
-    entries = await readdir(artifactsRoot);
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code === "ENOENT") {
-      return { ok: true, artifacts: [] };
-    }
-    return {
-      ok: false,
-      reason: `file ownership artifacts cannot be listed: ${String(error)}`,
-    };
-  }
-
-  const artifacts: FileOwnershipArtifact[] = [];
-  for (const entry of entries) {
-    const otherPlanPath = rel(".ai", "plans", `${entry}.md`);
-    try {
-      const otherPlanContent = await readFile(
-        path.join(rootDir, otherPlanPath),
-        "utf8",
-      );
-      const extractedWorkflowState = extractSectionValue(
-        otherPlanContent,
-        "## Workflow State",
-      );
-      if (extractedWorkflowState !== null) {
-        const rawWorkflowState = normalizeWorkflowStateValue(extractedWorkflowState);
-        if (rawWorkflowState.startsWith("draft-")) {
-          continue;
-        }
-      }
-    } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code;
-      if (code !== "ENOENT") {
-        return {
-          ok: false,
-          reason: `plan file cannot be read: ${otherPlanPath}: ${String(error)}`,
-        };
-      }
-    }
-
-    const artifactPath = path.join(
-      artifactsRoot,
-      entry,
-      "state",
-      "file-ownership.json",
-    );
-    let raw: string;
-    try {
-      raw = await readFile(artifactPath, "utf8");
-    } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code;
-      if (code === "ENOENT" || code === "EISDIR") {
-        continue;
-      }
-      return {
-        ok: false,
-        reason: `file ownership artifact cannot be read: ${artifactPath}: ${String(error)}`,
-      };
-    }
-    const parsed = parseFileOwnershipArtifact(raw, artifactPath);
-    if (isFailure(parsed)) {
-      return parsed;
-    }
-    if (parsed.planPath !== currentPlanPath) {
-      const workflowPath = path.join(
-        artifactsRoot,
-        entry,
-        "state",
-        "workflow.json",
-      );
-      let artifact = parsed;
-      try {
-        const workflowRaw = await readFile(workflowPath, "utf8");
-        const workflow = parseThinPlanV2WorkflowState(
-          JSON.parse(workflowRaw) as unknown,
-          parsed.planPath,
-          path.relative(rootDir, workflowPath),
-        );
-        if (isFailure(workflow)) {
-          return workflow;
-        }
-        artifact = {
-          ...parsed,
-          workflowState: workflow.workflowState,
-          updatedAt: parsed.updatedAt || workflow.updatedAt,
-        };
-      } catch (error) {
-        const code = (error as NodeJS.ErrnoException).code;
-        if (code !== "ENOENT") {
-          return {
-            ok: false,
-            reason: `file ownership workflow artifact cannot be read: ${workflowPath}: ${String(error)}`,
-          };
-        }
-        return { ok: false, reason: `file ownership workflow artifact cannot be read: ${workflowPath}: missing canonical workflow state` };
-      }
-      if (artifact.migratedFromLegacy) {
-        await writeFile(
-          artifactPath,
-          `${JSON.stringify(canonicalFileOwnershipArtifact(artifact), null, 2)}\n`,
-          "utf8",
-        );
-      }
-      artifacts.push(artifact);
-    }
-  }
-
-  return { ok: true, artifacts };
-};
-
-export const effectiveArtifactResolvedFiles = (
-  artifact: FileOwnershipArtifact,
-  changedFiles: string[],
-): string[] =>
-  uniquePaths([
-    ...artifact.resolvedFiles,
-    ...resolveOwnershipScopeEntries(
-      artifact.owns,
-      changedFiles,
-      artifact.released,
-    ),
-  ]).filter((filePath) => !artifact.released.includes(filePath));
-
-export const detectFileOwnershipArtifactConflict = async ({
-  rootDir,
-  current,
-  changedFiles,
-  dirtyFiles = changedFiles,
-}: {
-  rootDir: string;
-  current: FileOwnershipArtifact;
-  changedFiles: string[];
-  dirtyFiles?: string[];
-}): Promise<{ ok: true } | Failure> => {
-  const otherArtifacts = await readOtherFileOwnershipArtifacts(
-    rootDir,
-    current.planPath,
-  );
-  if (!otherArtifacts.ok) {
-    return otherArtifacts;
-  }
-
-  const currentFiles = new Set(current.resolvedFiles);
-  const dirtyFileSet = new Set(dirtyFiles);
-  for (const other of otherArtifacts.artifacts) {
-    if (!other.workflowState) {
-      return {
-        ok: false,
-        reason: `file ownership artifact is missing canonical workflow state: ${other.planPath}`,
-      };
-    }
-    const otherFiles = effectiveArtifactResolvedFiles(other, changedFiles);
-    const conflictingFiles =
-      other.workflowState === "completed"
-        ? otherFiles.filter(
-            (filePath) =>
-              currentFiles.has(filePath) && dirtyFileSet.has(filePath),
-          )
-        : blockingOwnershipStates.has(other.workflowState)
-          ? otherFiles.filter((filePath) => currentFiles.has(filePath))
-          : [];
-    if (conflictingFiles.length === 0) {
-      continue;
-    }
-    return {
-      ok: false,
-      reason: `workflow file ownership conflict: ${conflictingFiles[0]} is already owned by ${other.planPath}`,
-    };
-  }
-
-  return { ok: true };
-};
-
 export const refreshAndCheckFileOwnershipArtifact = async ({
   rootDir,
   plan,
@@ -337,15 +145,6 @@ export const refreshAndCheckFileOwnershipArtifact = async ({
     return { hasOwnershipScope: false };
   }
 
-  const conflict = await detectFileOwnershipArtifactConflict({
-    rootDir,
-    current: refreshed.artifact,
-    changedFiles: refreshed.changedFiles,
-  });
-  if (!conflict.ok) {
-    return conflict;
-  }
-
   const ignored =
     isIgnored ??
     ((relativePath: string) => defaultIsIgnored(rootDir, relativePath));
@@ -370,13 +169,11 @@ export const readThinPlanV2FileOwnershipPreflight = async ({
   rootDir,
   plan,
   processRunner,
-  checkCompletedDirtyConflicts,
   isIgnored,
 }: {
   rootDir: string;
   plan: ParsedPlan;
   processRunner: ProcessRunner;
-  checkCompletedDirtyConflicts: boolean;
   isIgnored?: (relativePath: string) => Promise<boolean>;
 }): Promise<FileOwnershipPreflight | Failure> => {
   const fileOwnershipPath = thinPlanV2ArtifactPath(
@@ -442,25 +239,6 @@ export const readThinPlanV2FileOwnershipPreflight = async ({
       };
     }
   }
-  let dirtyFiles: string[] | undefined;
-  if (checkCompletedDirtyConflicts) {
-    const changed = await readGitChangedFiles(rootDir, processRunner);
-    if (!changed.ok) {
-      return changed;
-    }
-    dirtyFiles = changed.paths;
-  }
-
-  const conflict = await detectFileOwnershipArtifactConflict({
-    rootDir,
-    current: artifact,
-    changedFiles: files.changedFiles,
-    dirtyFiles,
-  });
-  if (!conflict.ok) {
-    return conflict;
-  }
-
   const ignored =
     isIgnored ??
     ((relativePath: string) => defaultIsIgnored(rootDir, relativePath));

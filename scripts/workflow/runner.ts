@@ -21,7 +21,6 @@ export {
   createWorkflowWaitNotice,
   formatCommitProgressLine,
   formatWorkflowElapsedTime,
-  formatWorkflowOwnershipResetHint,
   formatWorkflowProgressLine,
   formatWorkflowWaitLine,
   supportsWorkflowAnsiColor,

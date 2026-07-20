@@ -230,7 +230,7 @@ broken because of the current task:
   required to uphold the current task's invariant, including an access/security invariant, treat it as this
   compatibility repair
 * if such a file is absent from either the current plan ownership or changed-
-  file inventory artifact and no active owner plan claims it, add the exact
+  file inventory artifact, add the exact
   file to both artifacts and continue
 * do not output `STOP` solely because the required minimal backend contract
   repair touches a migration, generated database contract file, or database
@@ -253,52 +253,13 @@ For each phase:
 
 ---
 
-### Cross-Plan File Dependency
+### File Scope
 
 If required execution or bugfix work needs a file outside the current plan-owned paths:
 
-* First determine whether the file is owned by another active plan.
-* If the edit qualifies under Compatibility Regression Carve-Out and the file
-  is unowned, claim the exact file in the current plan's ownership/inventory
-  artifacts and continue instead of stopping.
-* If the file is owned by another active plan, treat this as a `plan dependency`, not as a generic file-scope failure.
-* Do NOT keep executing both plans in parallel.
-* Update the current plan to `workflowState = blocked`.
-* Create an execution event artifact that records a blocker with:
-  * `Type: plan dependency`
-  * the required file path
-  * the owner plan path
-  * evidence that the file is owned by another active plan
-  * the required action: complete the owner plan or release the shared file ownership
-* Update `.ai/artifacts/<plan-name>/state/workflow.json` with `workflowState: "blocked"`, `latest.execution`, appended `history`, and `unresolvedBlockers`.
-* MUST NOT add inline `## Blockers` to thin-plan-v2 manifests.
-* STOP.
-
-If no owner plan path can be identified:
-
-→ STOP (`file outside plan scope`)
-
-### File Ownership Releases
-
-If the current plan owns a file that another blocked plan needs, the current plan MAY transfer that file before the whole plan is complete only when:
-
-* all current-plan work for that file is complete
-* validation evidence for that file-specific work is documented
-* remaining current-plan phases can continue without editing that file
-
-To transfer the file, append or update:
-
-## File Ownership Releases
-
-### Release vX
-
-* File: exact/repo-relative/path.ts
-* Released By: .ai/plans/current-plan.md
-* Released To: .ai/plans/dependent-plan.md
-* Evidence: concrete validation or review evidence
-* Status: transferred
-
-After `Status: transferred`, the releasing plan must not edit, stage, review, or commit the released file again. If the releasing plan later needs the released file, STOP and create a new `plan dependency` on the current owner plan.
+* If the edit qualifies under Compatibility Regression Carve-Out, claim the
+  exact file in the current plan's ownership/inventory artifacts and continue.
+* Otherwise STOP (`file outside plan scope`).
 
 ---
 

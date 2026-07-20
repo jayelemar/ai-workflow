@@ -28,7 +28,7 @@ Do not load full historical sections unless the snapshot is insufficient.
 Do not inspect workflow `history` during normal unblock runs; use the snapshot,
 unresolved blockers, and the latest relevant event pointer first, then open
 only that exact event artifact when specific evidence is needed.
-Preserve exact unblock evidence reads for unresolved blockers, owner-plan evidence, workflow state, event evidence, user-provided unblock evidence, and file ownership releases.
+Preserve exact unblock evidence reads for unresolved blockers, workflow state, event evidence, and user-provided unblock evidence.
 Use the runner-provided Active Context Packet and index-selected instruction files only. Do not broadly load `.ai/instructions/**`.
 
 Apply shared reasoning-quality and debugging guidance for evidence checks,
@@ -57,7 +57,7 @@ Use blocker-resolution evidence from:
 * the user's current request
 * the exact event artifact referenced by the latest relevant event pointer when that evidence is needed
 
-These unresolved blockers, owner-plan evidence, workflow state, and event evidence remain correctness-critical inputs even when the context snapshot is available.
+These unresolved blockers, workflow state, and event evidence remain correctness-critical inputs even when the context snapshot is available.
 
 Manual browser validation evidence MUST include:
 
@@ -80,27 +80,6 @@ If the unblock evidence proves the current runtime/setup blocker is resolved but
 * transition to `active`
 * record the exact failing validation command and observed failure in the unblock artifact
 * do not keep the stale runtime/setup blocker as the active blocked reason
-
-If a blocker is `Type: plan dependency`:
-
-* require evidence that the owner plan reached `completed` with no uncommitted changes for the shared file OR that the owner plan released the shared file ownership
-* evidence MUST identify the owner plan and the shared file path
-* the runner-owned `.ai/artifacts/<owner-plan>/state/file-ownership.json` conflict check is authoritative for whether a completed owner plan is still dirty
-* do not unblock from a `plan dependency` using only an assumption that the owner plan is inactive
-* if the evidence proves the dependency is resolved, mark the blocker resolved and allow the normal `blocked -> active` transition
-* if the evidence is missing or incomplete, keep `workflowState = blocked`
-
-### File Ownership Releases
-
-For released shared file ownership, valid evidence MUST include a File Ownership Releases entry in the owner plan's `.ai/artifacts/<owner-plan>/state/file-ownership.json` with:
-
-* `File:` matching the shared file path
-* `Released By:` naming the owner plan
-* `Released To:` naming this dependent plan
-* `Status: transferred`
-* concrete validation or review evidence
-
-When unblocking from a transferred release, add the released file to this plan's `.ai/artifacts/<plan-name>/state/file-ownership.json` ownership state and to `.ai/artifacts/<plan-name>/state/files.json` if it already has changed content for this plan. After the transition, this plan owns the transferred file.
 
 After classifying blockers, if any remaining execution blocker requires user clarification, product decision, external service access, auth state, runtime setup, or manual browser validation and no concrete resolution evidence is available:
 
