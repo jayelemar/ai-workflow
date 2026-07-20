@@ -113,15 +113,13 @@ test("createCodexLiveOutputFormatter flushes readable terminal output", () => {
 test("formatWorkflowProgressLine reports stage, action, task, and iteration context", () => {
   assert.equal(
     formatWorkflowProgressLine({
-      planName: "workflow-runner-module-refactor",
-      status: "active",
-      nextAction: "execute-plan",
+      workflowState: "active",
       promptPath: EXECUTE_PLAN_PROMPT_PATH,
       model: "gpt-5.4",
       reasoning: "high",
       iteration: 2,
       maxIterations: 100,
     }),
-    "\n\n[2/100] STAGE EXECUTE\nactive -> execute-plan\nmodel: gpt-5.4 | reasoning: high\n",
+    "\n\n[2/100] STAGE EXECUTE\nworkflowState: active\nmodel: gpt-5.4 | reasoning: high\n",
   );
 });

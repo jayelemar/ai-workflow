@@ -41,13 +41,11 @@ If not provided:
 
 Read:
 
-## Status
+## Workflow State
 
-Expected:
+Expected: `draft-artifact-sync`
 
-draft
-
-IF Status != draft:
+IF Workflow State != `draft-artifact-sync`:
 
 → STOP (`plan must be in draft state`)
 
@@ -55,17 +53,6 @@ IF Status != draft:
 
 Read:
 
-## Next Action
-
-Expected:
-
-sync-plan-artifacts
-
-IF Next Action != sync-plan-artifacts:
-
-→ STOP (`unexpected next action for artifact sync`)
-
----
 
 ## Objective
 
@@ -128,7 +115,7 @@ For thin-plan-v2 state:
 
 ## STOP Conditions
 
-Output `STOP` and keep the plan in `draft + sync-plan-artifacts` when:
+Output `STOP` and keep the plan in `draft-artifact-sync` when:
 
 * the spec is incomplete, vague, ambiguous, or internally inconsistent
 * a required flow-trace artifact cannot be repaired without a product decision
@@ -141,9 +128,7 @@ When stopping:
 
 * state the concrete unresolved decision or artifact blocker
 * do not transition to `plan-validator`
-* keep both the plan manifest and workflow sidecar at:
-  * Status = draft
-  * Next Action = sync-plan-artifacts
+* keep both the plan manifest and workflow sidecar at `workflowState: draft-artifact-sync`
 
 ---
 
@@ -151,17 +136,14 @@ When stopping:
 
 When sync succeeds:
 
-1. update the plan manifest:
-   * Status = draft
-   * Next Action = plan-validator
+1. update the plan manifest `## Workflow State` to `draft-validation`
 2. update `.ai/artifacts/<plan-name>/state/workflow.json`:
    * `planPath` = `.ai/plans/<plan-name>.md`
-   * `status` = `draft`
-   * `nextAction` = `plan-validator`
+   * `workflowState` = `draft-validation`
    * preserve `latest`, `history`, and `unresolvedBlockers` when present
    * update `updatedAt`
 3. reread both locations
-4. verify both locations match `draft + plan-validator`
+4. verify both locations match `workflowState: draft-validation`
 
 If parity cannot be verified:
 
@@ -181,7 +163,7 @@ Use this terminal contract:
 **Summary**
 
 * stage result: `<ARTIFACTS SYNCED | STOP>`
-* state set to `<draft + plan-validator | draft + sync-plan-artifacts>`
+* workflow state set to `<draft-validation | draft-artifact-sync>`
 
 **Key Details**
 
@@ -190,5 +172,4 @@ Use this terminal contract:
 
 **Next**
 
-Status: `draft`
-Next Action: `<plan-validator | sync-plan-artifacts>`
+Workflow State: `<draft-validation | draft-artifact-sync>`

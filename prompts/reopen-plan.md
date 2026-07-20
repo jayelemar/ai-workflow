@@ -72,17 +72,11 @@ If no concrete findings exist:
 
 Read:
 
-## Status
+## Workflow State
 
 ### Already Reopened Fast Path
 
-IF Status == active:
-
-Read:
-
-## Next Action
-
-IF Next Action == execute-plan AND `## Reopen History` contains a latest reopen entry with `Decision: active`:
+IF Workflow State == `active` AND `## Reopen History` contains a latest reopen entry with `Decision: active`:
 
 -> do not output `STOP`
 -> do not edit the plan
@@ -90,7 +84,7 @@ IF Next Action == execute-plan AND `## Reopen History` contains a latest reopen 
 -> output the next step as `execute-plan`
 -> end
 
-IF Status == active and this fast path does not apply:
+IF Workflow State == `active` and this fast path does not apply:
 
 -> STOP (`plan is active but reopen handoff evidence is missing`)
 
@@ -98,23 +92,14 @@ IF Status == active and this fast path does not apply:
 
 Expected:
 
-reopening
+`reopening`
 
-IF Status != reopening:
+IF Workflow State != `reopening`:
 
 -> STOP (`plan must be in reopening state`)
 
 ---
 
-Read:
-
-## Next Action
-
-Any value is allowed.
-
-Do not STOP based on the current Next Action value.
-
----
 
 ## Reopen Scope
 
@@ -156,13 +141,9 @@ After the plan is updated for the reopened work:
 
 update:
 
-## Status
+## Workflow State
 
 active
-
-## Next Action
-
-execute-plan
 
 ---
 
@@ -214,8 +195,4 @@ Use this shared terminal-facing contract for non-review stages.
 
 **Next**
 
-Status:
-active
-
-Next Action:
-execute-plan
+Workflow State: `active`

@@ -52,18 +52,14 @@ Mode rules:
   implementation-map requirements, and concrete phase planning quality.
 - Only `runner-managed` mode may require runner-only workflow state artifacts.
 
-For `runner-managed` plans, new draft plans MUST start at:
-
-- Status = draft
-- Next Action = sync-plan-artifacts
-
-This is the `draft + sync-plan-artifacts` state.
+For `runner-managed` plans, new draft plans MUST start at
+`workflowState = draft-artifact-sync` in both manifest and workflow sidecar.
 
 The workflow runner performs `sync-plan-artifacts` after plan creation and
 before `plan-validator`.
 
-For `manual` plans, keep the plan manifest structure but do not require
-runner-managed workflow state before execution.
+For `manual` plans, set `## Workflow State` to
+`N/A: manual plan-bound execution`; do not create routing state artifacts.
 After saving a manual plan, append the manual token checkpoint:
 
 `pnpm exec tsx .ai/scripts/workflow/telemetry/manual-token-usage.ts --plan <plan-name> --stage plan`
@@ -167,7 +163,7 @@ Each phase MUST include:
 Apply this contract only to new or `draft` runner-managed plans. Manual plans
 are not required to use the commit-savepoint structure or commit guarantees.
 Never rewrite task IDs, task boundaries, or runner artifacts for plans already
-in `active`, `review`, `blocked`, or `completed` status.
+in `active`, `review`, `blocked`, or `completed` workflow state.
 
 Two outcomes MUST be separate tasks when they are independently implementable
 and validatable and have distinct reasons to review or revert. There is no
@@ -335,8 +331,7 @@ Do not write workflow state into `files.json`. Workflow state belongs only in th
 Write `.ai/artifacts/<plan-name>/state/workflow.json` with:
 
 - `planPath`
-- `status`
-- `nextAction`
+- `workflowState`
 - `latest`
 - `history`
 - unresolved blockers
@@ -344,8 +339,7 @@ Write `.ai/artifacts/<plan-name>/state/workflow.json` with:
 
 The initial `workflow.json` MUST use:
 
-- `status`: `draft`
-- `nextAction`: `sync-plan-artifacts`
+- `workflowState`: `draft-artifact-sync`
 - `latest`: `{}`
 - `history`: `[]`
 - `unresolvedBlockers`: `[]`
@@ -364,14 +358,14 @@ It MUST be valid JSON with exactly the runner-required ownership fields:
 - `headSha`: current `git rev-parse HEAD` string
 - `updatedAt`: ISO timestamp string
 
-Do not write `status` or `nextAction` into `file-ownership.json`. Workflow state belongs only in the plan manifest and `workflow.json`.
+Do not write workflow routing fields into `file-ownership.json`. `workflowState` belongs only in the plan manifest and `workflow.json`.
 
 Write `.ai/artifacts/<plan-name>/state/context.md` with an initial runner context snapshot.
 
 It MUST:
 
 - exist before returning from create-plan
-- identify the plan path, spec path, workflow status, next action, and required artifact paths
+- identify the plan path, spec path, workflow state, and required artifact paths
 - state that no validation, execution, review, or blocker events exist yet for a new plan
 - be concise because the runner uses it as a warm context packet
 
@@ -453,7 +447,7 @@ Use for:
 Before completing:
 
 - verify all template sections exist
-- verify `## Status` is present
+- for `runner-managed` mode, verify `## Workflow State` is present
 - verify all Phases are complete
 - verify any flow-trace artifacts required by the plan are present and valid
 - for `runner-managed` mode, verify `.ai/artifacts/<plan-name>/state/files.json` is complete

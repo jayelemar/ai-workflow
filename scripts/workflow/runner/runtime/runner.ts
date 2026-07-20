@@ -43,10 +43,10 @@ import {
 import { CODEX_BINARY_COMMAND, codexExecArgs, codexResultContainsSelectedModelCapacity, codexWorkEnvironment, createWorkflowRunnerCodexRuntime, defaultProcessRunner, isValidCodexProfile } from "../process.ts";
 import { classifyFailureForLog, codexOutputStopReason, createCodexLiveOutputFormatter, createWorkflowFailureDebugRecord } from "../terminal/codex-events.ts";
 import { compactCapturedOutputForLog, createWorkflowWaitNotice, formatCommitProgressLine, formatEditedFilesForLog, formatEditedFilesForTerminal, formatTaskCompletedProgressLine, formatWorkflowElapsedTime, formatWorkflowOwnershipResetHint, formatWorkflowProgressLine, supportsWorkflowAnsiColor } from "../terminal/formatters.ts";
-import { parsePlanTasks, parseTaskCommitBoundaries, taskCommitBoundaryCount, validateTaskCommitBoundaries } from "../plan/parser.ts";
+import { parsePlanTasks, parseTaskCommitBoundaries, taskCommitBoundaryCount, uniquePaths, validateTaskCommitBoundaries } from "../plan/parser.ts";
 import { writeWorkflowContextSnapshot } from "../plan/context-snapshot.ts";
 import { generateWorkflowPrompt, isReviewPrompt, readPrompt } from "../plan/prompt.ts";
-import { normalizeWorkflowEventHistory, parsePlan, parseThinPlanV2WorkflowState, preflightManualPlanExecutionMode, readJsonArtifact, recoverThinPlanV2BlockedValidationHandoff, recoverThinPlanV2PartialExecuteReviewHandoff, repairThinPlanV2ManifestStateFromWorkflow, thinPlanV2ArtifactPath } from "../plan/state.ts";
+import { normalizeWorkflowEventHistory, parsePlan, parseThinPlanV2WorkflowState, preflightManualPlanExecutionMode, readJsonArtifact, recoverThinPlanV2BlockedValidationHandoff, recoverThinPlanV2PartialExecuteReviewHandoff, repairThinPlanV2ManifestStateFromWorkflow, thinPlanV2ArtifactPath, writeManifestWorkflowState } from "../plan/state.ts";
 import { completedTaskCommitCount, currentTaskArtifactRelativePath, formatTaskProgressLine, nextIncompleteTask, nextTaskAfter, nextTaskArtifactRelativePath, readHeadTaskCommit, readableTaskLabel, readableTaskProgressDescription, readTaskArtifactStage, readTaskCommitRecoveryParent, writeCurrentTaskPointer, writeTaskArtifact, writeTaskStageArtifact } from "../tasks/savepoints.ts";
 import { extractCommitSummarySubject, extractSummaryLines, readCompletedTaskSavepoints, writeBossSummary, writeExecutionSummary } from "../tasks/summaries.ts";
 import { parseCommitSummaryPathsForPlan, readDirtyPlanOwnedPaths, verifyCommitSummaryPathsClean } from "../review/commit.ts";
@@ -61,7 +61,7 @@ import { addTokenUsageToTotals, appendFailureDebugLedger, appendTokenUsageLedger
 import { blockedPlanDetail, blockedReasonSummary } from "./outcomes.ts";
 import { parseEditedFileSummaryPaths, readEditedFileSnapshot, summarizeEditedFiles } from "./iteration.ts";
 import { defaultConsole, failure, MAX_WORKFLOW_ITERATIONS, success, type RunWorkflowOptions, WORKFLOW_RUNNER_USAGE, workflowFileOwnershipResetPathHint } from "./lifecycle.ts";
-import type { CommitProgress, EditedFileSummary, Failure, FileOwnershipArtifact, FileOwnershipPreflight, NextAction, ParsedPlan, ProcessResult, ProcessRunner, ReviewCleanupProcess, ReviewScopeMetadata, ReviewStagingProcess, RunnerResult, Status, TaskStage, TokenUsageTotals, WorkflowContextSnapshotResult, WorkflowTaskContext } from "../types.ts";
+import type { CommitProgress, EditedFileSummary, Failure, FileOwnershipArtifact, FileOwnershipPreflight, ParsedPlan, ProcessResult, ProcessRunner, ReviewCleanupProcess, ReviewScopeMetadata, ReviewStagingProcess, RunnerResult, TaskStage, TokenUsageTotals, WorkflowContextSnapshotResult, WorkflowTaskContext } from "../types.ts";
 import {
   asRecord,
   boundedInlineExcerpt,
@@ -69,6 +69,13 @@ import {
 } from "../types.ts";
 
 const rel = (...segments: string[]) => segments.join("/");
+
+const canonicalWorkflowRecord = (
+  record: Record<string, unknown>,
+  workflowState: import("../../contracts/stage.ts").WorkflowState,
+): Record<string, unknown> => {
+  return { ...record, workflowState };
+};
 
 type TokenUsageLedgerResult = "success" | "failed" | "interrupted";
 
@@ -114,11 +121,7 @@ const reopenPlanForNextTask = async (
     plan.thinPlanContract === "thin-plan-v2"
       ? plan.manifestContent
       : plan.content;
-  const nextContent = replacePlanSectionValue(
-    replacePlanSectionValue(baseContent, "## Status", "active"),
-    "## Next Action",
-    "execute-plan",
-  );
+  const nextContent = writeManifestWorkflowState(baseContent, "active");
   let workflowStateUpdate:
     | { absolutePath: string; content: string }
     | undefined;
@@ -154,9 +157,7 @@ const reopenPlanForNextTask = async (
       absolutePath: path.join(rootDir, workflowPath),
       content: `${JSON.stringify(
         {
-          ...workflowRecord,
-          status: "active",
-          nextAction: "execute-plan",
+          ...canonicalWorkflowRecord(workflowRecord, "active"),
           updatedAt: new Date().toISOString(),
         },
         null,
@@ -350,9 +351,7 @@ const completeArtifactOnlyNoCommitReview = async ({
       path.join(rootDir, workflowPath),
       `${JSON.stringify(
         {
-          ...workflowRecord,
-          status: continueExecution ? "active" : "completed",
-          nextAction: continueExecution ? "execute-plan" : "commit-summary",
+          ...canonicalWorkflowRecord(workflowRecord, continueExecution ? "active" : "completed"),
           latest,
           history,
           unresolvedBlockers: [],
@@ -365,14 +364,9 @@ const completeArtifactOnlyNoCommitReview = async ({
     );
     await writeFile(
       plan.absolutePlanPath,
-      replacePlanSectionValue(
-        replacePlanSectionValue(
-          plan.manifestContent,
-          "## Status",
-          continueExecution ? "active" : "completed",
-        ),
-        "## Next Action",
-        continueExecution ? "execute-plan" : "commit-summary",
+      writeManifestWorkflowState(
+        plan.manifestContent,
+        continueExecution ? "active" : "completed",
       ),
       "utf8",
     );
@@ -427,8 +421,7 @@ const recoverThinPlanV2ExecuteHandoff = async ({
 }): Promise<{ ok: true; recovered: boolean } | Failure> => {
   if (
     plan.thinPlanContract !== "thin-plan-v2" ||
-    plan.status !== "active" ||
-    plan.nextAction !== "execute-plan" ||
+    plan.workflowState !== "active" ||
     !workflowOutputHasValidationPass(stdout)
   ) {
     return { ok: true, recovered: false };
@@ -631,9 +624,7 @@ const recoverThinPlanV2ExecuteHandoff = async ({
       path.join(rootDir, workflowPath),
       `${JSON.stringify(
         {
-          ...workflowRecord,
-          status: "review",
-          nextAction: "review-plan",
+          ...canonicalWorkflowRecord(workflowRecord, "review"),
           latest,
           history,
           unresolvedBlockers: [],
@@ -646,11 +637,7 @@ const recoverThinPlanV2ExecuteHandoff = async ({
     );
     await writeFile(
       plan.absolutePlanPath,
-      replacePlanSectionValue(
-        replacePlanSectionValue(plan.manifestContent, "## Status", "review"),
-        "## Next Action",
-        "review-plan",
-      ),
+      writeManifestWorkflowState(plan.manifestContent, "review"),
       "utf8",
     );
   } catch (error) {
@@ -667,8 +654,7 @@ const logFields = ({
   timestamp,
   iteration,
   planPath,
-  status,
-  nextAction,
+  workflowState,
   promptPath,
   model,
   reasoning,
@@ -695,8 +681,7 @@ const logFields = ({
   timestamp: string;
   iteration: number;
   planPath: string;
-  status: Status;
-  nextAction: NextAction;
+  workflowState: import("../../contracts/stage.ts").WorkflowState;
   promptPath: string;
   model: string;
   reasoning: string;
@@ -729,8 +714,7 @@ const logFields = ({
   return [
     ["timestamp", timestamp],
     ["iteration", iteration],
-    ["status", status],
-    ["nextAction", nextAction],
+    ["workflowState", workflowState],
     ["promptPath", promptPath],
     ["model", model],
     ["reasoning", reasoning],
@@ -738,8 +722,7 @@ const logFields = ({
     ["contextWindowUsedTokens", contextUsage.contextWindowUsedTokens],
     ["contextWindowUsedPercent", contextUsage.contextWindowUsedPercent],
     ["planPath", planPath],
-    ["startingStatus", status],
-    ["startingNextAction", nextAction],
+    ["startingWorkflowState", workflowState],
     ["currentBranch", currentBranch],
     ["startingHeadSha", startingHeadSha],
     ["endingHeadSha", endingHeadSha],
@@ -1028,7 +1011,7 @@ export const runWorkflowRunner = async (
   };
 
   while (true) {
-    const route = routeFor(parsedPlan.status, parsedPlan.nextAction);
+    const route = routeFor(parsedPlan.workflowState);
     if (!route.executable) {
       return await finishFailure(route.reason);
     }
@@ -1084,8 +1067,7 @@ export const runWorkflowRunner = async (
       : undefined;
     if (
       taskSavepointMode &&
-      parsedPlan.status === "completed" &&
-      parsedPlan.nextAction === "commit-summary" &&
+      parsedPlan.workflowState === "completed" &&
       selectedTask &&
       selectedTaskArtifactPath
     ) {
@@ -1317,8 +1299,7 @@ export const runWorkflowRunner = async (
           timestamp: logTimestamp,
           iteration: nextIteration,
           planPath: parsedPlan.planPath,
-          status: parsedPlan.status,
-          nextAction: parsedPlan.nextAction,
+          workflowState: parsedPlan.workflowState,
           promptPath: route.promptPath,
           result: "not-launched",
           exitCode: undefined,
@@ -1339,8 +1320,7 @@ export const runWorkflowRunner = async (
           timestamp: logTimestamp,
           iteration: nextIteration,
           planPath: parsedPlan.planPath,
-          status: parsedPlan.status,
-          nextAction: parsedPlan.nextAction,
+          workflowState: parsedPlan.workflowState,
           promptPath: route.promptPath,
           model: executionConfig.model,
           reasoning: executionConfig.reasoning,
@@ -1386,8 +1366,7 @@ export const runWorkflowRunner = async (
         formatWorkflowProgressLine({
           iteration: iterations,
           maxIterations: MAX_WORKFLOW_ITERATIONS,
-          status: parsedPlan.status,
-          nextAction: parsedPlan.nextAction,
+          workflowState: parsedPlan.workflowState,
           promptPath: route.promptPath,
           model: executionConfig.model,
           reasoning: executionConfig.reasoning,
@@ -1668,8 +1647,7 @@ export const runWorkflowRunner = async (
               timestamp: logTimestamp,
               iteration: nextIteration,
               planPath: parsedPlan.planPath,
-              status: parsedPlan.status,
-              nextAction: parsedPlan.nextAction,
+              workflowState: parsedPlan.workflowState,
               promptPath: route.promptPath,
               result: "not-launched",
               exitCode: undefined,
@@ -1690,8 +1668,7 @@ export const runWorkflowRunner = async (
               timestamp: logTimestamp,
               iteration: nextIteration,
               planPath: parsedPlan.planPath,
-              status: parsedPlan.status,
-              nextAction: parsedPlan.nextAction,
+              workflowState: parsedPlan.workflowState,
               promptPath: route.promptPath,
               model: executionConfig.model,
               reasoning: executionConfig.reasoning,
@@ -1736,8 +1713,7 @@ export const runWorkflowRunner = async (
               timestamp: logTimestamp,
               iteration: nextIteration,
               planPath: parsedPlan.planPath,
-              status: parsedPlan.status,
-              nextAction: parsedPlan.nextAction,
+              workflowState: parsedPlan.workflowState,
               promptPath: route.promptPath,
               result: "not-launched",
               exitCode: undefined,
@@ -1758,8 +1734,7 @@ export const runWorkflowRunner = async (
               timestamp: logTimestamp,
               iteration: nextIteration,
               planPath: parsedPlan.planPath,
-              status: parsedPlan.status,
-              nextAction: parsedPlan.nextAction,
+              workflowState: parsedPlan.workflowState,
               promptPath: route.promptPath,
               model: executionConfig.model,
               reasoning: executionConfig.reasoning,
@@ -1826,8 +1801,7 @@ export const runWorkflowRunner = async (
               timestamp: logTimestamp,
               iteration: nextIteration,
               planPath: parsedPlan.planPath,
-              status: parsedPlan.status,
-              nextAction: parsedPlan.nextAction,
+              workflowState: parsedPlan.workflowState,
               promptPath: route.promptPath,
               result: staged.staging ? "staging-failed" : "not-launched",
               exitCode: undefined,
@@ -1851,8 +1825,7 @@ export const runWorkflowRunner = async (
               timestamp: logTimestamp,
               iteration: nextIteration,
               planPath: parsedPlan.planPath,
-              status: parsedPlan.status,
-              nextAction: parsedPlan.nextAction,
+              workflowState: parsedPlan.workflowState,
               promptPath: route.promptPath,
               model: executionConfig.model,
               reasoning: executionConfig.reasoning,
@@ -2028,8 +2001,7 @@ export const runWorkflowRunner = async (
           timestamp: timestamp(),
           iteration: iterations,
           planPath: parsedPlan.planPath,
-          status: parsedPlan.status,
-          nextAction: parsedPlan.nextAction,
+          workflowState: parsedPlan.workflowState,
           promptPath: route.promptPath,
           model: executionConfig.model,
           reasoning: executionConfig.reasoning,
@@ -2255,8 +2227,7 @@ export const runWorkflowRunner = async (
             timestamp: logTimestamp,
             iteration: iterations,
             planPath: parsedPlan.planPath,
-            status: parsedPlan.status,
-            nextAction: parsedPlan.nextAction,
+            workflowState: parsedPlan.workflowState,
             promptPath: route.promptPath,
             result: result.launched ? "launched" : "launch-failed",
             exitCode: result.launched ? result.exitCode : undefined,
@@ -2282,8 +2253,7 @@ export const runWorkflowRunner = async (
           timestamp: logTimestamp,
           iteration: iterations,
           planPath: parsedPlan.planPath,
-          status: parsedPlan.status,
-          nextAction: parsedPlan.nextAction,
+          workflowState: parsedPlan.workflowState,
           promptPath: route.promptPath,
           model: effectiveExecutionConfig.model,
           reasoning: effectiveExecutionConfig.reasoning,
@@ -2328,11 +2298,9 @@ export const runWorkflowRunner = async (
           timestamp: timestamp(),
           iteration: iterations,
           planPath: parsedPlan.planPath,
-          startingStatus: parsedPlan.status,
-          startingNextAction: parsedPlan.nextAction,
+          startingWorkflowState: parsedPlan.workflowState,
           promptPath: route.promptPath,
-          endingStatus: endingPlan?.status,
-          endingNextAction: endingPlan?.nextAction,
+          endingWorkflowState: endingPlan?.workflowState,
           model: effectiveExecutionConfig.model,
           reasoning: effectiveExecutionConfig.reasoning,
           result: ledgerResult,
@@ -2390,7 +2358,7 @@ export const runWorkflowRunner = async (
       | undefined => {
       if (
         route.promptPath === rel(".ai", "prompts", "execute-plan.md") &&
-        updated.status === "blocked"
+        updated.workflowState === "blocked"
       ) {
         const detail = blockedPlanDetail(updated.content);
         const reason = `plan blocked after execute-plan: ${detail}`;
@@ -2399,7 +2367,7 @@ export const runWorkflowRunner = async (
 
       if (
         route.promptPath === rel(".ai", "prompts", "unblock-plan.md") &&
-        updated.status === "blocked"
+        updated.workflowState === "blocked"
       ) {
         const detail = blockedPlanDetail(updated.content);
         const reason = `plan remains blocked after unblock-plan: ${detail}`;
@@ -2440,8 +2408,7 @@ export const runWorkflowRunner = async (
         if (transition.ok) {
           if (
             isReviewPrompt(route.promptPath) &&
-            updated.status === "active" &&
-            updated.nextAction === "execute-plan"
+            updated.workflowState === "active"
           ) {
             const cleanup = await cleanupReviewStagingPaths(reviewStagingPaths);
             if (!cleanup.ok) {
@@ -2878,8 +2845,7 @@ export const runWorkflowRunner = async (
 
     if (
       isReviewPrompt(route.promptPath) &&
-      updated.status === "active" &&
-      updated.nextAction === "execute-plan"
+      updated.workflowState === "active"
     ) {
       const cleanup = await cleanupReviewStagingPaths(reviewStagingPaths);
       if (!cleanup.ok) {

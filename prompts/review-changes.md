@@ -1,7 +1,7 @@
 # Review Changes (Combined Harness Review)
 
 This prompt defines the single default combined harness review for the
-runner-managed `review + review-plan` workflow entry.
+runner-managed `review` workflow entry.
 
 The review must validate spec correctness, user-journey coverage, validation
 evidence, regression risk, rule compliance, scope control, and code quality in
@@ -90,8 +90,7 @@ If staged implementation paths do not match the expected changed-file inventory 
 
 * classify the finding as a `file-list mismatch`
 * do not repair the file list during review
-* set `Status = active`
-* set `Next Action = execute-plan`
+* set `workflowState = active`
 * record the exact missing or extra path correction needed for execution to reconcile the changed-file inventory
 
 ---
@@ -100,31 +99,16 @@ If staged implementation paths do not match the expected changed-file inventory 
 
 Read:
 
-## Status
+## Workflow State
 
-Expected:
+Expected: `review`
 
-review
-
-IF Status != review:
+IF Workflow State != `review`:
 
 -> STOP (`plan must be in review state before reviewing`)
 
 ---
 
-Read:
-
-## Next Action
-
-Expected:
-
-review-plan
-
-IF Next Action != review-plan:
-
--> STOP (`unexpected next action for review`)
-
----
 
 ## Isolation Assumption (MANDATORY)
 
@@ -154,7 +138,7 @@ list:
 * Record the required file path and owner plan path in the review issue.
 * Do not approve the current plan.
 * Do not expand the current review scope to include the other plan's file.
-* Set `Status = active` and `Next Action = execute-plan` so the next execution run can update the plan into a `plan dependency` blocker with `Status = blocked` and `Next Action = unblock-plan`.
+* Set `workflowState = active` so the next execution run can update the plan into a `plan dependency` blocker with `workflowState = blocked`.
 
 If the required fix needs a file outside the current plan path list and no owner
 plan can be identified:
@@ -166,7 +150,7 @@ plan can be identified:
   rule changed by the current task.
 * If it qualifies, classify it as a `compatibility scope repair`, record the
   exact required file path and the current-task compatibility rationale in the
-  review artifact, and set `Status = active` and `Next Action = execute-plan`.
+  review artifact, and set `workflowState = active`.
   Do not output `STOP` for this eligible repair. The next execution stage must
   claim the exact file in both scope artifacts before editing it.
 * If it does not qualify, output exactly `STOP: file outside plan scope`.
@@ -209,8 +193,8 @@ If the runner injects `Task savepoint current task`:
 * review ONLY the staged diff for that task ID and task name
 * verify the current task's validation evidence before approving it
 * do not review or approve future `[task:...]` items
-* if review fails, do not commit; set or keep `Status = active` and `Next Action = execute-plan`
-* if review passes, route only the current task to `completed + commit-summary`
+* if review fails, do not commit; set or keep `workflowState = active`
+* if review passes, route only the current task to `completed`
 
 Analyze:
 
@@ -367,28 +351,24 @@ Ensure:
 
 Thin-plan-v2 state parity rule:
 
-* Every branch below that changes workflow state MUST update both the plan manifest `## Status` / `## Next Action` and `.ai/artifacts/<plan-name>/state/workflow.json` `status` / `nextAction`.
+* Every branch below that changes workflow state MUST update both the plan manifest `## Workflow State` and `.ai/artifacts/<plan-name>/state/workflow.json` `workflowState`.
 * After writing the review artifact and workflow state, reread both files before final output.
-* If the plan manifest and workflow sidecar do not show the same `status + nextAction`, repair the mismatch before final output.
+* If the plan manifest and workflow sidecar do not show the same `workflowState`, repair the mismatch before final output.
 * If the mismatch cannot be repaired, output `STOP` with the exact manifest values and workflow sidecar values.
 
 ### IF any CRITICAL issues exist:
 
 1. update the plan manifest:
 
-## Status
+## Workflow State
 
 active
-
-## Next Action
-
-execute-plan
 
 2. add the next review entry.
 
 Write `.ai/artifacts/<plan-name>/events/review-vX.md`, then update
 `.ai/artifacts/<plan-name>/state/workflow.json` with runner-readable
-thin-plan-v2 state: preserve `planPath`, set `status` and `nextAction`, write
+thin-plan-v2 state: preserve `planPath`, set `workflowState`, write
 the compact combined review event under `latest.review`, append the review
 artifact path to `history`, set `unresolvedBlockers`, and refresh `updatedAt`.
 For every `NEEDS FIX` or `HIGH RISK` result, `unresolvedBlockers` MUST contain
@@ -431,7 +411,7 @@ Do not duplicate the `## Review History` heading in thin-plan-v2 manifests.
 * unresolved risks
 * implementation gaps
 
-4. reread the plan manifest and `.ai/artifacts/<plan-name>/state/workflow.json`; verify both show `active + execute-plan` before final output.
+4. reread the plan manifest and `.ai/artifacts/<plan-name>/state/workflow.json`; verify both show `workflowState = active` before final output.
 
 ---
 
@@ -444,13 +424,9 @@ local reviewed workspace.
 
 1. update the plan manifest:
 
-## Status
+## Workflow State
 
 completed
-
-## Next Action
-
-commit-summary
 
 2. create `.ai/artifacts/<plan-name>/events/review-vX.md` with `# Review vX`,
 `## Summary`, and `## Evidence`, including the deferred validation note.
@@ -458,9 +434,9 @@ commit-summary
 3. update `.ai/artifacts/<plan-name>/state/workflow.json` with
 `latest.review.summary = SAFE - DEFERRED VALIDATION`,
 `latest.review.decision = completed`, the review evidence pointer, appended
-`history`, status, nextAction, and updatedAt.
+`history`, `workflowState`, and updatedAt.
 
-4. reread the plan manifest and `.ai/artifacts/<plan-name>/state/workflow.json`; verify both show `completed + commit-summary` before final output.
+4. reread the plan manifest and `.ai/artifacts/<plan-name>/state/workflow.json`; verify both show `workflowState = completed` before final output.
 
 5. do not create any extra plan section for this path. `commit-summary` records the local commit metadata. The operator performs the deferred validation manually after commit/deploy and reopens the plan if that check finds a required fix.
 
@@ -478,27 +454,22 @@ For legacy thin-plan-v1 plans only, append:
 
 Review passed:
 
-Status = completed
-Next Action = commit-summary
+Workflow State = completed
 
 1. update the plan manifest:
 
-## Status
+## Workflow State
 
 completed
-
-## Next Action
-
-commit-summary
 
 2. create `.ai/artifacts/<plan-name>/events/review-vX.md` with `# Review vX`,
 `## Summary`, and `## Evidence`.
 
 3. update `.ai/artifacts/<plan-name>/state/workflow.json` with
 `latest.review.summary = SAFE`, `latest.review.decision = completed`, the
-review evidence pointer, appended `history`, status, nextAction, and updatedAt.
+review evidence pointer, appended `history`, `workflowState`, and updatedAt.
 
-4. reread the plan manifest and `.ai/artifacts/<plan-name>/state/workflow.json`; verify both show `completed + commit-summary` before final output.
+4. reread the plan manifest and `.ai/artifacts/<plan-name>/state/workflow.json`; verify both show `workflowState = completed` before final output.
 
 Put optional warnings and suggestions in the review artifact.
 
@@ -556,12 +527,4 @@ Rules:
 
 **Next**
 
-Status:
-
-* active
-* completed
-
-Next Action:
-
-* execute-plan
-* commit-summary
+Workflow State: `active` or `completed`

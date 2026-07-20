@@ -1,23 +1,5 @@
 import { boundedInlineExcerpt, type Failure, type PlanTask } from '../types.ts';
-
-const VALID_STATUSES = [
-  'draft',
-  'approved',
-  'active',
-  'review',
-  'reopening',
-  'completed',
-  'blocked',
-] as const;
-const VALID_NEXT_ACTIONS = [
-  'sync-plan-artifacts',
-  'plan-validator',
-  'execute-plan',
-  'unblock-plan',
-  'review-plan',
-  'reopen-plan',
-  'commit-summary',
-] as const;
+import type { WorkflowState } from "../../contracts/stage.ts";
 
 export const uniquePaths = (paths: string[]): string[] => [...new Set(paths)];
 
@@ -449,7 +431,5 @@ export const extractSectionValue = (
 export const normalizeWorkflowStateValue = (value: string): string =>
   value.replace(/^`+|`+$/g, '');
 
-export const isStatus = (value: string): value is import('../types.ts').Status =>
-  VALID_STATUSES.includes(value as import('../types.ts').Status);
-export const isNextAction = (value: string): value is import('../types.ts').NextAction =>
-  VALID_NEXT_ACTIONS.includes(value as import('../types.ts').NextAction);
+export const isWorkflowState = (value: string): value is WorkflowState =>
+  ["draft-artifact-sync", "draft-validation", "approved", "active", "blocked", "review", "reopening", "completed"].includes(value);

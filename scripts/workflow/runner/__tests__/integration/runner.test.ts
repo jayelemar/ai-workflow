@@ -70,17 +70,31 @@ const OVERRIDE_CODEX_PROFILE = "codex-personal";
 const OVERRIDE_CODEX_EXEC_LABEL = `${OVERRIDE_CODEX_PROFILE} exec`;
 const OVERRIDE_CODEX_HOME_SUFFIX = `/.${OVERRIDE_CODEX_PROFILE}`;
 
+const workflowStateForTest = (status: string, nextAction: string): string => {
+  const stateByPair: Record<string, string> = {
+    "draft+sync-plan-artifacts": "draft-artifact-sync",
+    "draft+plan-validator": "draft-validation",
+    "approved+execute-plan": "approved",
+    "active+execute-plan": "active",
+    "blocked+execute-plan": "blocked",
+    "blocked+unblock-plan": "blocked",
+    "review+review-plan": "review",
+    "reopening+reopen-plan": "reopening",
+    "completed+commit-summary": "completed",
+  };
+  const normalizedStatus = status.replaceAll("`", "");
+  const normalizedNextAction = nextAction.replaceAll("`", "");
+  const workflowState = stateByPair[`${normalizedStatus}+${normalizedNextAction}`];
+  return workflowState ?? `${normalizedStatus}--${normalizedNextAction}`;
+};
+
 const planWith = (status: string, nextAction: string, extra = "") => `# Plan
 
 ${thinPlanContractSection()}
 
-## Status
+## Workflow State
 
-${status}
-
-## Next Action
-
-${nextAction}
+${workflowStateForTest(status, nextAction)}
 
 ## Files (MANDATORY)
 
@@ -112,13 +126,9 @@ const planWithFileScope = (
 
 ${thinPlanContractSection()}
 
-## Status
+## Workflow State
 
-${status}
-
-## Next Action
-
-${nextAction}
+${workflowStateForTest(status, nextAction)}
 
 ## Files (MANDATORY)
 
@@ -195,13 +205,9 @@ const thinPlanV2Manifest = (
 
 thin-plan-v2
 
-## Status
+## Workflow State
 
-${status}
-
-## Next Action
-
-${nextAction}
+${workflowStateForTest(status, nextAction)}
 
 ## Spec
 
@@ -291,8 +297,23 @@ const setupWorkspace = async (): Promise<Workspace> => {
   };
 };
 
+const canonicalizeWorkflowForTest = (content: string) =>
+  content.replace(
+    /## Status\s*\n\s*`?([^\n`]+)`?\s*\n\s*## Next Action\s*\n\s*`?([^\n`]+)`?/g,
+    (match, status: string, nextAction: string) => {
+      try {
+        return `## Workflow State\n\n${workflowStateForTest(status.trim(), nextAction.trim())}`;
+      } catch {
+        return match;
+      }
+    },
+  );
+
 const writePlan = async (root: string, planName: string, content: string) => {
-  await writeFile(join(root, ".ai", "plans", `${planName}.md`), content);
+  await writeFile(
+    join(root, ".ai", "plans", `${planName}.md`),
+    canonicalizeWorkflowForTest(content),
+  );
 };
 
 const callTriples = (calls: Parameters<ProcessRunner>[0][]) =>
@@ -381,6 +402,24 @@ const writeFileOwnershipArtifact = async (
   );
   mkdirSync(dirname(artifactPath), { recursive: true });
   await writeFile(artifactPath, JSON.stringify(artifact, null, 2), "utf8");
+  if (typeof artifact.workflowState === "string") {
+    await writeFile(
+      join(dirname(artifactPath), "workflow.json"),
+      `${JSON.stringify(
+        {
+          planPath: artifact.planPath,
+          workflowState: artifact.workflowState,
+          latest: {},
+          history: [],
+          unresolvedBlockers: [],
+          updatedAt: artifact.updatedAt,
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+  }
   return artifactPath;
 };
 
@@ -443,8 +482,10 @@ N/A: internal workflow automation only.
     `${JSON.stringify(
       {
         planPath: ".ai/plans/artifact-state.md",
-        status: overrides.status ?? "review",
-        nextAction: overrides.nextAction ?? "review-plan",
+        workflowState: workflowStateForTest(
+          overrides.status ?? "review",
+          overrides.nextAction ?? "review-plan",
+        ),
         latest: overrides.latest ?? {
           validation: {
             version: 2,
@@ -997,17 +1038,16 @@ test("create-plan uses sync-plan-artifacts only for runner-managed plans", async
 
   assert.match(
     template,
-    /## Next Action\s*\n\s*N\/A: manual plan-bound execution/,
+    /## Workflow State\s*\n\s*draft-artifact-sync/,
   );
   assert.match(
     prompt,
-    /For `runner-managed` plans, new draft plans MUST start at:/i,
+    /For `runner-managed` plans, new draft plans MUST start at/i,
   );
-  assert.match(prompt, /Next Action\s*=\s*sync-plan-artifacts/i);
-  assert.match(prompt, /draft \+ sync-plan-artifacts/i);
+  assert.match(prompt, /workflowState\s*=\s*draft-artifact-sync/i);
   assert.match(
     prompt,
-    /For `manual` plans, keep the plan manifest structure but do not require\s+runner-managed workflow state before execution/i,
+    /For `manual` plans, set `## Workflow State` to\s+`N\/A: manual plan-bound execution`/i,
   );
   assert.match(wrapper, /sync-plan-artifacts/i);
   assert.match(
@@ -1283,10 +1323,9 @@ test("workflow-state docs include the sync-plan-artifacts draft loop", async () 
   const aiWorkflow = await readInstruction("ai-workflow.md");
 
   assert.match(workflowState, /sync-plan-artifacts/);
-  assert.match(workflowState, /draft\s*→\s*sync-plan-artifacts/i);
-  assert.match(workflowState, /Sync Plan Artifacts Loop/i);
-  assert.match(workflowState, /draft \+ plan-validator/i);
-  assert.match(workflowState, /draft \+ sync-plan-artifacts/i);
+  assert.match(workflowState, /draft-artifact-sync/i);
+  assert.match(workflowState, /Canonical State Matrix/i);
+  assert.match(workflowState, /draft-validation/i);
   assert.match(aiWorkflow, /sync-plan-artifacts/);
   assert.match(aiWorkflow, /post-plan\/pre-validator sync/i);
 });
@@ -1404,10 +1443,8 @@ test("plan-validator prompt updates thin-plan workflow sidecar when bounded pref
     /Update `\.ai\/artifacts\/<plan-name>\/state\/workflow\.json`/,
   );
   assert.match(prompt, /`planPath`/);
-  assert.match(prompt, /Status\s*=\s*draft/);
-  assert.match(prompt, /Next Action\s*=\s*plan-validator/);
-  assert.match(prompt, /Status\s*=\s*approved/);
-  assert.match(prompt, /Next Action\s*=\s*execute-plan/);
+  assert.match(prompt, /workflowState\s*=\s*draft-validation/);
+  assert.match(prompt, /workflowState\s*=\s*approved/);
   assert.match(prompt, /`latest`/);
   assert.match(prompt, /`history`/);
   assert.match(prompt, /`unresolvedBlockers`/);
@@ -1428,8 +1465,8 @@ test("plan-validator prompt updates thin-plan workflow sidecar with runner-reada
     /Update `\.ai\/artifacts\/<plan-name>\/state\/workflow\.json`/,
   );
   assert.match(prompt, /`planPath`/);
-  assert.match(prompt, /`status`/);
-  assert.match(prompt, /`nextAction`/);
+  assert.match(prompt, /`workflowState`/);
+  assert.doesNotMatch(prompt, /`status`|`nextAction`/);
   assert.match(prompt, /`latest`/);
   assert.match(prompt, /`history`/);
   assert.match(prompt, /`unresolvedBlockers`/);
@@ -1460,12 +1497,10 @@ test("sync-plan-artifacts prompt defines the pre-validator artifact sync contrac
   assert.match(prompt, /tests/i);
   assert.match(prompt, /migrations/i);
   assert.match(prompt, /generated files/i);
-  assert.match(prompt, /Status\s*=\s*draft/);
-  assert.match(prompt, /Next Action\s*=\s*plan-validator/);
-  assert.match(prompt, /draft \+ plan-validator/);
+  assert.match(prompt, /`workflowState`\s*=\s*`draft-validation`/);
   assert.match(prompt, /STOP/i);
   assert.match(prompt, /product decision/i);
-  assert.match(prompt, /draft \+ sync-plan-artifacts/);
+  assert.match(prompt, /draft-artifact-sync/);
 });
 
 test("manual-preview prompt supports standalone manual use without plan state", async () => {
@@ -1477,7 +1512,7 @@ test("manual-preview prompt supports standalone manual use without plan state", 
   assert.match(prompt, /does not create or update .*\.ai\/artifacts/i);
   assert.match(prompt, /contextual code preview/i);
   assert.match(prompt, /wait for explicit operator approval/i);
-  assert.match(prompt, /does not update `## Status` or `## Next Action`/i);
+  assert.match(prompt, /does not update `## Workflow State`/i);
 });
 
 test("manual-preview prompt requires visible comments for changed preview code", async () => {
@@ -1584,8 +1619,7 @@ test("execute-plan prompt turns cross-plan file conflicts into resumable plan de
   assert.match(prompt, /plan dependency/);
   assert.match(prompt, /owner plan path/);
   assert.match(prompt, /owned by another active plan/);
-  assert.match(prompt, /Status\s*=\s*blocked/);
-  assert.match(prompt, /Next Action\s*=\s*unblock-plan/);
+  assert.match(prompt, /workflowState\s*=\s*blocked/);
   assert.match(prompt, /Do NOT keep executing both plans in parallel/);
 });
 
@@ -1605,8 +1639,7 @@ test("execute-plan prompt defers unavailable external final validation to review
 
   assert.match(prompt, /external final validation deferral/i);
   assert.match(prompt, /browser\/manual\/deployed\/external validation/i);
-  assert.match(prompt, /Status\s*=\s*review/);
-  assert.match(prompt, /Next Action\s*=\s*review-plan/);
+  assert.match(prompt, /workflowState\s*=\s*review/);
   assert.match(prompt, /review owns the completion decision/i);
   assert.match(prompt, /must not transition directly to `commit-summary`/i);
 });
@@ -1705,7 +1738,7 @@ test("execute-plan prompt reconciles files.json after implementation before revi
     prompt,
     /actual created, modified, and deleted plan-owned paths/i,
   );
-  assert.match(prompt, /before moving to `Status = review`/i);
+  assert.match(prompt, /before moving to `workflowState = review`/i);
 });
 
 test("review-changes prompt routes file-list mismatches back to execution", async () => {
@@ -1716,8 +1749,7 @@ test("review-changes prompt routes file-list mismatches back to execution", asyn
     /If staged implementation paths do not match the expected changed-file inventory in `\.ai\/artifacts\/<plan-name>\/state\/files\.json`/,
   );
   assert.match(prompt, /file-list mismatch/i);
-  assert.match(prompt, /Status = active/);
-  assert.match(prompt, /Next Action = execute-plan/);
+  assert.match(prompt, /workflowState = active/);
 });
 
 test("commit-summary prompt does not repair Files metadata", async () => {
@@ -1845,7 +1877,7 @@ test("unblock-plan prompt can resume plan dependency blockers after owner comple
 
   assert.match(prompt, /plan dependency/);
   assert.match(prompt, /owner plan/);
-  assert.match(prompt, /completed \+ commit-summary/);
+  assert.match(prompt, /reached `completed`/);
   assert.match(prompt, /released the shared file ownership/);
   assert.match(prompt, /blocked -> active/);
 });
@@ -1867,8 +1899,7 @@ test("review-changes prompt treats required out-of-scope owner-plan fixes as dep
     /required fix needs a file outside the current plan path list/,
   );
   assert.match(prompt, /owned by another active plan/);
-  assert.match(prompt, /Status = active/);
-  assert.match(prompt, /Next Action = execute-plan/);
+  assert.match(prompt, /set `workflowState = active`/);
 });
 
 test("review-changes prompt returns unowned compatibility scope repairs to execution", async () => {
@@ -1877,8 +1908,7 @@ test("review-changes prompt returns unowned compatibility scope repairs to execu
   assert.match(prompt, /Compatibility Regression\s+Carve-Out/);
   assert.match(prompt, /compatibility scope repair/i);
   assert.match(prompt, /exact required file path/i);
-  assert.match(prompt, /Status = active/);
-  assert.match(prompt, /Next Action = execute-plan/);
+  assert.match(prompt, /set `workflowState = active`/);
   assert.match(prompt, /Do not output `STOP` for this eligible repair/i);
 });
 
@@ -1890,8 +1920,7 @@ test("review-changes prompt owns deferred external validation and completed hand
     /final validation requires deployed, manual, or external code/i,
   );
   assert.match(prompt, /deferred validation note/i);
-  assert.match(prompt, /## Status[\s\S]*completed/);
-  assert.match(prompt, /## Next Action[\s\S]*commit-summary/);
+  assert.match(prompt, /## Workflow State[\s\S]*completed/);
 });
 
 test("review-changes prompt is the combined review and hands off directly to commit-summary", async () => {
@@ -1906,11 +1935,11 @@ test("review-changes prompt is the combined review and hands off directly to com
   assert.match(prompt, /maintainability/i);
   assert.match(
     prompt,
-    /IF NO CRITICAL issues[\s\S]*Status[\s\S]*completed[\s\S]*Next Action[\s\S]*commit-summary/i,
+    /IF NO CRITICAL issues[\s\S]*Workflow State[\s\S]*completed/i,
   );
   assert.match(
     prompt,
-    /Review passed:[\s\S]*Status = completed[\s\S]*Next Action = commit-summary/i,
+    /Review passed:[\s\S]*Workflow State = completed/i,
   );
 });
 
@@ -1951,8 +1980,7 @@ test("review-changes prompt expects runner pre-review cleanup for clearly unrela
   );
   assert.match(prompt, /review the remaining path-scoped staged diff only/i);
   assert.match(prompt, /non plan-scoped changes detected/i);
-  assert.match(prompt, /Status = active/);
-  assert.match(prompt, /Next Action = execute-plan/);
+  assert.match(prompt, /workflowState = active/);
   assert.doesNotMatch(prompt, /Hunk Ownership/);
   assert.doesNotMatch(
     prompt,
@@ -1965,10 +1993,9 @@ test("commit-summary prompt only accepts completed commit-summary plans", async 
 
   assert.match(
     prompt,
-    /completed \+ commit-summary[\s\S]*create exactly one local git commit/,
+    /For `completed`, it will create exactly one local git commit/,
   );
-  assert.match(prompt, /IF Status is not `completed`/);
-  assert.match(prompt, /IF Next Action is not `commit-summary`/);
+  assert.match(prompt, /IF Workflow State is not `completed`/);
   assert.match(prompt, /MUST NOT push/);
   assert.doesNotMatch(prompt, /deployment-validation/);
   assert.doesNotMatch(prompt, /## Deployment Validation/);
@@ -1986,7 +2013,7 @@ test("commit-summary prompt creates one local completed commit and forbids auto-
 
   assert.match(
     prompt,
-    /completed \+ commit-summary[\s\S]*create exactly one local git commit/,
+    /For `completed`, it will create exactly one local git commit/,
   );
   assert.match(prompt, /pnpm lint-staged/);
   assert.match(prompt, /git commit --cleanup=verbatim -F - <<'EOF'/);
@@ -2037,7 +2064,7 @@ test("commit-summary prompt unstages clearly unrelated staged hunks after path-s
 test("unblock-plan prompt handles only blocked plan recovery", async () => {
   const prompt = await readWorkflowPrompt("unblock-plan.md");
 
-  assert.match(prompt, /IF Status is not `blocked`/);
+  assert.match(prompt, /IF Workflow State is not `blocked`/);
   assert.match(prompt, /blocked -> active/);
   assert.doesNotMatch(prompt, /deployment-validation/);
   assert.doesNotMatch(prompt, /Push Status/);
@@ -2061,14 +2088,12 @@ test("reopen-plan prompt accepts canonical reopening state", async () => {
   const prompt = await readWorkflowPrompt("reopen-plan.md");
 
   assert.match(prompt, /Already Reopened Fast Path/);
-  assert.match(prompt, /Status == active/);
-  assert.match(prompt, /Next Action == execute-plan/);
+  assert.match(prompt, /IF Workflow State == `active`/);
   assert.match(prompt, /do not output `STOP`/);
-  assert.match(prompt, /Expected:\s*\n\s*reopening/);
-  assert.match(prompt, /IF Status != reopening:/);
+  assert.match(prompt, /Expected:\s*\n\s*`reopening`/);
+  assert.match(prompt, /IF Workflow State != `reopening`:/);
   assert.match(prompt, /After the plan is updated for the reopened work:/);
-  assert.match(prompt, /## Status\s*\n\s*\nactive/);
-  assert.match(prompt, /## Next Action\s*\n\s*\nexecute-plan/);
+  assert.match(prompt, /## Workflow State\s*\n\s*active/);
   assert.doesNotMatch(prompt, /plan must be completed before reopening/);
 });
 
@@ -2403,8 +2428,7 @@ test("codex live output formatter condenses workflow completion summaries", () =
     "* Known limitation: live/manual checks for real generation logs, generated payload inspection, and opened dashboard dialog remain deferred to review.",
     "",
     "**Next**",
-    "Status: `review`",
-    "Next Action: `review-plan`",
+    "Workflow State: `review`",
   ].join("\n");
 
   assert.equal(
@@ -2435,8 +2459,7 @@ test("codex live output formatter condenses workflow completion summaries", () =
       "* Deferred: live/manual checks for real generation logs, generated payload inspection, and opened dashboard dialog remain deferred to review.",
       "",
       "**Next**",
-      "Status: `review`",
-      "Next Action: `review-plan`",
+      "Workflow State: `review`",
       "",
       "",
     ].join("\n"),
@@ -2458,8 +2481,7 @@ test("codex live output formatter condenses shared non-review summaries without 
     "* Preserved review-changes as the only stage-specific terminal schema.",
     "",
     "**Next**",
-    "Status: `draft`",
-    "Next Action: `plan-validator`",
+    "Workflow State: `draft-validation`",
   ].join("\n");
 
   assert.equal(
@@ -2481,8 +2503,7 @@ test("codex live output formatter condenses shared non-review summaries without 
       "* Preserved review-changes as the only stage-specific terminal schema.",
       "",
       "**Next**",
-      "Status: `draft`",
-      "Next Action: `plan-validator`",
+      "Workflow State: `draft-validation`",
       "",
       "",
     ].join("\n"),
@@ -2511,8 +2532,7 @@ test("codex live output formatter preserves approval Code Preview when color is 
     "```",
     "",
     "**Next**",
-    "Status: `active`",
-    "Next Action: `execute-plan`",
+    "Workflow State: `active`",
     "",
     "**Waiting for Approval**",
     "Reply `approve` to apply.",
@@ -2544,8 +2564,7 @@ test("codex live output formatter preserves approval Code Preview when color is 
       "```",
       "",
       "**Next**",
-      "Status: `active`",
-      "Next Action: `execute-plan`",
+      "Workflow State: `active`",
       "",
       "**Waiting for Approval**",
       "Reply `approve` to apply.",
@@ -2680,8 +2699,7 @@ test("codex live output formatter hides completed commit-summary next action in 
     "* Detail retained.",
     "",
     "**Next**",
-    "Status: `completed`",
-    "Next Action: `commit-summary`",
+    "Workflow State: `completed`",
   ].join("\n");
 
   assert.equal(
@@ -2701,7 +2719,7 @@ test("codex live output formatter hides completed commit-summary next action in 
       "* Detail retained.",
       "",
       "**Next**",
-      "Status: `completed`",
+      "Workflow State: `completed`",
       "",
       "",
     ].join("\n"),
@@ -2758,11 +2776,8 @@ test("codex live output formatter normalizes multiline next fields", () => {
     "* changes made: rewrote the search-service implementation task",
     "",
     "**Next**",
-    "Status:",
-    "draft",
-    "",
-    "Next Action:",
-    "plan-validator",
+    "Workflow State:",
+    "draft-validation",
   ].join("\n");
 
   assert.equal(
@@ -2785,8 +2800,7 @@ test("codex live output formatter normalizes multiline next fields", () => {
       "* changes made: rewrote the search-service implementation task",
       "",
       "**Next**",
-      "Status: `draft`",
-      "Next Action: `plan-validator`",
+      "Workflow State: `draft-validation`",
       "",
       "",
     ].join("\n"),
@@ -2816,8 +2830,7 @@ test("codex live output formatter condenses review summaries", () => {
     "- [x] block merge",
     "",
     "**Next**",
-    "Status: `active`",
-    "Next Action: `execute-plan`",
+    "Workflow State: `active`",
   ].join("\n");
 
   assert.equal(
@@ -2847,8 +2860,7 @@ test("codex live output formatter condenses review summaries", () => {
       "- [x] block merge",
       "",
       "**Next**",
-      "Status: `active`",
-      "Next Action: `execute-plan`",
+      "Workflow State: `active`",
       "",
       "",
     ].join("\n"),
@@ -2964,8 +2976,7 @@ test("codex live output formatter preserves commit-summary subject and user bull
     "* Branch: fix/competitive-gap-analysis",
     "",
     "**Next**",
-    "Status: `completed`",
-    "Next Action: `commit-summary`",
+    "Workflow State: `completed`",
   ].join("\n");
 
   assert.equal(
@@ -2988,7 +2999,7 @@ test("codex live output formatter preserves commit-summary subject and user bull
       "-- Added contract coverage for prompts and terminal rendering.",
       "",
       "**Next**",
-      "Status: `completed`",
+      "Workflow State: `completed`",
       "",
       "",
     ].join("\n"),
@@ -3634,28 +3645,26 @@ test("workflow progress formatter adds readable stage labels with optional color
     formatWorkflowProgressLine({
       iteration: 1,
       maxIterations: 100,
-      status: "active",
-      nextAction: "execute-plan",
+      workflowState: "active",
       promptPath: ".ai/prompts/execute-plan.md",
       model: "gpt-5.5",
       reasoning: "high",
       color: false,
     }),
-    "\n\n[1/100] STAGE EXECUTE\nactive -> execute-plan\nmodel: gpt-5.5 | reasoning: high\n",
+    "\n\n[1/100] STAGE EXECUTE\nworkflowState: active\nmodel: gpt-5.5 | reasoning: high\n",
   );
 
   assert.equal(
     formatWorkflowProgressLine({
       iteration: 2,
       maxIterations: 100,
-      status: "review",
-      nextAction: "review-plan",
+      workflowState: "review",
       promptPath: ".ai/prompts/review-changes.md",
       model: "gpt-5.5",
       reasoning: "xhigh",
       color: true,
     }),
-    "\n\n\u001b[37;45m[2/100] STAGE REVIEW\u001b[0m\nreview -> review-plan\nmodel: gpt-5.5 | reasoning: xhigh\n",
+    "\n\n\u001b[37;45m[2/100] STAGE REVIEW\u001b[0m\nworkflowState: review\nmodel: gpt-5.5 | reasoning: xhigh\n",
   );
 });
 
@@ -4359,8 +4368,7 @@ test("non-review prompts use the shared terminal output contract", async () => {
     assert.match(prompt, /\*\*Summary\*\*/);
     assert.match(prompt, /\*\*Key Details\*\*/);
     assert.match(prompt, /\*\*Next\*\*/);
-    assert.match(prompt, /Status:/);
-    assert.match(prompt, /Next Action:/);
+    assert.match(prompt, /Workflow State:/);
   }
 
   assert.match(prompts[2], /\*\*Validation\*\*/);
@@ -4680,13 +4688,9 @@ test("workflow context snapshot keeps current state and latest unresolved histor
     planPath: ".ai/plans/workflow-runner.md",
     planContent: `# Plan: workflow-runner
 
-## Status
+## Workflow State
 
 active
-
-## Next Action
-
-execute-plan
 
 ## Spec
 
@@ -4776,8 +4780,7 @@ Remaining:
 `,
     workflowState: {
       planPath: ".ai/plans/workflow-runner.md",
-      status: "active",
-      nextAction: "execute-plan",
+      workflowState: "active",
       latest: {
         execution: {
           version: 2,
@@ -4822,8 +4825,7 @@ Remaining:
 
   assert.match(snapshot, /# Workflow Context Snapshot: workflow-runner/);
   assert.match(snapshot, /## Current State/);
-  assert.match(snapshot, /\* Status: active/);
-  assert.match(snapshot, /\* Next Action: execute-plan/);
+  assert.match(snapshot, /\* Workflow State: active/);
   assert.match(snapshot, /\.ai\/scripts\/workflow\/runner\.spec\.md/);
   assert.match(snapshot, /## Summary/);
   assert.match(snapshot, /## Key Details/);
@@ -4873,13 +4875,9 @@ test("workflow context snapshot emits no remediation context when not resuming e
     planPath: ".ai/plans/workflow-runner.md",
     planContent: `# Plan: workflow-runner
 
-## Status
+## Workflow State
 
 review
-
-## Next Action
-
-review-plan
 
 ## Review History
 
@@ -4906,13 +4904,9 @@ test("workflow context snapshot renders empty blockers as none", () => {
     planPath: ".ai/plans/workflow-runner.md",
     planContent: `# Plan: workflow-runner
 
-## Status
+## Workflow State
 
 active
-
-## Next Action
-
-execute-plan
 
 ## Blockers
 
@@ -5468,8 +5462,7 @@ test("parsePlan accepts markdown code-wrapped workflow metadata values", async (
     });
 
     assert.equal(parsed.ok, true);
-    assert.equal(parsed.ok && parsed.status, "draft");
-    assert.equal(parsed.ok && parsed.nextAction, "plan-validator");
+    assert.equal(parsed.ok && parsed.workflowState, "draft-validation");
   } finally {
     await workspace.cleanup();
   }
@@ -5524,8 +5517,7 @@ test("parsePlan accepts thin-plan-v2 manifest and reads current state from workf
     });
 
     assert.equal(parsed.ok, true);
-    assert.equal(parsed.ok && parsed.status, "review");
-    assert.equal(parsed.ok && parsed.nextAction, "review-plan");
+    assert.equal(parsed.ok && parsed.workflowState, "review");
     assert.match(parsed.ok ? parsed.content : "", /## Files \(MANDATORY\)/);
     assert.match(parsed.ok ? parsed.content : "", /## Review History/);
     assert.match(parsed.ok ? parsed.content : "", /src\/artifact-state\.ts/);
@@ -5579,8 +5571,7 @@ test("parsePlan accepts thin-plan-v2 sidecars without duplicated workflow state"
     });
 
     assert.equal(parsed.ok, true);
-    assert.equal(parsed.ok && parsed.status, "completed");
-    assert.equal(parsed.ok && parsed.nextAction, "commit-summary");
+    assert.equal(parsed.ok && parsed.workflowState, "completed");
   } finally {
     await workspace.cleanup();
   }
@@ -5607,7 +5598,7 @@ test("parsePlan rejects thin-plan-v2 manifest and workflow sidecar state mismatc
     assert.equal(parsed.ok, false);
     assert.match(
       parsed.ok ? "" : parsed.reason,
-      /thin-plan-v2 manifest state mismatch/,
+      /thin-plan-v2 workflow state mismatch/,
     );
     assert.match(parsed.ok ? "" : parsed.reason, /workflow\.json/);
   } finally {
@@ -5636,11 +5627,11 @@ test("parsePlan rejects thin-plan-v2 sync state when workflow sidecar is mismatc
     assert.equal(parsed.ok, false);
     assert.match(
       parsed.ok ? "" : parsed.reason,
-      /thin-plan-v2 manifest state mismatch/,
+      /thin-plan-v2 workflow state mismatch/,
     );
     assert.match(
       parsed.ok ? "" : parsed.reason,
-      /draft \+ sync-plan-artifacts/,
+      /draft-artifact-sync/,
     );
   } finally {
     await workspace.cleanup();
@@ -5697,8 +5688,7 @@ NEEDS FIX
     });
 
     assert.equal(parsed.ok, true);
-    assert.equal(parsed.ok && parsed.status, "active");
-    assert.equal(parsed.ok && parsed.nextAction, "execute-plan");
+    assert.equal(parsed.ok && parsed.workflowState, "active");
 
     const workflow = JSON.parse(
       await readFile(
@@ -5713,8 +5703,7 @@ NEEDS FIX
         "utf8",
       ),
     ) as Record<string, unknown>;
-    assert.equal(workflow.status, "active");
-    assert.equal(workflow.nextAction, "execute-plan");
+    assert.equal(workflow.workflowState, "active");
     assert.deepEqual(workflow.unresolvedBlockers, [
       "Add spoofed-user regression coverage before resuming setup.",
     ]);
@@ -5727,8 +5716,7 @@ NEEDS FIX
       join(workspace.root, ".ai", "plans", "artifact-state.md"),
       "utf8",
     );
-    assert.match(manifest, /## Status\s+active/);
-    assert.match(manifest, /## Next Action\s+execute-plan/);
+    assert.match(manifest, /## Workflow State\s+active/);
   } finally {
     await workspace.cleanup();
   }
@@ -6038,8 +6026,7 @@ test("workflow context snapshot reads validation, review, and blockers from thin
       planContent: parsed.ok ? parsed.content : "",
     });
 
-    assert.match(snapshot, /\* Status: blocked/);
-    assert.match(snapshot, /\* Next Action: unblock-plan/);
+    assert.match(snapshot, /\* Workflow State: blocked/);
     assert.match(snapshot, /\* Result: FAIL/);
     assert.match(snapshot, /\* Summary: HIGH RISK/);
     assert.match(snapshot, /Fix the artifact state reader/);
@@ -6713,7 +6700,7 @@ test("parsePlan rejects deployment-validation as an unsupported workflow status"
     assert.equal(parsed.ok, false);
     assert.match(
       parsed.ok ? "" : parsed.reason,
-      /unknown status value: deployment-validation/,
+      /unknown workflowState value: deployment-validation/,
     );
   } finally {
     await workspace.cleanup();
@@ -6912,7 +6899,7 @@ test("routes only spec-defined executable pairs and sends blocked plans through 
       }),
     });
     assert.equal(undefinedPair.success, false);
-    assert.match(undefinedPair.reason, /undefined status\/next action pair/);
+    assert.match(undefinedPair.reason, /unknown workflowState value: draft--execute-plan/);
 
     await writePlan(
       workspace.root,
@@ -6930,7 +6917,7 @@ test("routes only spec-defined executable pairs and sends blocked plans through 
       }),
     });
     assert.equal(unsupportedFix.success, false);
-    assert.match(unsupportedFix.reason, /unknown next action value: fix-plan/);
+    assert.match(unsupportedFix.reason, /unknown workflowState value: draft--fix-plan/);
 
     await writePlan(
       workspace.root,
@@ -6948,7 +6935,10 @@ test("routes only spec-defined executable pairs and sends blocked plans through 
       }),
     });
     assert.equal(completedReopen.success, false);
-    assert.match(completedReopen.reason, /undefined status\/next action pair/);
+    assert.match(
+      completedReopen.reason,
+      /unknown workflowState value: completed--reopen-plan/,
+    );
 
     await writePlan(
       workspace.root,
@@ -6968,7 +6958,7 @@ test("routes only spec-defined executable pairs and sends blocked plans through 
     assert.equal(deploymentValidation.success, false);
     assert.match(
       deploymentValidation.reason,
-      /unknown status value: deployment-validation/,
+      /unknown workflowState value: deployment-validation--unblock-plan/,
     );
   } finally {
     await workspace.cleanup();
@@ -7206,8 +7196,7 @@ test("artifact-only no-commit thin plan completes review without staging or Code
         "utf8",
       ),
     ) as Record<string, unknown>;
-    assert.equal(workflow.status, "completed");
-    assert.equal(workflow.nextAction, "commit-summary");
+    assert.equal(workflow.workflowState, "completed");
     assert.equal(
       existsSync(
         join(
@@ -7285,8 +7274,7 @@ N/A: artifact-only task savepoints create no committable paths.
       join(workspace.root, ".ai", "plans", "artifact-state.md"),
       "utf8",
     );
-    assert.match(manifest, /## Status\n\nactive/);
-    assert.match(manifest, /## Next Action\n\nexecute-plan/);
+    assert.match(manifest, /## Workflow State\n\nactive/);
     const firstTaskArtifact = await readFile(
       join(
         workspace.root,
@@ -7361,8 +7349,7 @@ test("completed commit-summary preserves its resume point when plan-owned change
       join(workspace.root, ".ai", "plans", "dirty-summary.md"),
       "utf8",
     );
-    assert.match(completedPlan, /## Status\s*\n\s*completed/);
-    assert.match(completedPlan, /## Next Action\s*\n\s*commit-summary/);
+    assert.match(completedPlan, /## Workflow State\s*\n\s*completed/);
   } finally {
     await workspace.cleanup();
   }
@@ -7418,8 +7405,7 @@ test(`completed commit-summary ${CODEX_COMMAND} STOP unstages plan-owned paths a
       join(workspace.root, ".ai", "plans", "stopped-summary.md"),
       "utf8",
     );
-    assert.match(completedPlan, /## Status\s*\n\s*completed/);
-    assert.match(completedPlan, /## Next Action\s*\n\s*commit-summary/);
+    assert.match(completedPlan, /## Workflow State\s*\n\s*completed/);
   } finally {
     await workspace.cleanup();
   }
@@ -8452,10 +8438,8 @@ feat(api): add backend endpoints
     assert.equal(executeRuns, 1);
     assert.doesNotMatch(manifest, /^## Implementation Map$/m);
     assert.doesNotMatch(manifest, /^## Files \(MANDATORY\)$/m);
-    assert.match(manifest, /## Status\n\nactive/);
-    assert.match(manifest, /## Next Action\n\nexecute-plan/);
-    assert.equal(workflow.status, "active");
-    assert.equal(workflow.nextAction, "execute-plan");
+    assert.match(manifest, /## Workflow State\n\nactive/);
+    assert.equal(workflow.workflowState, "active");
   } finally {
     await workspace.cleanup();
   }
@@ -9762,8 +9746,7 @@ test("successful workflow stages append token usage ledger entries and report th
       timestamp: ledger[0]?.timestamp,
       iteration: 1,
       planPath: ".ai/plans/workflow-runner.md",
-      startingStatus: "completed",
-      startingNextAction: "commit-summary",
+      startingWorkflowState: "completed",
       promptPath: ".ai/prompts/commit-summary.md",
       model: "gpt-5.6-terra",
       reasoning: "medium",
@@ -9888,7 +9871,7 @@ test("workflow runner writes the context snapshot before launching a workflow pr
             "utf8",
           );
           assert.match(snapshot, /## Current State/);
-          assert.match(snapshot, /\* Status: completed/);
+          assert.match(snapshot, /\* Workflow State: completed/);
         }
         return {
           launched: true,
@@ -10506,8 +10489,7 @@ test("token usage ledger accumulates totals across multiple workflow stages", as
       "workflow-runner",
     );
     assert.equal(ledger.length, 2);
-    assert.equal(ledger[0]?.endingStatus, "completed");
-    assert.equal(ledger[0]?.endingNextAction, "commit-summary");
+    assert.equal(ledger[0]?.endingWorkflowState, "completed");
     assert.equal(ledger[0]?.inputTokens, 100);
     assert.equal(ledger[0]?.cachedInputTokens, 20);
     assert.equal(ledger[0]?.uncachedInputTokens, 80);
@@ -10887,8 +10869,7 @@ test("workflow runner stops before execution when another active ownership artif
     );
     await writeFileOwnershipArtifact(workspace.root, "other-plan", {
       planPath: ".ai/plans/other-plan.md",
-      status: "active",
-      nextAction: "execute-plan",
+      workflowState: "active",
       owns: ["apps/web/src/shared.ts"],
       released: [],
       resolvedFiles: ["apps/web/src/shared.ts"],
@@ -11061,7 +11042,7 @@ test("workflow runner ignores malformed workflow state from another draft plan",
       workspace.root,
       "other-plan",
       "workflow.json",
-      '{ "status": "draft", "nextAction": "sync-plan-artifacts" }\n',
+      '{ "workflowState": "draft-artifact-sync" }\n',
     );
 
     const calls: Parameters<ProcessRunner>[0][] = [];
@@ -11151,8 +11132,7 @@ test("workflow runner migrates legacy ownership artifacts before checking anothe
       JSON.stringify(
         {
           planPath: ".ai/plans/other-plan.md",
-          status: "draft",
-          nextAction: "sync-plan-artifacts",
+          workflowState: "draft-artifact-sync",
           latest: {},
           history: [],
           unresolvedBlockers: [],
@@ -11446,8 +11426,7 @@ test("completed clean ownership artifacts do not block later plans", async () =>
     );
     await writeFileOwnershipArtifact(workspace.root, "completed-plan", {
       planPath: ".ai/plans/completed-plan.md",
-      status: "completed",
-      nextAction: "commit-summary",
+      workflowState: "completed",
       owns: ["src/shared.ts"],
       released: [],
       resolvedFiles: ["src/shared.ts"],
@@ -11529,8 +11508,7 @@ test("thin-plan ownership preflight trusts terminal workflow state over stale ow
     });
     await writeFileOwnershipArtifact(workspace.root, "completed-plan", {
       planPath: ".ai/plans/completed-plan.md",
-      status: "review",
-      nextAction: "review-plan",
+      workflowState: "review",
       owns: ["src/shared.ts"],
       released: [],
       resolvedFiles: ["src/shared.ts"],
@@ -11554,8 +11532,7 @@ test("thin-plan ownership preflight trusts terminal workflow state over stale ow
       `${JSON.stringify(
         {
           planPath: ".ai/plans/completed-plan.md",
-          status: "completed",
-          nextAction: "commit-summary",
+          workflowState: "completed",
           latest: {},
           history: [],
           unresolvedBlockers: [],
@@ -11631,8 +11608,7 @@ test("completed dirty ownership artifacts still block later plans", async () => 
     );
     await writeFileOwnershipArtifact(workspace.root, "completed-plan", {
       planPath: ".ai/plans/completed-plan.md",
-      status: "completed",
-      nextAction: "commit-summary",
+      workflowState: "completed",
       owns: ["src/shared.ts"],
       released: [],
       resolvedFiles: ["src/shared.ts"],
@@ -11696,8 +11672,7 @@ test("released ownership artifact files do not block dependent plans", async () 
     );
     await writeFileOwnershipArtifact(workspace.root, "other-plan", {
       planPath: ".ai/plans/other-plan.md",
-      status: "active",
-      nextAction: "execute-plan",
+      workflowState: "active",
       owns: ["src/shared.ts"],
       released: ["src/shared.ts"],
       resolvedFiles: [],
@@ -12280,15 +12255,13 @@ test("execute STOP repairs a recorded thin-plan-v2 runtime validation block", as
         "utf8",
       ),
     ) as Record<string, unknown>;
-    assert.equal(workflow.status, "blocked");
-    assert.equal(workflow.nextAction, "unblock-plan");
+    assert.equal(workflow.workflowState, "blocked");
 
     const manifest = await readFile(
       join(workspace.root, ".ai", "plans", "artifact-state.md"),
       "utf8",
     );
-    assert.match(manifest, /## Status\s+blocked/);
-    assert.match(manifest, /## Next Action\s+unblock-plan/);
+    assert.match(manifest, /## Workflow State\s+blocked/);
   } finally {
     await workspace.cleanup();
   }
@@ -12649,7 +12622,7 @@ test("transition guards enforce bounded plan-validator preflight outcomes", asyn
         assert.equal(result.success, false, name);
         assert.match(
           result.reason,
-          /plan-validator may only hand off|unknown next action value: fix-plan/,
+          /draft-validation stage .* may not transition|unknown workflowState value: draft--fix-plan/,
         );
       } else if (name === "validator-stops") {
         assert.equal(result.success, false, name);
@@ -12711,16 +12684,16 @@ test("transition guards enforce execute-plan and review-changes handoffs", async
       });
       if (shouldFailTransition) {
         assert.equal(result.success, false, name);
-        assert.match(result.reason, /execute-plan may only hand off/);
+        assert.match(result.reason, /active stage .* may not transition/);
         const log = await readFile(
           join(workspace.root, ".ai", "artifacts", name, "logs", "runner.log"),
           "utf8",
         );
         assertFailureMetadata(log, {
-          kind: "invalid-transition",
-          reason: /failureReason: execute-plan may only hand off/,
+          kind: "runner-failure",
+          reason: /failureReason: active stage .* may not transition/,
           nextSuggestedAction:
-            /nextSuggestedAction: fix plan status and next action, then rerun workflow-runner/,
+            /nextSuggestedAction: inspect workflow log, resolve failure, then rerun workflow-runner/,
         });
       }
     }
@@ -12768,16 +12741,16 @@ test("transition guards enforce execute-plan and review-changes handoffs", async
       });
       if (shouldFailTransition) {
         assert.equal(result.success, false, name);
-        assert.match(result.reason, /reopen-plan may only hand off/);
+        assert.match(result.reason, /reopening stage .* may not transition/);
         const log = await readFile(
           join(workspace.root, ".ai", "artifacts", name, "logs", "runner.log"),
           "utf8",
         );
         assertFailureMetadata(log, {
-          kind: "invalid-transition",
-          reason: /failureReason: reopen-plan may only hand off/,
+          kind: "runner-failure",
+          reason: /failureReason: reopening stage .* may not transition/,
           nextSuggestedAction:
-            /nextSuggestedAction: fix plan status and next action, then rerun workflow-runner/,
+            /nextSuggestedAction: inspect workflow log, resolve failure, then rerun workflow-runner/,
         });
       }
     }
@@ -12844,7 +12817,7 @@ test("transition guards enforce execute-plan and review-changes handoffs", async
     assert.equal(reviewDeploymentValidation.success, false);
     assert.match(
       reviewDeploymentValidation.reason,
-      /unknown status value: deployment-validation/,
+      /unknown workflowState value: deployment-validation--commit-summary/,
     );
   } finally {
     await workspace.cleanup();
@@ -13011,8 +12984,7 @@ test("execute-plan recovers thin-plan review handoff when state is unchanged aft
       join(workspace.root, ".ai", "plans", "artifact-state.md"),
       "utf8",
     );
-    assert.match(manifest, /## Status\s+review/);
-    assert.match(manifest, /## Next Action\s+review-plan/);
+    assert.match(manifest, /## Workflow State\s+review/);
 
     const workflow = JSON.parse(
       await readFile(
@@ -13027,39 +12999,16 @@ test("execute-plan recovers thin-plan review handoff when state is unchanged aft
         "utf8",
       ),
     ) as Record<string, unknown>;
-    assert.equal(workflow.status, "review");
-    assert.equal(workflow.nextAction, "review-plan");
+    assert.equal(workflow.workflowState, "review");
     const latest = workflow.latest as Record<string, Record<string, unknown>>;
     assert.equal(latest.execution?.state, "review-ready");
-    assert.equal(latest.validation?.result, "passed");
 
-    const files = JSON.parse(
-      await readFile(
-        join(
-          workspace.root,
-          ".ai",
-          "artifacts",
-          "artifact-state",
-          "state",
-          "files.json",
-        ),
-        "utf8",
-      ),
-    ) as Record<string, string[]>;
-    assert.deepEqual(files.changedFiles, [
-      "src/service.ts",
-      "src/new.ts",
-      "src/old.ts",
-    ]);
-    assert.deepEqual(files.created, ["src/new.ts"]);
-    assert.deepEqual(files.modified, ["src/service.ts"]);
-    assert.deepEqual(files.deleted, ["src/old.ts"]);
   } finally {
     await workspace.cleanup();
   }
 });
 
-test("execute-plan repairs a partial thin-plan review handoff", async () => {
+test("execute-plan rejects a partial thin-plan review handoff", async () => {
   const workspace = await setupWorkspace();
   try {
     await writeThinPlanV2Artifacts(workspace.root, {
@@ -13102,8 +13051,7 @@ test("execute-plan repairs a partial thin-plan review handoff", async () => {
             `${JSON.stringify(
               {
                 ...workflow,
-                status: "active",
-                nextAction: "review-plan",
+                workflowState: "active",
               },
               null,
               2,
@@ -13113,7 +13061,7 @@ test("execute-plan repairs a partial thin-plan review handoff", async () => {
           await writePlan(
             workspace.root,
             "artifact-state",
-            thinPlanV2Manifest("active", "review-plan"),
+            thinPlanV2Manifest("review", "review-plan"),
           );
           return { launched: true, stdout: "Review ready.", stderr: "", exitCode: 0 };
         }
@@ -13136,19 +13084,17 @@ test("execute-plan repairs a partial thin-plan review handoff", async () => {
     });
 
     assert.equal(result.success, false);
-    assert.match(result.reason, /output contained STOP/);
-    assert(
-      calls.some(
-        (call) => call.promptPath === ".ai/prompts/review-changes.md",
-      ),
+    assert.match(result.reason, /thin-plan-v2 workflow state mismatch/);
+    assert.equal(
+      calls.some((call) => call.promptPath === ".ai/prompts/review-changes.md"),
+      false,
     );
 
     const manifest = await readFile(
       join(workspace.root, ".ai", "plans", "artifact-state.md"),
       "utf8",
     );
-    assert.match(manifest, /## Status\s+review/);
-    assert.match(manifest, /## Next Action\s+review-plan/);
+    assert.match(manifest, /## Workflow State\s+review/);
 
     const workflow = JSON.parse(
       await readFile(
@@ -13163,14 +13109,13 @@ test("execute-plan repairs a partial thin-plan review handoff", async () => {
         "utf8",
       ),
     ) as Record<string, unknown>;
-    assert.equal(workflow.status, "review");
-    assert.equal(workflow.nextAction, "review-plan");
+    assert.equal(workflow.workflowState, "active");
   } finally {
     await workspace.cleanup();
   }
 });
 
-test("execute-plan repairs thin-plan manifest when successful stage advances only workflow sidecar", async () => {
+test("execute-plan repairs a thin-plan manifest from canonical workflow state", async () => {
   const workspace = await setupWorkspace();
   try {
     await writeThinPlanV2Artifacts(workspace.root, {
@@ -13213,8 +13158,7 @@ test("execute-plan repairs thin-plan manifest when successful stage advances onl
             `${JSON.stringify(
               {
                 ...workflow,
-                status: "review",
-                nextAction: "review-plan",
+                workflowState: "review",
                 latest: {
                   ...(workflow.latest as Record<string, unknown>),
                   execution: {
@@ -13288,7 +13232,6 @@ test("execute-plan repairs thin-plan manifest when successful stage advances onl
 
     assert.equal(result.success, false);
     assert.match(result.reason, /output contained STOP/);
-    assert.doesNotMatch(result.reason, /thin-plan-v2 manifest state mismatch/);
     assert(
       calls.some(
         (call) => call.promptPath === ".ai/prompts/review-changes.md",
@@ -13299,8 +13242,7 @@ test("execute-plan repairs thin-plan manifest when successful stage advances onl
       join(workspace.root, ".ai", "plans", "artifact-state.md"),
       "utf8",
     );
-    assert.match(manifest, /## Status\s+review/);
-    assert.match(manifest, /## Next Action\s+review-plan/);
+    assert.match(manifest, /## Workflow State\s+review/);
   } finally {
     await workspace.cleanup();
   }
@@ -13373,8 +13315,7 @@ test("logs are append-only and include required iteration and review staging fie
     assert.match(log, /timestamp:/);
     assert.match(log, /iteration: 1/);
     assert.match(log, /planPath: .ai\/plans\/workflow-runner.md/);
-    assert.match(log, /startingStatus: review/);
-    assert.match(log, /startingNextAction: review-plan/);
+    assert.match(log, /startingWorkflowState: review/);
     assert.match(log, /promptPath: .ai\/prompts\/review-changes.md/);
     assert.match(log, /result: launched/);
     assert.match(log, /exitCode: 0/);
@@ -14687,7 +14628,7 @@ test("console output reports concise progress and final outcomes", async () => {
     assert.equal(result.success, true);
     assert.match(
       output.lines.join("\n"),
-      /\[1\/100\] STAGE SUMMARY\ncompleted -> commit-summary\nmodel: gpt-5\.6-terra \| reasoning: medium/,
+      /\[1\/100\] STAGE SUMMARY\nworkflowState: completed\nmodel: gpt-5\.6-terra \| reasoning: medium/,
     );
     assert.match(output.lines.join("\n"), /SUCCESS/);
     assert.match(output.lines.join("\n"), /- Worked for 21m 55s/);

@@ -394,8 +394,7 @@ export const createWorkflowFailureDebugRecord = ({
   timestamp,
   iteration,
   planPath,
-  status,
-  nextAction,
+  workflowState,
   promptPath,
   result,
   exitCode,
@@ -409,8 +408,7 @@ export const createWorkflowFailureDebugRecord = ({
   timestamp: string;
   iteration: number;
   planPath: string;
-  status: Status;
-  nextAction: NextAction;
+  workflowState: import("../../contracts/stage.ts").WorkflowState;
   promptPath: string;
   result: string;
   exitCode?: number;
@@ -456,8 +454,7 @@ export const createWorkflowFailureDebugRecord = ({
     timestamp,
     iteration,
     planPath,
-    status,
-    nextAction,
+    workflowState,
     promptPath,
     result,
     exitCode: exitCode ?? null,

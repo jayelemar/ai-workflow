@@ -23,25 +23,25 @@ workflow artifacts.
 
 - Keep thin-plan-v2 manifests small: plan details live in `## Phases`, while
   workflow history and evidence live under `.ai/artifacts/<plan-name>/`.
-- Use `.ai/instructions/shared/workflow-state.md` as the state-machine source
-  for statuses, next actions, and allowed transitions.
+- Use `.ai/instructions/shared/workflow-state.md` as state-machine source for
+  canonical workflow states and allowed transitions.
 - Use Active Context Packet paths from the runner and index-selected
   instruction files only. Do not broadly load `.ai/instructions/**`.
 - Keep `.ai/` artifacts out of implementation commits unless the plan itself
   explicitly owns workflow files.
 - Write execution, validation, review, unblock, and commit evidence to
   `.ai/artifacts/<plan-name>/events/`.
-- Keep `.ai/artifacts/<plan-name>/state/workflow.json` in parity with the
-  plan manifest `## Status` and `## Next Action` values.
+- Keep `.ai/artifacts/<plan-name>/state/workflow.json` in parity with the plan
+  manifest `## Workflow State` value.
 
 ## Artifact Sync
 
-- New draft plans may enter `draft + sync-plan-artifacts` before validation.
+- New draft plans start at `draft-artifact-sync` before validation.
 - Treat `sync-plan-artifacts` as the post-plan/pre-validator sync stage for
   user-journey artifacts, implementation maps, workflow state, file ownership,
   and files sidecars.
-- A resolved artifact sync transitions to `draft + plan-validator`.
-- An unresolved artifact gap remains `draft + sync-plan-artifacts` until the
+- A resolved artifact sync transitions to `draft-validation`.
+- An unresolved artifact gap remains `draft-artifact-sync` until the
   required plan-owned artifact is corrected.
 
 ## Task Savepoints
@@ -49,7 +49,7 @@ workflow artifacts.
 Apply this contract only to new or `draft` runner-managed plans. Manual plans
 are not required to use the commit-savepoint structure or commit guarantees.
 Never rewrite task IDs, task boundaries, or runner artifacts for plans already
-in `active`, `review`, `blocked`, or `completed` status.
+in `active`, `review`, `blocked`, or `completed` workflow state.
 
 Two outcomes MUST be separate tasks when they are independently implementable
 and validatable and have distinct reasons to review or revert. There is no

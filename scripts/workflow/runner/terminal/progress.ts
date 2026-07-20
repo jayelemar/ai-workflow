@@ -1,5 +1,6 @@
 import path from "node:path";
 import type { CodexModel, ReasoningEffort } from "../../config/codex.ts";
+import type { WorkflowState } from "../../contracts/stage.ts";
 import type { CommitProgress, OutputStream } from "../types.ts";
 import { ANSI_RESET, WORKFLOW_WAIT_NOTICE_COLOR } from "./ansi.ts";
 
@@ -72,8 +73,7 @@ export const supportsWorkflowAnsiColor = (
 export const formatWorkflowProgressLine = ({
   iteration,
   maxIterations,
-  status,
-  nextAction,
+  workflowState,
   promptPath,
   model,
   reasoning,
@@ -81,8 +81,7 @@ export const formatWorkflowProgressLine = ({
 }: {
   iteration: number;
   maxIterations: number;
-  status: string;
-  nextAction: string;
+  workflowState: WorkflowState;
   promptPath: string;
   model: CodexModel;
   reasoning: ReasoningEffort;
@@ -96,7 +95,7 @@ export const formatWorkflowProgressLine = ({
   const formattedProgressPrefix = color
     ? `${stage.colorCode}${progressPrefix}${ANSI_RESET}`
     : progressPrefix;
-  return `\n\n${formattedProgressPrefix}\n${status} -> ${nextAction}\nmodel: ${model} | reasoning: ${reasoning}\n`;
+  return `\n\n${formattedProgressPrefix}\nworkflowState: ${workflowState}\nmodel: ${model} | reasoning: ${reasoning}\n`;
 };
 
 export const formatCommitProgressLine = ({

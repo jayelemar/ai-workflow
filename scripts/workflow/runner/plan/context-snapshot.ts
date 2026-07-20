@@ -127,9 +127,7 @@ const extractLatestReviewSummary = (
 const extractLatestReviewRemediationContext = (
   planContent: string,
 ): string[] => {
-  const status = extractSectionValue(planContent, "## Status");
-  const nextAction = extractSectionValue(planContent, "## Next Action");
-  if (status !== "active" || nextAction !== "execute-plan") {
+  if (extractSectionValue(planContent, "## Workflow State") !== "active") {
     return [];
   }
 
@@ -279,6 +277,8 @@ export const generateWorkflowContextSnapshot = ({
   const reviewRemediationContext =
     extractLatestReviewRemediationContext(planContent);
   const tokenSummary = summarizeLatestTokenUsage(latestTokenUsage);
+  const currentWorkflowState =
+    workflowState?.workflowState ?? extractSectionValue(planContent, "## Workflow State") ?? undefined;
 
   return `# Workflow Context Snapshot: ${planName}
 
@@ -288,8 +288,7 @@ ${planPath}
 
 ## Current State
 
-* Status: ${extractSectionValue(planContent, "## Status") ?? "(missing)"}
-* Next Action: ${extractSectionValue(planContent, "## Next Action") ?? "(missing)"}
+* Workflow State: ${currentWorkflowState ?? "(missing)"}
 
 ${formatSnapshotSection("## Spec Paths", extractSpecPaths(planContent))}
 

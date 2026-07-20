@@ -4,7 +4,7 @@ This prompt stages completed plan implementation files, then generates the final
 
 It does NOT modify code.
 
-For `completed + commit-summary`, it will create exactly one local git commit
+For `completed`, it will create exactly one local git commit
 from runner-injected plan-owned paths by default. A task-savepoint plan may define
 an explicit `## Commit Boundaries` entry for the current task; in that case,
 create one local commit per listed boundary instead.
@@ -62,29 +62,15 @@ If not provided:
 
 Read:
 
-## Status
+## Workflow State
 
-Expected:
+Expected: `completed`
 
-* completed
-
-IF Status is not `completed`:
+IF Workflow State is not `completed`:
 
 → STOP (`plan is not ready for commit summary`)
 
 ---
-
-Read:
-
-## Next Action
-
-Expected:
-
-commit-summary
-
-IF Next Action is not `commit-summary`:
-
-→ STOP (`unexpected next action for commit summary`)
 
 Use the completed commit rules below.
 
@@ -258,13 +244,9 @@ If no plan-related files can be staged:
 
 Apply this section ONLY when the plan starts as:
 
-## Status
+## Workflow State
 
 completed
-
-## Next Action
-
-commit-summary
 
 Required behavior:
 
@@ -336,7 +318,7 @@ Rules:
 * Do not stage or commit `.ai/` files.
 * If `pnpm lint-staged` or `git commit` fails, output `STOP` with the exact
   failure. The runner records the failed preflight, unstages the plan-owned
-  paths, preserves `completed + commit-summary`, and lets the next runner
+  paths, preserves `completed`, and lets the next runner
   invocation resume this stage without bypassing the hook.
 * Do not write `.ai/artifacts/<plan-name>/execution-summary.md`; the runner
   refreshes it from completed task artifacts after each task savepoint commit.
@@ -375,10 +357,4 @@ Rules:
 
 **Next**
 
-Status:
-
-* completed
-
-Next Action:
-
-commit-summary
+Workflow State: `completed`

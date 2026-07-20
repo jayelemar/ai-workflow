@@ -105,10 +105,10 @@ Required Behavior:
 
 Initial Plan State:
 - In `runner-managed` mode:
-  - `## Status` must be `draft`.
-  - `## Next Action` must be `sync-plan-artifacts`.
-  - `.ai/artifacts/<feature-or-bug-name>/state/workflow.json` must use `status: "draft"` and `nextAction: "sync-plan-artifacts"`.
-  - `.ai/artifacts/<feature-or-bug-name>/state/context.md` must exist with an initial snapshot that names the plan path, spec path, artifact paths, status, next action, and notes that no validation/execution/review events exist yet.
+  - `## Workflow State` must be `draft-artifact-sync`.
+  - `.ai/artifacts/<feature-or-bug-name>/state/workflow.json` must use
+    `workflowState: "draft-artifact-sync"`.
+  - `.ai/artifacts/<feature-or-bug-name>/state/context.md` must exist with an initial snapshot that names the plan path, spec path, artifact paths, workflow state, and notes that no validation/execution/review events exist yet.
   - `.ai/artifacts/<feature-or-bug-name>/events/` must exist even when it is empty.
 - In `manual` mode:
   - keep the plan manifest structure from the template

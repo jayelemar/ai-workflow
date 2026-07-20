@@ -5,10 +5,10 @@ contextual code preview before non-test files are changed.
 
 This prompt is not a workflow stage. It does not require a plan file, does not
 read or update workflow state, does not create or update `.ai/artifacts`, and
-does not update `## Status` or `## Next Action`.
+does not update `## Workflow State`.
 
 Manual preview does not read or update workflow state.
-Manual preview does not update `## Status` or `## Next Action`.
+Manual preview does not update `## Workflow State`.
 
 ---
 

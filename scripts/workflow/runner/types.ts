@@ -1,20 +1,5 @@
-export type Status =
-  | "draft"
-  | "approved"
-  | "active"
-  | "review"
-  | "reopening"
-  | "completed"
-  | "blocked";
-
-export type NextAction =
-  | "sync-plan-artifacts"
-  | "plan-validator"
-  | "execute-plan"
-  | "unblock-plan"
-  | "review-plan"
-  | "reopen-plan"
-  | "commit-summary";
+import type { WorkflowState } from "../contracts/stage.ts";
+export type { WorkflowState };
 
 export type ProcessCall = {
   command: string;
@@ -57,8 +42,7 @@ export type ParsedPlan = {
   manifestContent: string;
   content: string;
   thinPlanContract: string;
-  status: Status;
-  nextAction: NextAction;
+  workflowState: WorkflowState;
   warnings: string[];
 };
 export type PlanTask = {
@@ -108,8 +92,7 @@ export type WorkflowTokenGuardrail = {
 };
 export type ThinPlanV2WorkflowState = {
   planPath: string;
-  status: Status;
-  nextAction: NextAction;
+  workflowState: WorkflowState;
   latest?: Record<string, unknown>;
   history?: string[];
   unresolvedBlockers: string[];
@@ -125,8 +108,7 @@ export type ThinPlanV2FilesState = {
 };
 export type FileOwnershipArtifact = {
   planPath: string;
-  status?: Status;
-  nextAction?: NextAction;
+  workflowState?: WorkflowState;
   owns: string[];
   released: string[];
   resolvedFiles: string[];
@@ -195,8 +177,7 @@ export type WorkflowFailureDebugRecord = {
   timestamp: string;
   iteration: number;
   planPath: string;
-  status: Status;
-  nextAction: NextAction;
+  workflowState: WorkflowState;
   promptPath: string;
   result: string;
   exitCode: number | null;

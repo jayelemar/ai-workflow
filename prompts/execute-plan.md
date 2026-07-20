@@ -52,8 +52,7 @@ If not provided:
 
 Ensure the plan contains:
 
-* `## Status`
-* `## Next Action`
+* `## Workflow State`
 * `## Artifacts`
 * readable `## Phases`
 * readable `.ai/artifacts/<plan-name>/state/workflow.json`
@@ -71,60 +70,46 @@ If missing:
 
 Read:
 
-## Status
+## Workflow State
 
 ---
 
 ### Allowed Execution States
 
-* approved
-* active
+* `approved`
+* `active`
 
 ---
 
 ### State Handling
 
-IF Status == approved:
+IF Workflow State == `approved`:
 
-* update Status → active
-* keep Next Action → execute-plan
+* update Workflow State → `active`
 * begin execution from first phase
 
-IF Status == active:
+IF Workflow State == `active`:
 
 * resume execution from first incomplete phase
 
-IF Status == blocked:
+IF Workflow State == `blocked`:
 
 → STOP (`plan is blocked; resolve blockers first`)
 
-IF Status == review:
+IF Workflow State == `review`:
 
 → STOP (`plan awaiting review`)
 
-IF Status == completed:
+IF Workflow State == `completed`:
 
 → STOP (`plan already completed`)
 
-IF Status == draft:
+IF Workflow State starts with `draft-`:
 
 → STOP (`plan not approved`)
 
 ---
 
-Read:
-
-## Next Action
-
-Expected:
-
-execute-plan
-
-IF Next Action != execute-plan:
-
-→ STOP (`unexpected next action for execution`)
-
----
 
 ### Execution End-State Constraint (CRITICAL)
 
@@ -132,26 +117,24 @@ Execution may start from `approved` or `active`.
 
 Execution MUST end in exactly one of these states:
 
-* `review` with `Next Action = review-plan`
-* `active` with `Next Action = execute-plan`
-* `blocked` with `Next Action = unblock-plan`
+* `review`
+* `active`
+* `blocked`
 
 When handing off, update the plan manifest and
 `.ai/artifacts/<plan-name>/state/workflow.json` together using one exact
-status/action pair above. Reread both values before final output; never leave
-an `active + review-plan` or other mixed pair.
+`workflowState` above. Reread both values before final output; never leave a
+manifest/sidecar mismatch.
 
 Execution MUST NOT end with:
 
-* `Status = completed`
-* `Next Action = commit-summary`
+* `completed`
 
 `active` is valid after an `execute-plan` run ONLY when implementation work remains and execution can continue from the next incomplete task.
 
 Implementation defects, incomplete implementation tasks, missing tests for newly defined implementation tasks, or browser findings that require code changes MUST keep or set:
 
-* `Status = active`
-* `Next Action = execute-plan`
+* `workflowState = active`
 
 Do NOT mark a plan `blocked` when the next required action is code implementation already covered by the spec and plan.
 
@@ -160,8 +143,7 @@ Do NOT mark a plan `blocked` when the next required action is code implementatio
 If implementation work and local validation are complete, but the only unavailable validation is final browser/manual/deployed/external validation:
 
 * record the pending browser/manual/deployed/external validation in the execution log and validation notes
-* set `Status = review`
-* set `Next Action = review-plan`
+* set `workflowState = review`
 * review owns the completion decision
 * must not transition directly to `commit-summary`
 * do not mark the plan `blocked` solely because that final external validation is unavailable
@@ -225,7 +207,7 @@ If the runner injects `Task savepoint current task`:
 * validate only the current task's changed behavior plus directly affected regressions
 * do not start the next `[task:...]` item
 * keep `.ai/` artifacts out of git commits
-* when the current task is implemented and validated, set `Status = review` and `Next Action = review-plan`
+* when the current task is implemented and validated, set `workflowState = review`
 * if implementation or validation fails, keep the same task active, record the failure, and do not route to `commit-summary`
 
 #### Compatibility Regression Carve-Out
@@ -281,14 +263,14 @@ If required execution or bugfix work needs a file outside the current plan-owned
   artifacts and continue instead of stopping.
 * If the file is owned by another active plan, treat this as a `plan dependency`, not as a generic file-scope failure.
 * Do NOT keep executing both plans in parallel.
-* Update the current plan to `Status = blocked` and `Next Action = unblock-plan`.
+* Update the current plan to `workflowState = blocked`.
 * Create an execution event artifact that records a blocker with:
   * `Type: plan dependency`
   * the required file path
   * the owner plan path
   * evidence that the file is owned by another active plan
   * the required action: complete the owner plan or release the shared file ownership
-* Update `.ai/artifacts/<plan-name>/state/workflow.json` with `status: "blocked"`, `nextAction: "unblock-plan"`, `latest.execution`, appended `history`, and `unresolvedBlockers`.
+* Update `.ai/artifacts/<plan-name>/state/workflow.json` with `workflowState: "blocked"`, `latest.execution`, appended `history`, and `unresolvedBlockers`.
 * MUST NOT add inline `## Blockers` to thin-plan-v2 manifests.
 * STOP.
 
@@ -348,7 +330,7 @@ The artifact must include:
 <compact evidence: command, result, evidence path, file/change summary, short excerpt only when needed, blocker/risk note, or deferred validation note>
 ```
 
-Then update `.ai/artifacts/<plan-name>/state/workflow.json` with runner-readable thin-plan-v2 state: preserve `planPath`, set `status` and `nextAction`, write the compact execution event under `latest.execution`, append the execution artifact path to `history`, set `unresolvedBlockers` to active blocker strings or `[]`, and refresh `updatedAt`.
+Then update `.ai/artifacts/<plan-name>/state/workflow.json` with runner-readable thin-plan-v2 state: preserve `planPath`, set `workflowState`, write the compact execution event under `latest.execution`, append the execution artifact path to `history`, set `unresolvedBlockers` to active blocker strings or `[]`, and refresh `updatedAt`.
 
 Wording rules:
 
@@ -372,13 +354,9 @@ It does NOT apply when implementation tasks remain and can be performed by conti
 
 1. update:
 
-## Status
+## Workflow State
 
 blocked
-
-## Next Action
-
-unblock-plan
 
 2. create an execution event artifact with the blocker details:
 
@@ -390,7 +368,7 @@ unblock-plan
 * Evidence:
 * Next Step:
 
-3. update `.ai/artifacts/<plan-name>/state/workflow.json` with runner-readable thin-plan-v2 state: preserve `planPath`, set `status` to `blocked`, set `nextAction` to `unblock-plan`, write compact `latest.execution`, append the execution artifact path to `history`, set `unresolvedBlockers` to active blocker strings, and refresh `updatedAt`.
+3. update `.ai/artifacts/<plan-name>/state/workflow.json` with runner-readable thin-plan-v2 state: preserve `planPath`, set `workflowState` to `blocked`, write compact `latest.execution`, append the execution artifact path to `history`, set `unresolvedBlockers` to active blocker strings, and refresh `updatedAt`.
 
 4. MUST NOT add inline `## Blockers` to thin-plan-v2 manifests.
 
@@ -402,7 +380,7 @@ unblock-plan
 
 Execution may resume ONLY if:
 
-* Status == active
+* Workflow State == `active`
 * blockers are resolved AND documented
 
 ---
@@ -421,18 +399,13 @@ IF all phases are complete AND Post-Execution Validation is confirmed:
 
 update:
 
-## Status
+## Workflow State
 
 review
 
-## Next Action
-
-review-plan
-
 IF any phase remains incomplete:
 
-* keep or set `Status = active`
-* keep or set `Next Action = execute-plan`
+* keep or set `workflowState = active`
 * update the incomplete phase, execution log, and next implementation task clearly
 * end the current run with `execution incomplete; continue execute-plan`
 
@@ -455,18 +428,16 @@ If validation cannot be confirmed:
 * IF a validation command fails only on files outside the current plan scope, and the current plan's implementation plus plan-owned validation is otherwise confirmed:
   * do not block the active plan solely for that reason
   * record the validation as deferred or out-of-scope with the exact command, failing files, and remaining risk
-  * continue with `Status = review` and `Next Action = review-plan` when implementation and local plan-owned validation are complete
+* continue with `workflowState = review` when implementation and local plan-owned validation are complete
 * IF validation cannot be confirmed because local runtime setup, auth state, external service access, or operator-controlled database state must change before the validation can run against current code:
   * follow Blocking rules
-  * set `Status = blocked`
-  * set `Next Action = unblock-plan`
+  * set `workflowState = blocked`
   * record exact unblock evidence required
-  * do not keep `active + execute-plan` when no further implementation work can make validation proceed
+  * do not keep `workflowState = active` when no further implementation work can make validation proceed
   * persist the blocked state before outputting `STOP`; do not rely on the
     runner to infer this transition from terminal output
 * IF validation cannot be confirmed because implementation tasks remain or a validation finding requires code changes already covered by the spec and plan:
-  * keep or set `Status = active`
-  * keep or set `Next Action = execute-plan`
+  * keep or set `workflowState = active`
   * record the failed or incomplete validation as implementation follow-up work
   * end the current run with `validation found implementation work; continue execute-plan`
 * ELSE follow Blocking rules
@@ -474,8 +445,7 @@ If validation cannot be confirmed:
 
 Post-Execution Validation MUST NOT set:
 
-* Status = completed
-* Next Action = commit-summary
+* `workflowState = completed`
 
 ---
 
@@ -483,7 +453,7 @@ Post-Execution Validation MUST NOT set:
 
 Update the plan with:
 
-* `## Status` and `## Next Action` only when workflow state changes
+* `## Workflow State` only when workflow state changes
 
 Update artifacts with:
 
@@ -492,9 +462,9 @@ Update artifacts with:
 * ownership changes and releases in `.ai/artifacts/<plan-name>/state/file-ownership.json`
 * deviations and evidence in event artifacts under `.ai/artifacts/<plan-name>/events/`
 
-Reconcile `.ai/artifacts/<plan-name>/state/files.json` after implementation to the actual created, modified, and deleted plan-owned paths before moving to `Status = review`. `files.json` is the changed-file inventory for review and commit, not the ownership authority.
+Reconcile `.ai/artifacts/<plan-name>/state/files.json` after implementation to the actual created, modified, and deleted plan-owned paths before moving to `workflowState = review`. `files.json` is the changed-file inventory for review and commit, not the ownership authority.
 
-Do not write workflow `status` or `nextAction` into `files.json` or `file-ownership.json`. Workflow state belongs only in the plan manifest and `.ai/artifacts/<plan-name>/state/workflow.json`.
+Do not write workflow routing fields into `files.json` or `file-ownership.json`. `workflowState` belongs only in the plan manifest and `.ai/artifacts/<plan-name>/state/workflow.json`.
 
 Keep workflow state entries concise: compact summary, one state field, and evidence pointer only.
 Detailed validation evidence belongs in `.ai/artifacts/<plan-name>/events/validation-vX.md`, with only the latest validation pointer under `latest.validation` in `.ai/artifacts/<plan-name>/state/workflow.json`.
@@ -510,7 +480,7 @@ Rules:
 * `**Summary**` starts with the stage result/state line, then at most 2-3 short high-signal bullets.
 * `**Key Details**` carries the important human-readable substance for the stage.
 * `**Validation**` should stay compact and usually prefer compact result labels or artifact paths over detailed inline diagnostics.
-* `**Next**` must always use explicit `Status:` and `Next Action:` lines.
+* `**Next**` must always use one explicit `Workflow State:` line.
 
 **Plan**
 
@@ -536,14 +506,4 @@ Rules:
 
 **Next**
 
-Status:
-
-* review
-* active
-* blocked
-
-Next Action:
-
-* execute-plan
-* unblock-plan
-* review-plan
+Workflow State: `review`, `active`, or `blocked`

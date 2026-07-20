@@ -161,81 +161,31 @@ const nextSectionLines = (lines: string[]): string[] => {
   const trimmedLines = trimBlankLines(lines).filter(
     (line) => line.trim().length > 0,
   );
-  const explicitNextValues: {
-    status?: string;
-    nextAction?: string;
-  } = {};
-
   for (let index = 0; index < trimmedLines.length; index += 1) {
     const labelMatch = trimmedLines[index]
       .trim()
-      .match(/^(Status|Next Action):\s*(.*)$/i);
+      .match(/^Workflow State:\s*(.*)$/i);
     if (!labelMatch) {
       continue;
     }
-
-    const field =
-      labelMatch[1].toLowerCase() === "status" ? "status" : "nextAction";
-    const inlineValue = labelMatch[2].trim();
+    const inlineValue = labelMatch[1].trim();
     const nextValue =
       inlineValue.length > 0 ? inlineValue : trimmedLines[index + 1]?.trim();
-    if (!nextValue || /^(Status|Next Action):\s*/i.test(nextValue)) {
+    if (!nextValue || /^Workflow State:\s*/i.test(nextValue)) {
       continue;
     }
-
-    explicitNextValues[field] = nextValue
+    const workflowState = nextValue
       .replace(/^[-*]\s+/, "")
       .replace(/^`+|`+$/g, "");
-  }
-
-  const explicitLines: string[] = [];
-  if (explicitNextValues.status) {
-    explicitLines.push(`Status: \`${explicitNextValues.status}\``);
-  }
-  if (
-    explicitNextValues.nextAction &&
-    !shouldSuppressTerminalNextAction(
-      explicitNextValues.status,
-      explicitNextValues.nextAction,
-    )
-  ) {
-    explicitLines.push(`Next Action: \`${explicitNextValues.nextAction}\``);
-  }
-  if (explicitLines.length > 0) {
-    return explicitLines;
+    return [`Workflow State: \`${workflowState}\``];
   }
 
   const transitionLine = trimmedLines[0];
-  const status = transitionLine?.match(/->\s*([a-z-]+)\s*$/)?.[1];
-  if (!status) {
+  const workflowState = transitionLine?.match(/(?:->|=)\s*([a-z-]+)\s*$/)?.[1];
+  if (!workflowState) {
     return [];
   }
-  const nextAction = workflowNextActionForStatus(status);
-  return nextAction && !shouldSuppressTerminalNextAction(status, nextAction)
-    ? [`Status: \`${status}\``, `Next Action: \`${nextAction}\``]
-    : [`Status: \`${status}\``];
-};
-
-const shouldSuppressTerminalNextAction = (
-  status: string | undefined,
-  nextAction: string | undefined,
-): boolean => status === "completed" && nextAction === "commit-summary";
-
-const workflowNextActionForStatus = (status: string): NextAction | null => {
-  switch (status) {
-    case "active":
-      return "execute-plan";
-    case "review":
-      return "review-plan";
-    case "blocked":
-      return "unblock-plan";
-    case "reopening":
-      return "reopen-plan";
-    case "completed":
-      return "commit-summary";
-    default:
-      return null;
-  }
+  return [`Workflow State: \`${workflowState}\``];
 };
 
 const reviewSummaryLines = (lines: string[]): string[] => {

@@ -48,8 +48,7 @@ const writeArtifact = async (
 const writeWorkflow = async (
   root: string,
   planName: string,
-  status = "active",
-  nextAction = "execute-plan",
+  workflowState = "active",
 ) => {
   const workflowPath = join(
     root,
@@ -65,8 +64,7 @@ const writeWorkflow = async (
     `${JSON.stringify(
       {
         planPath: `.ai/plans/${planName}.md`,
-        status,
-        nextAction,
+        workflowState,
         latest: {},
         history: [],
         unresolvedBlockers: [],
@@ -87,8 +85,7 @@ const parsedPlan = (content: string): ParsedPlan => ({
   manifestContent: content,
   content,
   thinPlanContract: "thin-plan-v2",
-  status: "active",
-  nextAction: "execute-plan",
+  workflowState: "active",
   warnings: [],
 });
 
@@ -229,7 +226,6 @@ test("file ownership conflict detection uses canonical workflow state", async ()
       workspace.root,
       "other-plan",
       "active",
-      "execute-plan",
     );
 
     const conflict = await detectFileOwnershipArtifactConflict({

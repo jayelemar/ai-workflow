@@ -7,12 +7,7 @@ import {
   type Failure,
   type ParsedPlan,
 } from "../types.ts";
-import {
-  extractSectionValue,
-  isNextAction,
-  isStatus,
-  normalizeWorkflowStateValue,
-} from "./parser.ts";
+import type { WorkflowState } from "../../contracts/stage.ts";
 import {
   normalizeWorkflowEventHistory,
   parseThinPlanV2WorkflowState,
@@ -72,6 +67,18 @@ export const replaceManifestWorkflowValue = (
   return lines.join("\n");
 };
 
+const replaceManifestWorkflowState = (
+  content: string,
+  workflowState: WorkflowState,
+): string => replaceManifestWorkflowValue(content, "## Workflow State", workflowState);
+
+const canonicalWorkflowJson = (
+  record: Record<string, unknown>,
+  workflowState: WorkflowState,
+): string => {
+  return `${JSON.stringify({ ...record, workflowState, updatedAt: new Date().toISOString() }, null, 2)}\n`;
+};
+
 export const repairThinPlanV2ManifestStateFromWorkflow = async ({
   rootDir,
   plan,
@@ -93,27 +100,6 @@ export const repairThinPlanV2ManifestStateFromWorkflow = async ({
     };
   }
 
-  const manifestStatus = extractSectionValue(manifestContent, "## Status");
-  const manifestNextAction = extractSectionValue(
-    manifestContent,
-    "## Next Action",
-  );
-  if (manifestStatus === null) {
-    return { ok: false, reason: "plan is missing ## Status" };
-  }
-  if (manifestNextAction === null) {
-    return { ok: false, reason: "plan is missing ## Next Action" };
-  }
-
-  const rawStatus = normalizeWorkflowStateValue(manifestStatus);
-  const rawNextAction = normalizeWorkflowStateValue(manifestNextAction);
-  if (!isStatus(rawStatus)) {
-    return { ok: false, reason: `unknown status value: ${rawStatus}` };
-  }
-  if (!isNextAction(rawNextAction)) {
-    return { ok: false, reason: `unknown next action value: ${rawNextAction}` };
-  }
-
   const workflowPath = thinPlanV2ArtifactPath(
     plan.planName,
     "state",
@@ -132,22 +118,11 @@ export const repairThinPlanV2ManifestStateFromWorkflow = async ({
     return workflow;
   }
 
-  if (
-    rawStatus === workflow.status &&
-    rawNextAction === workflow.nextAction
-  ) {
+  if (workflow.workflowState === plan.workflowState) {
     return { ok: true, repaired: false };
   }
 
-  if (rawStatus !== plan.status || rawNextAction !== plan.nextAction) {
-    return { ok: true, repaired: false };
-  }
-
-  const repairedContent = replaceManifestWorkflowValue(
-    replaceManifestWorkflowValue(manifestContent, "## Status", workflow.status),
-    "## Next Action",
-    workflow.nextAction,
-  );
+  const repairedContent = replaceManifestWorkflowState(manifestContent, workflow.workflowState);
   if (repairedContent === manifestContent) {
     return { ok: true, repaired: false };
   }
@@ -175,10 +150,8 @@ export const recoverThinPlanV2PartialExecuteReviewHandoff = async ({
 }): Promise<{ ok: true; recovered: boolean } | Failure> => {
   if (
     previous.thinPlanContract !== "thin-plan-v2" ||
-    previous.status !== "active" ||
-    previous.nextAction !== "execute-plan" ||
-    updated.status !== "active" ||
-    updated.nextAction !== "review-plan"
+    previous.workflowState !== "active" ||
+    updated.workflowState !== "active"
   ) {
     return { ok: true, recovered: false };
   }
@@ -195,27 +168,13 @@ export const recoverThinPlanV2PartialExecuteReviewHandoff = async ({
   const workflowRecord = asRecord(workflowRaw);
   if (
     !workflowRecord ||
-    workflowRecord.status !== "active" ||
-    workflowRecord.nextAction !== "review-plan"
+    workflowRecord.workflowState !== "active"
   ) {
     return { ok: true, recovered: false };
   }
 
-  const manifestContent = replaceManifestWorkflowValue(
-    updated.manifestContent,
-    "## Status",
-    "review",
-  );
-  const workflowContent = `${JSON.stringify(
-    {
-      ...workflowRecord,
-      status: "review",
-      nextAction: "review-plan",
-      updatedAt: new Date().toISOString(),
-    },
-    null,
-    2,
-  )}\n`;
+  const manifestContent = replaceManifestWorkflowState(updated.manifestContent, "review");
+  const workflowContent = canonicalWorkflowJson(workflowRecord, "review");
 
   try {
     await writeFile(updated.absolutePlanPath, manifestContent, "utf8");
@@ -260,15 +219,13 @@ export const recoverThinPlanV2FailedReviewState = async ({
   planName,
   planPath,
   manifestContent,
-  manifestStatus,
-  manifestNextAction,
+  manifestWorkflowState,
 }: {
   rootDir: string;
   planName: string;
   planPath: string;
   manifestContent: string;
-  manifestStatus: Status;
-  manifestNextAction: NextAction;
+  manifestWorkflowState: WorkflowState;
 }): Promise<
   { ok: true; recovered: boolean; manifestContent: string } | Failure
 > => {
@@ -303,19 +260,14 @@ export const recoverThinPlanV2FailedReviewState = async ({
     return { ok: true, recovered: false, manifestContent };
   }
 
-  const workflowStatus = workflowRecord.status;
-  const workflowNextAction = workflowRecord.nextAction;
-  const isReviewHandoff =
-    workflowStatus === "review" && workflowNextAction === "review-plan";
-  const isActiveHandoff =
-    workflowStatus === "active" && workflowNextAction === "execute-plan";
-  const isBlockedHandoff =
-    workflowStatus === "blocked" && workflowNextAction === "unblock-plan";
+  const workflowState = workflowRecord.workflowState;
+  const isReviewHandoff = workflowState === "review";
+  const isActiveHandoff = workflowState === "active";
+  const isBlockedHandoff = workflowState === "blocked";
   const manifestHasRecoverableHandoff =
-    (manifestStatus === "review" && manifestNextAction === "review-plan") ||
-    (manifestStatus === "active" &&
-      manifestNextAction === "execute-plan") ||
-    (manifestStatus === "blocked" && manifestNextAction === "unblock-plan");
+    manifestWorkflowState === "review" ||
+    manifestWorkflowState === "active" ||
+    manifestWorkflowState === "blocked";
   if (
     (!isReviewHandoff && !isActiveHandoff && !isBlockedHandoff) ||
     !manifestHasRecoverableHandoff
@@ -346,15 +298,10 @@ export const recoverThinPlanV2FailedReviewState = async ({
     ];
   }
 
-  const nextManifestContent = replaceManifestWorkflowValue(
-    replaceManifestWorkflowValue(manifestContent, "## Status", "active"),
-    "## Next Action",
-    "execute-plan",
-  );
+  const nextManifestContent = replaceManifestWorkflowState(manifestContent, "active");
   const nextWorkflow = {
     ...workflowRecord,
-    status: "active",
-    nextAction: "execute-plan",
+    workflowState: "active",
     latest: {
       ...latest,
       review: {
@@ -369,7 +316,7 @@ export const recoverThinPlanV2FailedReviewState = async ({
   try {
     await writeFile(
       path.join(rootDir, workflowPath),
-      `${JSON.stringify(nextWorkflow, null, 2)}\n`,
+      canonicalWorkflowJson(nextWorkflow, "active"),
       "utf8",
     );
     await writeFile(path.join(rootDir, planPath), nextManifestContent, "utf8");
@@ -392,8 +339,7 @@ export const recoverThinPlanV2BlockedValidationHandoff = async ({
 }): Promise<{ ok: true; recovered: boolean } | Failure> => {
   if (
     plan.thinPlanContract !== "thin-plan-v2" ||
-    plan.status !== "active" ||
-    plan.nextAction !== "execute-plan"
+    plan.workflowState !== "active"
   ) {
     return { ok: true, recovered: false };
   }
@@ -422,22 +368,17 @@ export const recoverThinPlanV2BlockedValidationHandoff = async ({
     return { ok: true, recovered: false };
   }
 
-  const nextManifestContent = replaceManifestWorkflowValue(
-    replaceManifestWorkflowValue(plan.manifestContent, "## Status", "blocked"),
-    "## Next Action",
-    "unblock-plan",
-  );
+  const nextManifestContent = replaceManifestWorkflowState(plan.manifestContent, "blocked");
   const nextWorkflow = {
     ...workflowRecord,
-    status: "blocked",
-    nextAction: "unblock-plan",
+    workflowState: "blocked",
     updatedAt: new Date().toISOString(),
   };
 
   try {
     await writeFile(
       path.join(rootDir, workflowPath),
-      `${JSON.stringify(nextWorkflow, null, 2)}\n`,
+      canonicalWorkflowJson(nextWorkflow, "blocked"),
       "utf8",
     );
     await writeFile(plan.absolutePlanPath, nextManifestContent, "utf8");

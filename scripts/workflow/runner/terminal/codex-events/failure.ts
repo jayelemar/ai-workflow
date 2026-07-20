@@ -96,7 +96,7 @@ export const classifyFailureForLog = (
       failureKind: "invalid-transition",
       failureReason: reason,
       nextSuggestedAction:
-        "fix plan status and next action, then rerun workflow-runner",
+        "fix plan workflowState, then rerun workflow-runner",
     };
   }
   if (reason.startsWith("maximum iterations ")) {

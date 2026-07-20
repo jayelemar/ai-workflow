@@ -112,8 +112,9 @@ Count these as real progress:
 * review
 * final validation
 
-Use the plan status, next action, completed workflow stages, completed tasks,
-and remaining workflow stages to estimate progress.
+Use `workflowState`, completed workflow stages, completed tasks, and remaining
+workflow stages to estimate progress. Derive any human-readable labels from
+`.ai/scripts/workflow/contracts/stage.ts`; never persist secondary workflow fields.
 
 Stage ranges:
 
@@ -165,20 +166,19 @@ Mention those only when they are important to business status.
 
 ---
 
-## Status Interpretation
+## Workflow State Interpretation
 
 Use these mappings when estimating progress:
 
-* `draft + sync-plan-artifacts`: artifact creation or syncing range
-* `draft + plan-validator`: plan validation range
-* `approved` before execution starts: approved / ready range
+* `draft-artifact-sync`: artifact creation or syncing range
+* `draft-validation`: plan validation range
+* `approved`: approved / ready range
 * `active` with the first task in progress: implementation started range
 * `active` with some completed tasks: implementation in progress range
 * `review`: review / cleanup range
-* `completed + commit-summary`: final validation / ready to ship range
+* `completed`: final validation / ready to ship range
 
-When status and next action conflict, choose the lower credible percentage and
-base bullets only on completed work.
+If plan and sidecar workflow states conflict, STOP and report both values.
 
 ---
 

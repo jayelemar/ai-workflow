@@ -1,5 +1,11 @@
 # Workflow State Instruction Changelog
 
+## v2.0 — 2026-07-20
+
+* Replaced persisted `status` plus `nextAction` routing with canonical
+  `workflowState` only, with contract-parity coverage and rejection of legacy
+  routing fields.
+
 ## v1.21 — 2026-07-19
 
 * Added a machine-checked runner route matrix, documented the legacy blocked

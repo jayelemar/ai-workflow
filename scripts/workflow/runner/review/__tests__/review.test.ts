@@ -52,17 +52,29 @@ const thinPlanContractSection = () => `## Workflow Content Rules
 thin-plan-v1
 `;
 
+const workflowStateForTest = (status: string, nextAction: string) => {
+  const stateByPair: Record<string, string> = {
+    "draft+sync-plan-artifacts": "draft-artifact-sync",
+    "draft+plan-validator": "draft-validation",
+    "approved+execute-plan": "approved",
+    "active+execute-plan": "active",
+    "blocked+unblock-plan": "blocked",
+    "review+review-plan": "review",
+    "reopening+reopen-plan": "reopening",
+    "completed+commit-summary": "completed",
+  };
+  const workflowState = stateByPair[`${status}+${nextAction}`];
+  if (!workflowState) throw new Error(`unknown test workflow pair: ${status} + ${nextAction}`);
+  return workflowState;
+};
+
 const planWith = (status: string, nextAction: string, extra = "") => `# Plan
 
 ${thinPlanContractSection()}
 
-## Status
+## Workflow State
 
-${status}
-
-## Next Action
-
-${nextAction}
+${workflowStateForTest(status, nextAction)}
 
 ## Files (MANDATORY)
 
@@ -94,13 +106,9 @@ const planWithFileScope = (
 
 ${thinPlanContractSection()}
 
-## Status
+## Workflow State
 
-${status}
-
-## Next Action
-
-${nextAction}
+${workflowStateForTest(status, nextAction)}
 
 ## Files (MANDATORY)
 
@@ -142,13 +150,9 @@ const thinPlanV2Manifest = (
 
 thin-plan-v2
 
-## Status
+## Workflow State
 
-${status}
-
-## Next Action
-
-${nextAction}
+${workflowStateForTest(status, nextAction)}
 `;
 
 const writeThinPlanV2Artifacts = async (
@@ -171,8 +175,10 @@ const writeThinPlanV2Artifacts = async (
     `${JSON.stringify(
       {
         planPath: ".ai/plans/artifact-state.md",
-        status: overrides.status ?? "review",
-        nextAction: overrides.nextAction ?? "review-plan",
+        workflowState: workflowStateForTest(
+          overrides.status ?? "review",
+          overrides.nextAction ?? "review-plan",
+        ),
         latest: {},
         history: [],
         unresolvedBlockers: [],

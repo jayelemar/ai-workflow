@@ -18,15 +18,10 @@ manual
 
 ---
 
-## Status
+<!-- Runner-managed plans only: include this block. Manual plans omit it. -->
+## Workflow State
 
-draft
-
----
-
-## Next Action
-
-N/A: manual plan-bound execution
+draft-artifact-sync
 
 ---
 

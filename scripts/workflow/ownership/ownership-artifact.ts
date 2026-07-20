@@ -1,5 +1,4 @@
 import path from "node:path";
-import { isNextAction, isStatus } from "../runner/plan/parser.ts";
 import {
   asRecord,
   type Failure,
@@ -47,8 +46,6 @@ export const parseFileOwnershipArtifact = (
 
   const record = asRecord(parsed);
   const planPath = record?.planPath;
-  const status = record?.status;
-  const nextAction = record?.nextAction;
   const owns = asStringArray(record?.owns);
   const released = asStringArray(record?.released);
   const resolvedFiles = asStringArray(record?.resolvedFiles);
@@ -59,16 +56,7 @@ export const parseFileOwnershipArtifact = (
   const updatedAt = record?.updatedAt;
   const hasLegacyShape = !owns && !!legacyOwnedFiles;
   if (typeof planPath === "string" && hasLegacyShape) {
-    const hasLegacyWorkflowState =
-      status !== undefined || nextAction !== undefined;
-    if (
-      (hasLegacyWorkflowState &&
-        (typeof status !== "string" ||
-          !isStatus(status) ||
-          typeof nextAction !== "string" ||
-          !isNextAction(nextAction))) ||
-      (record?.releasedFiles !== undefined && !legacyReleasedFiles)
-    ) {
+    if (record?.releasedFiles !== undefined && !legacyReleasedFiles) {
       return {
         ok: false,
         reason: `file ownership artifact is malformed: ${artifactPath}`,
@@ -77,8 +65,6 @@ export const parseFileOwnershipArtifact = (
 
     return {
       planPath,
-      status: hasLegacyWorkflowState ? status : undefined,
-      nextAction: hasLegacyWorkflowState ? nextAction : undefined,
       owns: legacyOwnedFiles,
       released: legacyReleasedFiles ?? [],
       resolvedFiles: resolvedFiles ?? [],
@@ -102,25 +88,8 @@ export const parseFileOwnershipArtifact = (
       reason: `file ownership artifact is malformed: ${artifactPath}`,
     };
   }
-  const hasLegacyWorkflowState =
-    status !== undefined || nextAction !== undefined;
-  if (
-    hasLegacyWorkflowState &&
-    (typeof status !== "string" ||
-      !isStatus(status) ||
-      typeof nextAction !== "string" ||
-      !isNextAction(nextAction))
-  ) {
-    return {
-      ok: false,
-      reason: `file ownership artifact is malformed: ${artifactPath}`,
-    };
-  }
-
   return {
     planPath,
-    status: hasLegacyWorkflowState ? status : undefined,
-    nextAction: hasLegacyWorkflowState ? nextAction : undefined,
     owns,
     released,
     resolvedFiles,

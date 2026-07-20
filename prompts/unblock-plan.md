@@ -77,18 +77,18 @@ If the unblock evidence proves the current runtime/setup blocker is resolved but
 
 * clear the resolved runtime/setup blocker
 * reclassify the new failure as active implementation work when it is covered by the spec and plan
-* transition to `active + execute-plan`
+* transition to `active`
 * record the exact failing validation command and observed failure in the unblock artifact
 * do not keep the stale runtime/setup blocker as the active blocked reason
 
 If a blocker is `Type: plan dependency`:
 
-* require evidence that the owner plan reached `completed + commit-summary` with no uncommitted changes for the shared file OR that the owner plan released the shared file ownership
+* require evidence that the owner plan reached `completed` with no uncommitted changes for the shared file OR that the owner plan released the shared file ownership
 * evidence MUST identify the owner plan and the shared file path
 * the runner-owned `.ai/artifacts/<owner-plan>/state/file-ownership.json` conflict check is authoritative for whether a completed owner plan is still dirty
 * do not unblock from a `plan dependency` using only an assumption that the owner plan is inactive
 * if the evidence proves the dependency is resolved, mark the blocker resolved and allow the normal `blocked -> active` transition
-* if the evidence is missing or incomplete, keep the plan blocked with `Next Action = unblock-plan`
+* if the evidence is missing or incomplete, keep `workflowState = blocked`
 
 ### File Ownership Releases
 
@@ -115,32 +115,16 @@ After classifying blockers, if any remaining execution blocker requires user cla
 
 Read:
 
-## Status
+## Workflow State
 
-Expected:
+Expected: `blocked`
 
-* blocked
-
-IF Status is not `blocked`:
+IF Workflow State is not `blocked`:
 
 -> STOP (`plan must be blocked before unblocking`)
 
 ---
 
-Read:
-
-## Next Action
-
-Expected:
-
-* unblock-plan
-* execute-plan (legacy blocked plans only)
-
-IF Next Action is neither `unblock-plan` nor `execute-plan`:
-
--> STOP (`unexpected next action for unblocking`)
-
----
 
 ## Unblock Scope
 
@@ -178,24 +162,19 @@ If the blocker is resolved:
 If any unresolved execution blocker remains:
 
 -> output `STOP`
--> keep Status blocked
--> keep or set Next Action unblock-plan
+-> keep `workflowState = blocked`
 
 ---
 
 ## State Transition (MANDATORY)
 
-When Status is `blocked` and all execution blockers are resolved, documented, or reclassified as active implementation work:
+When Workflow State is `blocked` and all execution blockers are resolved, documented, or reclassified as active implementation work:
 
 update:
 
-## Status
+## Workflow State
 
 active
-
-## Next Action
-
-execute-plan
 
 ---
 
@@ -206,7 +185,7 @@ Before updating the plan, create `.ai/artifacts/<plan-name>/events/unblock-vX.md
 Then update `.ai/artifacts/<plan-name>/state/workflow.json` with runner-readable thin-plan-v2 state:
 
 * preserve `planPath`
-* set `status` and `nextAction`
+* set `workflowState` to `active` or keep it `blocked`
 * write compact `version`, `result`, `summary`, and `evidence` fields under `latest.unblock`
 * append `.ai/artifacts/<plan-name>/events/unblock-vX.md` to `history`
 * set `unresolvedBlockers` to active blocker strings, or `[]` only when no
@@ -247,12 +226,4 @@ Use this shared terminal-facing contract for non-review stages.
 
 **Next**
 
-Status:
-
-* active
-* blocked
-
-Next Action:
-
-* execute-plan
-* unblock-plan
+Workflow State: `active` or `blocked`

@@ -7,7 +7,7 @@ import {
   type ThinPlanV2FilesState,
   type ThinPlanV2WorkflowState,
 } from "../types.ts";
-import { isNextAction, isStatus } from "./parser.ts";
+import { isWorkflowState } from "./parser.ts";
 const rel = (...segments: string[]) => segments.join("/");
 const asStringArray = (value: unknown): string[] | undefined =>
   Array.isArray(value) && value.every((item) => typeof item === "string")
@@ -105,53 +105,28 @@ export const parseThinPlanV2WorkflowState = (
 ): ThinPlanV2WorkflowState | Failure => {
   const record = asRecord(raw);
   const planPath = record?.planPath;
-  const status = record?.status;
-  const nextAction = record?.nextAction;
+  const workflowState = record?.workflowState;
+  if (record?.status !== undefined || record?.nextAction !== undefined) {
+    return { ok: false, reason: `thin-plan-v2 workflow state must use only workflowState: ${artifactPath}` };
+  }
   const updatedAt = record?.updatedAt;
   const unresolvedBlockers = asStringArray(record?.unresolvedBlockers) ?? [];
   const history = normalizeWorkflowEventHistory(record?.history);
 
-  if (
-    typeof planPath !== "string" ||
-    planPath !== expectedPlanPath ||
-    typeof status !== "string" ||
-    !isStatus(status) ||
-    typeof nextAction !== "string" ||
-    !isNextAction(nextAction) ||
-    typeof updatedAt !== "string"
-  ) {
+  if (typeof planPath !== "string" || planPath !== expectedPlanPath || typeof updatedAt !== "string") {
     return {
       ok: false,
       reason: `thin-plan-v2 workflow state is malformed: ${artifactPath}`,
     };
   }
-
-  const latest = asRecord(record?.latest) ?? undefined;
-  const latestReview = asRecord(latest?.review);
-  const reviewSummary =
-    typeof latestReview?.summary === "string"
-      ? latestReview.summary.toUpperCase()
-      : "";
-  const reviewDecision =
-    typeof latestReview?.decision === "string"
-      ? latestReview.decision.toLowerCase()
-      : "";
-  if (
-    unresolvedBlockers.length === 0 &&
-    reviewDecision === "active" &&
-    /\b(?:NEEDS FIX|HIGH RISK)\b/.test(reviewSummary) &&
-    !workflowReviewSupersededByProgress(latest, history)
-  ) {
-    return {
-      ok: false,
-      reason: `thin-plan-v2 workflow state is inconsistent: latest review requires fixes but unresolvedBlockers is empty in ${artifactPath}`,
-    };
+  if (typeof workflowState !== "string" || !isWorkflowState(workflowState)) {
+    return { ok: false, reason: `unknown workflowState value: ${String(workflowState)}` };
   }
 
+  const latest = asRecord(record?.latest) ?? undefined;
   return {
     planPath,
-    status,
-    nextAction,
+    workflowState,
     latest,
     history,
     unresolvedBlockers,
@@ -192,5 +167,3 @@ export const parseThinPlanV2FilesState = (
     headSha,
   };
 };
-
-

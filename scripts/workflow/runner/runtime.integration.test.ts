@@ -54,13 +54,9 @@ thin-plan-v1
 
 runner-managed
 
-## Status
+## Workflow State
 
-draft
-
-## Next Action
-
-execute-plan
+not-a-workflow-state
 `,
     );
 
@@ -79,7 +75,7 @@ execute-plan
     });
 
     assert.equal(result.success, false);
-    assert.match(result.reason, /undefined status\/next action pair: draft \+ execute-plan/);
+    assert.match(result.reason, /unknown workflowState value/);
     assert.equal(processCalls, 0);
   });
 });

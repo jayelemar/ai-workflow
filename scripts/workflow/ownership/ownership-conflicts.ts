@@ -3,7 +3,6 @@ import path from "node:path";
 
 import {
   extractSectionValue,
-  isStatus,
   normalizeWorkflowStateValue,
   uniquePaths,
 } from "../runner/plan/parser.ts";
@@ -20,7 +19,6 @@ import {
   type ParsedPlan,
   type ProcessRunner,
   type ReviewStagingResult,
-  type Status,
 } from "../runner/types.ts";
 import { readGitChangedFiles, readGitHeadSha } from "./git-changes.ts";
 import {
@@ -126,7 +124,7 @@ export const refreshCurrentFileOwnershipArtifact = async ({
   };
 };
 
-const blockingOwnershipStatuses = new Set<Status>([
+const blockingOwnershipStates = new Set<import("../runner/types.ts").WorkflowState>([
   "active",
   "review",
   "blocked",
@@ -160,13 +158,13 @@ export const readOtherFileOwnershipArtifacts = async (
         path.join(rootDir, otherPlanPath),
         "utf8",
       );
-      const extractedStatus = extractSectionValue(
+      const extractedWorkflowState = extractSectionValue(
         otherPlanContent,
-        "## Status",
+        "## Workflow State",
       );
-      if (extractedStatus !== null) {
-        const rawStatus = normalizeWorkflowStateValue(extractedStatus);
-        if (isStatus(rawStatus) && rawStatus === "draft") {
+      if (extractedWorkflowState !== null) {
+        const rawWorkflowState = normalizeWorkflowStateValue(extractedWorkflowState);
+        if (rawWorkflowState.startsWith("draft-")) {
           continue;
         }
       }
@@ -223,8 +221,7 @@ export const readOtherFileOwnershipArtifacts = async (
         }
         artifact = {
           ...parsed,
-          status: workflow.status,
-          nextAction: workflow.nextAction,
+          workflowState: workflow.workflowState,
           updatedAt: parsed.updatedAt || workflow.updatedAt,
         };
       } catch (error) {
@@ -235,12 +232,7 @@ export const readOtherFileOwnershipArtifacts = async (
             reason: `file ownership workflow artifact cannot be read: ${workflowPath}: ${String(error)}`,
           };
         }
-        if (!artifact.status || !artifact.nextAction) {
-          return {
-            ok: false,
-            reason: `file ownership workflow artifact cannot be read: ${workflowPath}: missing canonical workflow state`,
-          };
-        }
+        return { ok: false, reason: `file ownership workflow artifact cannot be read: ${workflowPath}: missing canonical workflow state` };
       }
       if (artifact.migratedFromLegacy) {
         await writeFile(
@@ -291,7 +283,7 @@ export const detectFileOwnershipArtifactConflict = async ({
   const currentFiles = new Set(current.resolvedFiles);
   const dirtyFileSet = new Set(dirtyFiles);
   for (const other of otherArtifacts.artifacts) {
-    if (!other.status || !other.nextAction) {
+    if (!other.workflowState) {
       return {
         ok: false,
         reason: `file ownership artifact is missing canonical workflow state: ${other.planPath}`,
@@ -299,12 +291,12 @@ export const detectFileOwnershipArtifactConflict = async ({
     }
     const otherFiles = effectiveArtifactResolvedFiles(other, changedFiles);
     const conflictingFiles =
-      other.status === "completed" && other.nextAction === "commit-summary"
+      other.workflowState === "completed"
         ? otherFiles.filter(
             (filePath) =>
               currentFiles.has(filePath) && dirtyFileSet.has(filePath),
           )
-        : blockingOwnershipStatuses.has(other.status)
+        : blockingOwnershipStates.has(other.workflowState)
           ? otherFiles.filter((filePath) => currentFiles.has(filePath))
           : [];
     if (conflictingFiles.length === 0) {

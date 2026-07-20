@@ -76,8 +76,7 @@ ${extra}
 `;
 
 const thinPlanV2Manifest = (
-  status = "review",
-  nextAction = "review-plan",
+  workflowState = "review",
   extra = "",
 ) => `# Plan: artifact-state
 
@@ -85,13 +84,9 @@ const thinPlanV2Manifest = (
 
 thin-plan-v2
 
-## Status
+## Workflow State
 
-${status}
-
-## Next Action
-
-${nextAction}
+${workflowState}
 
 ## Spec
 
@@ -121,8 +116,7 @@ ${extra}
 const writeThinPlanV2Artifacts = async (
   root: string,
   overrides: Partial<{
-    status: string;
-    nextAction: string;
+    workflowState: string;
     latest: Record<string, unknown>;
     history: unknown[];
     unresolvedBlockers: string[];
@@ -141,8 +135,7 @@ const writeThinPlanV2Artifacts = async (
     `${JSON.stringify(
       {
         planPath: ".ai/plans/artifact-state.md",
-        status: overrides.status ?? "review",
-        nextAction: overrides.nextAction ?? "review-plan",
+        workflowState: overrides.workflowState ?? "review",
         latest: overrides.latest ?? {
           validation: {
             version: 1,
@@ -254,12 +247,71 @@ test("plan parser extracts task, spec, and boundary contracts", () => {
   );
 });
 
+test("plan state rejects legacy routing fields", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(
+      workspace.root,
+      "legacy-routing",
+      `# Plan
+
+## Workflow Content Rules
+
+thin-plan-v1
+
+## Status
+
+active
+
+## Next Action
+
+execute-plan
+`,
+    );
+    const parsed = await parsePlan({
+      planName: planArg("legacy-routing"),
+      rootDir: workspace.root,
+    });
+    assert.equal(parsed.ok, false);
+    assert.match(parsed.ok ? "" : parsed.reason, /only ## Workflow State/);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("thin-plan sidecar rejects secondary routing fields", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writeThinPlanV2Artifacts(workspace.root, { workflowState: "active" });
+    await writePlan(workspace.root, "artifact-state", thinPlanV2Manifest("active"));
+    const workflowPath = join(
+      workspace.root,
+      ".ai",
+      "artifacts",
+      "artifact-state",
+      "state",
+      "workflow.json",
+    );
+    const workflow = JSON.parse(await readFile(workflowPath, "utf8"));
+    workflow.status = "active";
+    await writeFile(workflowPath, `${JSON.stringify(workflow, null, 2)}\n`);
+
+    const parsed = await parsePlan({
+      planName: planArg("artifact-state"),
+      rootDir: workspace.root,
+    });
+    assert.equal(parsed.ok, false);
+    assert.match(parsed.ok ? "" : parsed.reason, /only workflowState/);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
 test("plan state parses thin-plan-v2 sidecars and recovers failed review blockers", async () => {
   const workspace = await setupWorkspace();
   try {
     await writeThinPlanV2Artifacts(workspace.root, {
-      status: "review",
-      nextAction: "review-plan",
+      workflowState: "review",
       latest: {
         review: {
           version: 3,
@@ -294,7 +346,7 @@ NEEDS FIX
     await writePlan(
       workspace.root,
       "artifact-state",
-      thinPlanV2Manifest("review", "review-plan"),
+      thinPlanV2Manifest("review"),
     );
 
     const parsed = await parsePlan({
@@ -303,8 +355,7 @@ NEEDS FIX
     });
 
     assert.equal(parsed.ok, true);
-    assert.equal(parsed.ok && parsed.status, "active");
-    assert.equal(parsed.ok && parsed.nextAction, "execute-plan");
+    assert.equal(parsed.ok && parsed.workflowState, "active");
 
     const workflow = JSON.parse(
       await readFile(
@@ -319,8 +370,9 @@ NEEDS FIX
         "utf8",
       ),
     ) as Record<string, unknown>;
-    assert.equal(workflow.status, "active");
-    assert.equal(workflow.nextAction, "execute-plan");
+    assert.equal(workflow.workflowState, "active");
+    assert.equal(workflow.status, undefined);
+    assert.equal(workflow.nextAction, undefined);
     assert.deepEqual(workflow.unresolvedBlockers, [
       "Restore failed-review findings before another execute pass.",
     ]);
@@ -333,13 +385,12 @@ test("context snapshot service writes current thin-plan state and token summary"
   const workspace = await setupWorkspace();
   try {
     await writeThinPlanV2Artifacts(workspace.root, {
-      status: "active",
-      nextAction: "execute-plan",
+      workflowState: "active",
     });
     await writePlan(
       workspace.root,
       "artifact-state",
-      thinPlanV2Manifest("active", "execute-plan"),
+      thinPlanV2Manifest("active"),
     );
     const parsed = await parsePlan({
       planName: planArg("artifact-state"),
@@ -368,8 +419,7 @@ test("context snapshot service writes current thin-plan state and token summary"
       join(workspace.root, ".ai", "artifacts", "artifact-state", "state", "context.md"),
       "utf8",
     );
-    assert.match(snapshot, /\* Status: active/);
-    assert.match(snapshot, /\* Next Action: execute-plan/);
+    assert.match(snapshot, /\* Workflow State: active/);
     assert.match(snapshot, /Move state tests beside the plan module/);
     assert.match(snapshot, /Stage Input Tokens: 123/);
   } finally {
@@ -439,6 +489,6 @@ test("context snapshot rendering stays available as a pure formatter", () => {
   });
 
   assert.match(snapshot, /# Workflow Context Snapshot: workflow-runner/);
-  assert.match(snapshot, /\* Status: blocked/);
+  assert.match(snapshot, /\* Workflow State: \(missing\)/);
   assert.match(snapshot, /plan dependency/);
 });

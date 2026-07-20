@@ -4,7 +4,6 @@ import {
   type ThinPlanV2FilesState,
   type ThinPlanV2WorkflowState,
 } from "../types.ts";
-import { extractSectionValue } from "./parser.ts";
 import { replaceManifestWorkflowValue } from "./state-recovery.ts";
 import { workflowReviewSupersededByProgress } from "./thin-plan-sidecars.ts";
 
@@ -123,14 +122,11 @@ export const selectRelevantWorkflowEvent = (
   const unblock = latestRecord(workflow, "unblock");
   const reopen = latestRecord(workflow, "reopen");
   const reviewFindings = asStringArray(review?.unresolvedFindings) ?? [];
-  const status =
-    workflow.status || extractSectionValue(planContent, "## Status");
-  const nextAction =
-    workflow.nextAction || extractSectionValue(planContent, "## Next Action");
+  const workflowState = workflow.workflowState;
 
-  if (nextAction === "execute-plan") {
+  if (workflowState === "approved" || workflowState === "active") {
     if (
-      status === "active" &&
+      workflowState === "active" &&
       review &&
       !workflowReviewSupersededByProgress(workflow.latest, workflow.history) &&
       (reviewFindings.length > 0 ||
@@ -142,7 +138,7 @@ export const selectRelevantWorkflowEvent = (
         "latest review remediation for the next execute-plan run",
       );
     }
-    if (status === "approved" && validation) {
+    if (workflowState === "approved" && validation) {
       return relevantWorkflowEventDetails(
         "validation",
         validation,
@@ -165,7 +161,7 @@ export const selectRelevantWorkflowEvent = (
     }
   }
 
-  if (nextAction === "review-plan") {
+  if (workflowState === "review") {
     if (validation) {
       return relevantWorkflowEventDetails(
         "validation",
@@ -182,7 +178,7 @@ export const selectRelevantWorkflowEvent = (
     }
   }
 
-  if (nextAction === "unblock-plan") {
+  if (workflowState === "blocked") {
     if (execution) {
       return relevantWorkflowEventDetails(
         "execution",
@@ -199,7 +195,7 @@ export const selectRelevantWorkflowEvent = (
     }
   }
 
-  if (nextAction === "reopen-plan") {
+  if (workflowState === "reopening") {
     if (review) {
       return relevantWorkflowEventDetails(
         "review",
@@ -216,7 +212,7 @@ export const selectRelevantWorkflowEvent = (
     }
   }
 
-  if (nextAction === "commit-summary") {
+  if (workflowState === "completed") {
     if (review) {
       return relevantWorkflowEventDetails(
         "review",
@@ -233,7 +229,7 @@ export const selectRelevantWorkflowEvent = (
     }
   }
 
-  if (nextAction === "plan-validator" && validation) {
+  if (workflowState === "draft-validation" && validation) {
     return relevantWorkflowEventDetails(
       "validation",
       validation,
@@ -315,15 +311,10 @@ export const synthesizeThinPlanV2Content = ({
   fileOwnership: FileOwnershipArtifact;
   implementationMap: string;
 }): string => {
-  let content = replaceManifestWorkflowValue(
+  const content = replaceManifestWorkflowValue(
     manifestContent,
-    "## Status",
-    workflow.status,
-  );
-  content = replaceManifestWorkflowValue(
-    content,
-    "## Next Action",
-    workflow.nextAction,
+    "## Workflow State",
+    workflow.workflowState,
   );
   const validation = latestRecord(workflow, "validation");
   const review = latestRecord(workflow, "review");
@@ -423,4 +414,3 @@ ${synthesizeLatestEventSection({
 })}
 ${blockerLines}`;
 };
-

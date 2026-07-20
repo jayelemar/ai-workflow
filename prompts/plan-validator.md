@@ -54,13 +54,11 @@ If not provided:
 
 Read:
 
-## Status
+## Workflow State
 
-Allowed Validation States:
+Expected: `draft-validation`
 
-* draft
-
-IF Status != draft:
+IF Workflow State != `draft-validation`:
 
 → STOP (`plan is not in validation state`)
 
@@ -68,17 +66,6 @@ IF Status != draft:
 
 Read:
 
-## Next Action
-
-Expected:
-
-plan-validator
-
-IF Next Action != plan-validator:
-
-→ STOP (`unexpected next action for validation`)
-
----
 
 ## Validation Scope
 
@@ -140,8 +127,7 @@ Preflight constraints:
 If any blocker remains after the bounded repair pass:
 
 → output `STOP`
-→ keep Status = draft
-→ keep Next Action = plan-validator
+→ keep `workflowState = draft-validation`
 
 ---
 
@@ -150,7 +136,7 @@ If any blocker remains after the bounded repair pass:
 Apply this contract only to new or `draft` runner-managed plans. Manual plans
 are not required to use the commit-savepoint structure or commit guarantees.
 Never rewrite task IDs, task boundaries, or runner artifacts for plans already
-in `active`, `review`, `blocked`, or `completed` status.
+in `active`, `review`, `blocked`, or `completed` workflow state.
 
 Two outcomes MUST be separate tasks when they are independently implementable
 and validatable and have distinct reasons to review or revert. There is no
@@ -342,16 +328,14 @@ If minor spec repairs are detected:
 
 → run one bounded repair pass if the repair is allowed
 → otherwise output `STOP`
-→ keep Status = draft
-→ keep Next Action = plan-validator
+→ keep `workflowState = draft-validation`
 → list the exact spec file and section(s) that this prompt is allowed to repair
 
 If major spec decisions are detected:
 
 → output `STOP`
 → state the required user decision
-→ keep Status = draft
-→ keep Next Action = plan-validator
+→ keep `workflowState = draft-validation`
 
 ---
 
@@ -504,10 +488,9 @@ Rules:
 * Event artifacts must not include full raw stdout/stderr bodies, full raw diffs, or raw Codex event streams.
 * Update `.ai/artifacts/<plan-name>/state/workflow.json` with runner-readable thin-plan-v2 state:
   * `planPath`: the exact repo-relative plan path, for example `.ai/plans/<plan-name>.md`
-  * `status`: `draft` when validation stops after the bounded repair pass, or `approved` when validation passes
-  * `nextAction`: `plan-validator` when validation stops after the bounded repair pass, or `execute-plan` when validation passes
-  * valid stop state: Status = draft and Next Action = plan-validator
-  * valid approval state: Status = approved and Next Action = execute-plan
+* `workflowState`: `draft-validation` when validation stops after the bounded repair pass, or `approved` when validation passes
+* valid stop state: `workflowState = draft-validation`
+* valid approval state: `workflowState = approved`
   * `latest`: object containing `validation` with compact `version`, `result`, `summary`, and `evidence` fields for the validation artifact just created
   * `history`: array of event artifact paths, including the validation artifact just created
   * `unresolvedBlockers`: array; use `[]` for ordinary validation failures
@@ -525,19 +508,13 @@ IF any `MAJOR SPEC DECISION REQUIRED` issues exist:
 * output `STOP`
 * state the exact user decision required
 * plan MUST NOT be approved
-* plan MUST remain `draft + plan-validator`
+* plan MUST remain `workflowState = draft-validation`
 
 Update or keep:
 
-## Status
+## Workflow State
 
-draft
-
-Update or keep:
-
-## Next Action
-
-plan-validator
+draft-validation
 
 ---
 
@@ -550,13 +527,9 @@ IF any `MINOR SPEC REPAIR` issues exist and NO `MAJOR SPEC DECISION REQUIRED` is
 
 If stopping, update or keep plan:
 
-## Status
+## Workflow State
 
-draft
-
-## Next Action
-
-plan-validator
+draft-validation
 
 ---
 
@@ -569,13 +542,9 @@ IF any CRITICAL issues exist and NO `MAJOR SPEC DECISION REQUIRED` issues exist 
 
 If stopping, update or keep plan:
 
-## Status
+## Workflow State
 
-draft
-
-## Next Action
-
-plan-validator
+draft-validation
 
 ---
 
@@ -583,13 +552,9 @@ IF NO CRITICAL issues:
 
 update plan:
 
-## Status
+## Workflow State
 
 approved
-
-## Next Action
-
-execute-plan
 
 write the validation event artifact and update
 `.ai/artifacts/<plan-name>/state/workflow.json` with the approval evidence.
@@ -618,30 +583,14 @@ Use this shared terminal-facing contract for non-review stages.
 
 **Next**
 
-Status:
-
-* draft
-* approved
-
-Next Action:
-
-* plan-validator
-* execute-plan
+Workflow State: `draft-validation` or `approved`
 
 IF any CRITICAL issues exist and NO `MAJOR SPEC DECISION REQUIRED` issues exist and NO `MINOR SPEC REPAIR` issues exist:
 
-Status:
-draft
-
-Next Action:
-plan-validator
+Workflow State: `draft-validation`
 
 ---
 
 IF NO CRITICAL issues:
 
-Status:
-approved
-
-Next Action:
-execute-plan
+Workflow State: `approved`
