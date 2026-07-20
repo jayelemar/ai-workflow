@@ -28,8 +28,12 @@ import type { ProcessRunner } from "../../types.ts";
 import {
   createThinPlanV2ArtifactWriter,
   setupWorkflowWorkspace,
-  workflowStateForFixture,
 } from "../../__tests__/helpers/workspace.ts";
+import {
+  planWith,
+  planWithFileScope,
+  thinPlanV2Manifest,
+} from "../../__tests__/helpers/runner-plan.ts";
 
 const PROMPTS = {
   "scope-cleanup.md": "SCOPE CLEANUP PROMPT",
@@ -42,73 +46,7 @@ const setupWorkspace = () =>
     prompts: PROMPTS,
   });
 
-const thinPlanContractSection = () => `## Workflow Content Rules
-
-thin-plan-v1
-`;
-
-const workflowStateForTest = workflowStateForFixture;
-
 const writeThinPlanV2Artifacts = createThinPlanV2ArtifactWriter("review");
-
-const planWith = (status: string, nextAction: string, extra = "") => `# Plan
-
-${thinPlanContractSection()}
-
-## Workflow State
-
-${workflowStateForTest(status, nextAction)}
-
-## Files (MANDATORY)
-
-### Created files
-
-* .ai/scripts/workflow/runner/__tests__/integration/runner.test.ts
-
-### Modified files
-
-* .ai/scripts/workflow/runner.ts
-
-### Deleted files
-
-* None
-
-${extra}
-`;
-
-const planWithFileScope = (
-  status: string,
-  nextAction: string,
-  files: {
-    created?: string[];
-    modified?: string[];
-    deleted?: string[];
-  },
-  extra = "",
-) => `# Plan
-
-${thinPlanContractSection()}
-
-## Workflow State
-
-${workflowStateForTest(status, nextAction)}
-
-## Files (MANDATORY)
-
-### Created files
-
-${(files.created ?? []).map((file) => `* ${file}`).join("\n") || "* None"}
-
-### Modified files
-
-${(files.modified ?? []).map((file) => `* ${file}`).join("\n") || "* None"}
-
-### Deleted files
-
-${(files.deleted ?? []).map((file) => `* ${file}`).join("\n") || "* None"}
-
-${extra}
-`;
 
 const ownershipReleaseSection = (
   file: string,
@@ -122,20 +60,6 @@ const ownershipReleaseSection = (
 * Released To: ${releasedTo}
 * Evidence: current-plan file-specific validation passed
 * Status: transferred
-`;
-
-const thinPlanV2Manifest = (
-  status = "draft",
-  nextAction = "plan-validator",
-) => `# Plan: artifact-state
-
-## Workflow Content Rules
-
-thin-plan-v2
-
-## Workflow State
-
-${workflowStateForTest(status, nextAction)}
 `;
 
 const codexAgentMessageLine = (text: string) =>
