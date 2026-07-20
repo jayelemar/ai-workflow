@@ -11,7 +11,8 @@
 !/docs/
 !/docs/**
 !/instructions/
-!/instructions/**
+!/instructions/shared/
+!/instructions/shared/**
 !/prompts/
 !/prompts/**
 !/scripts/
