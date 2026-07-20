@@ -4,6 +4,29 @@ This prompt creates a structured implementation plan only.
 
 ---
 
+## Protected-Branch Guard (MANDATORY)
+
+Before resolving execution mode, reading the spec, or creating or modifying any
+file, run:
+
+`git rev-parse --abbrev-ref HEAD`
+
+If the command fails or returns no branch name:
+
+→ STOP
+→ state: `could not determine current git branch before creating plan`
+→ do NOT read planning inputs or create, modify, or delete any files
+
+If the branch is exactly `main`, `master`, `dev`, `development`, or `staging`:
+
+→ STOP
+→ state: `plan creation blocked on protected branch <branch>`
+→ do NOT read planning inputs or create, modify, or delete any files
+
+Detached `HEAD` and branches not listed above may continue.
+
+---
+
 ## Instruction Loading
 
 Read:

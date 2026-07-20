@@ -193,6 +193,10 @@ const failedReviewSummary = (review: Record<string, unknown>): boolean =>
   typeof review.summary === "string" &&
   /\b(?:NEEDS FIX|HIGH RISK)\b/.test(review.summary.toUpperCase());
 
+const passedReviewSummary = (review: Record<string, unknown>): boolean =>
+  typeof review.summary === "string" &&
+  /^SAFE(?:\s*-\s*DEFERRED VALIDATION)?$/i.test(review.summary.trim());
+
 const reviewIssueFindings = (content: string): string[] => {
   const lines = content.split(/\r?\n/);
   const issuesIndex = lines.findIndex((line) => line.trim() === "## Issues");
@@ -324,6 +328,92 @@ export const recoverThinPlanV2FailedReviewState = async ({
     return {
       ok: false,
       reason: `thin-plan-v2 failed-review recovery could not persist state: ${String(error)}`,
+    };
+  }
+
+  return { ok: true, recovered: true, manifestContent: nextManifestContent };
+};
+
+export const recoverThinPlanV2PassedReviewState = async ({
+  rootDir,
+  planName,
+  planPath,
+  manifestContent,
+  manifestWorkflowState,
+}: {
+  rootDir: string;
+  planName: string;
+  planPath: string;
+  manifestContent: string;
+  manifestWorkflowState: WorkflowState;
+}): Promise<
+  { ok: true; recovered: boolean; manifestContent: string } | Failure
+> => {
+  const workflowPath = thinPlanV2ArtifactPath(
+    planName,
+    "state",
+    "workflow.json",
+  );
+  const workflowRaw = await readJsonArtifact(rootDir, workflowPath);
+  if (isFailure(workflowRaw)) {
+    return workflowRaw;
+  }
+  const workflowRecord = asRecord(workflowRaw);
+  const latest = asRecord(workflowRecord?.latest);
+  const review = asRecord(latest?.review);
+  const unresolvedBlockers =
+    asStringArray(workflowRecord?.unresolvedBlockers) ?? [];
+  const unresolvedFindings = asStringArray(review?.unresolvedFindings) ?? [];
+  if (
+    !workflowRecord ||
+    !latest ||
+    !review ||
+    unresolvedBlockers.length > 0 ||
+    unresolvedFindings.length > 0 ||
+    latestString(review, "decision")?.toLowerCase() !== "active" ||
+    !passedReviewSummary(review)
+  ) {
+    return { ok: true, recovered: false, manifestContent };
+  }
+
+  const workflowState = workflowRecord.workflowState;
+  if (
+    (workflowState !== "active" && workflowState !== "review") ||
+    (manifestWorkflowState !== "active" && manifestWorkflowState !== "review")
+  ) {
+    return { ok: true, recovered: false, manifestContent };
+  }
+
+  const nextManifestContent = replaceManifestWorkflowState(
+    manifestContent,
+    "completed",
+  );
+  const nextWorkflow = {
+    ...workflowRecord,
+    workflowState: "completed",
+    latest: {
+      ...latest,
+      review: {
+        ...review,
+        decision: "completed",
+        unresolvedFindings: [],
+      },
+    },
+    unresolvedBlockers: [],
+    updatedAt: new Date().toISOString(),
+  };
+
+  try {
+    await writeFile(
+      path.join(rootDir, workflowPath),
+      canonicalWorkflowJson(nextWorkflow, "completed"),
+      "utf8",
+    );
+    await writeFile(path.join(rootDir, planPath), nextManifestContent, "utf8");
+  } catch (error) {
+    return {
+      ok: false,
+      reason: `thin-plan-v2 passed-review recovery could not persist state: ${String(error)}`,
     };
   }
 

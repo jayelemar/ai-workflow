@@ -26,6 +26,13 @@ and in `.ai/artifacts/<feature-or-bug-name>/implementation-map.md`.
 Objective:
 Create any missing planning prerequisite artifact, then create the implementation plan.
 
+Protected branch guard:
+Before resolving execution mode or reading any planning input, run
+`git rev-parse --abbrev-ref HEAD`. STOP without reading or changing files when
+branch lookup fails, or when branch is exactly `main`, `master`, `dev`,
+`development`, or `staging`. State `plan creation blocked on protected branch
+<branch>`. Detached `HEAD` and other branches may continue.
+
 `create-plan` now auto-preflights flow-trace artifacts and task boundaries
 before it returns a draft when the scope actually needs them:
 

@@ -185,6 +185,10 @@ If the runner injects `Task savepoint current task`:
 * do not review or approve future `[task:...]` items
 * if review fails, do not commit; set or keep `workflowState = active`
 * if review passes, route only the current task to `completed`
+* a `SAFE` verdict is never compatible with `workflowState = active`: persist
+  `latest.review.decision = completed`, then reread both state files before
+  output; do not label a task safe to merge while any state or next-action line
+  still says `active`
 
 Analyze:
 

@@ -8,12 +8,16 @@ import { normalizePlanArgument } from "../cli.ts";
 import { validateThinPlanContract } from "../thin-plan.ts";
 import { isFailure, type Failure, type ParsedPlan, type ParsePlanOptions } from "../types.ts";
 import { extractPlanInstructionPaths, extractSectionValue, isWorkflowState, normalizeWorkflowStateValue } from "./parser.ts";
-import { readTextArtifact, recoverThinPlanV2FailedReviewState } from "./state-recovery.ts";
+import {
+  readTextArtifact,
+  recoverThinPlanV2FailedReviewState,
+  recoverThinPlanV2PassedReviewState,
+} from "./state-recovery.ts";
 import { synthesizeThinPlanV2Content } from "./state-synthesis.ts";
 import { parseThinPlanV2FilesState, parseThinPlanV2WorkflowState, readJsonArtifact, thinPlanV2ArtifactPath } from "./thin-plan-sidecars.ts";
 
 export { normalizeWorkflowEventHistory, parseThinPlanV2FilesState, parseThinPlanV2WorkflowState, readJsonArtifact, thinPlanV2ArtifactPath, workflowReviewSupersededByProgress } from "./thin-plan-sidecars.ts";
-export { readTextArtifact, recoverThinPlanV2BlockedValidationHandoff, recoverThinPlanV2FailedReviewState, recoverThinPlanV2PartialExecuteReviewHandoff, repairThinPlanV2ManifestStateFromWorkflow, replaceManifestWorkflowValue } from "./state-recovery.ts";
+export { readTextArtifact, recoverThinPlanV2BlockedValidationHandoff, recoverThinPlanV2FailedReviewState, recoverThinPlanV2PassedReviewState, recoverThinPlanV2PartialExecuteReviewHandoff, repairThinPlanV2ManifestStateFromWorkflow, replaceManifestWorkflowValue } from "./state-recovery.ts";
 export { latestNumber, latestRecord, latestString, selectRelevantWorkflowEvent, synthesizeThinPlanV2Content } from "./state-synthesis.ts";
 
 type ManifestWorkflowState = { workflowState: WorkflowState };
@@ -110,6 +114,9 @@ export const parsePlan = async ({ planName, rootDir = process.cwd() }: ParsePlan
     const recovery = await recoverThinPlanV2FailedReviewState({ rootDir, planName: normalizedPlanName, planPath, manifestContent: content, manifestWorkflowState: manifest.workflowState });
     if (isFailure(recovery)) return recovery;
     if (recovery.recovered) { content = recovery.manifestContent; manifest = { workflowState: "active" }; }
+    const passedReviewRecovery = await recoverThinPlanV2PassedReviewState({ rootDir, planName: normalizedPlanName, planPath, manifestContent: content, manifestWorkflowState: manifest.workflowState });
+    if (isFailure(passedReviewRecovery)) return passedReviewRecovery;
+    if (passedReviewRecovery.recovered) { content = passedReviewRecovery.manifestContent; manifest = { workflowState: "completed" }; }
     const loaded = await loadThinPlanV2WorkingContent({ rootDir, planName: normalizedPlanName, planPath, manifestContent: content });
     if (isFailure(loaded)) return loaded;
     if (loaded.workflowState !== manifest.workflowState) return { ok: false, reason: `thin-plan-v2 workflow state mismatch: plan manifest has ${manifest.workflowState}, but ${workflowPath} has ${loaded.workflowState}` };
