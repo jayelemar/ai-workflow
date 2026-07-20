@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -19,24 +19,18 @@ import {
   generateWorkflowPrompt,
 } from "../prompt.ts";
 import { parsePlan } from "../state.ts";
+import {
+  createThinPlanV2ArtifactWriter,
+  setupWorkflowWorkspace,
+  writeWorkflowPlan,
+} from "../../__tests__/helpers/workspace.ts";
 
-type Workspace = {
-  root: string;
-  cleanup: () => Promise<void>;
-};
+const setupWorkspace = () =>
+  setupWorkflowWorkspace({ prefix: "workflow-plan-state-" });
 
-const setupWorkspace = async (): Promise<Workspace> => {
-  const root = await mkdtemp(join(tmpdir(), "workflow-plan-state-"));
-  mkdirSync(join(root, ".ai", "plans"), { recursive: true });
-  return {
-    root,
-    cleanup: () => rm(root, { recursive: true, force: true }),
-  };
-};
+const writePlan = writeWorkflowPlan;
 
-const writePlan = async (root: string, planName: string, content: string) => {
-  await writeFile(join(root, ".ai", "plans", `${planName}.md`), content);
-};
+const writeThinPlanV2Artifacts = createThinPlanV2ArtifactWriter("plan-state");
 
 const planArg = (planName: string) => `.ai/plans/${planName}.md`;
 
@@ -112,90 +106,6 @@ ${workflowState}
 
 ${extra}
 `;
-
-const writeThinPlanV2Artifacts = async (
-  root: string,
-  overrides: Partial<{
-    workflowState: string;
-    latest: Record<string, unknown>;
-    history: unknown[];
-    unresolvedBlockers: string[];
-  }> = {},
-) => {
-  const artifactRoot = join(root, ".ai", "artifacts", "artifact-state");
-  mkdirSync(join(artifactRoot, "state"), { recursive: true });
-  mkdirSync(join(artifactRoot, "events"), { recursive: true });
-  await writeFile(
-    join(artifactRoot, "implementation-map.md"),
-    "# Implementation Map\n\nN/A: workflow runner refactor.\n",
-  );
-  await writeFile(join(artifactRoot, "state", "context.md"), "# Context\n");
-  await writeFile(
-    join(artifactRoot, "state", "workflow.json"),
-    `${JSON.stringify(
-      {
-        planPath: ".ai/plans/artifact-state.md",
-        workflowState: overrides.workflowState ?? "review",
-        latest: overrides.latest ?? {
-          validation: {
-            version: 1,
-            result: "PASS",
-            summary: "Focused plan checks passed.",
-            evidence: ".ai/artifacts/artifact-state/events/validation-v1.md",
-          },
-          review: {
-            version: 2,
-            summary: "NEEDS FIX",
-            decision: "active",
-            evidence: ".ai/artifacts/artifact-state/events/review-v2.md",
-            unresolvedFindings: ["Move state tests beside the plan module."],
-          },
-        },
-        history: overrides.history ?? [
-          ".ai/artifacts/artifact-state/events/validation-v1.md",
-          ".ai/artifacts/artifact-state/events/review-v2.md",
-        ],
-        unresolvedBlockers: overrides.unresolvedBlockers ?? [
-          "Move state tests beside the plan module.",
-        ],
-        updatedAt: "2026-07-19T00:00:00.000Z",
-      },
-      null,
-      2,
-    )}\n`,
-  );
-  await writeFile(
-    join(artifactRoot, "state", "file-ownership.json"),
-    `${JSON.stringify(
-      {
-        planPath: ".ai/plans/artifact-state.md",
-        owns: [".ai/scripts/workflow/runner/plan/state.ts"],
-        released: [],
-        resolvedFiles: [".ai/scripts/workflow/runner/plan/state.ts"],
-        changedFiles: [".ai/scripts/workflow/runner/plan/state.ts"],
-        headSha: "abc123",
-        updatedAt: "2026-07-19T00:00:00.000Z",
-      },
-      null,
-      2,
-    )}\n`,
-  );
-  await writeFile(
-    join(artifactRoot, "state", "files.json"),
-    `${JSON.stringify(
-      {
-        created: [],
-        modified: [".ai/scripts/workflow/runner/plan/state.ts"],
-        deleted: [],
-        changedFiles: [".ai/scripts/workflow/runner/plan/state.ts"],
-        released: [],
-        headSha: "abc123",
-      },
-      null,
-      2,
-    )}\n`,
-  );
-};
 
 test("plan parser extracts task, spec, and boundary contracts", () => {
   const plan = `${thinPlanV1(

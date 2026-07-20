@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { once } from "node:events";
 import { Writable } from "node:stream";
 import test from "node:test";
 
@@ -19,6 +20,21 @@ const executionConfig: CodexExecutionConfig = {
 test("process stdio uses stdin only when prompt input is present", () => {
   assert.deepEqual(processStdioForInput(""), ["ignore", "pipe", "pipe"]);
   assert.deepEqual(processStdioForInput("prompt"), ["pipe", "pipe", "pipe"]);
+});
+
+test("process stdin helper attaches an error handler before writing input", async () => {
+  const writable = new Writable({
+    write(_chunk, _encoding, callback) {
+      callback(new Error("write EPIPE"));
+    },
+  });
+  const error = once(writable, "error");
+
+  writeProcessInput(writable, "prompt");
+
+  assert.equal(writable.listenerCount("error") >= 2, true);
+  const [caught] = await error;
+  assert.match(String(caught), /write EPIPE/);
 });
 
 test("writeProcessInput ends stdin with the prompt and reports stdin errors", async () => {

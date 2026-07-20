@@ -29,20 +29,16 @@ import {
   decideWorkflowAutoNarrow,
 } from "../../telemetry/token-warnings.ts";
 import {
-  CODEX_SELECTED_MODEL_CAPACITY_FALLBACK_ATTEMPTS,
-  CODEX_SELECTED_MODEL_CAPACITY_PRIMARY_ATTEMPTS,
-  codexCapacityFallbackConfig,
   codexExecutionConfig,
   WORKFLOW_RUNNER_CODEX_PROFILE,
-  type CodexExecutionConfig,
 } from "../../config/codex.ts";
 import {
   COMMIT_SUMMARY_PROMPT_PATH,
   EXECUTE_PLAN_PROMPT_PATH,
 } from "../../contracts/stage.ts";
-import { CODEX_BINARY_COMMAND, codexExecArgs, codexResultContainsSelectedModelCapacity, codexWorkEnvironment, createWorkflowRunnerCodexRuntime, defaultProcessRunner, isValidCodexProfile } from "../process.ts";
-import { classifyFailureForLog, codexOutputStopReason, createCodexLiveOutputFormatter, createWorkflowFailureDebugRecord } from "../terminal/codex-events.ts";
-import { compactCapturedOutputForLog, createWorkflowWaitNotice, formatCommitProgressLine, formatEditedFilesForLog, formatEditedFilesForTerminal, formatTaskCompletedProgressLine, formatWorkflowElapsedTime, formatWorkflowOwnershipResetHint, formatWorkflowProgressLine, supportsWorkflowAnsiColor } from "../terminal/formatters.ts";
+import { createWorkflowRunnerCodexRuntime, defaultProcessRunner, isValidCodexProfile } from "../process.ts";
+import { classifyFailureForLog, codexOutputStopReason, createWorkflowFailureDebugRecord } from "../terminal/codex-events.ts";
+import { compactCapturedOutputForLog, formatCommitProgressLine, formatEditedFilesForLog, formatTaskCompletedProgressLine, formatWorkflowElapsedTime, formatWorkflowProgressLine, supportsWorkflowAnsiColor } from "../terminal/formatters.ts";
 import { parsePlanTasks, parseTaskCommitBoundaries, taskCommitBoundaryCount, uniquePaths, validateTaskCommitBoundaries } from "../plan/parser.ts";
 import { writeWorkflowContextSnapshot } from "../plan/context-snapshot.ts";
 import { generateWorkflowPrompt, isReviewPrompt, readPrompt } from "../plan/prompt.ts";
@@ -59,8 +55,9 @@ import { replacePlanSectionValue } from "./recovery.ts";
 import { createZeroTokenUsageTotals } from "./telemetry.ts";
 import { addTokenUsageToTotals, appendFailureDebugLedger, appendTokenUsageLedger, readLatestTokenUsage, readTokenUsageTotals, readWorkflowTokenGuardrail, tokenUsageLedgerRelativePath } from "./records.ts";
 import { blockedPlanDetail, blockedReasonSummary } from "./outcomes.ts";
-import { parseEditedFileSummaryPaths, readEditedFileSnapshot, summarizeEditedFiles } from "./iteration.ts";
-import { defaultConsole, failure, MAX_WORKFLOW_ITERATIONS, success, type RunWorkflowOptions, WORKFLOW_RUNNER_USAGE, workflowFileOwnershipResetPathHint } from "./lifecycle.ts";
+import { executeWorkflowIteration } from "./iteration-execution.ts";
+import { gitHeadShortSha, reopenPlanForNextTask } from "./task-recovery.ts";
+import { defaultConsole, failure, MAX_WORKFLOW_ITERATIONS, success, type RunWorkflowOptions, WORKFLOW_RUNNER_USAGE } from "./lifecycle.ts";
 import type { CommitProgress, EditedFileSummary, Failure, FileOwnershipArtifact, FileOwnershipPreflight, ParsedPlan, ProcessResult, ProcessRunner, ReviewCleanupProcess, ReviewScopeMetadata, ReviewStagingProcess, RunnerResult, TaskStage, TokenUsageTotals, WorkflowContextSnapshotResult, WorkflowTaskContext } from "../types.ts";
 import {
   asRecord,
@@ -78,110 +75,6 @@ const canonicalWorkflowRecord = (
 };
 
 type TokenUsageLedgerResult = "success" | "failed" | "interrupted";
-
-const gitHeadShortSha = async (
-  rootDir: string,
-  processRunner: ProcessRunner,
-): Promise<{ ok: true; sha: string } | Failure> => {
-  const result = await processRunner({
-    command: "git",
-    args: ["rev-parse", "--short", "HEAD"],
-    cwd: rootDir,
-    input: "",
-    promptPath: "git-task-commit-sha",
-  });
-  if (!result.launched) {
-    return {
-      ok: false,
-      reason: `could not launch task commit sha lookup: ${result.error}`,
-    };
-  }
-  if (result.exitCode !== 0) {
-    return {
-      ok: false,
-      reason: `task commit sha lookup exited with code ${result.exitCode}: ${boundedInlineExcerpt(
-        result.stderr || result.stdout,
-      )}`,
-    };
-  }
-  const sha = result.stdout.trim().split(/\s+/)[0] ?? "";
-  if (!sha) {
-    return {
-      ok: false,
-      reason: "task commit sha lookup returned empty output",
-    };
-  }
-  return { ok: true, sha };
-};
-
-const reopenPlanForNextTask = async (
-  plan: ParsedPlan,
-): Promise<{ ok: true } | Failure> => {
-  const baseContent =
-    plan.thinPlanContract === "thin-plan-v2"
-      ? plan.manifestContent
-      : plan.content;
-  const nextContent = writeManifestWorkflowState(baseContent, "active");
-  let workflowStateUpdate:
-    | { absolutePath: string; content: string }
-    | undefined;
-  if (plan.thinPlanContract === "thin-plan-v2") {
-    const rootDir = path.dirname(
-      path.dirname(path.dirname(plan.absolutePlanPath)),
-    );
-    const workflowPath = thinPlanV2ArtifactPath(
-      plan.planName,
-      "state",
-      "workflow.json",
-    );
-    const workflowJson = await readJsonArtifact(rootDir, workflowPath);
-    if (isFailure(workflowJson)) {
-      return workflowJson;
-    }
-    const workflow = parseThinPlanV2WorkflowState(
-      workflowJson,
-      plan.planPath,
-      workflowPath,
-    );
-    if (isFailure(workflow)) {
-      return workflow;
-    }
-    const workflowRecord = asRecord(workflowJson);
-    if (!workflowRecord) {
-      return {
-        ok: false,
-        reason: `thin-plan-v2 workflow state is malformed: ${workflowPath}`,
-      };
-    }
-    workflowStateUpdate = {
-      absolutePath: path.join(rootDir, workflowPath),
-      content: `${JSON.stringify(
-        {
-          ...canonicalWorkflowRecord(workflowRecord, "active"),
-          updatedAt: new Date().toISOString(),
-        },
-        null,
-        2,
-      )}\n`,
-    };
-  }
-  try {
-    await writeFile(plan.absolutePlanPath, nextContent, "utf8");
-    if (workflowStateUpdate) {
-      await writeFile(
-        workflowStateUpdate.absolutePath,
-        workflowStateUpdate.content,
-        "utf8",
-      );
-    }
-    return { ok: true };
-  } catch (error) {
-    return {
-      ok: false,
-      reason: `plan cannot be reopened for next task: ${String(error)}`,
-    };
-  }
-};
 
 const workflowOutputHasValidationPass = (stdout: string): boolean =>
   /\bvalidation\s+passed\b/i.test(stdout) ||
@@ -896,17 +789,8 @@ export const runWorkflowRunner = async (
     completedIterations = iterations,
     exitCode = 1,
   ): Promise<RunnerResult> => {
-    const ownershipResetHint = workflowFileOwnershipResetPathHint(reason);
-    const reasonWithHint = ownershipResetHint
-      ? `${reason}\n${ownershipResetHint}`
-      : reason;
-    const finalReason = reasonWithHint;
+    const finalReason = reason;
     logger.error(`FAILED: ${reason}`);
-    if (ownershipResetHint) {
-      logger.error(
-        formatWorkflowOwnershipResetHint(ownershipResetHint, colorOutput),
-      );
-    }
     let loggedSpacedFailurePath = false;
     if (workflowLogPath) {
       loggedSpacedFailurePath = logSpacedFailurePath(
@@ -1530,8 +1414,6 @@ export const runWorkflowRunner = async (
               rootDir,
               plan: parsedPlan,
               processRunner,
-              checkCompletedDirtyConflicts:
-                route.promptPath === rel(".ai", "prompts", "execute-plan.md"),
               isIgnored: options.isIgnored,
             })
           : await refreshAndCheckFileOwnershipArtifact({
@@ -2048,127 +1930,32 @@ export const runWorkflowRunner = async (
       taskContext: currentTaskContext,
       taskSavepointAggregateSummary,
     });
-    const editedSummaryPaths = await parseEditedFileSummaryPaths(
+    const executedIteration = await executeWorkflowIteration({
       rootDir,
-      parsedPlan.content,
-    );
-    const editedFileSnapshot = await readEditedFileSnapshot(
-      rootDir,
-      editedSummaryPaths,
-    );
-    const waitNotice = createWorkflowWaitNotice({
-      outputStream,
-      enabled: streamOutput,
+      planContent: parsedPlan.content,
       promptPath: route.promptPath,
+      generatedPrompt,
+      codexRuntime,
+      executionConfig,
+      processRunner,
+      abortSignal: options.abortSignal,
+      outputStream,
+      streamOutput,
+      colorOutput,
+      commitBoundaryProgress,
       now,
       startedAt: attemptStartedAt,
-      color: colorOutput,
+      logger,
     });
-    const liveOutput = streamOutput
-      ? createCodexLiveOutputFormatter(
-          {
-            ...outputStream,
-            stdout: (chunk: string) => {
-              waitNotice.markActivity();
-              outputStream.stdout(chunk);
-            },
-            stderr: (chunk: string) => {
-              waitNotice.markActivity();
-              outputStream.stderr(chunk);
-            },
-          },
-          { color: colorOutput, commitBoundaryProgress },
-        )
-      : undefined;
-    waitNotice.start();
-    let effectiveExecutionConfig = executionConfig;
-    const runCodexAttempt = async (
-      attemptExecutionConfig: CodexExecutionConfig,
-    ): Promise<ProcessResult> =>
-      processRunner({
-        command: codexRuntime.command,
-        binaryCommand: CODEX_BINARY_COMMAND,
-        args: codexExecArgs({
-          executionConfig: attemptExecutionConfig,
-          promptPath: route.promptPath,
-          prompt: generatedPrompt,
-          rootDir,
-        }),
-        cwd: rootDir,
-        input: "",
-        promptPath: route.promptPath,
-        env: codexWorkEnvironment(process.env, codexRuntime.profile),
-        abortSignal: options.abortSignal,
-        onStdout: liveOutput?.stdout,
-        onStderr: liveOutput?.stderr,
-      }).catch(
-        (error): ProcessResult => ({
-          launched: false,
-          stdout: "",
-          stderr: "",
-          error: String(error),
-        }),
-      );
-    let result: ProcessResult;
-    try {
-      const retryNotices: string[] = [];
-      result = await runCodexAttempt(executionConfig);
-      for (
-        let attempt = 2;
-        attempt <= CODEX_SELECTED_MODEL_CAPACITY_PRIMARY_ATTEMPTS &&
-        codexResultContainsSelectedModelCapacity(result);
-        attempt += 1
-      ) {
-        const retryNotice = `[workflow-runner] ${executionConfig.model} reported capacity; retrying ${route.promptPath} with the same model (${attempt}/${CODEX_SELECTED_MODEL_CAPACITY_PRIMARY_ATTEMPTS}).`;
-        retryNotices.push(retryNotice);
-        logger.log(streamOutput ? `${retryNotice}\n` : retryNotice);
-        result = await runCodexAttempt(executionConfig);
-      }
-
-      const fallbackExecutionConfig = codexResultContainsSelectedModelCapacity(
-        result,
-      )
-        ? codexCapacityFallbackConfig(executionConfig)
-        : undefined;
-      if (fallbackExecutionConfig) {
-        effectiveExecutionConfig = fallbackExecutionConfig;
-        for (
-          let attempt = 1;
-          attempt <= CODEX_SELECTED_MODEL_CAPACITY_FALLBACK_ATTEMPTS &&
-          codexResultContainsSelectedModelCapacity(result);
-          attempt += 1
-        ) {
-          const retryNotice = `[workflow-runner] ${executionConfig.model} still reported capacity after ${CODEX_SELECTED_MODEL_CAPACITY_PRIMARY_ATTEMPTS} attempts; retrying ${route.promptPath} with fallback model ${fallbackExecutionConfig.model} (${attempt}/${CODEX_SELECTED_MODEL_CAPACITY_FALLBACK_ATTEMPTS}).`;
-          retryNotices.push(retryNotice);
-          logger.log(streamOutput ? `${retryNotice}\n` : retryNotice);
-          result = await runCodexAttempt(fallbackExecutionConfig);
-        }
-      }
-
-      if (result.launched && retryNotices.length > 0) {
-        result = {
-          ...result,
-          stderr: [...retryNotices, result.stderr]
-            .filter((part) => part.length > 0)
-            .join("\n"),
-        };
-      }
-    } finally {
-      waitNotice.stop();
-    }
-    liveOutput?.flush({ includePendingTurnCompleted: false });
-    const durationMs = Math.max(0, now() - attemptStartedAt);
+    const {
+      result,
+      durationMs,
+      effectiveExecutionConfig,
+      editedFiles,
+    } = executedIteration;
     const contextUsage = result.launched
       ? parseContextUsage(result.stdout)
       : unavailableContextUsage;
-    const editedFiles = result.launched
-      ? await summarizeEditedFiles(rootDir, editedFileSnapshot)
-      : [];
-    if (streamOutput && editedFiles.length > 0) {
-      logger.log(formatEditedFilesForTerminal(editedFiles, colorOutput));
-      outputStream.stdout("\n");
-    }
-    liveOutput?.flush();
 
     let stopReason: string | undefined;
     const interruptSignal =

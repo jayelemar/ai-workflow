@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -25,48 +25,31 @@ import {
 } from "../../../telemetry/token-warnings.ts";
 import { WORKFLOW_RUNNER_CODEX_PROFILE } from "../../../config/codex.ts";
 import type { ProcessRunner } from "../../types.ts";
-
-type Workspace = {
-  root: string;
-  cleanup: () => Promise<void>;
-};
+import {
+  createThinPlanV2ArtifactWriter,
+  setupWorkflowWorkspace,
+  workflowStateForFixture,
+} from "../../__tests__/helpers/workspace.ts";
 
 const PROMPTS = {
   "scope-cleanup.md": "SCOPE CLEANUP PROMPT",
 };
 
-const setupWorkspace = async (): Promise<Workspace> => {
-  const root = await mkdtemp(join(tmpdir(), "workflow-review-"));
-  mkdirSync(join(root, ".ai", "prompts"), { recursive: true });
-  for (const [name, content] of Object.entries(PROMPTS)) {
-    writeFileSync(join(root, ".ai", "prompts", name), content);
-  }
-  return {
-    root,
-    cleanup: () => rm(root, { recursive: true, force: true }),
-  };
-};
+const setupWorkspace = () =>
+  setupWorkflowWorkspace({
+    prefix: "workflow-review-",
+    directories: [".ai/plans", ".ai/prompts"],
+    prompts: PROMPTS,
+  });
 
 const thinPlanContractSection = () => `## Workflow Content Rules
 
 thin-plan-v1
 `;
 
-const workflowStateForTest = (status: string, nextAction: string) => {
-  const stateByPair: Record<string, string> = {
-    "draft+sync-plan-artifacts": "draft-artifact-sync",
-    "draft+plan-validator": "draft-validation",
-    "approved+execute-plan": "approved",
-    "active+execute-plan": "active",
-    "blocked+unblock-plan": "blocked",
-    "review+review-plan": "review",
-    "reopening+reopen-plan": "reopening",
-    "completed+commit-summary": "completed",
-  };
-  const workflowState = stateByPair[`${status}+${nextAction}`];
-  if (!workflowState) throw new Error(`unknown test workflow pair: ${status} + ${nextAction}`);
-  return workflowState;
-};
+const workflowStateForTest = workflowStateForFixture;
+
+const writeThinPlanV2Artifacts = createThinPlanV2ArtifactWriter("review");
 
 const planWith = (status: string, nextAction: string, extra = "") => `# Plan
 
@@ -154,56 +137,6 @@ thin-plan-v2
 
 ${workflowStateForTest(status, nextAction)}
 `;
-
-const writeThinPlanV2Artifacts = async (
-  root: string,
-  overrides: Partial<{
-    status: string;
-    nextAction: string;
-    created: string[];
-    modified: string[];
-    deleted: string[];
-    changedFiles: string[];
-  }> = {},
-) => {
-  const artifactRoot = join(root, ".ai", "artifacts", "artifact-state");
-  mkdirSync(join(artifactRoot, "state"), { recursive: true });
-  const changedFiles = overrides.changedFiles ??
-    overrides.modified ?? ["src/artifact-state.ts"];
-  await writeFile(
-    join(artifactRoot, "state", "workflow.json"),
-    `${JSON.stringify(
-      {
-        planPath: ".ai/plans/artifact-state.md",
-        workflowState: workflowStateForTest(
-          overrides.status ?? "review",
-          overrides.nextAction ?? "review-plan",
-        ),
-        latest: {},
-        history: [],
-        unresolvedBlockers: [],
-        updatedAt: "2026-07-01T00:00:00.000Z",
-      },
-      null,
-      2,
-    )}\n`,
-  );
-  await writeFile(
-    join(artifactRoot, "state", "files.json"),
-    `${JSON.stringify(
-      {
-        created: overrides.created ?? [],
-        modified: overrides.modified ?? ["src/artifact-state.ts"],
-        deleted: overrides.deleted ?? [],
-        changedFiles,
-        released: [],
-        headSha: "abc123",
-      },
-      null,
-      2,
-    )}\n`,
-  );
-};
 
 const codexAgentMessageLine = (text: string) =>
   JSON.stringify({

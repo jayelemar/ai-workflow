@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
-import { once } from "node:events";
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
-import { Writable } from "node:stream";
 import test from "node:test";
 
 import {
@@ -18,17 +16,13 @@ import {
   createWorkflowWaitNotice,
   formatCommitProgressLine,
   formatCodexJsonlEventForTerminal,
-  formatWorkflowOwnershipResetHint,
   formatWorkflowElapsedTime,
   formatWorkflowProgressLine,
   formatWorkflowWaitLine,
   estimateBossSummaryPercent,
   generateWorkflowPrompt,
   analyzeTokenUsageLedger,
-  processStdioForInput,
-  parseCodexTokenUsage,
   parsePlan,
-  parseContextUsage,
   runWorkflowRunner,
   supportsWorkflowAnsiColor,
   validateTaskCommitBoundaries,
@@ -36,7 +30,6 @@ import {
   WORKFLOW_RUNNER_CODEX_FALLBACK_MODEL,
   WORKFLOW_RUNNER_CODEX_PROFILE,
   workflowContextSnapshotRelativePath,
-  writeProcessInput,
   parsePlanTasks,
   type ProcessRunner,
 } from "../../../runner.ts";
@@ -46,11 +39,12 @@ import {
   exceedsWorkflowTokenThresholds,
   WORKFLOW_REVIEW_FULL_DIFF_BYTE_LIMIT,
 } from "../../../telemetry/token-warnings.ts";
-
-type Workspace = {
-  root: string;
-  cleanup: () => Promise<void>;
-};
+import {
+  createThinPlanV2ArtifactWriter,
+  setupWorkflowWorkspace,
+  workflowStateForFixture,
+  writeWorkflowPlan,
+} from "../helpers/workspace.ts";
 
 const PROMPTS = {
   "sync-plan-artifacts.md": "SYNC PLAN ARTIFACTS PROMPT",
@@ -70,23 +64,10 @@ const OVERRIDE_CODEX_PROFILE = "codex-personal";
 const OVERRIDE_CODEX_EXEC_LABEL = `${OVERRIDE_CODEX_PROFILE} exec`;
 const OVERRIDE_CODEX_HOME_SUFFIX = `/.${OVERRIDE_CODEX_PROFILE}`;
 
-const workflowStateForTest = (status: string, nextAction: string): string => {
-  const stateByPair: Record<string, string> = {
-    "draft+sync-plan-artifacts": "draft-artifact-sync",
-    "draft+plan-validator": "draft-validation",
-    "approved+execute-plan": "approved",
-    "active+execute-plan": "active",
-    "blocked+execute-plan": "blocked",
-    "blocked+unblock-plan": "blocked",
-    "review+review-plan": "review",
-    "reopening+reopen-plan": "reopening",
-    "completed+commit-summary": "completed",
-  };
-  const normalizedStatus = status.replaceAll("`", "");
-  const normalizedNextAction = nextAction.replaceAll("`", "");
-  const workflowState = stateByPair[`${normalizedStatus}+${normalizedNextAction}`];
-  return workflowState ?? `${normalizedStatus}--${normalizedNextAction}`;
-};
+const workflowStateForTest = (status: string, nextAction: string): string =>
+  workflowStateForFixture(status, nextAction, { unknown: "pair" });
+
+const writeThinPlanV2Artifacts = createThinPlanV2ArtifactWriter("runner");
 
 const planWith = (status: string, nextAction: string, extra = "") => `# Plan
 
@@ -284,18 +265,12 @@ const deploymentValidationSection = (
 * Evidence: .ai/artifacts/${planName}/events/deployment-validation-v1.md
 `;
 
-const setupWorkspace = async (): Promise<Workspace> => {
-  const root = await mkdtemp(join(tmpdir(), "workflow-runner-"));
-  mkdirSync(join(root, ".ai", "plans"), { recursive: true });
-  mkdirSync(join(root, ".ai", "prompts"), { recursive: true });
-  for (const [name, content] of Object.entries(PROMPTS)) {
-    writeFileSync(join(root, ".ai", "prompts", name), content);
-  }
-  return {
-    root,
-    cleanup: () => rm(root, { recursive: true, force: true }),
-  };
-};
+const setupWorkspace = () =>
+  setupWorkflowWorkspace({
+    prefix: "workflow-runner-",
+    directories: [".ai/plans", ".ai/prompts"],
+    prompts: PROMPTS,
+  });
 
 const canonicalizeWorkflowForTest = (content: string) =>
   content.replace(
@@ -310,11 +285,54 @@ const canonicalizeWorkflowForTest = (content: string) =>
   );
 
 const writePlan = async (root: string, planName: string, content: string) => {
-  await writeFile(
-    join(root, ".ai", "plans", `${planName}.md`),
-    canonicalizeWorkflowForTest(content),
-  );
+  await writeWorkflowPlan(root, planName, canonicalizeWorkflowForTest(content));
 };
+
+const tokenCountLine = (usedTokens: number, contextWindowTokens: number) =>
+  JSON.stringify({
+    type: "event_msg",
+    payload: {
+      type: "token_count",
+      info: {
+        last_token_usage: {
+          total_tokens: usedTokens,
+        },
+        model_context_window: contextWindowTokens,
+      },
+    },
+  });
+
+const turnCompletedUsageLine = (inputTokens: number) =>
+  JSON.stringify({
+    type: "turn.completed",
+    usage: {
+      input_tokens: inputTokens,
+      cached_input_tokens: Math.floor(inputTokens / 2),
+      output_tokens: 1234,
+      reasoning_output_tokens: 456,
+    },
+  });
+
+const turnCompletedUsageDetailLine = ({
+  inputTokens,
+  cachedInputTokens,
+  outputTokens,
+  reasoningOutputTokens,
+}: {
+  inputTokens: number;
+  cachedInputTokens: number;
+  outputTokens: number;
+  reasoningOutputTokens: number;
+}) =>
+  JSON.stringify({
+    type: "turn.completed",
+    usage: {
+      input_tokens: inputTokens,
+      cached_input_tokens: cachedInputTokens,
+      output_tokens: outputTokens,
+      reasoning_output_tokens: reasoningOutputTokens,
+    },
+  });
 
 const callTriples = (calls: Parameters<ProcessRunner>[0][]) =>
   calls.map((call) => [call.command, call.args[0] ?? "", call.promptPath]);
@@ -442,117 +460,6 @@ const writeArtifactStateFile = async (
   return artifactPath;
 };
 
-const writeThinPlanV2Artifacts = async (
-  root: string,
-  overrides: Partial<{
-    status: string;
-    nextAction: string;
-    latestValidationResult: string;
-    latestReviewSummary: string;
-    latest: Record<string, unknown>;
-    history: string[];
-    rawHistory: unknown[];
-    activeBlockers: string[];
-    created: string[];
-    modified: string[];
-    deleted: string[];
-    changedFiles: string[];
-    owns: string[];
-  }> = {},
-) => {
-  const planName = "artifact-state";
-  const artifactRoot = join(root, ".ai", "artifacts", planName);
-  mkdirSync(join(artifactRoot, "state"), { recursive: true });
-  mkdirSync(join(artifactRoot, "events"), { recursive: true });
-  await writeFile(
-    join(artifactRoot, "implementation-map.md"),
-    `# Implementation Map
-
-N/A: internal workflow automation only.
-`,
-    "utf8",
-  );
-  await writeFile(
-    join(artifactRoot, "state", "context.md"),
-    "# Context\n\n(empty)\n",
-    "utf8",
-  );
-  await writeFile(
-    join(artifactRoot, "state", "workflow.json"),
-    `${JSON.stringify(
-      {
-        planPath: ".ai/plans/artifact-state.md",
-        workflowState: workflowStateForTest(
-          overrides.status ?? "review",
-          overrides.nextAction ?? "review-plan",
-        ),
-        latest: overrides.latest ?? {
-          validation: {
-            version: 2,
-            result: overrides.latestValidationResult ?? "PASS",
-            summary: "Required checks passed.",
-            evidence: ".ai/artifacts/artifact-state/events/validation-v2.md",
-          },
-          review: {
-            version: 3,
-            summary: overrides.latestReviewSummary ?? "NEEDS FIX",
-            decision: "active",
-            evidence: ".ai/artifacts/artifact-state/events/review-v3.md",
-            unresolvedFindings: ["Fix the artifact state reader."],
-          },
-        },
-        history: overrides.rawHistory ??
-          overrides.history ?? [
-            ".ai/artifacts/artifact-state/events/validation-v2.md",
-            ".ai/artifacts/artifact-state/events/review-v3.md",
-          ],
-        unresolvedBlockers: overrides.activeBlockers ?? [
-          "Blocker v1 | owner plan still active",
-        ],
-        updatedAt: "2026-07-01T00:00:00.000Z",
-      },
-      null,
-      2,
-    )}\n`,
-    "utf8",
-  );
-  const changedFiles = overrides.changedFiles ??
-    overrides.modified ?? ["src/artifact-state.ts"];
-  await writeFile(
-    join(artifactRoot, "state", "file-ownership.json"),
-    `${JSON.stringify(
-      {
-        planPath: ".ai/plans/artifact-state.md",
-        owns: overrides.owns ?? changedFiles,
-        released: [],
-        resolvedFiles: overrides.owns ?? changedFiles,
-        changedFiles,
-        headSha: "abc123",
-        updatedAt: "2026-07-01T00:00:00.000Z",
-      },
-      null,
-      2,
-    )}\n`,
-    "utf8",
-  );
-  await writeFile(
-    join(artifactRoot, "state", "files.json"),
-    `${JSON.stringify(
-      {
-        created: overrides.created ?? [],
-        modified: overrides.modified ?? ["src/artifact-state.ts"],
-        deleted: overrides.deleted ?? [],
-        changedFiles,
-        released: [],
-        headSha: "abc123",
-      },
-      null,
-      2,
-    )}\n`,
-    "utf8",
-  );
-};
-
 const planArg = (planName: string) => `.ai/plans/${planName}.md`;
 
 const thinPlanContractSection = () => `## Workflow Content Rules
@@ -624,52 +531,6 @@ const runnerReturning =
     }
     return result;
   };
-
-const tokenCountLine = (usedTokens: number, contextWindowTokens: number) =>
-  JSON.stringify({
-    type: "event_msg",
-    payload: {
-      type: "token_count",
-      info: {
-        last_token_usage: {
-          total_tokens: usedTokens,
-        },
-        model_context_window: contextWindowTokens,
-      },
-    },
-  });
-
-const turnCompletedUsageLine = (inputTokens: number) =>
-  JSON.stringify({
-    type: "turn.completed",
-    usage: {
-      input_tokens: inputTokens,
-      cached_input_tokens: Math.floor(inputTokens / 2),
-      output_tokens: 1234,
-      reasoning_output_tokens: 456,
-    },
-  });
-
-const turnCompletedUsageDetailLine = ({
-  inputTokens,
-  cachedInputTokens,
-  outputTokens,
-  reasoningOutputTokens,
-}: {
-  inputTokens: number;
-  cachedInputTokens: number;
-  outputTokens: number;
-  reasoningOutputTokens: number;
-}) =>
-  JSON.stringify({
-    type: "turn.completed",
-    usage: {
-      input_tokens: inputTokens,
-      cached_input_tokens: cachedInputTokens,
-      output_tokens: outputTokens,
-      reasoning_output_tokens: reasoningOutputTokens,
-    },
-  });
 
 const codexAgentMessageLine = (text: string) =>
   JSON.stringify({
@@ -1045,6 +906,11 @@ test("create-plan uses sync-plan-artifacts only for runner-managed plans", async
     /For `runner-managed` plans, new draft plans MUST start at/i,
   );
   assert.match(prompt, /workflowState\s*=\s*draft-artifact-sync/i);
+  assert.match(
+    prompt,
+    /"planPath": "\.ai\/plans\/<plan-name>\.md"[\s\S]*"workflowState": "draft-artifact-sync"[\s\S]*"latest": \{\}[\s\S]*"history": \[\][\s\S]*"unresolvedBlockers": \[\][\s\S]*"updatedAt": "<ISO timestamp>"/,
+  );
+  assert.match(prompt, /sidecar containing only\s+`workflowState` is incomplete/i);
   assert.match(
     prompt,
     /For `manual` plans, set `## Workflow State` to\s+`N\/A: manual plan-bound execution`/i,
@@ -1613,16 +1479,6 @@ test("plan-validator prompt allows codebase-backed reclassification without spec
   );
 });
 
-test("execute-plan prompt turns cross-plan file conflicts into resumable plan dependency blockers", async () => {
-  const prompt = await readWorkflowPrompt("execute-plan.md");
-
-  assert.match(prompt, /plan dependency/);
-  assert.match(prompt, /owner plan path/);
-  assert.match(prompt, /owned by another active plan/);
-  assert.match(prompt, /workflowState\s*=\s*blocked/);
-  assert.match(prompt, /Do NOT keep executing both plans in parallel/);
-});
-
 test("execute and unblock prompts keep thin-plan-v2 workflow history out of the manifest", async () => {
   const executePrompt = await readWorkflowPrompt("execute-plan.md");
   const unblockPrompt = await readWorkflowPrompt("unblock-plan.md");
@@ -1872,36 +1728,6 @@ test("testing instructions require command-level escalation for local E2E in Cod
   assert.match(instructions, /Do not use `yolo`/i);
 });
 
-test("unblock-plan prompt can resume plan dependency blockers after owner completion evidence", async () => {
-  const prompt = await readWorkflowPrompt("unblock-plan.md");
-
-  assert.match(prompt, /plan dependency/);
-  assert.match(prompt, /owner plan/);
-  assert.match(prompt, /reached `completed`/);
-  assert.match(prompt, /released the shared file ownership/);
-  assert.match(prompt, /blocked -> active/);
-});
-
-test("unblock-plan prompt does not accept deployment-validation owner evidence", async () => {
-  const prompt = await readWorkflowPrompt("unblock-plan.md");
-
-  assert.doesNotMatch(prompt, /deployment-validation \+ unblock-plan/);
-  assert.doesNotMatch(prompt, /deployment-validation artifact/);
-  assert.match(prompt, /plan dependency/);
-});
-
-test("review-changes prompt treats required out-of-scope owner-plan fixes as dependency blockers", async () => {
-  const prompt = await readWorkflowPrompt("review-changes.md");
-
-  assert.match(prompt, /plan dependency/);
-  assert.match(
-    prompt,
-    /required fix needs a file outside the current plan path list/,
-  );
-  assert.match(prompt, /owned by another active plan/);
-  assert.match(prompt, /set `workflowState = active`/);
-});
-
 test("review-changes prompt returns unowned compatibility scope repairs to execution", async () => {
   const prompt = await readWorkflowPrompt("review-changes.md");
 
@@ -2065,7 +1891,7 @@ test("unblock-plan prompt handles only blocked plan recovery", async () => {
   const prompt = await readWorkflowPrompt("unblock-plan.md");
 
   assert.match(prompt, /IF Workflow State is not `blocked`/);
-  assert.match(prompt, /blocked -> active/);
+  assert.match(prompt, /workflowState` to `active`/);
   assert.doesNotMatch(prompt, /deployment-validation/);
   assert.doesNotMatch(prompt, /Push Status/);
   assert.doesNotMatch(prompt, /Deployment Status/);
@@ -2095,132 +1921,6 @@ test("reopen-plan prompt accepts canonical reopening state", async () => {
   assert.match(prompt, /After the plan is updated for the reopened work:/);
   assert.match(prompt, /## Workflow State\s*\n\s*active/);
   assert.doesNotMatch(prompt, /plan must be completed before reopening/);
-});
-
-test("workflow prompts define transferred file ownership releases", async () => {
-  const executePrompt = await readWorkflowPrompt("execute-plan.md");
-  const unblockPrompt = await readWorkflowPrompt("unblock-plan.md");
-  const reviewPrompt = await readWorkflowPrompt("review-changes.md");
-
-  for (const prompt of [executePrompt, unblockPrompt, reviewPrompt]) {
-    assert.match(prompt, /File Ownership Releases/);
-    assert.match(prompt, /Released To/);
-    assert.match(prompt, /Status: transferred/);
-  }
-  assert.match(
-    executePrompt,
-    /must not edit, stage, review, or commit the released file again/,
-  );
-  assert.match(unblockPrompt, /state\/file-ownership\.json/);
-  assert.match(unblockPrompt, /state\/files\.json/);
-  assert.match(reviewPrompt, /reject the review for the releasing plan/);
-});
-
-test("parses context usage from the final valid codex token_count event", () => {
-  const usage = parseContextUsage(
-    [
-      "not json",
-      tokenCountLine(100, 1000),
-      JSON.stringify({
-        type: "event_msg",
-        payload: { type: "token_count", info: {} },
-      }),
-      tokenCountLine(129200, 258400),
-      turnCompletedUsageLine(999999),
-    ].join("\n"),
-  );
-
-  assert.deepEqual(usage, {
-    contextWindowTokens: 258400,
-    contextWindowUsedTokens: 129200,
-    contextWindowUsedPercent: "50.00",
-  });
-});
-
-test("parses detailed codex turn completed token usage", () => {
-  assert.deepEqual(
-    parseCodexTokenUsage(
-      [
-        "not json",
-        tokenCountLine(333, 999),
-        turnCompletedUsageDetailLine({
-          inputTokens: 1200,
-          cachedInputTokens: 450,
-          outputTokens: 80,
-          reasoningOutputTokens: 25,
-        }),
-      ].join("\n"),
-    ),
-    {
-      usageAvailable: true,
-      inputTokens: 1200,
-      cachedInputTokens: 450,
-      uncachedInputTokens: 750,
-      outputTokens: 80,
-      reasoningOutputTokens: 25,
-      totalTokens: 1280,
-      contextWindowTokens: 999,
-      contextWindowUsedTokens: 333,
-      contextWindowUsedPercent: "33.33",
-    },
-  );
-});
-
-test("token usage parsing keeps context-window usage when detailed usage is unavailable", () => {
-  assert.deepEqual(
-    parseCodexTokenUsage(["plain", tokenCountLine(200, 1000)].join("\n")),
-    {
-      usageAvailable: false,
-      inputTokens: null,
-      cachedInputTokens: null,
-      uncachedInputTokens: null,
-      outputTokens: null,
-      reasoningOutputTokens: null,
-      totalTokens: null,
-      contextWindowTokens: 1000,
-      contextWindowUsedTokens: 200,
-      contextWindowUsedPercent: "20.00",
-    },
-  );
-});
-
-test("parses current codex turn.completed usage when token_count events are absent", () => {
-  assert.deepEqual(
-    parseContextUsage(["not json", turnCompletedUsageLine(6070935)].join("\n")),
-    {
-      contextWindowTokens: "unavailable",
-      contextWindowUsedTokens: 6070935,
-      contextWindowUsedPercent: "unavailable",
-    },
-  );
-});
-
-test("context usage parsing returns unavailable when codex usage data is missing", () => {
-  assert.deepEqual(parseContextUsage("plain stdout\n{}"), {
-    contextWindowTokens: "unavailable",
-    contextWindowUsedTokens: "unavailable",
-    contextWindowUsedPercent: "unavailable",
-  });
-});
-
-test("process stdin helpers ignore empty input and pipe non-empty input", () => {
-  assert.deepEqual(processStdioForInput(""), ["ignore", "pipe", "pipe"]);
-  assert.deepEqual(processStdioForInput("prompt"), ["pipe", "pipe", "pipe"]);
-});
-
-test("process stdin helper attaches an error handler before writing input", async () => {
-  const writable = new Writable({
-    write(_chunk, _encoding, callback) {
-      callback(new Error("write EPIPE"));
-    },
-  });
-  const error = once(writable, "error");
-
-  writeProcessInput(writable, "prompt");
-
-  assert.equal(writable.listenerCount("error") >= 2, true);
-  const [caught] = await error;
-  assert.match(String(caught), /write EPIPE/);
 });
 
 test(`${CODEX_COMMAND} environment matches the local ${CODEX_COMMAND} function account context`, () => {
@@ -3748,26 +3448,6 @@ test("workflow elapsed time formatter uses compact human-readable units", () => 
   assert.equal(formatWorkflowElapsedTime(3_845_000), "1h 04m 05s");
 });
 
-test("workflow ownership reset hint formatter makes the command copyable and green", () => {
-  const hint =
-    "- Ownership reset command: rtk node .ai/scripts/workflow/ownership/reset-file-ownership.mjs .ai/plans/support-ticket-sub-issues.md --force";
-
-  assert.equal(
-    formatWorkflowOwnershipResetHint(hint, false),
-    [
-      "- Ownership reset command:",
-      "rtk node .ai/scripts/workflow/ownership/reset-file-ownership.mjs .ai/plans/support-ticket-sub-issues.md --force",
-    ].join("\n"),
-  );
-  assert.equal(
-    formatWorkflowOwnershipResetHint(hint, true),
-    [
-      "\u001b[34m- Ownership reset command:\u001b[0m",
-      "\u001b[32mrtk node .ai/scripts/workflow/ownership/reset-file-ownership.mjs .ai/plans/support-ticket-sub-issues.md --force\u001b[0m",
-    ].join("\n"),
-  );
-});
-
 test("workflow ANSI color detection respects terminal and environment controls", () => {
   assert.equal(supportsWorkflowAnsiColor({}, { isTTY: true }), true);
   assert.equal(supportsWorkflowAnsiColor({}, { isTTY: false }), false);
@@ -4971,7 +4651,6 @@ test("baseline snapshot-first guidance preserves review and blocker correctness 
   assert.match(reviewChangesPrompt, /correctness-critical review inputs/i);
 
   assert.match(unblockPrompt, /unresolved blockers/i);
-  assert.match(unblockPrompt, /owner-plan evidence/i);
   assert.match(unblockPrompt, /workflow state/i);
   assert.match(unblockPrompt, /event evidence/i);
 
@@ -10852,7 +10531,7 @@ test(`commit-summary stops before ${CODEX_COMMAND} when all plan-owned paths are
   }
 });
 
-test("workflow runner stops before execution when another active ownership artifact owns a resolved file", async () => {
+test("workflow runner ignores another plan's invalid ownership workflow state", async () => {
   const workspace = await setupWorkspace();
   try {
     await writePlan(
@@ -10877,6 +10556,12 @@ test("workflow runner stops before execution when another active ownership artif
       headSha: "abc123",
       updatedAt: "2026-06-04T00:00:00.000Z",
     });
+    await writeArtifactStateFile(
+      workspace.root,
+      "other-plan",
+      "workflow.json",
+      '{ "status": "active", "nextAction": "execute-plan" }\n',
+    );
 
     const calls: Parameters<ProcessRunner>[0][] = [];
     const result = await runWorkflowRunner({
@@ -10895,21 +10580,27 @@ test("workflow runner stops before execution when another active ownership artif
             exitCode: 0,
           };
         }
+        if (call.promptPath === ".ai/prompts/execute-plan.md") {
+          await writePlan(
+            workspace.root,
+            "current-plan",
+            planWithFileScope(
+              "blocked",
+              "unblock-plan",
+              { modified: ["apps/web/src/shared.ts"] },
+              ownershipScopeSection(["apps/web/src/shared.ts"]),
+            ),
+          );
+        }
         return { launched: true, stdout: "", stderr: "", exitCode: 0 };
       },
     });
 
     assert.equal(result.success, false);
-    assert.match(result.reason, /workflow file ownership conflict/);
-    assert.match(result.reason, /\.ai\/plans\/other-plan\.md/);
-    assert.match(result.reason, /apps\/web\/src\/shared\.ts/);
-    assert.match(
-      result.reason,
-      /rtk node \.ai\/scripts\/workflow\/ownership\/reset-file-ownership\.mjs \.ai\/plans\/other-plan\.md --force/,
-    );
+    assert.match(result.reason, /plan blocked after execute-plan/);
     assert.equal(
-      calls.some((call) => call.command === CODEX_COMMAND),
-      false,
+      calls.some((call) => call.promptPath === ".ai/prompts/execute-plan.md"),
+      true,
     );
 
     const artifact = JSON.parse(
@@ -11096,7 +10787,7 @@ test("workflow runner ignores malformed workflow state from another draft plan",
   }
 });
 
-test("workflow runner migrates legacy ownership artifacts before checking another draft plan", async () => {
+test("workflow runner ignores legacy ownership artifacts from other plans", async () => {
   const workspace = await setupWorkspace();
   try {
     await writePlan(
@@ -11190,33 +10881,12 @@ test("workflow runner migrates legacy ownership artifacts before checking anothe
       true,
     );
 
-    const repaired = JSON.parse(
-      await readFile(
-        join(
-          workspace.root,
-          ".ai",
-          "artifacts",
-          "other-plan",
-          "state",
-          "file-ownership.json",
-        ),
-        "utf8",
-      ),
-    );
-    assert.deepEqual(repaired.owns, ["apps/web/src/shared.ts"]);
-    assert.deepEqual(repaired.released, []);
-    assert.deepEqual(repaired.resolvedFiles, []);
-    assert.deepEqual(repaired.changedFiles, []);
-    assert.equal(repaired.headSha, "");
-    assert.equal(repaired.updatedAt, "2026-07-08T00:00:00.000Z");
-    assert.equal("ownedFiles" in repaired, false);
-    assert.equal("releasedFiles" in repaired, false);
   } finally {
     await workspace.cleanup();
   }
 });
 
-test("workflow runner still blocks malformed ownership artifacts from another active plan", async () => {
+test("workflow runner ignores malformed ownership artifacts from other plans", async () => {
   const workspace = await setupWorkspace();
   try {
     await writePlan(
@@ -11265,18 +10935,27 @@ test("workflow runner still blocks malformed ownership artifacts from another ac
             exitCode: 0,
           };
         }
+        if (call.promptPath === ".ai/prompts/execute-plan.md") {
+          await writePlan(
+            workspace.root,
+            "current-plan",
+            planWithFileScope(
+              "blocked",
+              "unblock-plan",
+              { modified: ["apps/web/src/shared.ts"] },
+              ownershipScopeSection(["apps/web/src/shared.ts"]),
+            ),
+          );
+        }
         return { launched: true, stdout: "", stderr: "", exitCode: 0 };
       },
     });
 
     assert.equal(result.success, false);
-    assert.match(
-      result.reason,
-      /workflow file ownership scope invalid: file ownership artifact is malformed/,
-    );
+    assert.match(result.reason, /plan blocked after execute-plan/);
     assert.equal(
-      calls.some((call) => call.command === CODEX_COMMAND),
-      false,
+      calls.some((call) => call.promptPath === ".ai/prompts/execute-plan.md"),
+      true,
     );
   } finally {
     await workspace.cleanup();
@@ -11591,7 +11270,7 @@ test("thin-plan ownership preflight trusts terminal workflow state over stale ow
   }
 });
 
-test("completed dirty ownership artifacts still block later plans", async () => {
+test("workflow runner ignores completed-plan ownership state", async () => {
   const workspace = await setupWorkspace();
   try {
     await writePlan(
@@ -11639,16 +11318,27 @@ test("completed dirty ownership artifacts still block later plans", async () => 
             exitCode: 0,
           };
         }
+        if (call.promptPath === ".ai/prompts/execute-plan.md") {
+          await writePlan(
+            workspace.root,
+            "current-plan",
+            planWithFileScope(
+              "blocked",
+              "unblock-plan",
+              { modified: ["src/shared.ts"] },
+              ownershipScopeSection(["src/shared.ts"]),
+            ),
+          );
+        }
         return { launched: true, stdout: "", stderr: "", exitCode: 0 };
       },
     });
 
     assert.equal(result.success, false);
-    assert.match(result.reason, /workflow file ownership conflict/);
-    assert.match(result.reason, /src\/shared\.ts/);
+    assert.match(result.reason, /plan blocked after execute-plan/);
     assert.equal(
-      calls.some((call) => call.command === CODEX_COMMAND),
-      false,
+      calls.some((call) => call.promptPath === ".ai/prompts/execute-plan.md"),
+      true,
     );
   } finally {
     await workspace.cleanup();
