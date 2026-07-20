@@ -2,11 +2,44 @@
 
 Assessment date: 2026-07-17  
 Repository: `/home/jetermulo/projects/futr-wsl/ramiro-law`  
-Current implementation baseline: `d59c4f2` on `feat/super-admin`
+Historical implementation baseline: `d59c4f2` on `feat/super-admin`
 
 ## Executive scope
 
 This is an engineering capability assessment based only on repository evidence. It is not an HR or personality assessment and makes no claim about experience outside this repository.
+
+## Post-assessment update — 2026-07-20
+
+This addendum reassesses committed `HEAD` at `6a8d0be` after five focused refactor/test commits by Elemar/Jay. The July 17 snapshot below remains historical baseline evidence.
+
+| Rank | Developer | Score | Level | Change since 2026-07-17 |
+|---:|---|---:|---|---|
+| 1 | Elemar/Jay Termulo | 79 | Senior- | +5: focused decompositions and committed E2E stabilization |
+| 2 | Jericho Bermas | 78 | Senior- | Baseline unchanged; no later work reassessed |
+
+Elemar/Jay’s score changes from 74 to 79: Architecture 12→13, Code Quality 11→12, Maintainability 7→9, and Refactoring 8→9. Security, testing, performance, debugging, repository hygiene, and documentation scores remain unchanged. This reaches first place by one point but remains below the 80-point Strong Senior threshold.
+
+### New evidence
+
+- `e47e41a` extracts debtor dialogs and form model from the debtor page.
+- `8a6d7ab` extracts employee page controls, form model, location map, and report controller.
+- `ec6bf06` extracts message draft and realtime controllers.
+- `fcae36c` replaces a 1,261-line support-ticket property-control component with focused type, activity, picker, board, and detail modules.
+- `6a8d0be` updates E2E coverage/stability for the refactor.
+- Worktree was clean; `tsc --noEmit`, ESLint, Prettier check, and full `vitest --run` passed on 2026-07-20. Full Playwright was not run during this addendum.
+
+The remaining score gaps are measured production performance, durable architecture/operations documentation, and production security observability. These gaps prevent a Strong Senior conclusion.
+
+### Strong Senior delivery plan — proposed work, not current evidence
+
+Ship the following as narrow, independently reviewable PRs. Do not combine documentation, schema, telemetry, and performance changes into one review surface.
+
+1. **Security architecture documentation.** Create `docs/security/authz-threat-model.md`, `docs/security/authz-matrix.md`, and `docs/runbooks/authz-incident.md`; replace the stale root `README.md` with accurate project and documentation links. Cover 2FA, Super Admin, messaging, and support-ticket authorization. The threat model must name assets, actors, trust boundaries, threats, controls, enforcement layers, and regression tests. The authorization matrix must map action, allowed roles, API/service enforcement, database/RLS enforcement, and test coverage. The incident runbook must define detection, containment, evidence preservation, recovery, verification, owner, and escalation for 2FA failures, authorization-denial spikes, privilege escalation, and cross-firm data access.
+2. **CI quality and security gate.** Add a repository CI workflow because no GitHub Actions workflow was present in this reassessment. Run frozen dependency installation, typecheck, lint, formatting, unit tests, an appropriate Playwright smoke/affected-E2E job, dependency review/audit, and SAST. Findings require remediation or explicit, time-bound risk acceptance.
+3. **Security audit-event vertical slice.** Add a forward-only migration and append-only structured audit-event contract for 2FA and Super Admin actions. Events must include safe actor, target, action, outcome, firm, request/correlation identifier, and allowlisted metadata. They must never include OTPs, passwords, session tokens, cookies, raw authorization headers, or full email addresses. Restrict audit-event access, test allowed and denied emission paths, and connect abnormal failures/denials to an alert with a documented owner and runbook.
+4. **Measured performance vertical slice.** Select one high-risk flow, preferably support-ticket detail or direct-message creation. Capture `EXPLAIN (ANALYZE, BUFFERS)` before and after, add a representative load test, instrument latency/error rate, and record baseline, result, rollout threshold, and rollback condition. Performance claims without these artifacts do not increase the performance score.
+
+Completion evidence: focused conventional commits, PR descriptions with dependency order and validation, green static/unit/E2E checks, migration rollout/rollback details where applicable, and links to the resulting documents, alerts, and measurement artifacts.
 
 The audit examined:
 
@@ -24,7 +57,7 @@ The supplied category maxima total 110 even though the required total is 100. Pe
 ## Evidence limitations
 
 - No `.mailmap` exists. Elemar/Jay are grouped with high confidence because both names use `jetermulo@gmail.com`. The two Jericho names are grouped with medium-high confidence because the full names and continuous feature/PR history align, but repository metadata does not prove identity.
-- The current working tree had six pre-existing modified files. Current ownership and scores use committed `HEAD`; uncommitted work is neither attributed nor evaluated.
+- The July 17 snapshot had six pre-existing modified files. Its historical ownership and scores use committed `HEAD`; uncommitted work was neither attributed nor evaluated. The July 20 addendum separately evaluates the five later commits listed above.
 - Branch and PR history contains squash/branch duplicates. Repeated copies of the same change are not treated as additional evidence.
 - The current test suite was not executed for this attribution audit. Test scores assess authored test design and regression coverage visible in commits and current sources, not current pass status.
 - PR review comments, production incidents, runtime telemetry, SAST results, and production performance dashboards were unavailable.
@@ -459,7 +492,7 @@ The primary risk is assessment error from confusing merge authorship with implem
 
 `dependabot[bot]` has one dependency-bump author record on a remote branch. It is automation and is not assigned a human engineering capability score or ranking.
 
-## Final Comparison
+## 2026-07-17 Final Comparison
 
 | Rank | Developer | Overall Score | Level | Architecture | Security | Testing | Maintainability | Performance | Refactoring | Consistency* | Biggest Strength | Biggest Weakness | Technical Risk |
 |---:|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---|---|---|
@@ -470,7 +503,7 @@ The primary risk is assessment error from confusing merge authorship with implem
 
 \* Consistency is diagnostic only and excluded from the overall score.
 
-## Ranking Rationale
+## 2026-07-17 Ranking Rationale
 
 ### 1. Jericho Bermas
 
