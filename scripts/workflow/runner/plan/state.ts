@@ -62,7 +62,6 @@ const canonicalWorkflowJson = (raw: unknown, workflowState: WorkflowState): stri
   return `${JSON.stringify({ ...record, workflowState, updatedAt: new Date().toISOString() }, null, 2)}\n`;
 };
 
-
 export const loadThinPlanV2WorkingContent = async ({ rootDir, planName, planPath, manifestContent }: { rootDir: string; planName: string; planPath: string; manifestContent: string }): Promise<{ ok: true; content: string; workflowState: WorkflowState } | Failure> => {
   const workflowPath = thinPlanV2ArtifactPath(planName, "state", "workflow.json");
   const filesPath = thinPlanV2ArtifactPath(planName, "state", "files.json");

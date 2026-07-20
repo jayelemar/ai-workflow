@@ -60,7 +60,9 @@ before `plan-validator`.
 
 For `manual` plans, set `## Workflow State` to
 `N/A: manual plan-bound execution`; do not create routing state artifacts.
-After saving a manual plan, append the manual token checkpoint:
+After saving either a `manual` or `runner-managed` plan, append the plan token
+checkpoint. This records pre-run planning usage in the same ledger the runner
+will continue to use:
 
 `pnpm exec tsx .ai/scripts/workflow/telemetry/manual-token-usage.ts --plan <plan-name> --stage plan`
 

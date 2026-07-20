@@ -40,8 +40,9 @@ spec, user-journey artifact, implementation map, and thin-plan-v2 state before
 handing off to `plan-validator`.
 
 If execution mode is `manual`, create the plan and planning artifacts only, and
-do not create runner-only workflow state just to continue execution. After
-saving the plan, append:
+do not create runner-only workflow state just to continue execution.
+
+For either execution mode, after saving the plan, append:
 `pnpm exec tsx .ai/scripts/workflow/telemetry/manual-token-usage.ts --plan <feature-or-bug-name> --stage plan`
 
 Strict Constraints:
@@ -122,7 +123,7 @@ Initial Plan State:
   - keep the plan manifest structure from the template
   - do not create runner-only state files
   - do not require `sync-plan-artifacts` before execution
-  - append the manual token checkpoint after saving the plan
+- After saving either plan mode, append the plan token checkpoint.
 
 Final Output:
 Return only:
