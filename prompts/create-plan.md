@@ -346,6 +346,23 @@ The initial `workflow.json` MUST use:
 
 Do not use legacy aliases such as `latestEvent`, `latestValidation`, `latestReview`, or `compactHistory`.
 
+For a plan named `<plan-name>`, write this complete initial shape, replacing
+only `updatedAt` with the current ISO timestamp:
+
+```json
+{
+  "planPath": ".ai/plans/<plan-name>.md",
+  "workflowState": "draft-artifact-sync",
+  "latest": {},
+  "history": [],
+  "unresolvedBlockers": [],
+  "updatedAt": "<ISO timestamp>"
+}
+```
+
+Before returning, reread and validate this file. A sidecar containing only
+`workflowState` is incomplete and must be repaired before the runner starts.
+
 Write `.ai/artifacts/<plan-name>/state/file-ownership.json` with the planning-time ownership boundary.
 
 It MUST be valid JSON with exactly the runner-required ownership fields:

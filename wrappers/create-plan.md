@@ -106,8 +106,16 @@ Required Behavior:
 Initial Plan State:
 - In `runner-managed` mode:
   - `## Workflow State` must be `draft-artifact-sync`.
-  - `.ai/artifacts/<feature-or-bug-name>/state/workflow.json` must use
-    `workflowState: "draft-artifact-sync"`.
+  - `.ai/artifacts/<feature-or-bug-name>/state/workflow.json` must contain
+    exactly the initial thin-plan-v2 fields: `planPath`, `workflowState`,
+    `latest`, `history`, `unresolvedBlockers`, and `updatedAt`.
+  - Set `planPath` to `.ai/plans/<feature-or-bug-name>.md`,
+    `workflowState` to `draft-artifact-sync`, `latest` to `{}`, and
+    `history` and `unresolvedBlockers` to `[]`; set `updatedAt` to a current
+    ISO timestamp.
+  - Reread and validate `workflow.json` before returning. A file containing
+    only `workflowState` is invalid and must be repaired before invoking the
+    runner.
   - `.ai/artifacts/<feature-or-bug-name>/state/context.md` must exist with an initial snapshot that names the plan path, spec path, artifact paths, workflow state, and notes that no validation/execution/review events exist yet.
   - `.ai/artifacts/<feature-or-bug-name>/events/` must exist even when it is empty.
 - In `manual` mode:
