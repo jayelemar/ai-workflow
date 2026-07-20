@@ -1,11 +1,7 @@
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 
-import type {
-  Failure,
-  PlanTask,
-  WorkflowTaskContext,
-} from "../../types.ts";
+import type { PlanTask } from "../../types.ts";
 
 export {
   formatTaskProgressLine,
@@ -24,9 +20,6 @@ const escapeRegExp = (value: string): string =>
 
 export const taskArtifactsRelativeDir = (planName: string): string =>
   rel(".ai", "artifacts", planName, "tasks");
-
-const currentTaskRelativePath = (planName: string): string =>
-  rel(".ai", "artifacts", planName, "state", "current-task.md");
 
 const taskArtifactFilePrefix = (task: PlanTask): string => {
   const suffix =
@@ -238,162 +231,11 @@ export const latestTaskArtifactRelativePath = async (
   return rel(taskArtifactsRelativeDir(planName), latestArtifact.entry);
 };
 
-export const writeTaskStageArtifact = async ({
-  rootDir,
-  planPath,
-  context,
-}: {
-  rootDir: string;
-  planPath: string;
-  context: WorkflowTaskContext;
-}): Promise<{ ok: true } | Failure> => {
-  const artifactPath = path.join(rootDir, context.artifactPath);
-  const body = `# Task Savepoint: ${context.task.id}
-
-## Task Name
-
-${context.task.name}
-
-## Plan
-
-${planPath}
-
-## Stage
-
-${context.stage}
-
-## Commit SHA
-
-${context.commitSha ?? "(pending)"}
-
-## Task Artifact
-
-${context.artifactPath}
-`;
-  try {
-    await mkdir(path.dirname(artifactPath), { recursive: true });
-    await writeFile(artifactPath, body, "utf8");
-    return { ok: true };
-  } catch (error) {
-    return {
-      ok: false,
-      reason: `task stage artifact cannot be written: ${String(error)}`,
-    };
-  }
-};
-
-export const writeCurrentTaskPointer = async ({
-  rootDir,
-  planName,
-  planPath,
-  context,
-  timestamp,
-}: {
-  rootDir: string;
-  planName: string;
-  planPath: string;
-  context: WorkflowTaskContext;
-  timestamp: string;
-}): Promise<{ ok: true } | Failure> => {
-  const pointerPath = path.join(rootDir, currentTaskRelativePath(planName));
-  const body = `# Current Task
-
-* Plan: ${planPath}
-* Task ID: ${context.task.id}
-* Task Words: ${context.task.words}
-* Task Name: ${context.task.name}
-* Stage: ${context.stage}
-* Task Artifact: ${context.artifactPath}
-* Commit SHA: ${context.commitSha ?? "(pending)"}
-* Updated At: ${timestamp}
-`;
-  try {
-    await mkdir(path.dirname(pointerPath), { recursive: true });
-    await writeFile(pointerPath, body, "utf8");
-    return { ok: true };
-  } catch (error) {
-    return {
-      ok: false,
-      reason: `current task pointer cannot be written: ${String(error)}`,
-    };
-  }
-};
-
-export const writeTaskArtifact = async ({
-  rootDir,
-  planPath,
-  context,
-  changedFiles,
-  summaryLines,
-  validationSummary,
-  reviewResult,
-  commitMessage,
-  nextTask,
-}: {
-  rootDir: string;
-  planPath: string;
-  context: WorkflowTaskContext;
-  changedFiles: string[];
-  summaryLines: string[];
-  validationSummary: string;
-  reviewResult: string;
-  commitMessage: string;
-  nextTask?: PlanTask;
-}): Promise<{ ok: true } | Failure> => {
-  const artifactPath = path.join(rootDir, context.artifactPath);
-  const body = `# Task Savepoint: ${context.task.id}
-
-## Task Name
-
-${context.task.name}
-
-## Summary
-
-${summaryLines.map((line) => `* ${line}`).join("\n")}
-
-## Plan
-
-${planPath}
-
-## Changed Files
-
-${changedFiles.length > 0 ? changedFiles.map((file) => `* ${file}`).join("\n") : "* None"}
-
-## Validation Evidence
-
-${validationSummary}
-
-## Review Result
-
-${reviewResult}
-
-## Commit SHA
-
-${context.commitSha ?? "(unknown)"}
-
-## Commit Message
-
-${commitMessage}
-
-## Task Artifact
-
-${context.artifactPath}
-
-## Next Task
-
-${nextTask ? nextTask.id : "(none)"}
-`;
-  try {
-    await mkdir(path.dirname(artifactPath), { recursive: true });
-    await writeFile(artifactPath, body, "utf8");
-    return { ok: true };
-  } catch (error) {
-    return {
-      ok: false,
-      reason: `task artifact cannot be written: ${String(error)}`,
-    };
-  }
-};
+export {
+  writeCurrentTaskPointer,
+  writeTaskArtifact,
+  writeTaskStageArtifact,
+} from "./artifact-writes.ts";
 
 export const nextTaskAfter = async (
   rootDir: string,
