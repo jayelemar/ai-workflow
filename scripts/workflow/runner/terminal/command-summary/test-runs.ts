@@ -1,4 +1,3 @@
-export { summarizeFailedTestCommand } from "./shell.ts";
 import type { CommandTerminalSummary } from "../../types.ts";
 
 const looksLikeExplicitTestFile = (token: string): boolean =>
