@@ -1,16 +1,22 @@
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
-import os from "node:os";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { tokenUsageLedgerRelativePath } from "./token-ledger.ts";
 import {
-  parseSessionTokenSnapshot,
   type ContextUsage,
-  type SessionTokenSnapshot,
   type TokenUsageTotals,
 } from "./session-snapshot.ts";
+import {
+  defaultCodexHome,
+  detectLatestSessionSnapshot,
+} from "./manual-token-sessions.ts";
+import { addTotals, subtractTotals, zeroTotals } from "./manual-token-totals.ts";
 
 export { parseSessionTokenSnapshot } from "./session-snapshot.ts";
+export {
+  defaultCodexHome,
+  detectLatestSessionSnapshot,
+} from "./manual-token-sessions.ts";
 
 export type ManualTokenUsageStage = "spec" | "plan" | "execute";
 
@@ -65,15 +71,6 @@ export type AppendManualTokenUsageResult =
       ledgerPath?: string;
     };
 
-const zeroTotals = (): TokenUsageTotals => ({
-  inputTokens: 0,
-  cachedInputTokens: 0,
-  uncachedInputTokens: 0,
-  outputTokens: 0,
-  reasoningOutputTokens: 0,
-  totalTokens: 0,
-});
-
 const asRecord = (value: unknown): Record<string, unknown> | null =>
   typeof value === "object" && value !== null
     ? (value as Record<string, unknown>)
@@ -91,15 +88,6 @@ const manualPromptPath = (stage: ManualTokenUsageStage): string => {
     case "execute":
       return ".ai/manual/execute.md";
   }
-};
-
-export const defaultCodexHome = (): string => {
-  const envCodexHome = process.env.CODEX_HOME?.trim();
-  if (envCodexHome) {
-    return path.resolve(envCodexHome);
-  }
-
-  return path.join(os.homedir(), ".codex");
 };
 
 const readJsonlRecords = async (
@@ -124,88 +112,6 @@ const readJsonlRecords = async (
       }
     })
     .filter((record): record is Record<string, unknown> => record !== null);
-};
-
-const relativeSessionPath = (codexHome: string, absolutePath: string): string => {
-  const relativePath = path.relative(codexHome, absolutePath);
-  return relativePath.length > 0 && !relativePath.startsWith("..")
-    ? relativePath
-    : absolutePath;
-};
-
-const collectSessionFiles = async (directory: string): Promise<string[]> => {
-  let entries: Awaited<ReturnType<typeof readdir>>;
-  try {
-    entries = await readdir(directory, { withFileTypes: true });
-  } catch {
-    return [];
-  }
-
-  const files: string[] = [];
-  for (const entry of entries) {
-    const entryPath = path.join(directory, entry.name);
-    if (entry.isDirectory()) {
-      files.push(...(await collectSessionFiles(entryPath)));
-      continue;
-    }
-    if (entry.isFile() && entry.name.endsWith(".jsonl")) {
-      files.push(entryPath);
-    }
-  }
-  return files;
-};
-
-const findSessionFileById = async (
-  sessionsDir: string,
-  sessionId: string,
-): Promise<string | null> => {
-  const files = await collectSessionFiles(sessionsDir);
-  const match = files.find((filePath) => filePath.includes(sessionId));
-  return match ?? null;
-};
-
-export const detectLatestSessionSnapshot = async ({
-  codexHome,
-  cwd,
-  sessionId,
-}: {
-  codexHome: string;
-  cwd: string;
-  sessionId?: string;
-}): Promise<SessionTokenSnapshot | null> => {
-  const sessionsDir = path.join(codexHome, "sessions");
-  let candidateFiles: string[];
-
-  if (sessionId) {
-    const sessionFile = await findSessionFileById(sessionsDir, sessionId);
-    candidateFiles = sessionFile ? [sessionFile] : [];
-  } else {
-    candidateFiles = await collectSessionFiles(sessionsDir);
-    candidateFiles.sort((left, right) => right.localeCompare(left));
-  }
-
-  for (const filePath of candidateFiles) {
-    let content: string;
-    try {
-      content = await readFile(filePath, "utf8");
-    } catch {
-      continue;
-    }
-
-    const snapshot = parseSessionTokenSnapshot(
-      content,
-      relativeSessionPath(codexHome, filePath),
-      cwd,
-    );
-    if (!snapshot) {
-      continue;
-    }
-    if (!sessionId || snapshot.sessionId === sessionId) {
-      return snapshot;
-    }
-  }
-
-  return null;
 };
 
 const sessionTotalsFromRecord = (
@@ -266,34 +172,6 @@ const cumulativeTotalsFromRecord = (
     reasoningOutputTokens,
     totalTokens,
   };
-};
-
-const addTotals = (left: TokenUsageTotals, right: TokenUsageTotals): TokenUsageTotals => ({
-  inputTokens: left.inputTokens + right.inputTokens,
-  cachedInputTokens: left.cachedInputTokens + right.cachedInputTokens,
-  uncachedInputTokens: left.uncachedInputTokens + right.uncachedInputTokens,
-  outputTokens: left.outputTokens + right.outputTokens,
-  reasoningOutputTokens:
-    left.reasoningOutputTokens + right.reasoningOutputTokens,
-  totalTokens: left.totalTokens + right.totalTokens,
-});
-
-const subtractTotals = (
-  current: TokenUsageTotals,
-  previous: TokenUsageTotals,
-): TokenUsageTotals | null => {
-  const diff = {
-    inputTokens: current.inputTokens - previous.inputTokens,
-    cachedInputTokens: current.cachedInputTokens - previous.cachedInputTokens,
-    uncachedInputTokens:
-      current.uncachedInputTokens - previous.uncachedInputTokens,
-    outputTokens: current.outputTokens - previous.outputTokens,
-    reasoningOutputTokens:
-      current.reasoningOutputTokens - previous.reasoningOutputTokens,
-    totalTokens: current.totalTokens - previous.totalTokens,
-  };
-
-  return Object.values(diff).every((value) => value >= 0) ? diff : null;
 };
 
 const readLatestManualCheckpointForSession = async (
