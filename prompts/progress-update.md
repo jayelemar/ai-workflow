@@ -72,12 +72,17 @@ Rules:
 * Use the plan name as the feature name, rewritten in simple title case.
 * Keep exactly one header line.
 * Include a `Pre-Execution` group when completed spec, planning, artifact sync,
-  validation, fix-plan, or approval work exists before completed task commits.
+  bounded validation preflight, or approval work exists before completed task commits.
 * Use `Commit <short_sha>` group labels for completed task savepoints in completion order.
 * Use the saved short commit SHA from the completed task savepoint, such as `Commit 2450d85`.
 * Use two hyphens before each completed item.
 * Include only completed work.
 * Include every meaningful completed item. There is no maximum bullet count.
+* If no completed task savepoint exists, omit both `Pre-Execution` and `Commit`
+  group labels. List verified completed plan-specific outcomes as ungrouped
+  `--` bullets immediately after the header.
+* Never place completed implementation outcomes under `Pre-Execution` merely
+  because a task savepoint is missing.
 * Pre-execution bullets must name actual business or product outcomes from the
   specific plan, spec, artifacts, or event summaries.
 * Do not use generic workflow bullets such as "created the implementation plan"
@@ -102,21 +107,21 @@ Count these as real progress:
 * planning
 * artifact creation
 * artifact syncing
-* validation
-* fix-plan work
+* validation and bounded preflight repair work
 * implementation
 * review
 * final validation
 
-Use the plan status, next action, completed workflow stages, completed tasks,
-and remaining workflow stages to estimate progress.
+Use `workflowState`, completed workflow stages, completed tasks, and remaining
+workflow stages to estimate progress. Derive any human-readable labels from
+`.ai/scripts/workflow/contracts/stage.ts`; never persist secondary workflow fields.
 
 Stage ranges:
 
 * Spec / Requirements: 1-5%
 * Plan Drafting: 5-10%
 * Artifact Creation / Syncing: 8-15%
-* Plan Validation / Fix Plan: 10-20%
+* Plan Validation / Bounded Preflight: 10-20%
 * Approved / Ready for Implementation: 20-25%
 * Implementation Started: 25-40%
 * Implementation In Progress: 40-75%
@@ -161,22 +166,19 @@ Mention those only when they are important to business status.
 
 ---
 
-## Status Interpretation
+## Workflow State Interpretation
 
 Use these mappings when estimating progress:
 
-* `draft + sync-plan-artifacts`: artifact creation or syncing range
-* `draft + plan-validator`: plan validation range
-* `draft + fix-plan`: plan validation / fix-plan range
-* `approved` before execution starts: approved / ready range
+* `draft-artifact-sync`: artifact creation or syncing range
+* `draft-validation`: plan validation range
+* `approved`: approved / ready range
 * `active` with the first task in progress: implementation started range
 * `active` with some completed tasks: implementation in progress range
 * `review`: review / cleanup range
-* `completed + commit-summary`: final validation / ready to ship range
-* `completed` with no required next action: 100%
+* `completed`: final validation / ready to ship range
 
-When status and next action conflict, choose the lower credible percentage and
-base bullets only on completed work.
+If plan and sidecar workflow states conflict, STOP and report both values.
 
 ---
 
@@ -186,8 +188,9 @@ If `.ai/artifacts/<plan-name>/boss-summary.md` already exists:
 
 * preserve completed `Commit <short_sha>` groups that still correspond to completed task
   savepoints.
-* preserve or refresh the `Pre-Execution` group so it contains only completed,
-  plan-specific pre-execution outcomes.
+* when at least one completed task savepoint exists, preserve or refresh the
+  `Pre-Execution` group so it contains only completed, plan-specific
+  pre-execution outcomes.
 * rewrite the single header with the latest percentage.
 * append any missing completed task groups.
 * do not duplicate the header.
@@ -195,6 +198,10 @@ If `.ai/artifacts/<plan-name>/boss-summary.md` already exists:
 * do not duplicate an existing `Commit <short_sha>` group.
 
 If the file does not exist, create it.
+
+When no completed task savepoint exists, remove any existing `Pre-Execution`
+or `Commit <short_sha>` group labels and retain only verified completed outcomes
+as ungrouped bullets below the header.
 
 ---
 

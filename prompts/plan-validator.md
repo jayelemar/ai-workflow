@@ -14,6 +14,7 @@ Ensure the plan is:
 * complete
 * executable
 * free of assumptions
+* repaired once for bounded plan defects or explicitly minor spec defects before approval
 
 ---
 
@@ -22,11 +23,18 @@ Ensure the plan is:
 Read:
 
 * `.codex/AGENTS.md`
+* `.ai/instructions/ai-workflow.md`
 * `.ai/instructions/shared/workflow-state.md`
+* `.ai/instructions/shared/flow-trace-artifacts.md`
+* runner-owned context snapshot `.ai/artifacts/<plan-name>/state/context.md` as the primary current-state source
 * the plan file
 * the repo-relative `*.spec.md` path(s) listed under the plan's `## Spec` section (if any)
-* `.ai/artifacts/<plan-name>/user-journey.md` when the plan is user-facing
+* `.ai/artifacts/<plan-name>/user-journey.md` when the plan `## Artifacts`
+  section requires flow artifacts
 * relevant codebase files named by the spec or plan when contract, shape, rendering, or file-scope questions must be resolved from existing implementation evidence
+
+Read the full plan only when exact validation or bounded repair edits require
+it or the context snapshot is insufficient. Do not load full historical sections unless the snapshot is insufficient.
 
 ---
 
@@ -46,13 +54,11 @@ If not provided:
 
 Read:
 
-## Status
+## Workflow State
 
-Allowed Validation States:
+Expected: `draft-validation`
 
-* draft
-
-IF Status != draft:
+IF Workflow State != `draft-validation`:
 
 → STOP (`plan is not in validation state`)
 
@@ -60,17 +66,6 @@ IF Status != draft:
 
 Read:
 
-## Next Action
-
-Expected:
-
-plan-validator
-
-IF Next Action != plan-validator:
-
-→ STOP (`unexpected next action for validation`)
-
----
 
 ## Validation Scope
 
@@ -83,44 +78,152 @@ Validate:
 
 ---
 
+## Bounded Preflight Repair Pass (MANDATORY)
+
+This prompt owns validation and the single allowed pre-execution repair pass.
+There is no separate plan-fixing stage.
+
+After identifying validation findings, perform at most one bounded repair pass
+before deciding whether to approve or stop.
+
+Allowed repairs:
+
+* plan-only overreach that can be removed without changing required behavior
+* omitted spec-required coverage that can be added to the plan without a new product decision
+* file-scope or validation-scope narrowing back to the spec
+* replacing invented plan behavior with an existing compatible codebase contract
+* `MINOR SPEC REPAIR` findings that meet the rules below
+* task savepoint repairs that keep the same behavior scope
+
+Spec edits are allowed ONLY for `MINOR SPEC REPAIR` findings and only when the
+repair is already decided by the existing spec.
+
+When a minor spec repair is allowed:
+
+1. edit only the named spec file and named spec section(s)
+2. make only the exact repair permitted by this validation pass
+3. do not add new behavior, changed business logic, product decisions, API/data-shape decisions, or edge-case rules
+4. update the plan only if needed to align with the repaired spec text
+
+After repairs, rerun the validator preflight from
+`.ai/instructions/shared/flow-trace-artifacts.md`.
+
+Do not limit repairs to patching only the cited lines when the plan artifacts
+or task boundaries are still invalid. The validator preflight must re-read the
+spec plus any required flow-trace artifacts, repair missing action rows and
+under-scoped behavior ownership, rewrite bad task savepoints, remove task IDs
+when the work is really one final-commit fix, and re-check implementation and
+validation coverage.
+
+Preflight constraints:
+
+* one bounded repair pass only
+* keep the same behavior scope
+* any repair must not require new behavior
+* do not introduce new product behavior
+* do not edit the spec outside allowed minor repairs
+* stop instead of repairing anything that must require new behavior or user authority
+
+If any blocker remains after the bounded repair pass:
+
+→ output `STOP`
+→ keep `workflowState = draft-validation`
+
+---
+
 ## Task Savepoint Validation (MANDATORY)
 
-Task savepoints are valid only as meaningful commit milestones for
-independently reviewable chunks. A task savepoint chunk must be able to pass, be
-reviewed, and be committed independently. Valid savepoints group work by
-coherent behavior/subsystem boundaries, not by numbered checklist items.
+Apply this contract only to new or `draft` runner-managed plans. Manual plans
+are not required to use the commit-savepoint structure or commit guarantees.
+Never rewrite task IDs, task boundaries, or runner artifacts for plans already
+in `active`, `review`, `blocked`, or `completed` workflow state.
 
-`1. [task:01-readable-words] Do the task`
+Two outcomes MUST be separate tasks when they are independently implementable
+and validatable and have distinct reasons to review or revert. There is no
+fixed savepoint count.
+
+For multiple atomic outcomes, require this exact structure under
+`### Implementation`:
+
+```text
+1. [task:NN-readable-words] <imperative title, maximum 50 characters>
+   - Behavior: <one exact outcome>
+   - Files: <exact repo-relative paths>
+   - Validation: <exact runnable commands>
+   - Depends on: None | <earlier task IDs>
+   - Completes: <exact acceptance-criterion text> | None — prerequisite for <later task ID>
+   - Coupling rationale: N/A | <exact reason the listed work cannot be split safely>
+   - Size warning: N/A | More than 8 commit paths
+   - Atomization warning: N/A | <exact unresolved split boundary>
+```
+
+For one atomic outcome, require the same fields, omit the `[task:...]` ID, and
+retain the existing single final-commit behavior.
 
 Rules:
 
-* The ID MUST match `[task:NN-readable-words]` with a two-digit numeric prefix and lowercase hyphenated words.
-* Task IDs MUST be unique within the plan.
-* Task IDs MUST stay stable when task wording changes.
-* Task-savepoint plans use runner task artifacts under `.ai/artifacts/<plan-name>/tasks/`.
-* Simple bugfix plans keep the existing final-commit behavior and do not require task IDs.
-* A simple bugfix SHOULD be one final-commit task even when it includes red tests, implementation, and validation commands.
-* Prefer no task IDs for simple fixes.
-* Prefer 3-5 meaningful savepoints for larger multi-subsystem plans.
+* IDs MUST be unique, stable, two-digit, lowercase, and hyphenated.
+* Titles MUST be imperative, describe one outcome, exclude file lists and
+  workflow metadata, and contain a maximum 50 characters.
+* `Depends on` may name only earlier task IDs and must not create a cycle.
+* Every intermediate dependent commit MUST pass its declared validation.
+* Exact focused validation commands, implementation, and regression coverage
+  for one outcome MUST remain in the same task.
 * Do not split tasks only by lifecycle phase, app layer, isolated red-test work, implementation-only work, validation-only work, or tiny checklist items.
+* Tested foundations MAY be earlier tasks when independently validated and
+  distinctly reviewable; use `None — prerequisite for <later task ID>` when
+  they complete no acceptance criterion.
+* Each acceptance criterion MUST become fully satisfied in exactly one task.
+  Inseparable criteria MAY share one task; independently achievable criteria
+  MUST not.
+* Shared source, test, migration, or generated paths MAY appear in multiple
+  ordered tasks. Count each unique expected commit path once per task.
+* Expected directory ownership contributes every resolved concrete commit
+  path. Paths marked `(assumed)` still count.
+* Ignore `.ai/` paths excluded from implementation commits when calculating
+  task size. Nine or more unique commit paths require `Size warning: More than
+  8 commit paths` and concrete `Coupling rationale`; eight or fewer require
+  `Size warning: N/A`.
+* If a valid split is clear, rewrite the broad task during the one bounded
+  repair pass.
+* If a valid split remains uncertain after that pass, keep the task
+  executable, explain the fallback in `Coupling rationale`, record the exact
+  unresolved boundary in `Atomization warning`, and continue to normal
+  operator approval. Otherwise require `Atomization warning: N/A`.
+* Reject generic coupling wording such as `related changes` or `same feature`.
+* Preparation and final aggregate validation MUST remain untagged and MUST NOT
+  become commit savepoints.
+* During the bounded repair pass, convert an old draft's long single-line task
+  entries to the structured fields when the spec and codebase determine the
+  boundaries.
 
-If a plan has multiple task-savepoint IDs but the tasks cannot pass and commit independently:
+Mark malformed structure, invalid dependency ordering, duplicate acceptance
+ownership, artificial lifecycle splits, or missing focused validation as
+CRITICAL and repair them only within the existing bounded pass.
 
-→ mark as CRITICAL
+### Commit Boundary Validation
 
-If a plan splits a simple bugfix into separate test, implementation, or validation task savepoints:
+The default is one local commit for each reviewed task savepoint. A `## Commit
+Boundaries` entry is an exception for a runner-managed task that must remain
+one execution and review savepoint while its local history needs to be
+atomized. It is not a substitute for splitting independently implementable and
+validatable outcomes into task savepoints.
 
-→ mark as CRITICAL
+When `## Commit Boundaries` is present, validate and repair within the bounded
+pass that each entry:
 
-If a plan uses task savepoints for lifecycle-only, implementation-only,
-validation-only, or tiny checklist splits instead of coherent
-behavior/subsystem boundaries:
+* targets one existing `[task:NN-readable-words]` task and has two to twelve
+  dependency-ordered boundaries;
+* contains concrete repo-relative paths or narrowly scoped intentional file
+  groups, all within that task's plan-owned scope;
+* assigns every changed plan-owned implementation path to exactly one boundary
+  without overlap or a catch-all group; and
+* keeps focused tests with the matching implementation boundary.
 
-→ mark as CRITICAL
-
-If a plan uses task savepoints and any savepoint task lacks valid task ID syntax:
-
-→ mark as CRITICAL
+Reject a boundary entry on a manual plan, a one-final-commit plan, or final
+aggregate validation. Mark an invalid, overlapping, incomplete, or
+artificially layer-only boundary list as CRITICAL and either repair it within
+the existing pass or remove it in favor of the default one-commit task.
 
 ---
 
@@ -209,8 +312,8 @@ Rules:
 * Run the Codebase Contract Resolution check before using this classification.
 * If the issue cannot be classified with confidence as `MINOR SPEC REPAIR`, classify it as `MAJOR SPEC DECISION REQUIRED`.
 * `MINOR SPEC REPAIR` MUST NOT introduce behavior that is not already decided in the existing spec.
-* `MINOR SPEC REPAIR` MUST identify the exact spec file and exact section(s) that `fix-plan` is allowed to repair.
-* `MAJOR SPEC DECISION REQUIRED` MUST output `STOP`, state the required user decision, and must not transition to `fix-plan`.
+* `MINOR SPEC REPAIR` MUST identify the exact spec file and exact section(s) that this prompt is allowed to repair.
+* `MAJOR SPEC DECISION REQUIRED` MUST output `STOP` and state the required user decision.
 
 `MAJOR SPEC DECISION REQUIRED` does NOT apply when:
 
@@ -223,17 +326,56 @@ Rules:
 
 If minor spec repairs are detected:
 
-→ keep plan in `draft`
-→ set `Next Action` to `fix-plan`
-→ append validation history
-→ list the exact spec file and section(s) that `fix-plan` is allowed to repair
+→ run one bounded repair pass if the repair is allowed
+→ otherwise output `STOP`
+→ keep `workflowState = draft-validation`
+→ list the exact spec file and section(s) that this prompt is allowed to repair
 
 If major spec decisions are detected:
 
 → output `STOP`
 → state the required user decision
-→ do not update the plan state
-→ do not transition to `fix-plan`
+→ keep `workflowState = draft-validation`
+
+---
+
+## Codebase Reclassification Check (MANDATORY)
+
+Before stopping on `MAJOR SPEC DECISION REQUIRED`, inspect the relevant existing codebase files named by the spec or plan.
+
+If a finding can be resolved by any of the following, treat it as a fixable plan issue and continue:
+
+* removing behavior the plan invented beyond the spec
+* narrowing file scope or validation scope back to the spec
+* reusing an existing codebase contract/type/rendering path that already exists in spec-scoped files
+* replacing an invented data shape/API contract with an existing compatible contract already present in the codebase
+* adding spec-required coverage that the plan omitted
+* reusing an existing sibling contract for a new spec-required section of an existing document/API surface
+* including a supporting type/contract file only because an in-scope owner file needs that already-decided shape carried through existing code
+
+Rules:
+
+* This reclassification does NOT allow spec edits unless the finding is explicitly `MINOR SPEC REPAIR`.
+* This reclassification does NOT allow new product behavior.
+* This reclassification is allowed only when the plan can be corrected without asking the user to choose between multiple valid product behaviors.
+* Reusing an existing sibling item contract is allowed when it does not add behavior beyond the spec and the reused contract already represents the same kind of item in that document/API surface.
+* Adding a supporting type/contract file to the plan is allowed when the file only mirrors a spec-required shape that must flow through an already in-scope owner file.
+* when applicable, replace invented plan behavior with the existing compatible codebase contract instead of asking for a new spec decision
+
+If a finding is marked `MAJOR SPEC DECISION REQUIRED`, STOP only when the issue still requires user authority after this codebase reclassification check.
+
+If a spec-origin finding is unclassified:
+
+→ STOP (`major or unclassified spec issue requires user decision before plan can be fixed`)
+→ STOP (`unclassified spec issue requires user decision before validation can approve`)
+
+If a `MINOR SPEC REPAIR` finding lacks exact allowed spec sections:
+
+→ STOP (`minor spec repair requires exact allowed spec sections`)
+
+If a `MINOR SPEC REPAIR` would require behavior not already decided in the existing spec:
+
+→ STOP (`minor spec repair cannot introduce undecided behavior`)
 
 ---
 
@@ -266,37 +408,23 @@ If missing:
 
 ---
 
-## User Journey Artifact Validation (MANDATORY)
+## Flow Artifact Validation (MANDATORY)
 
-Read the plan's `## Artifacts` section plus `.ai/artifacts/<plan-name>/implementation-map.md`.
+Use `.ai/instructions/shared/flow-trace-artifacts.md` as the validation
+contract.
 
-User-facing work means a feature, bugfix, or change that affects a customer, admin, or operator screen, route, workflow, visible state, or user-triggered API behavior.
+Treat the plan `## Artifacts` entries as the source of truth for whether flow
+artifacts are required.
 
-For user-facing plans:
+If the plan requires flow-trace artifacts, validate the user-journey artifact
+and `implementation-map.md` against that shared contract.
 
-* user-facing work MUST have `.ai/artifacts/<plan-name>/user-journey.md`
-* the user-journey artifact MUST exist
-* the artifact MUST contain Goal, Actors, Entry Points, User Flows, Mermaid Diagram, States, Failures, Acceptance Scenarios, and Open Decisions
-* `.ai/artifacts/<plan-name>/implementation-map.md` MUST exist
-* every user action from the artifact's User Flows and Acceptance Scenarios MUST appear in `.ai/artifacts/<plan-name>/implementation-map.md`
-* each user action MUST include implementation coverage for applicable UI route/component, API route, backend service/module, and database/storage effect paths
-* each user action MUST include validation coverage in tests or an explicit validation command
-* a `None: <concrete reason>` entry is allowed only for implementation categories that genuinely do not apply to that action
+If the plan records `User journey` as `N/A: <concrete reason>`, require
+`implementation-map.md` to be exactly `N/A: <concrete reason>` and verify that
+the reason remains credible for the actual scope.
 
-If a user-facing flow step lacks implementation coverage or validation coverage:
-
-→ mark as CRITICAL
-
-If a user-facing plan records `N/A` in `.ai/artifacts/<plan-name>/implementation-map.md`:
-
-→ mark as CRITICAL
-
-For non-user-facing plans:
-
-* `.ai/artifacts/<plan-name>/implementation-map.md` MUST write `N/A: <concrete reason>`
-* the concrete reason MUST explain why the change does not affect a screen, route, workflow, visible state, or user-triggered API behavior
-
-If the non-user-facing reason is missing, vague, or contradicted by the spec or plan:
+If required implementation coverage, validation coverage, or valid `N/A`
+handling is missing:
 
 → mark as CRITICAL
 
@@ -355,16 +483,21 @@ Rules:
 * Validation versions MUST be sequential
 * MUST create `.ai/artifacts/<plan-name>/events/validation-vX.md` before updating the plan
 * The validation artifact MUST contain detailed critical issues, warnings, spec repair classifications, allowed spec repairs, recommendations, and evidence
+* Validation event artifacts use compact evidence for command data: record the command, result, evidence path, and a short excerpt only when needed, plus any risk or deferred validation note.
+* Preserve detailed critical issues and allowed spec repairs, but cite command evidence by exact path/excerpt instead of dumping raw logs.
+* Event artifacts must not include full raw stdout/stderr bodies, full raw diffs, or raw Codex event streams.
 * Update `.ai/artifacts/<plan-name>/state/workflow.json` with runner-readable thin-plan-v2 state:
   * `planPath`: the exact repo-relative plan path, for example `.ai/plans/<plan-name>.md`
-  * `status`: `draft` when validation needs fixes, or `approved` when validation passes
-  * `nextAction`: `fix-plan` when validation needs fixes, or `execute-plan` when validation passes
+* `workflowState`: `draft-validation` when validation stops after the bounded repair pass, or `approved` when validation passes
+* valid stop state: `workflowState = draft-validation`
+* valid approval state: `workflowState = approved`
   * `latest`: object containing `validation` with compact `version`, `result`, `summary`, and `evidence` fields for the validation artifact just created
   * `history`: array of event artifact paths, including the validation artifact just created
   * `unresolvedBlockers`: array; use `[]` for ordinary validation failures
   * `updatedAt`: current ISO timestamp
 * Do not use legacy top-level aliases such as `latestValidationSummary`, `latestValidationResult`, `latestValidationEvidence`, or `compactHistoryPointer`; the runner only reads the nested thin-plan-v2 sidecar fields above.
 * The plan manifest MUST NOT contain inline `## Validation History`
+* The workflow sidecar state must match the plan manifest before final output
 
 ---
 
@@ -375,64 +508,43 @@ IF any `MAJOR SPEC DECISION REQUIRED` issues exist:
 * output `STOP`
 * state the exact user decision required
 * plan MUST NOT be approved
-* plan MUST NOT transition to `fix-plan`
+* plan MUST remain `workflowState = draft-validation`
 
-Do not update:
+Update or keep:
 
-## Status
+## Workflow State
 
-Do not update:
-
-## Next Action
+draft-validation
 
 ---
 
 IF any `MINOR SPEC REPAIR` issues exist and NO `MAJOR SPEC DECISION REQUIRED` issues exist:
 
-* plan MUST NOT be approved
-* plan MUST remain in the validation loop
+* perform the bounded repair pass if the repair is allowed
+* after repair, rerun validation inside this prompt
+* if any blocker remains, output `STOP`
+* if no blocker remains, continue to the approval route
 
-update plan:
+If stopping, update or keep plan:
 
-## Status
+## Workflow State
 
-draft
-
-## Next Action
-
-fix-plan
-
-append:
-
-### Validation vX
-
-* Summary: minor spec repair required
-* Result: NEEDS FIX
-* Evidence: .ai/artifacts/<plan-name>/events/validation-vX.md
+draft-validation
 
 ---
 
 IF any CRITICAL issues exist and NO `MAJOR SPEC DECISION REQUIRED` issues exist and NO `MINOR SPEC REPAIR` issues exist:
 
-* plan MUST NOT be approved
+* perform the bounded repair pass if the issue is repairable without new behavior
+* after repair, rerun validation inside this prompt
+* if any blocker remains, output `STOP`
+* if no blocker remains, continue to the approval route
 
-update plan:
+If stopping, update or keep plan:
 
-## Status
+## Workflow State
 
-draft
-
-## Next Action
-
-fix-plan
-
-append:
-
-### Validation vX
-
-* Summary: plan requires fixes before approval
-* Result: NEEDS FIX
-* Evidence: .ai/artifacts/<plan-name>/events/validation-vX.md
+draft-validation
 
 ---
 
@@ -440,21 +552,12 @@ IF NO CRITICAL issues:
 
 update plan:
 
-## Status
+## Workflow State
 
 approved
 
-## Next Action
-
-execute-plan
-
-append:
-
-### Validation vX
-
-* Summary: plan is approved for execution
-* Result: APPROVED
-* Evidence: .ai/artifacts/<plan-name>/events/validation-vX.md
+write the validation event artifact and update
+`.ai/artifacts/<plan-name>/state/workflow.json` with the approval evidence.
 
 ---
 
@@ -480,30 +583,14 @@ Use this shared terminal-facing contract for non-review stages.
 
 **Next**
 
-Status:
-
-* draft
-* approved
-
-Next Action:
-
-* fix-plan
-* execute-plan
+Workflow State: `draft-validation` or `approved`
 
 IF any CRITICAL issues exist and NO `MAJOR SPEC DECISION REQUIRED` issues exist and NO `MINOR SPEC REPAIR` issues exist:
 
-Status:
-draft
-
-Next Action:
-fix-plan
+Workflow State: `draft-validation`
 
 ---
 
 IF NO CRITICAL issues:
 
-Status:
-approved
-
-Next Action:
-execute-plan
+Workflow State: `approved`

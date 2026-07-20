@@ -5,17 +5,14 @@
 !/.gitignore
 !/README.md
 !/AGENTS.md
-
 # Allowlisted source directories
 !/changelogs/
-!/changelogs/security.changelog.md
-!/changelogs/testing.changelog.md
-!/changelogs/workflow-state.changelog.md
+!/changelogs/**
+!/docs/
+!/docs/**
 !/instructions/
 !/instructions/shared/
-!/instructions/shared/security.md
-!/instructions/shared/testing.md
-!/instructions/shared/workflow-state.md
+!/instructions/shared/**
 !/prompts/
 !/prompts/**
 !/scripts/

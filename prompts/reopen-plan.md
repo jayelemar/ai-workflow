@@ -16,17 +16,24 @@ Read:
 
 * `.codex/AGENTS.md`
 * `.ai/instructions/shared/workflow-state.md`
+* `.ai/instructions/shared/reasoning-quality.md`
+* `.ai/instructions/shared/debugging.md`
+* runner-owned context snapshot `.ai/artifacts/<plan-name>/state/context.md` as the primary current-state source
 * the repo-relative `*.spec.md` path(s) listed under the plan's `## Spec` section (if any)
 * Active Context Packet instruction files selected from `.ai/instructions/index.md`
 * the plan file
 
+Read the full plan only when exact plan edits are required or the snapshot is insufficient.
+Do not load full historical sections unless the snapshot is insufficient.
+Do not inspect workflow `history` during normal reopen runs; use the snapshot,
+latest review pointer, unresolved blockers, and the latest relevant event
+pointer first, then open only that exact event artifact when specific evidence
+is needed.
+Preserve exact reopen findings, workflow state, event evidence, user-provided findings, and issue-report reads required to avoid unsafe reopen transitions.
 Use the runner-provided Active Context Packet and index-selected instruction files only. Do not broadly load `.ai/instructions/**`.
 
-Load:
-
-* `.ai/prompts/superpowers.md`
-
-Apply the superpowers advisory guidance for analysis and edge-case checks.
+Apply shared reasoning-quality and debugging guidance for evidence checks,
+root-cause validation, and safe workflow transitions.
 
 ---
 
@@ -47,9 +54,11 @@ If not provided:
 Use the latest bug findings from one of:
 
 * the user's current request
-* the latest review pointer and unresolved blockers in `.ai/artifacts/<plan-name>/state/workflow.json`
-* review/reopen evidence under `.ai/artifacts/<plan-name>/events/`
+* the latest review pointer, latest relevant event pointer, and unresolved blockers in `.ai/artifacts/<plan-name>/state/workflow.json`
+* the exact event artifact referenced by the latest relevant event pointer when that evidence is needed
 * a clearly referenced issue report in the plan
+
+These reopen findings, workflow state, and event evidence remain correctness-critical inputs even when the context snapshot is available.
 
 If no concrete findings exist:
 
@@ -63,17 +72,11 @@ If no concrete findings exist:
 
 Read:
 
-## Status
+## Workflow State
 
 ### Already Reopened Fast Path
 
-IF Status == active:
-
-Read:
-
-## Next Action
-
-IF Next Action == execute-plan AND `## Reopen History` contains a latest reopen entry with `Decision: active`:
+IF Workflow State == `active` AND `## Reopen History` contains a latest reopen entry with `Decision: active`:
 
 -> do not output `STOP`
 -> do not edit the plan
@@ -81,7 +84,7 @@ IF Next Action == execute-plan AND `## Reopen History` contains a latest reopen 
 -> output the next step as `execute-plan`
 -> end
 
-IF Status == active and this fast path does not apply:
+IF Workflow State == `active` and this fast path does not apply:
 
 -> STOP (`plan is active but reopen handoff evidence is missing`)
 
@@ -89,23 +92,14 @@ IF Status == active and this fast path does not apply:
 
 Expected:
 
-reopening
+`reopening`
 
-IF Status != reopening:
+IF Workflow State != `reopening`:
 
 -> STOP (`plan must be in reopening state`)
 
 ---
 
-Read:
-
-## Next Action
-
-Any value is allowed.
-
-Do not STOP based on the current Next Action value.
-
----
 
 ## Reopen Scope
 
@@ -147,13 +141,9 @@ After the plan is updated for the reopened work:
 
 update:
 
-## Status
+## Workflow State
 
 active
-
-## Next Action
-
-execute-plan
 
 ---
 
@@ -205,8 +195,4 @@ Use this shared terminal-facing contract for non-review stages.
 
 **Next**
 
-Status:
-active
-
-Next Action:
-execute-plan
+Workflow State: `active`

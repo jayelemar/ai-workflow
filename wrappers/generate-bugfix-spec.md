@@ -13,6 +13,14 @@ Strict Constraints:
 - Do not create a plan.
 - Limit output strictly to the spec creation process.
 
+RCA Approval Gate:
+- Create a spec only after the operator approves an evidence-backed RCA and
+  fix direction.
+- If `RCA Approved` is not `yes`, do not create a spec. Ask for missing
+  evidence or return to RCA-only analysis.
+- Production evidence may be `N/A: not a production issue`, but Codex must not
+  claim production reproduction without supplied evidence.
+
 Source Material:
 - You may inspect the codebase to confirm current behavior, affected files, routes, tests, logs, and reproduction facts.
 - You may inspect `.ai/instructions/**/*.md` when relevant.
@@ -21,8 +29,17 @@ Source Material:
 - Expected behavior must come from the user-provided details below.
 - If expected behavior, edge cases, constraints, or acceptance criteria are unclear, STOP and ask.
 
+Production Evidence:
+
+- Environment and time observed: <production URL/environment and time, or N/A>
+- Affected users, roles, routes, services, or data: <details>
+- Screenshot or recording: <path, URL, or N/A>
+- Console errors: <details or N/A>
+- Network request/response: <details or N/A>
+- Application/service logs: <details or N/A>
+
 Details:
-<details>
+<extra context>
 
 Current Behavior:
 <what is happening>
@@ -36,6 +53,12 @@ Reproduction:
 Constraints:
 <what must not change>
 
+RCA:
+<approved root cause and fix direction>
+
+RCA Approved:
+<yes or no>
+
 Known Decisions:
 - <explicit rule already decided>
 - <explicit constraint already decided>
@@ -46,6 +69,8 @@ Unknowns:
 
 Process Requirements:
 - Confirm the bug is described as current behavior vs expected behavior.
+- Confirm supplied evidence supports the RCA. If it does not, STOP and return
+  to RCA-only analysis instead of inventing a root cause.
 - Define exact IF/THEN behavior for the fix.
 - Define edge cases and failure behavior.
 - Define acceptance criteria.
@@ -54,3 +79,9 @@ Process Requirements:
 Output:
 Save the finalized spec to:
 .ai/specs/<bug-name>.spec.md
+
+Then append the manual token checkpoint:
+`pnpm exec tsx .ai/scripts/workflow/telemetry/manual-token-usage.ts --plan <bug-name> --stage spec`
+
+If the spec is completed successfully, end the final response with exactly:
+`Spec saved to .ai/specs/<bug-name>.spec.md`

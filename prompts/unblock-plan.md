@@ -16,17 +16,23 @@ Read:
 
 * `.codex/AGENTS.md`
 * `.ai/instructions/shared/workflow-state.md`
+* `.ai/instructions/shared/reasoning-quality.md`
+* `.ai/instructions/shared/debugging.md`
+* runner-owned context snapshot `.ai/artifacts/<plan-name>/state/context.md` as the primary current-state source
 * the repo-relative `*.spec.md` path(s) listed under the plan's `## Spec` section (if any)
 * Active Context Packet instruction files selected from `.ai/instructions/index.md`
 * the plan file
 
+Read the full plan only when exact plan edits are required or the snapshot is insufficient.
+Do not load full historical sections unless the snapshot is insufficient.
+Do not inspect workflow `history` during normal unblock runs; use the snapshot,
+unresolved blockers, and the latest relevant event pointer first, then open
+only that exact event artifact when specific evidence is needed.
+Preserve exact unblock evidence reads for unresolved blockers, workflow state, event evidence, and user-provided unblock evidence.
 Use the runner-provided Active Context Packet and index-selected instruction files only. Do not broadly load `.ai/instructions/**`.
 
-Load:
-
-* `.ai/prompts/superpowers.md`
-
-Apply the superpowers advisory guidance for analysis and edge-case checks.
+Apply shared reasoning-quality and debugging guidance for evidence checks,
+root-cause validation, and safe workflow transitions.
 
 ---
 
@@ -47,9 +53,11 @@ If not provided:
 Use blocker-resolution evidence from:
 
 * the runner-provided `Unblock evidence note`
-* unresolved blockers in `.ai/artifacts/<plan-name>/state/workflow.json`
+* unresolved blockers and the latest relevant event pointer in `.ai/artifacts/<plan-name>/state/workflow.json`
 * the user's current request
-* documented runtime or validation evidence in `.ai/artifacts/<plan-name>/events/`
+* the exact event artifact referenced by the latest relevant event pointer when that evidence is needed
+
+These unresolved blockers, workflow state, and event evidence remain correctness-critical inputs even when the context snapshot is available.
 
 Manual browser validation evidence MUST include:
 
@@ -65,26 +73,13 @@ If a blocker describes implementation work that can be performed by continuing `
 * do not require blocker-resolution evidence before execution can continue
 * preserve validation-only blockers that do not prevent implementation
 
-If a blocker is `Type: plan dependency`:
+If the unblock evidence proves the current runtime/setup blocker is resolved but a new validation failure appears in plan-owned code, tests, migrations, or artifacts:
 
-* require evidence that the owner plan reached `completed + commit-summary` with no uncommitted changes for the shared file OR that the owner plan released the shared file ownership
-* evidence MUST identify the owner plan and the shared file path
-* the runner-owned `.ai/artifacts/<owner-plan>/state/file-ownership.json` conflict check is authoritative for whether a completed owner plan is still dirty
-* do not unblock from a `plan dependency` using only an assumption that the owner plan is inactive
-* if the evidence proves the dependency is resolved, mark the blocker resolved and allow the normal `blocked -> active` transition
-* if the evidence is missing or incomplete, keep the plan blocked with `Next Action = unblock-plan`
-
-### File Ownership Releases
-
-For released shared file ownership, valid evidence MUST include a File Ownership Releases entry in the owner plan's `.ai/artifacts/<owner-plan>/state/file-ownership.json` with:
-
-* `File:` matching the shared file path
-* `Released By:` naming the owner plan
-* `Released To:` naming this dependent plan
-* `Status: transferred`
-* concrete validation or review evidence
-
-When unblocking from a transferred release, add the released file to this plan's `.ai/artifacts/<plan-name>/state/file-ownership.json` ownership state and to `.ai/artifacts/<plan-name>/state/files.json` if it already has changed content for this plan. After the transition, this plan owns the transferred file.
+* clear the resolved runtime/setup blocker
+* reclassify the new failure as active implementation work when it is covered by the spec and plan
+* transition to `active`
+* record the exact failing validation command and observed failure in the unblock artifact
+* do not keep the stale runtime/setup blocker as the active blocked reason
 
 After classifying blockers, if any remaining execution blocker requires user clarification, product decision, external service access, auth state, runtime setup, or manual browser validation and no concrete resolution evidence is available:
 
@@ -99,32 +94,16 @@ After classifying blockers, if any remaining execution blocker requires user cla
 
 Read:
 
-## Status
+## Workflow State
 
-Expected:
+Expected: `blocked`
 
-* blocked
-
-IF Status is not `blocked`:
+IF Workflow State is not `blocked`:
 
 -> STOP (`plan must be blocked before unblocking`)
 
 ---
 
-Read:
-
-## Next Action
-
-Expected:
-
-* unblock-plan
-* execute-plan (legacy blocked plans only)
-
-IF Next Action is neither `unblock-plan` nor `execute-plan`:
-
--> STOP (`unexpected next action for unblocking`)
-
----
 
 ## Unblock Scope
 
@@ -148,6 +127,12 @@ If the blocker is resolved:
 * create `.ai/artifacts/<plan-name>/events/unblock-vX.md` with the resolved blocker evidence
 * update `.ai/artifacts/<plan-name>/state/workflow.json` with `latest.unblock`, appended `history`, and remaining `unresolvedBlockers`
 * preserve unresolved blockers
+* when the latest review has `decision: active` with `NEEDS FIX` or `HIGH RISK`
+  and no later execution or validation has remediated it, preserve its
+  `unresolvedFindings` as active implementation work. If that field is absent,
+  copy the exact `## Issues` bullets from the review artifact. Resolving a
+  Docker, auth, or other runtime blocker does not resolve those review findings.
+  Never set `unresolvedBlockers` to `[]` in that state.
 * keep file ownership unchanged unless the blocker evidence proves the plan already owns the needed files
 * keep fixes traceable to the blocker
 * MUST NOT add inline `## Blockers` to thin-plan-v2 manifests
@@ -156,24 +141,19 @@ If the blocker is resolved:
 If any unresolved execution blocker remains:
 
 -> output `STOP`
--> keep Status blocked
--> keep or set Next Action unblock-plan
+-> keep `workflowState = blocked`
 
 ---
 
 ## State Transition (MANDATORY)
 
-When Status is `blocked` and all execution blockers are resolved, documented, or reclassified as active implementation work:
+When Workflow State is `blocked` and all execution blockers are resolved, documented, or reclassified as active implementation work:
 
 update:
 
-## Status
+## Workflow State
 
 active
-
-## Next Action
-
-execute-plan
 
 ---
 
@@ -184,10 +164,11 @@ Before updating the plan, create `.ai/artifacts/<plan-name>/events/unblock-vX.md
 Then update `.ai/artifacts/<plan-name>/state/workflow.json` with runner-readable thin-plan-v2 state:
 
 * preserve `planPath`
-* set `status` and `nextAction`
+* set `workflowState` to `active` or keep it `blocked`
 * write compact `version`, `result`, `summary`, and `evidence` fields under `latest.unblock`
 * append `.ai/artifacts/<plan-name>/events/unblock-vX.md` to `history`
-* set `unresolvedBlockers` to active blocker strings, or `[]` when none remain
+* set `unresolvedBlockers` to active blocker strings, or `[]` only when no
+  runtime blocker and no latest unremediated failed-review finding remains
 * refresh `updatedAt`
 
 Rules:
@@ -224,12 +205,4 @@ Use this shared terminal-facing contract for non-review stages.
 
 **Next**
 
-Status:
-
-* active
-* blocked
-
-Next Action:
-
-* execute-plan
-* unblock-plan
+Workflow State: `active` or `blocked`

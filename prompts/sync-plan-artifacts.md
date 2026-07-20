@@ -15,6 +15,7 @@ Read:
 
 * `.codex/AGENTS.md`
 * `.ai/instructions/shared/workflow-state.md`
+* `.ai/instructions/shared/flow-trace-artifacts.md`
 * the plan file
 * read the spec from the repo-relative `*.spec.md` path(s)
 * the repo-relative `*.spec.md` path(s) listed under the plan's `## Spec` section
@@ -40,13 +41,11 @@ If not provided:
 
 Read:
 
-## Status
+## Workflow State
 
-Expected:
+Expected: `draft-artifact-sync`
 
-draft
-
-IF Status != draft:
+IF Workflow State != `draft-artifact-sync`:
 
 → STOP (`plan must be in draft state`)
 
@@ -54,17 +53,6 @@ IF Status != draft:
 
 Read:
 
-## Next Action
-
-Expected:
-
-sync-plan-artifacts
-
-IF Next Action != sync-plan-artifacts:
-
-→ STOP (`unexpected next action for artifact sync`)
-
----
 
 ## Objective
 
@@ -104,26 +92,15 @@ Do not stage files or create commits.
 
 ## Sync Rules
 
-Read the plan, spec, user-journey artifact, implementation map, and workflow
-state before editing.
+Read the plan, spec, workflow state, and any flow artifacts required by the
+plan `## Artifacts` section before editing.
+
+Apply the sync contract from
+`.ai/instructions/shared/flow-trace-artifacts.md`.
 
 Repair missing, stale, or inconsistent planning artifacts when the correct
 content can be derived from the approved spec, current plan, and observed
 codebase paths without inventing product behavior.
-
-For user-facing work:
-
-* ensure `user-journey.md` exists and reflects only the spec plus observed
-  codebase entry points
-* ensure `implementation-map.md` maps every user-flow and acceptance-scenario
-  action to concrete implementation and validation paths
-* remove implementation-map rows that do not correspond to the user journey
-
-For non-user-facing work:
-
-* ensure the plan `## Artifacts` user journey entry records
-  `N/A: <concrete reason>`
-* ensure `implementation-map.md` contains exactly `N/A: <concrete reason>`
 
 For thin-plan-v2 state:
 
@@ -138,11 +115,10 @@ For thin-plan-v2 state:
 
 ## STOP Conditions
 
-Output `STOP` and keep the plan in `draft + sync-plan-artifacts` when:
+Output `STOP` and keep the plan in `draft-artifact-sync` when:
 
 * the spec is incomplete, vague, ambiguous, or internally inconsistent
-* the user journey cannot be repaired without a product decision
-* the implementation map cannot be repaired without a product decision
+* a required flow-trace artifact cannot be repaired without a product decision
 * artifact inconsistencies cannot be resolved without inventing behavior beyond
   the spec
 * repairing would require editing app code, tests, migrations, generated files,
@@ -152,9 +128,7 @@ When stopping:
 
 * state the concrete unresolved decision or artifact blocker
 * do not transition to `plan-validator`
-* keep both the plan manifest and workflow sidecar at:
-  * Status = draft
-  * Next Action = sync-plan-artifacts
+* keep both the plan manifest and workflow sidecar at `workflowState: draft-artifact-sync`
 
 ---
 
@@ -162,17 +136,14 @@ When stopping:
 
 When sync succeeds:
 
-1. update the plan manifest:
-   * Status = draft
-   * Next Action = plan-validator
+1. update the plan manifest `## Workflow State` to `draft-validation`
 2. update `.ai/artifacts/<plan-name>/state/workflow.json`:
    * `planPath` = `.ai/plans/<plan-name>.md`
-   * `status` = `draft`
-   * `nextAction` = `plan-validator`
+   * `workflowState` = `draft-validation`
    * preserve `latest`, `history`, and `unresolvedBlockers` when present
    * update `updatedAt`
 3. reread both locations
-4. verify both locations match `draft + plan-validator`
+4. verify both locations match `workflowState: draft-validation`
 
 If parity cannot be verified:
 
@@ -192,7 +163,7 @@ Use this terminal contract:
 **Summary**
 
 * stage result: `<ARTIFACTS SYNCED | STOP>`
-* state set to `<draft + plan-validator | draft + sync-plan-artifacts>`
+* workflow state set to `<draft-validation | draft-artifact-sync>`
 
 **Key Details**
 
@@ -201,5 +172,4 @@ Use this terminal contract:
 
 **Next**
 
-Status: `draft`
-Next Action: `<plan-validator | sync-plan-artifacts>`
+Workflow State: `<draft-validation | draft-artifact-sync>`
