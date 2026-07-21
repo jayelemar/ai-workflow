@@ -36,6 +36,23 @@ test("unblock prompt preserves latest failed-review findings", async () => {
   assert.match(prompt, /Never set `unresolvedBlockers` to `\[\]`/);
 });
 
+test("workflow prompts recover local E2E auth bootstrap before blocking", async () => {
+  const [executePrompt, unblockPrompt] = await Promise.all([
+    readWorkflowPrompt("execute-plan.md"),
+    readWorkflowPrompt("unblock-plan.md"),
+  ]);
+
+  assert.match(executePrompt, /Local E2E Authentication and Harness Recovery/);
+  assert.match(
+    executePrompt,
+    /existing local password, session, or storage-state helper/i,
+  );
+  assert.match(executePrompt, /do not add real credentials or tokens/i);
+  assert.match(executePrompt, /keep the plan `active`/i);
+  assert.match(unblockPrompt, /Local E2E Authentication and Harness Recovery/);
+  assert.match(unblockPrompt, /authenticated browser session/i);
+});
+
 test("generates manual workflow prompts for every prompt action", () => {
   const cases = [
     [

@@ -150,6 +150,37 @@ If implementation work and local validation are complete, but the only unavailab
 
 ---
 
+### Local E2E Authentication and Harness Recovery
+
+Before classifying browser validation as an auth, mail, runtime, or operator
+blocker, perform this bounded recovery check when the target behavior has not
+rendered because the local browser bootstrap failed:
+
+1. Inspect the existing Playwright configuration, selected E2E spec or
+   fixture, and local auth/session or storage-state helpers.
+2. Verify that the configured app origin and the E2E base URL agree. When a
+   safe project configuration edit can supply a missing app-origin value, make
+   that configuration edit instead of requiring a one-off shell environment
+   variable.
+3. When the selected test does not validate email or magic-link behavior,
+   prefer an existing local password, session, or storage-state helper over a
+   magic-link delivery flow.
+4. When an exact local config, fixture, helper, or test bootstrap edit makes
+   the required validation runnable without changing production auth behavior,
+   make the smallest edit, claim the exact files in the plan ownership and
+   changed-file inventory artifacts, keep the plan `active`, and run the
+   target validation.
+5. Do not add real credentials or tokens, check in browser storage state, add
+   a production auth bypass, or change mail-service behavior. Do not replace
+   an E2E test whose purpose is to validate email or magic-link delivery.
+
+Only use Blocking after this check shows that the missing credential, external
+service, local configuration, or manual state cannot be created or repaired
+with existing local test infrastructure. Record the probes performed and the
+exact remaining external condition.
+
+---
+
 ### 3. Spec Alignment Check
 
 If a spec exists:
@@ -259,6 +290,9 @@ If required execution or bugfix work needs a file outside the current plan-owned
 
 * If the edit qualifies under Compatibility Regression Carve-Out, claim the
   exact file in the current plan's ownership/inventory artifacts and continue.
+* If the edit qualifies under Local E2E Authentication and Harness Recovery,
+  claim the exact local E2E configuration, fixture, helper, or selected test
+  file in the current plan's ownership/inventory artifacts and continue.
 * Otherwise STOP (`file outside plan scope`).
 
 ---
@@ -391,12 +425,20 @@ If validation cannot be confirmed:
   * record the validation as deferred or out-of-scope with the exact command, failing files, and remaining risk
 * continue with `workflowState = review` when implementation and local plan-owned validation are complete
 * IF validation cannot be confirmed because local runtime setup, auth state, external service access, or operator-controlled database state must change before the validation can run against current code:
-  * follow Blocking rules
-  * set `workflowState = blocked`
-  * record exact unblock evidence required
-  * do not keep `workflowState = active` when no further implementation work can make validation proceed
-  * persist the blocked state before outputting `STOP`; do not rely on the
-    runner to infer this transition from terminal output
+  * first perform Local E2E Authentication and Harness Recovery when the
+    validation failure is a local browser bootstrap failure
+  * IF that bounded recovery can be implemented with existing local test
+    infrastructure:
+    * keep or set `workflowState = active`
+    * record the exact harness implementation follow-up work
+    * end the current run with `validation found implementation work; continue execute-plan`
+  * ELSE:
+    * follow Blocking rules
+    * set `workflowState = blocked`
+    * record exact unblock evidence required
+    * do not keep `workflowState = active` when no further implementation work can make validation proceed
+    * persist the blocked state before outputting `STOP`; do not rely on the
+      runner to infer this transition from terminal output
 * IF validation cannot be confirmed because implementation tasks remain or a validation finding requires code changes already covered by the spec and plan:
   * keep or set `workflowState = active`
   * record the failed or incomplete validation as implementation follow-up work

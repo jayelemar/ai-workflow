@@ -67,11 +67,16 @@ Manual browser validation evidence MUST include:
 * actual result
 * date/time or clearly current run context
 
-If a blocker describes implementation work that can be performed by continuing `execute-plan` and that work is already covered by the spec and plan:
+If a blocker describes implementation work that can be performed by continuing `execute-plan` and that work is already covered by the spec and plan, or qualifies under Execute Plan's Local E2E Authentication and Harness Recovery:
 
 * reclassify it as active implementation work
 * do not require blocker-resolution evidence before execution can continue
 * preserve validation-only blockers that do not prevent implementation
+
+For a local browser auth, mail, origin, session, or storage bootstrap blocker,
+do not require the operator to provide an authenticated browser session when
+existing local E2E infrastructure may provide or repair one. Reclassify the
+plan as `active` so `execute-plan` can perform its bounded recovery check.
 
 If the unblock evidence proves the current runtime/setup blocker is resolved but a new validation failure appears in plan-owned code, tests, migrations, or artifacts:
 
