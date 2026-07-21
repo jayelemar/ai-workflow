@@ -7,7 +7,7 @@ import { WORKFLOW_REVIEW_FULL_DIFF_BYTE_LIMIT } from "../../telemetry/token-warn
 import { extractSpecPaths } from "../plan/parser.ts";
 import { workflowContextSnapshotRelativePath } from "../plan/context-snapshot.ts";
 import { generateScopeCleanupPrompt, readPrompt } from "../plan/prompt.ts";
-import { thinPlanV2ArtifactPath } from "../plan/state.ts";
+import { thinPlanArtifactPath } from "../plan/state.ts";
 import { CODEX_BINARY_COMMAND, codexExecArgs, codexWorkEnvironment } from "../process.ts";
 import { codexAgentMessageTexts } from "../terminal/codex-events.ts";
 import { asRecord, boundedInlineExcerpt } from "../types.ts";
@@ -44,7 +44,7 @@ const failureDebugLedgerAbsolutePath = (rootDir: string, planName: string): stri
 
 const latestExecutionEvidenceMtimeMs = async (rootDir: string, planName: string): Promise<number | undefined> => {
   try {
-    const workflow = asRecord(JSON.parse(await readFile(path.join(rootDir, thinPlanV2ArtifactPath(planName, "state", "workflow.json")), "utf8")));
+    const workflow = asRecord(JSON.parse(await readFile(path.join(rootDir, thinPlanArtifactPath(planName, "state", "workflow.json")), "utf8")));
     const evidence = asRecord(asRecord(workflow?.latest)?.execution)?.evidence;
     if (typeof evidence !== "string" || path.isAbsolute(evidence)) return undefined;
     return (await stat(path.join(rootDir, evidence))).mtimeMs;

@@ -8,11 +8,12 @@ import {
   type ParsedPlan,
 } from "../types.ts";
 import type { WorkflowState } from "../../contracts/stage.ts";
+import { DOCUMENT_FORMATS } from "../../document-formats.ts";
 import {
   normalizeWorkflowEventHistory,
-  parseThinPlanV2WorkflowState,
+  parseThinPlanWorkflowState,
   readJsonArtifact,
-  thinPlanV2ArtifactPath,
+  thinPlanArtifactPath,
   workflowReviewSupersededByProgress,
 } from "./thin-plan-sidecars.ts";
 
@@ -39,7 +40,7 @@ export const readTextArtifact = async (
   } catch (error) {
     return {
       ok: false,
-      reason: `thin-plan-v2 artifact cannot be read: ${relativePath}: ${String(error)}`,
+      reason: `thin-plan artifact cannot be read: ${relativePath}: ${String(error)}`,
     };
   }
 };
@@ -76,17 +77,17 @@ const canonicalWorkflowJson = (
   record: Record<string, unknown>,
   workflowState: WorkflowState,
 ): string => {
-  return `${JSON.stringify({ ...record, workflowState, updatedAt: new Date().toISOString() }, null, 2)}\n`;
+  return `${JSON.stringify({ documentFormat: DOCUMENT_FORMATS.workflowState, ...record, workflowState, updatedAt: new Date().toISOString() }, null, 2)}\n`;
 };
 
-export const repairThinPlanV2ManifestStateFromWorkflow = async ({
+export const repairThinPlanManifestStateFromWorkflow = async ({
   rootDir,
   plan,
 }: {
   rootDir: string;
   plan: ParsedPlan;
 }): Promise<{ ok: true; repaired: boolean } | Failure> => {
-  if (plan.thinPlanContract !== "thin-plan-v2") {
+  if (plan.thinPlanContract !== "thin-plan") {
     return { ok: true, repaired: false };
   }
 
@@ -100,7 +101,7 @@ export const repairThinPlanV2ManifestStateFromWorkflow = async ({
     };
   }
 
-  const workflowPath = thinPlanV2ArtifactPath(
+  const workflowPath = thinPlanArtifactPath(
     plan.planName,
     "state",
     "workflow.json",
@@ -109,7 +110,7 @@ export const repairThinPlanV2ManifestStateFromWorkflow = async ({
   if (isFailure(workflowRaw)) {
     return workflowRaw;
   }
-  const workflow = parseThinPlanV2WorkflowState(
+  const workflow = parseThinPlanWorkflowState(
     workflowRaw,
     plan.planPath,
     workflowPath,
@@ -139,7 +140,7 @@ export const repairThinPlanV2ManifestStateFromWorkflow = async ({
   return { ok: true, repaired: true };
 };
 
-export const recoverThinPlanV2PartialExecuteReviewHandoff = async ({
+export const recoverThinPlanPartialExecuteReviewHandoff = async ({
   rootDir,
   previous,
   updated,
@@ -149,14 +150,14 @@ export const recoverThinPlanV2PartialExecuteReviewHandoff = async ({
   updated: ParsedPlan;
 }): Promise<{ ok: true; recovered: boolean } | Failure> => {
   if (
-    previous.thinPlanContract !== "thin-plan-v2" ||
+    previous.thinPlanContract !== "thin-plan" ||
     previous.workflowState !== "active" ||
     updated.workflowState !== "active"
   ) {
     return { ok: true, recovered: false };
   }
 
-  const workflowPath = thinPlanV2ArtifactPath(
+  const workflowPath = thinPlanArtifactPath(
     updated.planName,
     "state",
     "workflow.json",
@@ -182,7 +183,7 @@ export const recoverThinPlanV2PartialExecuteReviewHandoff = async ({
   } catch (error) {
     return {
       ok: false,
-      reason: `thin-plan-v2 partial execute review handoff could not be repaired: ${String(error)}`,
+      reason: `thin-plan partial execute review handoff could not be repaired: ${String(error)}`,
     };
   }
 
@@ -218,7 +219,7 @@ const reviewIssueFindings = (content: string): string[] => {
   return findings;
 };
 
-export const recoverThinPlanV2FailedReviewState = async ({
+export const recoverThinPlanFailedReviewState = async ({
   rootDir,
   planName,
   planPath,
@@ -233,7 +234,7 @@ export const recoverThinPlanV2FailedReviewState = async ({
 }): Promise<
   { ok: true; recovered: boolean; manifestContent: string } | Failure
 > => {
-  const workflowPath = thinPlanV2ArtifactPath(
+  const workflowPath = thinPlanArtifactPath(
     planName,
     "state",
     "workflow.json",
@@ -283,7 +284,7 @@ export const recoverThinPlanV2FailedReviewState = async ({
   if (findings.length === 0 && typeof review.version === "number") {
     const reviewEvent = await readTextArtifact(
       rootDir,
-      thinPlanV2ArtifactPath(
+      thinPlanArtifactPath(
         planName,
         "events",
         `review-v${review.version}.md`,
@@ -327,14 +328,14 @@ export const recoverThinPlanV2FailedReviewState = async ({
   } catch (error) {
     return {
       ok: false,
-      reason: `thin-plan-v2 failed-review recovery could not persist state: ${String(error)}`,
+      reason: `thin-plan failed-review recovery could not persist state: ${String(error)}`,
     };
   }
 
   return { ok: true, recovered: true, manifestContent: nextManifestContent };
 };
 
-export const recoverThinPlanV2PassedReviewState = async ({
+export const recoverThinPlanPassedReviewState = async ({
   rootDir,
   planName,
   planPath,
@@ -349,7 +350,7 @@ export const recoverThinPlanV2PassedReviewState = async ({
 }): Promise<
   { ok: true; recovered: boolean; manifestContent: string } | Failure
 > => {
-  const workflowPath = thinPlanV2ArtifactPath(
+  const workflowPath = thinPlanArtifactPath(
     planName,
     "state",
     "workflow.json",
@@ -413,14 +414,14 @@ export const recoverThinPlanV2PassedReviewState = async ({
   } catch (error) {
     return {
       ok: false,
-      reason: `thin-plan-v2 passed-review recovery could not persist state: ${String(error)}`,
+      reason: `thin-plan passed-review recovery could not persist state: ${String(error)}`,
     };
   }
 
   return { ok: true, recovered: true, manifestContent: nextManifestContent };
 };
 
-export const recoverThinPlanV2BlockedValidationHandoff = async ({
+export const recoverThinPlanBlockedValidationHandoff = async ({
   rootDir,
   plan,
 }: {
@@ -428,13 +429,13 @@ export const recoverThinPlanV2BlockedValidationHandoff = async ({
   plan: ParsedPlan;
 }): Promise<{ ok: true; recovered: boolean } | Failure> => {
   if (
-    plan.thinPlanContract !== "thin-plan-v2" ||
+    plan.thinPlanContract !== "thin-plan" ||
     plan.workflowState !== "active"
   ) {
     return { ok: true, recovered: false };
   }
 
-  const workflowPath = thinPlanV2ArtifactPath(
+  const workflowPath = thinPlanArtifactPath(
     plan.planName,
     "state",
     "workflow.json",
@@ -475,7 +476,7 @@ export const recoverThinPlanV2BlockedValidationHandoff = async ({
   } catch (error) {
     return {
       ok: false,
-      reason: `thin-plan-v2 blocked-validation recovery could not persist state: ${String(error)}`,
+      reason: `thin-plan blocked-validation recovery could not persist state: ${String(error)}`,
     };
   }
 

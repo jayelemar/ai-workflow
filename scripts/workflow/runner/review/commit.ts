@@ -2,9 +2,9 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 
 import {
-  parseThinPlanV2FilesState,
+  parseThinPlanFilesState,
   readJsonArtifact,
-  thinPlanV2ArtifactPath,
+  thinPlanArtifactPath,
 } from "../plan/state.ts";
 import {
   defaultIsIgnored,
@@ -41,17 +41,17 @@ const parseCommitSummaryPaths = async (
   };
 };
 
-const parseThinPlanV2CommitSummaryPaths = async (
+const parseThinPlanCommitSummaryPaths = async (
   rootDir: string,
   planName: string,
   isIgnored?: (relativePath: string) => Promise<boolean>,
 ): Promise<ReviewStagingResult> => {
-  const filesPath = thinPlanV2ArtifactPath(planName, "state", "files.json");
+  const filesPath = thinPlanArtifactPath(planName, "state", "files.json");
   const filesRaw = await readJsonArtifact(rootDir, filesPath);
   if (isFailure(filesRaw)) {
     return filesRaw;
   }
-  const files = parseThinPlanV2FilesState(filesRaw, filesPath);
+  const files = parseThinPlanFilesState(filesRaw, filesPath);
   if (isFailure(files)) {
     return files;
   }
@@ -98,8 +98,8 @@ export const parseCommitSummaryPathsForPlan = async (
   plan: ParsedPlan,
   isIgnored?: (relativePath: string) => Promise<boolean>,
 ): Promise<ReviewStagingResult> => {
-  if (plan.thinPlanContract === "thin-plan-v2") {
-    return parseThinPlanV2CommitSummaryPaths(rootDir, plan.planName, isIgnored);
+  if (plan.thinPlanContract === "thin-plan") {
+    return parseThinPlanCommitSummaryPaths(rootDir, plan.planName, isIgnored);
   }
 
   const parsed = await parseCommitSummaryPaths(

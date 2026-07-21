@@ -102,9 +102,12 @@ Repair missing, stale, or inconsistent planning artifacts when the correct
 content can be derived from the approved spec, current plan, and observed
 codebase paths without inventing product behavior.
 
-For thin-plan-v2 state:
+For thin-plan state:
 
 * ensure `.ai/artifacts/<plan-name>/state/workflow.json` exists
+* set its root `documentFormat` to `workflow-state@1`; preserve all other state fields
+* set root `documentFormat` to `file-ownership@1` in `file-ownership.json` and `files-state@1` in `files.json`
+* ensure Markdown core artifacts declare their current `## Document Format` immediately after the title
 * ensure `planPath` points to `.ai/plans/<plan-name>.md`
 * preserve `latest`, `history`, and `unresolvedBlockers` when present
 * do not use legacy top-level aliases such as `latestValidationSummary`,

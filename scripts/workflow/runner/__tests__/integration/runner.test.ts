@@ -4,7 +4,7 @@ import { runWorkflowRunner } from "../../../runner.ts";
 
 import {
   CODEX_COMMAND,
-  writeThinPlanV2Artifacts,
+  writeThinPlanArtifacts,
   setupWorkspace,
   writePlan,
   turnCompletedUsageDetailLine,
@@ -22,7 +22,7 @@ import {
   mkdirSync,
   readFile,
   readdir,
-  thinPlanV2Manifest,
+  thinPlanManifest,
   writeFile,
   writeFileSync,
   writeWorkflowEventArtifactSync,
@@ -345,7 +345,7 @@ test("review safe path routes to completed commit-summary and succeeds after pla
   }
 });
 
-test("thin-plan-v2 review and commit-summary stage plan-owned paths from files.json", async () => {
+test("thin-plan review and commit-summary stage plan-owned paths from files.json", async () => {
   const workspace = await setupWorkspace();
   try {
     mkdirSync(join(workspace.root, "src"), { recursive: true });
@@ -353,7 +353,7 @@ test("thin-plan-v2 review and commit-summary stage plan-owned paths from files.j
       join(workspace.root, "src", "artifact-state.ts"),
       "artifact state\n",
     );
-    await writeThinPlanV2Artifacts(workspace.root, {
+    await writeThinPlanArtifacts(workspace.root, {
       status: "review",
       nextAction: "review-plan",
       modified: ["src/artifact-state.ts"],
@@ -362,7 +362,7 @@ test("thin-plan-v2 review and commit-summary stage plan-owned paths from files.j
     await writePlan(
       workspace.root,
       "artifact-state",
-      thinPlanV2Manifest("review", "review-plan"),
+      thinPlanManifest("review", "review-plan"),
     );
     const calls: Parameters<ProcessRunner>[0][] = [];
     const result = await runWorkflowRunner({
@@ -380,9 +380,9 @@ test("thin-plan-v2 review and commit-summary stage plan-owned paths from files.j
           await writePlan(
             workspace.root,
             "artifact-state",
-            thinPlanV2Manifest("completed", "commit-summary"),
+            thinPlanManifest("completed", "commit-summary"),
           );
-          await writeThinPlanV2Artifacts(workspace.root, {
+          await writeThinPlanArtifacts(workspace.root, {
             status: "completed",
             nextAction: "commit-summary",
             modified: ["src/artifact-state.ts"],
@@ -443,7 +443,7 @@ test("artifact-only no-commit thin plan completes review without staging or Code
   const workspace = await setupWorkspace();
   try {
     const artifactPath = ".ai/artifacts/artifact-state/events/execution-v1.md";
-    await writeThinPlanV2Artifacts(workspace.root, {
+    await writeThinPlanArtifacts(workspace.root, {
       status: "review",
       nextAction: "review-plan",
       modified: [artifactPath],
@@ -452,7 +452,7 @@ test("artifact-only no-commit thin plan completes review without staging or Code
     await writePlan(
       workspace.root,
       "artifact-state",
-      thinPlanV2Manifest(
+      thinPlanManifest(
         "review",
         "review-plan",
         "## Commit Boundaries\n\nN/A: read-only verification creates no committable paths.\n",
@@ -514,7 +514,7 @@ test("artifact-only task review reopens a multi-task thin plan instead of comple
   const workspace = await setupWorkspace();
   try {
     const changedPath = ".ai/artifacts/artifact-state/events/execution-v1.md";
-    await writeThinPlanV2Artifacts(workspace.root, {
+    await writeThinPlanArtifacts(workspace.root, {
       status: "review",
       nextAction: "review-plan",
       modified: [changedPath],
@@ -523,7 +523,7 @@ test("artifact-only task review reopens a multi-task thin plan instead of comple
     await writePlan(
       workspace.root,
       "artifact-state",
-      thinPlanV2Manifest(
+      thinPlanManifest(
         "review",
         "review-plan",
         `## Commit Boundaries
@@ -1310,10 +1310,10 @@ commit-message
   }
 });
 
-test("execute STOP repairs a recorded thin-plan-v2 runtime validation block", async () => {
+test("execute STOP repairs a recorded thin-plan runtime validation block", async () => {
   const workspace = await setupWorkspace();
   try {
-    await writeThinPlanV2Artifacts(workspace.root, {
+    await writeThinPlanArtifacts(workspace.root, {
       status: "active",
       nextAction: "execute-plan",
       activeBlockers: [
@@ -1332,7 +1332,7 @@ test("execute STOP repairs a recorded thin-plan-v2 runtime validation block", as
     await writePlan(
       workspace.root,
       "artifact-state",
-      thinPlanV2Manifest("active", "execute-plan"),
+      thinPlanManifest("active", "execute-plan"),
     );
 
     const { lines, console } = collectConsole();
@@ -1849,7 +1849,7 @@ test("execute-plan may keep the plan active when implementation work remains", a
 test("execute-plan recovers thin-plan review handoff when state is unchanged after validated edits", async () => {
   const workspace = await setupWorkspace();
   try {
-    await writeThinPlanV2Artifacts(workspace.root, {
+    await writeThinPlanArtifacts(workspace.root, {
       status: "active",
       nextAction: "execute-plan",
       modified: ["src/previous-task.ts"],
@@ -1868,7 +1868,7 @@ test("execute-plan recovers thin-plan review handoff when state is unchanged aft
     await writePlan(
       workspace.root,
       "artifact-state",
-      thinPlanV2Manifest("active", "execute-plan"),
+      thinPlanManifest("active", "execute-plan"),
     );
 
     const calls: Parameters<ProcessRunner>[0][] = [];
@@ -1974,7 +1974,7 @@ test("execute-plan recovers thin-plan review handoff when state is unchanged aft
 test("execute-plan rejects a partial thin-plan review handoff", async () => {
   const workspace = await setupWorkspace();
   try {
-    await writeThinPlanV2Artifacts(workspace.root, {
+    await writeThinPlanArtifacts(workspace.root, {
       status: "active",
       nextAction: "execute-plan",
       modified: ["src/service.ts"],
@@ -1985,7 +1985,7 @@ test("execute-plan rejects a partial thin-plan review handoff", async () => {
     await writePlan(
       workspace.root,
       "artifact-state",
-      thinPlanV2Manifest("active", "execute-plan"),
+      thinPlanManifest("active", "execute-plan"),
     );
 
     const calls: Parameters<ProcessRunner>[0][] = [];
@@ -2024,7 +2024,7 @@ test("execute-plan rejects a partial thin-plan review handoff", async () => {
           await writePlan(
             workspace.root,
             "artifact-state",
-            thinPlanV2Manifest("review", "review-plan"),
+            thinPlanManifest("review", "review-plan"),
           );
           return { launched: true, stdout: "Review ready.", stderr: "", exitCode: 0 };
         }
@@ -2047,7 +2047,7 @@ test("execute-plan rejects a partial thin-plan review handoff", async () => {
     });
 
     assert.equal(result.success, false);
-    assert.match(result.reason, /thin-plan-v2 workflow state mismatch/);
+    assert.match(result.reason, /thin-plan workflow state mismatch/);
     assert.equal(
       calls.some((call) => call.promptPath === ".ai/prompts/review-changes.md"),
       false,
@@ -2081,7 +2081,7 @@ test("execute-plan rejects a partial thin-plan review handoff", async () => {
 test("execute-plan repairs a thin-plan manifest from canonical workflow state", async () => {
   const workspace = await setupWorkspace();
   try {
-    await writeThinPlanV2Artifacts(workspace.root, {
+    await writeThinPlanArtifacts(workspace.root, {
       status: "active",
       nextAction: "execute-plan",
       modified: ["src/service.ts"],
@@ -2092,7 +2092,7 @@ test("execute-plan repairs a thin-plan manifest from canonical workflow state", 
     await writePlan(
       workspace.root,
       "artifact-state",
-      thinPlanV2Manifest("active", "execute-plan"),
+      thinPlanManifest("active", "execute-plan"),
     );
 
     const calls: Parameters<ProcessRunner>[0][] = [];

@@ -13,7 +13,7 @@ test("manual plans are refused before Codex or Git work", async () => {
     await mkdir(join(rootDir, ".git"), { recursive: true });
     await writeFile(
       join(rootDir, ".ai", "plans", "manual.md"),
-      `# Plan: manual\n\n## Workflow Content Rules\n\nthin-plan-v2\n\n## Execution Mode\n\nmanual\n\n## Workflow State\n\nN/A: manual plan-bound execution\n`,
+      `# Plan: manual\n\n## Workflow Content Rules\n\nthin-plan\n\n## Execution Mode\n\nmanual\n\n## Workflow State\n\nN/A: manual plan-bound execution\n`,
     );
     const calls: string[] = [];
 

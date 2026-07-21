@@ -26,13 +26,13 @@ import {
 import { WORKFLOW_RUNNER_CODEX_PROFILE } from "../../../config/codex.ts";
 import type { ProcessRunner } from "../../types.ts";
 import {
-  createThinPlanV2ArtifactWriter,
+  createThinPlanArtifactWriter,
   setupWorkflowWorkspace,
 } from "../../__tests__/helpers/workspace.ts";
 import {
   planWith,
   planWithFileScope,
-  thinPlanV2Manifest,
+  thinPlanManifest,
 } from "../../__tests__/helpers/runner-plan.ts";
 
 const PROMPTS = {
@@ -46,7 +46,7 @@ const setupWorkspace = () =>
     prompts: PROMPTS,
   });
 
-const writeThinPlanV2Artifacts = createThinPlanV2ArtifactWriter("review");
+const writeThinPlanArtifacts = createThinPlanArtifactWriter("review");
 
 const ownershipReleaseSection = (
   file: string,
@@ -449,7 +449,7 @@ test("review staging rejects unsafe transferred file ownership release paths", a
   }
 });
 
-test("commit-summary uses thin-plan-v2 files artifact instead of inline files", async () => {
+test("commit-summary uses thin-plan files artifact instead of inline files", async () => {
   const workspace = await setupWorkspace();
   try {
     mkdirSync(join(workspace.root, "src"), { recursive: true });
@@ -457,7 +457,7 @@ test("commit-summary uses thin-plan-v2 files artifact instead of inline files", 
       join(workspace.root, "src", "artifact-state.ts"),
       "artifact state\n",
     );
-    await writeThinPlanV2Artifacts(workspace.root, {
+    await writeThinPlanArtifacts(workspace.root, {
       status: "completed",
       nextAction: "commit-summary",
       modified: [
@@ -480,11 +480,11 @@ test("commit-summary uses thin-plan-v2 files artifact instead of inline files", 
           "plans",
           "artifact-state.md",
         ),
-        manifestContent: thinPlanV2Manifest("completed", "commit-summary"),
+        manifestContent: thinPlanManifest("completed", "commit-summary"),
         content: planWithFileScope("completed", "commit-summary", {
           modified: ["src/inline-should-not-be-used.ts"],
         }),
-        thinPlanContract: "thin-plan-v2",
+        thinPlanContract: "thin-plan",
         status: "completed",
         nextAction: "commit-summary",
         warnings: [],
@@ -498,12 +498,12 @@ test("commit-summary uses thin-plan-v2 files artifact instead of inline files", 
   }
 });
 
-test("commit-summary omits absent non-deleted files from its thin-plan-v2 scope", async () => {
+test("commit-summary omits absent non-deleted files from its thin-plan scope", async () => {
   const workspace = await setupWorkspace();
   try {
     mkdirSync(join(workspace.root, "src"), { recursive: true });
     await writeFile(join(workspace.root, "src", "current.ts"), "current\n");
-    await writeThinPlanV2Artifacts(workspace.root, {
+    await writeThinPlanArtifacts(workspace.root, {
       status: "completed",
       nextAction: "commit-summary",
       created: ["src/future-test.ts"],
@@ -528,11 +528,11 @@ test("commit-summary omits absent non-deleted files from its thin-plan-v2 scope"
           "plans",
           "artifact-state.md",
         ),
-        manifestContent: thinPlanV2Manifest("completed", "commit-summary"),
+        manifestContent: thinPlanManifest("completed", "commit-summary"),
         content: planWithFileScope("completed", "commit-summary", {
           modified: ["src/inline-should-not-be-used.ts"],
         }),
-        thinPlanContract: "thin-plan-v2",
+        thinPlanContract: "thin-plan",
         status: "completed",
         nextAction: "commit-summary",
         warnings: [],

@@ -96,18 +96,6 @@ test("workflow prompts define compact evidence and forbid raw event artifact bod
   }
 });
 
-test("thin-plan event artifact size limits remain documented in source", async () => {
-  const source = await readWorkflowRunnerSource("thin-plan-v1.ts");
-
-  assert.match(
-    source,
-    /WORKFLOW_EVENT_ARTIFACT_MAX_BYTES\s*=\s*20\s*\*\s*1024/,
-  );
-  assert.match(source, /20 KB/);
-  assert.match(source, /WORKFLOW_EVENT_ARTIFACT_SUMMARY_MAX_BYTES\s*=\s*1024/);
-  assert.match(source, /1 KB/);
-});
-
 test("generate-user-flow prompt defines the user-journey artifact contract", async () => {
   const prompt = await readWorkflowPrompt("generate-user-flow.md");
   const wrapper = await readWorkflowWrapper("generate-user-flow.md");
@@ -418,7 +406,7 @@ test("create-plan uses sync-plan-artifacts only for runner-managed plans", async
 test("plan template requires artifact pointers for implementation map and state files", async () => {
   const template = await readPlanTemplate();
 
-  assert.match(template, /thin-plan-v2/);
+  assert.match(template, /thin-plan/);
   assert.match(template, /## Execution Mode/);
   assert.match(template, /## Artifacts/);
   assert.match(template, /\.ai\/artifacts\/<plan-name>\/user-journey\.md/);
@@ -972,7 +960,7 @@ test("plan-validator prompt allows codebase-backed reclassification without spec
   );
 });
 
-test("execute and unblock prompts keep thin-plan-v2 workflow history out of the manifest", async () => {
+test("execute and unblock prompts keep thin-plan workflow history out of the manifest", async () => {
   const executePrompt = await readWorkflowPrompt("execute-plan.md");
   const unblockPrompt = await readWorkflowPrompt("unblock-plan.md");
 
@@ -1152,10 +1140,10 @@ test("review-changes prompt requires concise actionable review artifact state", 
   );
 });
 
-test("plan template uses thin-plan-v2 artifact-first manifest", async () => {
+test("plan template uses thin-plan artifact-first manifest", async () => {
   const template = await readPlanTemplate();
 
-  assert.match(template, /thin-plan-v2/);
+  assert.match(template, /thin-plan/);
   assert.match(template, /user-journey\.md/);
   assert.match(template, /implementation-map\.md/);
   assert.match(template, /^## Phases$/m);

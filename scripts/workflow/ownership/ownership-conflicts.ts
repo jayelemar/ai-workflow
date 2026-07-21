@@ -31,10 +31,11 @@ import {
 const rel = (...segments: string[]) => segments.join("/");
 
 import {
-  parseThinPlanV2FilesState,
+  parseThinPlanFilesState,
   readJsonArtifact,
-  thinPlanV2ArtifactPath,
+  thinPlanArtifactPath,
 } from "../runner/plan/thin-plan-sidecars.ts";
+import { DOCUMENT_FORMATS } from "../document-formats.ts";
 export const refreshCurrentFileOwnershipArtifact = async ({
   rootDir,
   plan,
@@ -88,6 +89,7 @@ export const refreshCurrentFileOwnershipArtifact = async ({
     released.paths,
   );
   const artifact: FileOwnershipArtifact = {
+    documentFormat: DOCUMENT_FORMATS.fileOwnership,
     planPath: plan.planPath,
     owns: ownershipScope.entries,
     released: released.paths,
@@ -165,7 +167,7 @@ export const refreshAndCheckFileOwnershipArtifact = async ({
   };
 };
 
-export const readThinPlanV2FileOwnershipPreflight = async ({
+export const readThinPlanFileOwnershipPreflight = async ({
   rootDir,
   plan,
   processRunner,
@@ -176,12 +178,12 @@ export const readThinPlanV2FileOwnershipPreflight = async ({
   processRunner: ProcessRunner;
   isIgnored?: (relativePath: string) => Promise<boolean>;
 }): Promise<FileOwnershipPreflight | Failure> => {
-  const fileOwnershipPath = thinPlanV2ArtifactPath(
+  const fileOwnershipPath = thinPlanArtifactPath(
     plan.planName,
     "state",
     "file-ownership.json",
   );
-  const filesPath = thinPlanV2ArtifactPath(
+  const filesPath = thinPlanArtifactPath(
     plan.planName,
     "state",
     "files.json",
@@ -201,7 +203,7 @@ export const readThinPlanV2FileOwnershipPreflight = async ({
   if (isFailure(filesRaw)) {
     return filesRaw;
   }
-  const files = parseThinPlanV2FilesState(filesRaw, filesPath);
+  const files = parseThinPlanFilesState(filesRaw, filesPath);
   if (isFailure(files)) {
     return files;
   }

@@ -3,13 +3,25 @@ import type {
   ThinPlanFailure,
   ThinPlanSuccess,
 } from "./thin-plan-types.ts";
-import { validateThinPlanV1 } from "./thin-plan-v1.ts";
-import { validateThinPlanV2 } from "./thin-plan-v2.ts";
+import { validatePlanDocumentBundle } from "../document-formats.ts";
 
 export type { ThinPlanContractVersion } from "./thin-plan-types.ts";
 
-const V1 = "thin-plan-v1";
-const V2 = "thin-plan-v2";
+const THIN_PLAN = "thin-plan";
+const FORBIDDEN_INLINE_SECTIONS = [
+  "## Flow-to-File Mapping",
+  "## Implementation Map",
+  "## Execution Log",
+  "## Validation History",
+  "## Review History",
+  "## Unblock History",
+  "## Reopen History",
+  "## Blockers",
+  "## Ownership Scope",
+  "## File Ownership Releases",
+  "## Hunk Ownership",
+  "## Files (MANDATORY)",
+];
 
 const sectionLines = (content: string, heading: string): string[] => {
   const lines = content.split(/\r?\n/);
@@ -30,8 +42,7 @@ export const detectThinPlanContract = (
   content: string,
 ): ThinPlanContractVersion | undefined => {
   const contentRules = sectionLines(content, "## Workflow Content Rules");
-  if (contentRules.some((line) => normalizeInlineCodeValue(line) === V2)) return V2;
-  if (contentRules.some((line) => normalizeInlineCodeValue(line) === V1)) return V1;
+  if (contentRules.some((line) => normalizeInlineCodeValue(line) === THIN_PLAN)) return THIN_PLAN;
   return undefined;
 };
 
@@ -45,8 +56,18 @@ export const validateThinPlanContract = async ({
   content: string;
 }): Promise<ThinPlanSuccess | ThinPlanFailure> => {
   const contract = detectThinPlanContract(content);
-  if (!contract) return { ok: false, reason: `plan is missing ${V1} or ${V2}` };
-  return contract === V2
-    ? await validateThinPlanV2({ rootDir, planName, content })
-    : await validateThinPlanV1({ rootDir, planName, content });
+  if (!contract) return { ok: false, reason: `plan is missing ${THIN_PLAN}; thin-plan-v1 and thin-plan-v2 are unsupported. Run pnpm exec tsx .ai/scripts/workflow/migrate-document-formats.ts --plan .ai/plans/${planName}.md --apply` };
+  for (const section of FORBIDDEN_INLINE_SECTIONS) {
+    if (content.split(/\r?\n/).some((line) => line.trim() === section)) {
+      return { ok: false, reason: `thin-plan contains forbidden inline section ${section.replace(/^##\s+/, "")}` };
+    }
+  }
+  const bundle = await validatePlanDocumentBundle({
+    rootDir,
+    planPath: `.ai/plans/${planName}.md`,
+    planName,
+    planContent: content,
+  });
+  if (bundle.ok === false) return { ok: false, reason: bundle.reason };
+  return { ok: true, warnings: [], contract: THIN_PLAN };
 };

@@ -4,9 +4,9 @@ import path from "node:path";
 import { uniquePaths } from "../plan/parser.ts";
 import {
   normalizeWorkflowEventHistory,
-  parseThinPlanV2WorkflowState,
+  parseThinPlanWorkflowState,
   readJsonArtifact,
-  thinPlanV2ArtifactPath,
+  thinPlanArtifactPath,
   writeManifestWorkflowState,
 } from "../plan/state.ts";
 import type { Failure, FileOwnershipArtifact, ParsedPlan } from "../types.ts";
@@ -27,7 +27,7 @@ export const isArtifactOnlyNoCommitReview = ({
   plan: ParsedPlan;
   artifact: FileOwnershipArtifact | undefined;
 }): boolean =>
-  plan.thinPlanContract === "thin-plan-v2" &&
+  plan.thinPlanContract === "thin-plan" &&
   declaresNoCommitBoundary(plan.manifestContent) &&
   (artifact?.changedFiles.length ?? 0) > 0 &&
   artifact!.changedFiles.every((filePath) => filePath.startsWith(".ai/"));
@@ -43,7 +43,7 @@ export const completeArtifactOnlyNoCommitReview = async ({
   timestamp: () => string;
   continueExecution?: boolean;
 }): Promise<{ ok: true } | Failure> => {
-  const workflowPath = thinPlanV2ArtifactPath(
+  const workflowPath = thinPlanArtifactPath(
     plan.planName,
     "state",
     "workflow.json",
@@ -52,7 +52,7 @@ export const completeArtifactOnlyNoCommitReview = async ({
   if (isFailure(workflowRaw)) {
     return workflowRaw;
   }
-  const workflow = parseThinPlanV2WorkflowState(
+  const workflow = parseThinPlanWorkflowState(
     workflowRaw,
     plan.planPath,
     workflowPath,
@@ -64,7 +64,7 @@ export const completeArtifactOnlyNoCommitReview = async ({
   if (!workflowRecord) {
     return {
       ok: false,
-      reason: `thin-plan-v2 workflow state is malformed: ${workflowPath}`,
+      reason: `thin-plan workflow state is malformed: ${workflowPath}`,
     };
   }
 
@@ -82,7 +82,7 @@ export const completeArtifactOnlyNoCommitReview = async ({
     };
   }
 
-  const reviewPath = thinPlanV2ArtifactPath(
+  const reviewPath = thinPlanArtifactPath(
     plan.planName,
     "events",
     `review-v${reviewVersion}.md`,
@@ -169,12 +169,12 @@ export const hasArtifactOnlyNoCommitReview = async ({
   plan: ParsedPlan;
 }): Promise<{ ok: true; noCommit: boolean } | Failure> => {
   if (
-    plan.thinPlanContract !== "thin-plan-v2" ||
+    plan.thinPlanContract !== "thin-plan" ||
     !declaresNoCommitBoundary(plan.manifestContent)
   ) {
     return { ok: true, noCommit: false };
   }
-  const workflowPath = thinPlanV2ArtifactPath(
+  const workflowPath = thinPlanArtifactPath(
     plan.planName,
     "state",
     "workflow.json",

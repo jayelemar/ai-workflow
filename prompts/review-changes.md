@@ -64,10 +64,9 @@ If not provided:
 ## Diff Source (MANDATORY)
 
 Review MUST be performed using only the runner-injected staged paths for the
-current plan. For thin-plan-v2 plans, the runner stages paths from
+current plan. For thin-plan plans, the runner stages paths from
 `.ai/artifacts/<plan-name>/state/files.json` and checks
-`.ai/artifacts/<plan-name>/state/file-ownership.json`; legacy thin-plan-v1
-plans may still use inline file sections.
+`.ai/artifacts/<plan-name>/state/file-ownership.json`.
 
 Workflow-runner owns review staging. When review fails and routes back to execution, remediation must tell the operator or next execution agent to fix the working tree and leave files unstaged, then rerun workflow-runner. Do not tell the operator to stage or restage review fixes; pre-staged files block the next review entry.
 
@@ -362,25 +361,13 @@ active
 
 Write `.ai/artifacts/<plan-name>/events/review-vX.md`, then update
 `.ai/artifacts/<plan-name>/state/workflow.json` with runner-readable
-thin-plan-v2 state: preserve `planPath`, set `workflowState`, write
+thin-plan state: preserve `planPath`, set `workflowState`, write
 the compact combined review event under `latest.review`, append the review
 artifact path to `history`, set `unresolvedBlockers`, and refresh `updatedAt`.
 For every `NEEDS FIX` or `HIGH RISK` result, `unresolvedBlockers` MUST contain
 one or more concise, actionable remediation strings that correspond to the
 review artifact. Keep those entries until a later execution or validation event
 has remediated the review; do not write `[]` while the failed review is latest.
-
-For legacy thin-plan-v1 plans only, if the plan already contains
-`## Review History`, append only:
-
-### Review vX
-
-* Summary: NEEDS FIX
-* Evidence: .ai/artifacts/<plan-name>/events/review-vX.md
-* Decision: active
-
-Create `## Review History` only if the section is missing in a legacy
-thin-plan-v1 plan.
 
 Before updating the plan, create
 `.ai/artifacts/<plan-name>/events/review-vX.md` with `# Review vX`,
@@ -396,7 +383,7 @@ Do not paste raw log dumps or full unscoped diffs into review artifacts; cite
 the path-scoped diff command and include only the small excerpt needed to prove
 the issue.
 Review state entries may contain only compact `Summary`, `Decision`, and `Evidence` pointer fields.
-Do not duplicate the `## Review History` heading in thin-plan-v2 manifests.
+Do not duplicate the `## Review History` heading in thin-plan manifests.
 
 3. update plan with:
 
@@ -434,14 +421,6 @@ completed
 
 5. do not create any extra plan section for this path. `commit-summary` records the local commit metadata. The operator performs the deferred validation manually after commit/deploy and reopens the plan if that check finds a required fix.
 
-For legacy thin-plan-v1 plans only, append:
-
-### Review vX
-
-* Summary: SAFE - DEFERRED VALIDATION
-* Evidence: .ai/artifacts/<plan-name>/events/review-vX.md
-* Decision: completed
-
 ---
 
 ### IF NO CRITICAL issues AND local/final validation is complete:
@@ -466,14 +445,6 @@ review evidence pointer, appended `history`, `workflowState`, and updatedAt.
 4. reread the plan manifest and `.ai/artifacts/<plan-name>/state/workflow.json`; verify both show `workflowState = completed` before final output.
 
 Put optional warnings and suggestions in the review artifact.
-
-For legacy thin-plan-v1 plans only, append:
-
-### Review vX
-
-* Summary: SAFE
-* Evidence: .ai/artifacts/<plan-name>/events/review-vX.md
-* Decision: completed
 
 ---
 

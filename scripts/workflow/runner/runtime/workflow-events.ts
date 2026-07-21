@@ -1,13 +1,14 @@
 import { readdir } from "node:fs/promises";
 import path from "node:path";
 
-import { thinPlanV2ArtifactPath } from "../plan/state.ts";
+import { thinPlanArtifactPath } from "../plan/state.ts";
+import { DOCUMENT_FORMATS } from "../../document-formats.ts";
 
 export const canonicalWorkflowRecord = (
   record: Record<string, unknown>,
   workflowState: import("../../contracts/stage.ts").WorkflowState,
 ): Record<string, unknown> => {
-  return { ...record, workflowState };
+  return { documentFormat: DOCUMENT_FORMATS.workflowState, ...record, workflowState };
 };
 
 export const nextWorkflowEventVersion = async ({
@@ -21,7 +22,7 @@ export const nextWorkflowEventVersion = async ({
 }): Promise<number> => {
   const eventsDir = path.join(
     rootDir,
-    thinPlanV2ArtifactPath(planName, "events"),
+    thinPlanArtifactPath(planName, "events"),
   );
   let entries: string[] = [];
   try {
@@ -58,4 +59,3 @@ ${summary}
 
 ${evidenceLines.length > 0 ? evidenceLines.map((line) => `* ${line}`).join("\n") : "* No evidence recorded."}
 `;
-

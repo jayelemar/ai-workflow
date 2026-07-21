@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync as nativeWriteFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 
 import { runWorkflowRunner } from "../../runtime.ts";
@@ -9,7 +14,7 @@ import type { ProcessRunner } from "../../types.ts";
 import { codexExecutionConfig, WORKFLOW_RUNNER_CODEX_FALLBACK_MODEL, WORKFLOW_RUNNER_CODEX_PROFILE } from "../../../config/codex.ts";
 import { analyzeTokenUsageLedger } from "../../../telemetry/token-ledger.ts";
 import {
-  createThinPlanV2ArtifactWriter,
+  createThinPlanArtifactWriter,
   setupWorkflowWorkspace,
 } from "./workspace.ts";
 import {
@@ -17,7 +22,7 @@ import {
   planWithEllipsizedTaskSavepoints,
   planWithFileScope,
   planWithTaskSavepoints,
-  thinPlanV2Manifest,
+  thinPlanManifest,
   writeWorkflowRunnerPlan,
 } from "./runner-plan.ts";
 import {
@@ -29,7 +34,7 @@ export {
   analyzeTokenUsageLedger,
   assert,
   codexExecutionConfig,
-  createThinPlanV2ArtifactWriter,
+  createThinPlanArtifactWriter,
   dirname,
   existsSync,
   join,
@@ -39,10 +44,9 @@ export {
   rm,
   runWorkflowRunner,
   setupWorkflowWorkspace,
-  thinPlanV2Manifest,
+  thinPlanManifest,
   workflowContextSnapshotRelativePath,
   writeFile,
-  writeFileSync,
   writeWorkflowEventArtifact,
   writeWorkflowEventArtifactSync,
 };
@@ -54,6 +58,47 @@ export {
   planWithTaskSavepoints,
   writeWorkflowRunnerPlan,
 };
+
+/**
+ * Test agents commonly rewrite only the manifest. Keep the mutable workflow
+ * sidecar in lock-step so integration fixtures model the canonical contract.
+ */
+export const writeFileSync: typeof nativeWriteFileSync = ((file, data, options) => {
+  const planMatch = typeof file === "string"
+    ? file.match(/^(.*)\/\.ai\/plans\/([^/]+)\.md$/)
+    : undefined;
+  const normalizedData = planMatch && typeof data === "string"
+    ? data.replaceAll("artifact-state", planMatch[2])
+    : data;
+  nativeWriteFileSync(file, normalizedData, options);
+  if (typeof file !== "string" || typeof normalizedData !== "string") return;
+  const match = planMatch;
+  const workflowState = normalizedData.match(/## Workflow State\s*\n\s*([^\s]+)/)?.[1];
+  if (!match || !workflowState) return;
+  const workflowPath = join(
+    match[1],
+    ".ai",
+    "artifacts",
+    match[2],
+    "state",
+    "workflow.json",
+  );
+  if (!existsSync(workflowPath)) return;
+  try {
+    const workflow = JSON.parse(readFileSync(workflowPath, "utf8")) as Record<string, unknown>;
+    nativeWriteFileSync(
+      workflowPath,
+      `${JSON.stringify({
+        ...workflow,
+        documentFormat: "workflow-state@1",
+        workflowState: workflowState.replace(/^`|`$/g, ""),
+      }, null, 2)}\n`,
+      "utf8",
+    );
+  } catch {
+    // Tests that deliberately write malformed state keep control of it.
+  }
+}) as typeof nativeWriteFileSync;
 export {
   WORKFLOW_RUNNER_CODEX_FALLBACK_MODEL,
   WORKFLOW_RUNNER_CODEX_PROFILE,
@@ -77,7 +122,7 @@ export const OVERRIDE_CODEX_PROFILE = "codex-personal";
 export const OVERRIDE_CODEX_EXEC_LABEL = `${OVERRIDE_CODEX_PROFILE} exec`;
 export const OVERRIDE_CODEX_HOME_SUFFIX = `/.${OVERRIDE_CODEX_PROFILE}`;
 
-export const writeThinPlanV2Artifacts = createThinPlanV2ArtifactWriter("runner");
+export const writeThinPlanArtifacts = createThinPlanArtifactWriter("runner");
 
 
 export const ownershipReleaseSection = (

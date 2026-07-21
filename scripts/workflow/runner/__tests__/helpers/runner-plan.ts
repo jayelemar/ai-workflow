@@ -5,7 +5,7 @@ import {
 
 const thinPlanContractSection = () => `## Workflow Content Rules
 
-thin-plan-v1
+thin-plan
 `;
 
 const workflowStateForTest = (status: string, nextAction: string): string =>
@@ -27,7 +27,15 @@ export const writeWorkflowRunnerPlan = async (
   root: string,
   planName: string,
   content: string,
-) => writeWorkflowPlan(root, planName, canonicalizeWorkflowForTest(content));
+) =>
+  writeWorkflowPlan(
+    root,
+    planName,
+    canonicalizeWorkflowForTest(content).replaceAll(
+      ".ai/artifacts/artifact-state",
+      `.ai/artifacts/${planName}`,
+    ),
+  );
 
 export const planWith = (
   status: string,
@@ -35,25 +43,40 @@ export const planWith = (
   extra = "",
 ) => `# Plan
 
+## Document Format
+
+plan-manifest@1
+
 ${thinPlanContractSection()}
+
+## Execution Mode
+
+runner-managed
 
 ## Workflow State
 
 ${workflowStateForTest(status, nextAction)}
 
-## Files (MANDATORY)
+## Spec
 
-### Created files
+.ai/specs/artifact-state.spec.md
 
-* .ai/scripts/workflow/runner/__tests__/integration/runner.test.ts
+## Artifacts
 
-### Modified files
+* User journey: .ai/artifacts/artifact-state/user-journey.md
+* Implementation map: .ai/artifacts/artifact-state/implementation-map.md
+* Manual handoff: N/A: runner fixture
+* Workflow state: .ai/artifacts/artifact-state/state/workflow.json
+* File ownership: .ai/artifacts/artifact-state/state/file-ownership.json
+* Files: .ai/artifacts/artifact-state/state/files.json
+* Context: .ai/artifacts/artifact-state/state/context.md
+* Events: .ai/artifacts/artifact-state/events/
 
-* .ai/scripts/workflow/runner.ts
+## Phases
 
-### Deleted files
+### Implementation
 
-* None
+* Objective: Exercise runner fixtures.
 
 ${extra}
 `;
@@ -69,31 +92,41 @@ export const planWithFileScope = (
   extra = "",
 ) => `# Plan
 
+## Document Format
+
+plan-manifest@1
+
 ${thinPlanContractSection()}
+
+## Execution Mode
+
+runner-managed
 
 ## Workflow State
 
 ${workflowStateForTest(status, nextAction)}
 
-## Files (MANDATORY)
+## Spec
 
-### Created files
+.ai/specs/artifact-state.spec.md
 
-${(files.created?.length ? files.created : ["None"])
-  .map((file) => `* ${file}`)
-  .join("\n")}
+## Artifacts
 
-### Modified files
+* User journey: .ai/artifacts/artifact-state/user-journey.md
+* Implementation map: .ai/artifacts/artifact-state/implementation-map.md
+* Manual handoff: N/A: runner fixture
+* Workflow state: .ai/artifacts/artifact-state/state/workflow.json
+* File ownership: .ai/artifacts/artifact-state/state/file-ownership.json
+* Files: .ai/artifacts/artifact-state/state/files.json
+* Context: .ai/artifacts/artifact-state/state/context.md
+* Events: .ai/artifacts/artifact-state/events/
 
-${(files.modified?.length ? files.modified : ["None"])
-  .map((file) => `* ${file}`)
-  .join("\n")}
+## Phases
 
-### Deleted files
+### Implementation
 
-${(files.deleted?.length ? files.deleted : ["None"])
-  .map((file) => `* ${file}`)
-  .join("\n")}
+* Objective: Exercise file scope fixtures.
+* Files: ${(files.created ?? []).concat(files.modified ?? [], files.deleted ?? []).join(", ") || "None"}
 
 ${extra}
 `;
@@ -146,15 +179,23 @@ export const planWithEllipsizedTaskSavepoints = (
 ${extra}`,
   );
 
-export const thinPlanV2Manifest = (
+export const thinPlanManifest = (
   status = "draft",
   nextAction = "plan-validator",
   extra = "",
 ) => `# Plan: artifact-state
 
+## Document Format
+
+plan-manifest@1
+
 ## Workflow Content Rules
 
-thin-plan-v2
+thin-plan
+
+## Execution Mode
+
+runner-managed
 
 ## Workflow State
 
@@ -168,6 +209,7 @@ ${workflowStateForTest(status, nextAction)}
 
 * User journey: .ai/artifacts/artifact-state/user-journey.md
 * Implementation map: .ai/artifacts/artifact-state/implementation-map.md
+* Manual handoff: N/A: runner fixture
 * Workflow state: .ai/artifacts/artifact-state/state/workflow.json
 * File ownership: .ai/artifacts/artifact-state/state/file-ownership.json
 * Files: .ai/artifacts/artifact-state/state/files.json

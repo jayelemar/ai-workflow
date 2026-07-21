@@ -43,7 +43,7 @@ before it returns a draft when the scope actually needs them:
 
 If execution mode is `runner-managed`, the workflow runner performs the
 `sync-plan-artifacts` stage before validation. That stage reconciles the plan,
-spec, user-journey artifact, implementation map, and thin-plan-v2 state before
+spec, user-journey artifact, implementation map, and thin-plan state before
 handing off to `plan-validator`.
 
 If execution mode is `manual`, create the plan and planning artifacts only, and
@@ -123,7 +123,7 @@ Initial Plan State:
 - In `runner-managed` mode:
   - `## Workflow State` must be `draft-artifact-sync`.
   - `.ai/artifacts/<feature-or-bug-name>/state/workflow.json` must contain
-    exactly the initial thin-plan-v2 fields: `planPath`, `workflowState`,
+    exactly the initial thin-plan fields: `planPath`, `workflowState`,
     `latest`, `history`, `unresolvedBlockers`, and `updatedAt`.
   - Set `planPath` to `.ai/plans/<feature-or-bug-name>.md`,
     `workflowState` to `draft-artifact-sync`, `latest` to `{}`, and

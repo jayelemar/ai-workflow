@@ -55,6 +55,16 @@ If the work is user-facing, this artifact is mandatory before plan creation.
 
 The artifact must use Markdown + Mermaid only.
 
+Start the artifact with:
+
+```md
+# <journey title>
+
+## Document Format
+
+user-journey@1
+```
+
 Rules:
 
 - Do not include HTML.

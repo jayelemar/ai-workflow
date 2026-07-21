@@ -28,6 +28,8 @@ const REQUIRED_SOURCE_PATHS = [
   ".ai/scripts/workflow/runner/instruction-router.ts",
   ".ai/scripts/workflow/runner/instruction-router.test.ts",
   ".ai/scripts/workflow/runner/thin-plan.ts",
+  ".ai/scripts/workflow/document-formats.ts",
+  ".ai/scripts/workflow/migrate-document-formats.ts",
   ".ai/scripts/workflow/runner/runner.manual-plan.test.ts",
   ".ai/scripts/workflow/telemetry/manual-token-usage.ts",
   ".ai/scripts/workflow/telemetry/manual-token-usage.test.ts",

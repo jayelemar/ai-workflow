@@ -1,4 +1,4 @@
-import { asRecord, type ThinPlanV2WorkflowState } from "../types.ts";
+import { asRecord, type ThinPlanWorkflowState } from "../types.ts";
 import { workflowReviewSupersededByProgress } from "./thin-plan-sidecars.ts";
 
 const asStringArray = (value: unknown): string[] | undefined =>
@@ -7,7 +7,7 @@ const asStringArray = (value: unknown): string[] | undefined =>
     : undefined;
 
 export const latestRecord = (
-  workflow: ThinPlanV2WorkflowState,
+  workflow: ThinPlanWorkflowState,
   kind: string,
 ): Record<string, unknown> | undefined => asRecord(workflow.latest?.[kind]);
 
@@ -68,7 +68,7 @@ const details = (
 
 export const selectRelevantWorkflowEvent = (
   _planContent: string,
-  workflow: ThinPlanV2WorkflowState | undefined,
+  workflow: ThinPlanWorkflowState | undefined,
 ): RelevantWorkflowEvent | undefined => {
   if (!workflow) return undefined;
   const execution = latestRecord(workflow, "execution");

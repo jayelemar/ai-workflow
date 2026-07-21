@@ -45,6 +45,8 @@ const createWorkspace = async ({ includeAi = true } = {}) => {
       "workflow/runner/instruction-router.ts",
       "workflow/runner/instruction-router.test.ts",
       "workflow/runner/thin-plan.ts",
+      "workflow/document-formats.ts",
+      "workflow/migrate-document-formats.ts",
       "workflow/runner/runner.manual-plan.test.ts",
       "workflow/telemetry/manual-token-usage.ts",
       "workflow/telemetry/manual-token-usage.test.ts",

@@ -48,7 +48,7 @@ test("runtime applies transition routes before Codex launch", async () => {
 
 ## Workflow Content Rules
 
-thin-plan-v1
+thin-plan
 
 ## Execution Mode
 

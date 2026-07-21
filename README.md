@@ -339,7 +339,7 @@ Choose an execution mode when you create the plan:
 
 In `runner-managed` mode, new draft plans start at
 `draft + sync-plan-artifacts`. The default runner reconciles the plan, spec,
-user-journey artifact, implementation map, and thin-plan-v2 state before
+user-journey artifact, implementation map, and thin-plan state before
 moving to validation.
 
 Before invoking the runner, review every `runner-managed` plan with
@@ -458,7 +458,7 @@ Snapshot sections are intentionally compact and stage-aligned. Expect:
 - `## Review`
 - `## Latest Review Remediation Context`
 
-New workflow plans use `thin-plan-v2`. Existing `thin-plan-v1` plans remain
+New workflow plans use `thin-plan`. Existing historical plans remain
 supported as legacy input and are not migrated by the runner. Versioned
 workflow history entries stay short and point to event artifacts:
 

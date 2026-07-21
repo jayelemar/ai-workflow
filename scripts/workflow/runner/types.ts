@@ -90,7 +90,8 @@ export type WorkflowTokenGuardrail = {
   stageInputTokens: number | null | undefined;
   stageUncachedInputTokens: number | null | undefined;
 };
-export type ThinPlanV2WorkflowState = {
+export type ThinPlanWorkflowState = {
+  documentFormat: "workflow-state@1";
   planPath: string;
   workflowState: WorkflowState;
   latest?: Record<string, unknown>;
@@ -98,7 +99,8 @@ export type ThinPlanV2WorkflowState = {
   unresolvedBlockers: string[];
   updatedAt: string;
 };
-export type ThinPlanV2FilesState = {
+export type ThinPlanFilesState = {
+  documentFormat: "files-state@1";
   created: string[];
   modified: string[];
   deleted: string[];
@@ -107,6 +109,7 @@ export type ThinPlanV2FilesState = {
   headSha: string;
 };
 export type FileOwnershipArtifact = {
+  documentFormat: "file-ownership@1";
   planPath: string;
   workflowState?: WorkflowState;
   owns: string[];

@@ -19,7 +19,7 @@ import { planWith, planWithFileScope } from "../__tests__/helpers/runner-plan.ts
 const readWorkflowPrompt = (name: string) =>
   readFile(join(process.cwd(), ".ai", "prompts", name), "utf8");
 
-test("review prompt requires unresolved blockers for a failed thin-plan-v2 review", async () => {
+test("review prompt requires unresolved blockers for a failed thin-plan review", async () => {
   const prompt = await readWorkflowPrompt("review-changes.md");
 
   assert.match(prompt, /NEEDS FIX[\s\S]*unresolvedBlockers/i);

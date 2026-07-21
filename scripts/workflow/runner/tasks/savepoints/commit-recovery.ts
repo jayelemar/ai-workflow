@@ -1,7 +1,7 @@
 import {
-  parseThinPlanV2FilesState,
+  parseThinPlanFilesState,
   readJsonArtifact,
-  thinPlanV2ArtifactPath,
+  thinPlanArtifactPath,
 } from "../../plan/state.ts";
 import type {
   Failure,
@@ -94,10 +94,10 @@ export const readTaskCommitRecoveryParent = async ({
   rootDir: string;
   plan: ParsedPlan;
 }): Promise<{ ok: true; headSha?: string } | Failure> => {
-  if (plan.thinPlanContract !== "thin-plan-v2") {
+  if (plan.thinPlanContract !== "thin-plan") {
     return { ok: true };
   }
-  const filesPath = thinPlanV2ArtifactPath(
+  const filesPath = thinPlanArtifactPath(
     plan.planName,
     "state",
     "files.json",
@@ -106,7 +106,7 @@ export const readTaskCommitRecoveryParent = async ({
   if (isFailure(filesRaw)) {
     return filesRaw;
   }
-  const files = parseThinPlanV2FilesState(filesRaw, filesPath);
+  const files = parseThinPlanFilesState(filesRaw, filesPath);
   if (isFailure(files)) {
     return files;
   }

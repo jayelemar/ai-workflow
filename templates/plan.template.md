@@ -6,9 +6,13 @@ The generated plan MUST follow this exact manifest structure.
 
 # Plan: <plan-name>
 
+## Document Format
+
+plan-manifest@1
+
 ## Workflow Content Rules
 
-thin-plan-v2
+thin-plan
 
 ---
 

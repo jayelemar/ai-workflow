@@ -33,7 +33,7 @@ const parsedPlan = (content: string): ParsedPlan => ({
   absolutePlanPath: "/tmp/current-plan.md",
   manifestContent: content,
   content,
-  thinPlanContract: "thin-plan-v2",
+  thinPlanContract: "thin-plan",
   workflowState: "active",
   warnings: [],
 });

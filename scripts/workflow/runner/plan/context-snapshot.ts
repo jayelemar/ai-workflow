@@ -4,7 +4,7 @@ import {
   isFailure,
   type Failure,
   type ParsedPlan,
-  type ThinPlanV2WorkflowState,
+  type ThinPlanWorkflowState,
   type WorkflowContextSnapshotResult,
   type WorkflowContextSnapshotTokenUsage,
 } from "../types.ts";
@@ -18,9 +18,9 @@ import {
   uniquePaths,
 } from "./parser.ts";
 import {
-  parseThinPlanV2WorkflowState,
+  parseThinPlanWorkflowState,
   readJsonArtifact,
-  thinPlanV2ArtifactPath,
+  thinPlanArtifactPath,
 } from "./thin-plan-sidecars.ts";
 import { selectRelevantWorkflowEvent } from "./state-synthesis.ts";
 import {
@@ -56,7 +56,7 @@ export const generateWorkflowContextSnapshot = ({
   planPath: string;
   planContent: string;
   latestTokenUsage?: WorkflowContextSnapshotTokenUsage;
-  workflowState?: ThinPlanV2WorkflowState;
+  workflowState?: ThinPlanWorkflowState;
 }): string => {
   const validation = extractLatestValidationSummary(planContent);
   const review = extractLatestReviewSummary(planContent);
@@ -146,12 +146,12 @@ Artifact loading rule:
 };
 
 export const writeWorkflowContextSnapshot = async ({ rootDir, plan, latestTokenUsage }: { rootDir: string; plan: ParsedPlan; latestTokenUsage?: WorkflowContextSnapshotTokenUsage }): Promise<WorkflowContextSnapshotResult | Failure> => {
-  let workflowState: ThinPlanV2WorkflowState | undefined;
-  if (plan.thinPlanContract === "thin-plan-v2") {
-    const workflowPath = thinPlanV2ArtifactPath(plan.planName, "state", "workflow.json");
+  let workflowState: ThinPlanWorkflowState | undefined;
+  if (plan.thinPlanContract === "thin-plan") {
+    const workflowPath = thinPlanArtifactPath(plan.planName, "state", "workflow.json");
     const workflowRaw = await readJsonArtifact(rootDir, workflowPath);
     if (isFailure(workflowRaw)) return workflowRaw;
-    const parsedWorkflow = parseThinPlanV2WorkflowState(workflowRaw, plan.planPath, workflowPath);
+    const parsedWorkflow = parseThinPlanWorkflowState(workflowRaw, plan.planPath, workflowPath);
     if (isFailure(parsedWorkflow)) return parsedWorkflow;
     workflowState = parsedWorkflow;
   }

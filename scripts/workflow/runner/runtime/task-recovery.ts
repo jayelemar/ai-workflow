@@ -1,18 +1,19 @@
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
-  parseThinPlanV2WorkflowState,
+  parseThinPlanWorkflowState,
   readJsonArtifact,
-  thinPlanV2ArtifactPath,
+  thinPlanArtifactPath,
   writeManifestWorkflowState,
 } from "../plan/state.ts";
 import type { Failure, ParsedPlan, ProcessRunner } from "../types.ts";
 import { asRecord, boundedInlineExcerpt, isFailure } from "../types.ts";
+import { DOCUMENT_FORMATS } from "../../document-formats.ts";
 
 const canonicalWorkflowRecord = (
   record: Record<string, unknown>,
   workflowState: import("../../contracts/stage.ts").WorkflowState,
-): Record<string, unknown> => ({ ...record, workflowState });
+): Record<string, unknown> => ({ documentFormat: DOCUMENT_FORMATS.workflowState, ...record, workflowState });
 
 export const gitHeadShortSha = async (
   rootDir: string,
@@ -26,18 +27,18 @@ export const gitHeadShortSha = async (
 };
 
 export const reopenPlanForNextTask = async (plan: ParsedPlan): Promise<{ ok: true } | Failure> => {
-  const baseContent = plan.thinPlanContract === "thin-plan-v2" ? plan.manifestContent : plan.content;
+  const baseContent = plan.thinPlanContract === "thin-plan" ? plan.manifestContent : plan.content;
   const nextContent = writeManifestWorkflowState(baseContent, "active");
   let workflowStateUpdate: { absolutePath: string; content: string } | undefined;
-  if (plan.thinPlanContract === "thin-plan-v2") {
+  if (plan.thinPlanContract === "thin-plan") {
     const rootDir = path.dirname(path.dirname(path.dirname(plan.absolutePlanPath)));
-    const workflowPath = thinPlanV2ArtifactPath(plan.planName, "state", "workflow.json");
+    const workflowPath = thinPlanArtifactPath(plan.planName, "state", "workflow.json");
     const workflowJson = await readJsonArtifact(rootDir, workflowPath);
     if (isFailure(workflowJson)) return workflowJson;
-    const workflow = parseThinPlanV2WorkflowState(workflowJson, plan.planPath, workflowPath);
+    const workflow = parseThinPlanWorkflowState(workflowJson, plan.planPath, workflowPath);
     if (isFailure(workflow)) return workflow;
     const workflowRecord = asRecord(workflowJson);
-    if (!workflowRecord) return { ok: false, reason: `thin-plan-v2 workflow state is malformed: ${workflowPath}` };
+    if (!workflowRecord) return { ok: false, reason: `thin-plan workflow state is malformed: ${workflowPath}` };
     workflowStateUpdate = {
       absolutePath: path.join(rootDir, workflowPath),
       content: `${JSON.stringify({ ...canonicalWorkflowRecord(workflowRecord, "active"), updatedAt: new Date().toISOString() }, null, 2)}\n`,

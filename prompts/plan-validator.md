@@ -486,7 +486,8 @@ Rules:
 * Validation event artifacts use compact evidence for command data: record the command, result, evidence path, and a short excerpt only when needed, plus any risk or deferred validation note.
 * Preserve detailed critical issues and allowed spec repairs, but cite command evidence by exact path/excerpt instead of dumping raw logs.
 * Event artifacts must not include full raw stdout/stderr bodies, full raw diffs, or raw Codex event streams.
-* Update `.ai/artifacts/<plan-name>/state/workflow.json` with runner-readable thin-plan-v2 state:
+* Update `.ai/artifacts/<plan-name>/state/workflow.json` with runner-readable thin-plan state:
+  * `documentFormat`: `workflow-state@1`
   * `planPath`: the exact repo-relative plan path, for example `.ai/plans/<plan-name>.md`
 * `workflowState`: `draft-validation` when validation stops after the bounded repair pass, or `approved` when validation passes
 * valid stop state: `workflowState = draft-validation`
@@ -495,7 +496,7 @@ Rules:
   * `history`: array of event artifact paths, including the validation artifact just created
   * `unresolvedBlockers`: array; use `[]` for ordinary validation failures
   * `updatedAt`: current ISO timestamp
-* Do not use legacy top-level aliases such as `latestValidationSummary`, `latestValidationResult`, `latestValidationEvidence`, or `compactHistoryPointer`; the runner only reads the nested thin-plan-v2 sidecar fields above.
+* Do not use legacy top-level aliases such as `latestValidationSummary`, `latestValidationResult`, `latestValidationEvidence`, or `compactHistoryPointer`; the runner only reads the nested thin-plan sidecar fields above.
 * The plan manifest MUST NOT contain inline `## Validation History`
 * The workflow sidecar state must match the plan manifest before final output
 

@@ -140,8 +140,8 @@ If the blocker is resolved:
   Never set `unresolvedBlockers` to `[]` in that state.
 * keep file ownership unchanged unless the blocker evidence proves the plan already owns the needed files
 * keep fixes traceable to the blocker
-* MUST NOT add inline `## Blockers` to thin-plan-v2 manifests
-* MUST NOT add inline `## Unblock History` to thin-plan-v2 manifests
+* MUST NOT add inline `## Blockers` to thin-plan manifests
+* MUST NOT add inline `## Unblock History` to thin-plan manifests
 
 If any unresolved execution blocker remains:
 
@@ -166,7 +166,7 @@ active
 
 Before updating the plan, create `.ai/artifacts/<plan-name>/events/unblock-vX.md` with `# Unblock vX`, `## Summary`, and `## Evidence`.
 
-Then update `.ai/artifacts/<plan-name>/state/workflow.json` with runner-readable thin-plan-v2 state:
+Then update `.ai/artifacts/<plan-name>/state/workflow.json` with runner-readable thin-plan state:
 
 * preserve `planPath`
 * set `workflowState` to `active` or keep it `blocked`
@@ -183,8 +183,8 @@ Rules:
 * Unblock versions MUST be sequential
 * `latest.unblock` may contain only compact `version`, `result`, `summary`, and `evidence`
 * Put resolved blocker lists, remaining blocker lists, and detailed unblock reasoning in the unblock artifact
-* MUST NOT add inline `## Blockers` to thin-plan-v2 manifests
-* MUST NOT add inline `## Unblock History` to thin-plan-v2 manifests
+* MUST NOT add inline `## Blockers` to thin-plan manifests
+* MUST NOT add inline `## Unblock History` to thin-plan manifests
 
 ---
 

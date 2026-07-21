@@ -3,7 +3,7 @@ import test from "node:test";
 import { runWorkflowRunner } from "../../runtime.ts";
 
 import {
-  writeThinPlanV2Artifacts,
+  writeThinPlanArtifacts,
   setupWorkspace,
   writePlan,
   planArg,
@@ -16,7 +16,7 @@ import {
   mkdirSync,
   readFile,
   readdir,
-  thinPlanV2Manifest,
+  thinPlanManifest,
   writeFile,
   writeFileSync,
   writeWorkflowEventArtifactSync,
@@ -351,10 +351,10 @@ test("task savepoint mode creates a current task artifact before commit-summary"
   }
 });
 
-test("task savepoint mode reopens thin-plan-v2 without writing generated sections into the manifest", async () => {
+test("task savepoint mode reopens thin-plan without writing generated sections into the manifest", async () => {
   const workspace = await setupWorkspace();
   try {
-    await writeThinPlanV2Artifacts(workspace.root, {
+    await writeThinPlanArtifacts(workspace.root, {
       status: "completed",
       nextAction: "commit-summary",
       modified: ["src/artifact-state.ts"],
@@ -363,7 +363,7 @@ test("task savepoint mode reopens thin-plan-v2 without writing generated section
     await writePlan(
       workspace.root,
       "artifact-state",
-      thinPlanV2Manifest(
+      thinPlanManifest(
         "completed",
         "commit-summary",
         `## Phases
@@ -675,7 +675,7 @@ test("task savepoint mode recovers a later thin-plan task from its saved commit 
     await writePlan(
       workspace.root,
       "artifact-state",
-      `${thinPlanV2Manifest("completed", "commit-summary")}
+      `${thinPlanManifest("completed", "commit-summary")}
 ## Phases
 
 ### Implementation
@@ -685,7 +685,7 @@ test("task savepoint mode recovers a later thin-plan task from its saved commit 
   2. [task:02-web-surface] Add web surface
 `,
     );
-    await writeThinPlanV2Artifacts(workspace.root, {
+    await writeThinPlanArtifacts(workspace.root, {
       status: "completed",
       nextAction: "commit-summary",
       modified: ["src/task-work.ts"],
@@ -812,7 +812,7 @@ test("task commit recovery reopens the plan before the next task", async () => {
     await writePlan(
       workspace.root,
       "artifact-state",
-      `${thinPlanV2Manifest("completed", "commit-summary")}
+      `${thinPlanManifest("completed", "commit-summary")}
 ## Phases
 
 ### Implementation
@@ -823,7 +823,7 @@ test("task commit recovery reopens the plan before the next task", async () => {
   3. [task:03-app-shell] Add app shell
 `,
     );
-    await writeThinPlanV2Artifacts(workspace.root, {
+    await writeThinPlanArtifacts(workspace.root, {
       status: "completed",
       nextAction: "commit-summary",
       modified: ["src/task-work.ts"],

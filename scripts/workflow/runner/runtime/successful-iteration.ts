@@ -2,7 +2,7 @@ import { EXECUTE_PLAN_PROMPT_PATH } from "../../contracts/stage.ts";
 import { isReviewPrompt } from "../plan/prompt.ts";
 import {
   parsePlan,
-  recoverThinPlanV2PartialExecuteReviewHandoff,
+  recoverThinPlanPartialExecuteReviewHandoff,
 } from "../plan/state.ts";
 import { transitionAllowed } from "../transitions.ts";
 import type {
@@ -12,7 +12,7 @@ import type {
   RunnerResult,
   WorkflowContextSnapshotResult,
 } from "../types.ts";
-import { recoverThinPlanV2ExecuteHandoff } from "./execute-handoff-recovery.ts";
+import { recoverThinPlanExecuteHandoff } from "./execute-handoff-recovery.ts";
 
 type BlockedOutcome = {
   kind: "blocked";
@@ -85,7 +85,7 @@ export const handleSuccessfulNonterminalIteration = async ({
   }
   emitWorkflowThresholdWarnings(updated.warnings);
   if (promptPath === EXECUTE_PLAN_PROMPT_PATH) {
-    const recovered = await recoverThinPlanV2PartialExecuteReviewHandoff({
+    const recovered = await recoverThinPlanPartialExecuteReviewHandoff({
       rootDir,
       previous: plan,
       updated,
@@ -146,7 +146,7 @@ export const handleSuccessfulNonterminalIteration = async ({
   }
   if (updated.content === previousContent) {
     if (promptPath === EXECUTE_PLAN_PROMPT_PATH) {
-      const recovered = await recoverThinPlanV2ExecuteHandoff({
+      const recovered = await recoverThinPlanExecuteHandoff({
         rootDir,
         plan,
         processRunner,

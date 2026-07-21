@@ -8,7 +8,7 @@ import {
   OVERRIDE_CODEX_PROFILE,
   OVERRIDE_CODEX_EXEC_LABEL,
   OVERRIDE_CODEX_HOME_SUFFIX,
-  writeThinPlanV2Artifacts,
+  writeThinPlanArtifacts,
   setupWorkspace,
   writePlan,
   planArg,
@@ -20,7 +20,7 @@ import {
   mkdirSync,
   readFile,
   rm,
-  thinPlanV2Manifest,
+  thinPlanManifest,
   writeFile,
   writeFileSync,
   writeWorkflowEventArtifactSync,
@@ -601,14 +601,14 @@ for (const branch of [
         join(workspace.root, "src", "artifact-state.ts"),
         "artifact state\n",
       );
-      await writeThinPlanV2Artifacts(workspace.root, {
+      await writeThinPlanArtifacts(workspace.root, {
         status: "completed",
         nextAction: "commit-summary",
       });
       await writePlan(
         workspace.root,
         "artifact-state",
-        thinPlanV2Manifest("completed", "commit-summary"),
+        thinPlanManifest("completed", "commit-summary"),
       );
       const processCalls: Parameters<ProcessRunner>[0][] = [];
       const processRunner: ProcessRunner = async (call) => {

@@ -2,7 +2,7 @@ import {
   parseRunnerCliArgs,
 } from "../cli.ts";
 import {
-  readThinPlanV2FileOwnershipPreflight,
+  readThinPlanFileOwnershipPreflight,
   refreshAndCheckFileOwnershipArtifact,
 } from "../../ownership/file-ownership.ts";
 import {
@@ -21,7 +21,7 @@ import { formatCommitProgressLine, formatWorkflowElapsedTime, formatWorkflowProg
 import { parsePlanTasks, parseTaskCommitBoundaries, taskCommitBoundaryCount, validateTaskCommitBoundaries } from "../plan/parser.ts";
 import { writeWorkflowContextSnapshot } from "../plan/context-snapshot.ts";
 import { generateWorkflowPrompt, isReviewPrompt, readPrompt } from "../plan/prompt.ts";
-import { parsePlan, preflightManualPlanExecutionMode, repairThinPlanV2ManifestStateFromWorkflow } from "../plan/state.ts";
+import { parsePlan, preflightManualPlanExecutionMode, repairThinPlanManifestStateFromWorkflow } from "../plan/state.ts";
 import { completedTaskCommitCount, currentTaskArtifactRelativePath, nextIncompleteTask, nextTaskAfter, readableTaskLabel, readableTaskProgressDescription, readTaskArtifactStage, writeTaskArtifact } from "../tasks/savepoints.ts";
 import { hasCompletedTaskAggregateSummary } from "../tasks/summaries.ts";
 import { parseCommitSummaryPathsForPlan, readDirtyPlanOwnedPaths } from "../review/commit.ts";
@@ -514,8 +514,8 @@ export const runWorkflowRunnerLifecycle = async (
       route.promptPath === rel(".ai", "prompts", "commit-summary.md")
     ) {
       const preflight =
-        parsedPlan.thinPlanContract === "thin-plan-v2"
-          ? await readThinPlanV2FileOwnershipPreflight({
+        parsedPlan.thinPlanContract === "thin-plan"
+          ? await readThinPlanFileOwnershipPreflight({
               rootDir,
               plan: parsedPlan,
               processRunner,
@@ -1109,7 +1109,7 @@ export const runWorkflowRunnerLifecycle = async (
     };
 
     if (result.launched && result.exitCode === 0 && !interruptSignal) {
-      const manifestRepair = await repairThinPlanV2ManifestStateFromWorkflow({
+      const manifestRepair = await repairThinPlanManifestStateFromWorkflow({
         rootDir,
         plan: parsedPlan,
       });

@@ -4,16 +4,17 @@ import path from "node:path";
 import {
   asRecord,
   type Failure,
-  type ThinPlanV2FilesState,
-  type ThinPlanV2WorkflowState,
+  type ThinPlanFilesState,
+  type ThinPlanWorkflowState,
 } from "../types.ts";
+import { DOCUMENT_FORMATS, validateDocumentFormat } from "../../document-formats.ts";
 import { isWorkflowState } from "./parser.ts";
 const rel = (...segments: string[]) => segments.join("/");
 const asStringArray = (value: unknown): string[] | undefined =>
   Array.isArray(value) && value.every((item) => typeof item === "string")
     ? (value as string[])
     : undefined;
-export const thinPlanV2ArtifactPath = (
+export const thinPlanArtifactPath = (
   planName: string,
   ...segments: string[]
 ): string => rel(".ai", "artifacts", planName, ...segments);
@@ -28,7 +29,7 @@ export const readJsonArtifact = async (
   } catch (error) {
     return {
       ok: false,
-      reason: `thin-plan-v2 artifact cannot be read: ${relativePath}: ${String(error)}`,
+      reason: `thin-plan artifact cannot be read: ${relativePath}: ${String(error)}`,
     };
   }
   try {
@@ -36,7 +37,7 @@ export const readJsonArtifact = async (
   } catch {
     return {
       ok: false,
-      reason: `thin-plan-v2 artifact is malformed JSON: ${relativePath}`,
+      reason: `thin-plan artifact is malformed JSON: ${relativePath}`,
     };
   }
 };
@@ -98,16 +99,18 @@ export const workflowReviewSupersededByProgress = (
   });
 };
 
-export const parseThinPlanV2WorkflowState = (
+export const parseThinPlanWorkflowState = (
   raw: unknown,
   expectedPlanPath: string,
   artifactPath: string,
-): ThinPlanV2WorkflowState | Failure => {
+): ThinPlanWorkflowState | Failure => {
   const record = asRecord(raw);
+  const format = validateDocumentFormat("workflowState", raw, artifactPath);
+  if (format.ok === false) return { ok: false, reason: format.reason };
   const planPath = record?.planPath;
   const workflowState = record?.workflowState;
   if (record?.status !== undefined || record?.nextAction !== undefined) {
-    return { ok: false, reason: `thin-plan-v2 workflow state must use only workflowState: ${artifactPath}` };
+    return { ok: false, reason: `thin-plan workflow state must use only workflowState: ${artifactPath}` };
   }
   const updatedAt = record?.updatedAt;
   const unresolvedBlockers = asStringArray(record?.unresolvedBlockers) ?? [];
@@ -116,7 +119,7 @@ export const parseThinPlanV2WorkflowState = (
   if (typeof planPath !== "string" || planPath !== expectedPlanPath || typeof updatedAt !== "string") {
     return {
       ok: false,
-      reason: `thin-plan-v2 workflow state is malformed: ${artifactPath}`,
+      reason: `thin-plan workflow state is malformed: ${artifactPath}`,
     };
   }
   if (typeof workflowState !== "string" || !isWorkflowState(workflowState)) {
@@ -125,6 +128,7 @@ export const parseThinPlanV2WorkflowState = (
 
   const latest = asRecord(record?.latest) ?? undefined;
   return {
+    documentFormat: DOCUMENT_FORMATS.workflowState,
     planPath,
     workflowState,
     latest,
@@ -134,11 +138,13 @@ export const parseThinPlanV2WorkflowState = (
   };
 };
 
-export const parseThinPlanV2FilesState = (
+export const parseThinPlanFilesState = (
   raw: unknown,
   artifactPath: string,
-): ThinPlanV2FilesState | Failure => {
+): ThinPlanFilesState | Failure => {
   const record = asRecord(raw);
+  const format = validateDocumentFormat("filesState", raw, artifactPath);
+  if (format.ok === false) return { ok: false, reason: format.reason };
   const created = asStringArray(record?.created);
   const modified = asStringArray(record?.modified);
   const deleted = asStringArray(record?.deleted);
@@ -155,10 +161,11 @@ export const parseThinPlanV2FilesState = (
   ) {
     return {
       ok: false,
-      reason: `thin-plan-v2 files state is malformed: ${artifactPath}`,
+      reason: `thin-plan files state is malformed: ${artifactPath}`,
     };
   }
   return {
+    documentFormat: DOCUMENT_FORMATS.filesState,
     created,
     modified,
     deleted,

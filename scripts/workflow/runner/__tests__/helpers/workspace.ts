@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -34,6 +34,42 @@ export const writeWorkflowPlan = async (
   const plansDir = join(root, ".ai", "plans");
   await mkdir(plansDir, { recursive: true });
   await writeFile(join(plansDir, `${planName}.md`), content, "utf8");
+  const specPath = content.match(/^\.ai\/specs\/[^\s`]+\.spec\.md$/m)?.[0];
+  const artifactRoot = planName;
+  const referencedArtifactRoot = content.match(/\.ai\/artifacts\/([^/]+)\/state\/workflow\.json/)?.[1];
+  const workflowState = content.match(/## Workflow State\s*\n\s*([^\s]+)/)?.[1] ?? "draft-validation";
+  const scopedFiles = Array.from(content.matchAll(/^\* Files:\s*(.+)$/gm))
+    .flatMap((match) => match[1].split(","))
+    .map((file) => file.trim().replace(/^`|`$/g, ""))
+    .filter((file) => file.length > 0 && file !== "None");
+  const changedFiles = scopedFiles.length > 0 ? scopedFiles : ["src/artifact-state.ts"];
+  if (!specPath) return;
+  await mkdir(dirname(join(root, specPath)), { recursive: true });
+  await writeFile(join(root, specPath), "# Feature: Test\n\n## Document Format\n\nfeature-spec@1\n\n## Version\n\n1\n\n## Goal\n\nTest.\n\n## Inputs / Outputs\n\nNone\n\n## Behavior\n\nTest.\n\n## Edge Cases\n\nNone\n\n## Constraints\n\nNone\n\n## Acceptance Criteria\n\nPass.\n", "utf8");
+  let hasExistingState = false;
+  try {
+    await access(join(root, ".ai", "artifacts", artifactRoot, "state", "workflow.json"));
+    hasExistingState = true;
+  } catch {
+    // The first fixture write creates all mutable state sidecars below.
+  }
+  await writeWorkflowArtifactFiles(root, artifactRoot, {
+    "user-journey.md": "# User Journey\n\n## Document Format\n\nuser-journey@1\n\n## Goal\n\n* Test.\n\n## Actors\n\n* Runner\n\n## Entry Points\n\n* Test\n\n## User Flows\n\n* Validate.\n\n## Mermaid Diagram\n\n```mermaid\nflowchart TD\n A-->B\n```\n\n## States\n\n* draft\n\n## Failures\n\n* invalid\n\n## Acceptance Scenarios\n\n* valid\n\n## Open Decisions\n\nNone\n",
+    "implementation-map.md": "# Implementation Map\n\n## Document Format\n\nimplementation-map@1\n\n## Source Versions\n\nN/A: test fixture.\n",
+    ...(hasExistingState ? {} : {
+      "state/workflow.json": { documentFormat: "workflow-state@1", planPath: `.ai/plans/${planName}.md`, workflowState, latest: {}, history: [], unresolvedBlockers: [], updatedAt: "2026-07-01T00:00:00.000Z" },
+      "state/file-ownership.json": { documentFormat: "file-ownership@1", planPath: `.ai/plans/${planName}.md`, owns: changedFiles, released: [], resolvedFiles: changedFiles, changedFiles, headSha: "abc123", updatedAt: "2026-07-01T00:00:00.000Z" },
+      "state/files.json": { documentFormat: "files-state@1", created: [], modified: changedFiles, deleted: [], changedFiles, released: [], headSha: "abc123" },
+    }),
+    "state/context.md": "# Context\n",
+  });
+  if (referencedArtifactRoot && referencedArtifactRoot !== artifactRoot) {
+    await writeWorkflowArtifactFiles(root, referencedArtifactRoot, {
+      "user-journey.md": "# User Journey\n\n## Document Format\n\nuser-journey@1\n\n## Goal\n\n* Test.\n\n## Actors\n\n* Runner\n\n## Entry Points\n\n* Test\n\n## User Flows\n\n* Validate.\n\n## Mermaid Diagram\n\n```mermaid\nflowchart TD\n A-->B\n```\n\n## States\n\n* draft\n\n## Failures\n\n* invalid\n\n## Acceptance Scenarios\n\n* valid\n\n## Open Decisions\n\nNone\n",
+      "implementation-map.md": "# Implementation Map\n\n## Document Format\n\nimplementation-map@1\n\n## Source Versions\n\nN/A: test fixture.\n",
+    });
+  }
+  await mkdir(join(root, ".ai", "artifacts", artifactRoot, "events"), { recursive: true });
 };
 
 const workflowStateByPair: Record<string, string> = {
@@ -100,12 +136,18 @@ type ThinPlanArtifactOverrides = Partial<{
 
 type ThinPlanArtifactProfile = "runner" | "review" | "plan-state";
 
-export const createThinPlanV2ArtifactWriter = (
+export const createThinPlanArtifactWriter = (
   profile: ThinPlanArtifactProfile,
 ) => async (
   root: string,
   overrides: ThinPlanArtifactOverrides = {},
 ): Promise<void> => {
+  await mkdir(join(root, ".ai", "specs"), { recursive: true });
+  await writeFile(
+    join(root, ".ai", "specs", "artifact-state.spec.md"),
+    "# Feature: Artifact state\n\n## Document Format\n\nfeature-spec@1\n\n## Version\n\n1.0\n\n## Goal\n\nTest workflow artifacts.\n\n## Inputs / Outputs\n\nNone\n\n## Behavior\n\nDeterministic.\n\n## Edge Cases\n\nNone\n\n## Constraints\n\nNone\n\n## Acceptance Criteria\n\nArtifacts validate.\n",
+    "utf8",
+  );
   const changedFiles = overrides.changedFiles ?? overrides.modified ??
     (profile === "plan-state"
       ? [".ai/scripts/workflow/runner/plan/state.ts"]
@@ -117,9 +159,26 @@ export const createThinPlanV2ArtifactWriter = (
     });
   }
 
+  await writeWorkflowArtifactFiles(root, "artifact-state", {
+    "user-journey.md": "# User Journey: Artifact state\n\n## Document Format\n\nuser-journey@1\n\n## Goal\n\n* Validate fixtures.\n\n## Actors\n\n* Runner\n\n## Entry Points\n\n* Test\n\n## User Flows\n\n* Runner validates artifacts.\n\n## Mermaid Diagram\n\n```mermaid\nflowchart TD\n A-->B\n```\n\n## States\n\n* draft\n\n## Failures\n\n* invalid document\n\n## Acceptance Scenarios\n\n* valid bundle\n\n## Open Decisions\n\nNone\n",
+  });
+
   if (profile === "review") {
     await writeWorkflowArtifactFiles(root, "artifact-state", {
+      "implementation-map.md": "# Implementation Map\n\n## Document Format\n\nimplementation-map@1\n\n## Source Versions\n\nN/A: review fixture.\n",
+      "state/context.md": "# Context\n",
+      "state/file-ownership.json": {
+        documentFormat: "file-ownership@1",
+        planPath: ".ai/plans/artifact-state.md",
+        owns: [],
+        released: [],
+        resolvedFiles: [],
+        changedFiles,
+        headSha: "abc123",
+        updatedAt: "2026-07-01T00:00:00.000Z",
+      },
       "state/workflow.json": {
+        documentFormat: "workflow-state@1",
         planPath: ".ai/plans/artifact-state.md",
         workflowState: workflowStateForFixture(
           overrides.status ?? "review",
@@ -131,6 +190,7 @@ export const createThinPlanV2ArtifactWriter = (
         updatedAt: "2026-07-01T00:00:00.000Z",
       },
       "state/files.json": {
+        documentFormat: "files-state@1",
         created: overrides.created ?? [],
         modified: overrides.modified ?? ["src/artifact-state.ts"],
         deleted: overrides.deleted ?? [],
@@ -144,9 +204,10 @@ export const createThinPlanV2ArtifactWriter = (
 
   if (profile === "plan-state") {
     await writeWorkflowArtifactFiles(root, "artifact-state", {
-      "implementation-map.md": "# Implementation Map\n\nN/A: workflow runner refactor.\n",
+      "implementation-map.md": "# Implementation Map\n\n## Document Format\n\nimplementation-map@1\n\n## Source Versions\n\nN/A: workflow runner refactor.\n",
       "state/context.md": "# Context\n",
       "state/workflow.json": {
+        documentFormat: "workflow-state@1",
         planPath: ".ai/plans/artifact-state.md",
         workflowState: overrides.workflowState ?? "review",
         latest: overrides.latest ?? {
@@ -174,6 +235,7 @@ export const createThinPlanV2ArtifactWriter = (
         updatedAt: "2026-07-19T00:00:00.000Z",
       },
       "state/file-ownership.json": {
+        documentFormat: "file-ownership@1",
         planPath: ".ai/plans/artifact-state.md",
         owns: [".ai/scripts/workflow/runner/plan/state.ts"],
         released: [],
@@ -183,6 +245,7 @@ export const createThinPlanV2ArtifactWriter = (
         updatedAt: "2026-07-19T00:00:00.000Z",
       },
       "state/files.json": {
+        documentFormat: "files-state@1",
         created: [],
         modified: [".ai/scripts/workflow/runner/plan/state.ts"],
         deleted: [],
@@ -195,9 +258,10 @@ export const createThinPlanV2ArtifactWriter = (
   }
 
   await writeWorkflowArtifactFiles(root, "artifact-state", {
-    "implementation-map.md": "# Implementation Map\n\nN/A: internal workflow automation only.\n",
+    "implementation-map.md": "# Implementation Map\n\n## Document Format\n\nimplementation-map@1\n\n## Source Versions\n\nN/A: internal workflow automation only.\n",
     "state/context.md": "# Context\n\n(empty)\n",
     "state/workflow.json": {
+      documentFormat: "workflow-state@1",
       planPath: ".ai/plans/artifact-state.md",
       workflowState: workflowStateForFixture(
         overrides.status ?? "review",
@@ -229,6 +293,7 @@ export const createThinPlanV2ArtifactWriter = (
       updatedAt: "2026-07-01T00:00:00.000Z",
     },
     "state/file-ownership.json": {
+      documentFormat: "file-ownership@1",
       planPath: ".ai/plans/artifact-state.md",
       owns: overrides.owns ?? changedFiles,
       released: [],
@@ -238,6 +303,7 @@ export const createThinPlanV2ArtifactWriter = (
       updatedAt: "2026-07-01T00:00:00.000Z",
     },
     "state/files.json": {
+      documentFormat: "files-state@1",
       created: overrides.created ?? [],
       modified: overrides.modified ?? ["src/artifact-state.ts"],
       deleted: overrides.deleted ?? [],

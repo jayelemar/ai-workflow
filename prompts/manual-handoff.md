@@ -37,6 +37,10 @@ Write concise, verified Markdown with exactly these sections:
 ```md
 # Manual Handoff: <plan-name>
 
+## Document Format
+
+manual-handoff@1
+
 ## Plan
 
 .ai/plans/<plan-name>.md

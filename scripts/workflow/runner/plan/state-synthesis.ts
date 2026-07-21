@@ -1,7 +1,7 @@
 import {
   type FileOwnershipArtifact,
-  type ThinPlanV2FilesState,
-  type ThinPlanV2WorkflowState,
+  type ThinPlanFilesState,
+  type ThinPlanWorkflowState,
 } from "../types.ts";
 import { replaceManifestWorkflowValue } from "./state-recovery.ts";
 import { latestNumber, latestRecord, latestString } from "./state-events.ts";
@@ -62,7 +62,7 @@ const synthesizeLatestEventSection = ({
   return `${lines.join("\n")}\n`;
 };
 
-export const synthesizeThinPlanV2Content = ({
+export const synthesizeThinPlanContent = ({
   manifestContent,
   workflow,
   files,
@@ -70,8 +70,8 @@ export const synthesizeThinPlanV2Content = ({
   implementationMap,
 }: {
   manifestContent: string;
-  workflow: ThinPlanV2WorkflowState;
-  files: ThinPlanV2FilesState;
+  workflow: ThinPlanWorkflowState;
+  files: ThinPlanFilesState;
   fileOwnership: FileOwnershipArtifact;
   implementationMap: string;
 }): string => {

@@ -2,7 +2,7 @@ import {
   EXECUTE_PLAN_PROMPT_PATH,
 } from "../../contracts/stage.ts";
 import { isReviewPrompt } from "../plan/prompt.ts";
-import { parsePlan, recoverThinPlanV2BlockedValidationHandoff } from "../plan/state.ts";
+import { parsePlan, recoverThinPlanBlockedValidationHandoff } from "../plan/state.ts";
 import { transitionAllowed } from "../transitions.ts";
 import type {
   Failure,
@@ -71,7 +71,7 @@ export const handleStoppedIteration = async ({
     result,
   });
   if (promptPath === EXECUTE_PLAN_PROMPT_PATH) {
-    const recovered = await recoverThinPlanV2BlockedValidationHandoff({
+    const recovered = await recoverThinPlanBlockedValidationHandoff({
       rootDir,
       plan,
     });

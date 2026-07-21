@@ -212,7 +212,7 @@ Rules:
 * ownership is file-level only; do not use hunk/chunk ownership
 * generated or shared files are owned as whole files until committed or released
 
-The runner reads `.ai/artifacts/<plan-name>/state/file-ownership.json` and `.ai/artifacts/<plan-name>/state/files.json` for thin-plan-v2 plans. Treat runner-reported artifact conflicts as authoritative.
+The runner reads `.ai/artifacts/<plan-name>/state/file-ownership.json` and `.ai/artifacts/<plan-name>/state/files.json` for thin-plan plans. Treat runner-reported artifact conflicts as authoritative.
 
 If unclear:
 
@@ -325,7 +325,7 @@ The artifact must include:
 <compact evidence: command, result, evidence path, file/change summary, short excerpt only when needed, blocker/risk note, or deferred validation note>
 ```
 
-Then update `.ai/artifacts/<plan-name>/state/workflow.json` with runner-readable thin-plan-v2 state: preserve `planPath`, set `workflowState`, write the compact execution event under `latest.execution`, append the execution artifact path to `history`, set `unresolvedBlockers` to active blocker strings or `[]`, and refresh `updatedAt`.
+Then update `.ai/artifacts/<plan-name>/state/workflow.json` with runner-readable thin-plan state: preserve `planPath`, set `workflowState`, write the compact execution event under `latest.execution`, append the execution artifact path to `history`, set `unresolvedBlockers` to active blocker strings or `[]`, and refresh `updatedAt`.
 
 Wording rules:
 
@@ -363,9 +363,9 @@ blocked
 * Evidence:
 * Next Step:
 
-3. update `.ai/artifacts/<plan-name>/state/workflow.json` with runner-readable thin-plan-v2 state: preserve `planPath`, set `workflowState` to `blocked`, write compact `latest.execution`, append the execution artifact path to `history`, set `unresolvedBlockers` to active blocker strings, and refresh `updatedAt`.
+3. update `.ai/artifacts/<plan-name>/state/workflow.json` with runner-readable thin-plan state: preserve `planPath`, set `workflowState` to `blocked`, write compact `latest.execution`, append the execution artifact path to `history`, set `unresolvedBlockers` to active blocker strings, and refresh `updatedAt`.
 
-4. MUST NOT add inline `## Blockers` to thin-plan-v2 manifests.
+4. MUST NOT add inline `## Blockers` to thin-plan manifests.
 
 5. STOP
 

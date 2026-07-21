@@ -158,6 +158,10 @@ When the spec is completed successfully, end the final response with exactly:
 
 # Feature: <name>
 
+## Document Format
+
+feature-spec@1
+
 ## Goal
 
 ## Inputs / Outputs

@@ -4,7 +4,7 @@ import { runWorkflowRunner } from "../runner/runtime.ts";
 
 import {
   CODEX_COMMAND,
-  writeThinPlanV2Artifacts,
+  writeThinPlanArtifacts,
   ownershipReleaseSection,
   ownershipScopeSection,
   setupWorkspace,
@@ -16,7 +16,7 @@ import {
   join,
   mkdirSync,
   readFile,
-  thinPlanV2Manifest,
+  thinPlanManifest,
   writeFile,
   writeWorkflowEventArtifactSync,
   planWith,
@@ -659,9 +659,9 @@ test("thin-plan ownership preflight trusts terminal workflow state over stale ow
     await writePlan(
       workspace.root,
       "artifact-state",
-      thinPlanV2Manifest("approved", "execute-plan"),
+      thinPlanManifest("approved", "execute-plan"),
     );
-    await writeThinPlanV2Artifacts(workspace.root, {
+    await writeThinPlanArtifacts(workspace.root, {
       status: "approved",
       nextAction: "execute-plan",
       modified: ["src/shared.ts"],
@@ -737,9 +737,9 @@ test("thin-plan ownership preflight trusts terminal workflow state over stale ow
           await writePlan(
             workspace.root,
             "artifact-state",
-            thinPlanV2Manifest("blocked", "unblock-plan"),
+            thinPlanManifest("blocked", "unblock-plan"),
           );
-          await writeThinPlanV2Artifacts(workspace.root, {
+          await writeThinPlanArtifacts(workspace.root, {
             status: "blocked",
             nextAction: "unblock-plan",
             modified: ["src/shared.ts"],

@@ -10,9 +10,9 @@ import {
 import { uniquePaths } from "../plan/parser.ts";
 import {
   normalizeWorkflowEventHistory,
-  parseThinPlanV2WorkflowState,
+  parseThinPlanWorkflowState,
   readJsonArtifact,
-  thinPlanV2ArtifactPath,
+  thinPlanArtifactPath,
   writeManifestWorkflowState,
 } from "../plan/state.ts";
 import type { Failure, ParsedPlan, ProcessRunner } from "../types.ts";
@@ -27,7 +27,7 @@ export const workflowOutputHasValidationPass = (stdout: string): boolean =>
   /\bvalidation\s+passed\b/i.test(stdout) ||
   /\bvalidation\s*:\s*(?:pass|passed|ok|success)\b/i.test(stdout);
 
-export const recoverThinPlanV2ExecuteHandoff = async ({
+export const recoverThinPlanExecuteHandoff = async ({
   rootDir,
   plan,
   processRunner,
@@ -41,7 +41,7 @@ export const recoverThinPlanV2ExecuteHandoff = async ({
   timestamp: () => string;
 }): Promise<{ ok: true; recovered: boolean } | Failure> => {
   if (
-    plan.thinPlanContract !== "thin-plan-v2" ||
+    plan.thinPlanContract !== "thin-plan" ||
     plan.workflowState !== "active" ||
     !workflowOutputHasValidationPass(stdout)
   ) {
@@ -64,7 +64,7 @@ export const recoverThinPlanV2ExecuteHandoff = async ({
     return head;
   }
 
-  const workflowPath = thinPlanV2ArtifactPath(
+  const workflowPath = thinPlanArtifactPath(
     plan.planName,
     "state",
     "workflow.json",
@@ -73,7 +73,7 @@ export const recoverThinPlanV2ExecuteHandoff = async ({
   if (isFailure(workflowRaw)) {
     return workflowRaw;
   }
-  const workflow = parseThinPlanV2WorkflowState(
+  const workflow = parseThinPlanWorkflowState(
     workflowRaw,
     plan.planPath,
     workflowPath,
@@ -85,7 +85,7 @@ export const recoverThinPlanV2ExecuteHandoff = async ({
   if (!workflowRecord) {
     return {
       ok: false,
-      reason: `thin-plan-v2 workflow state is malformed: ${workflowPath}`,
+      reason: `thin-plan workflow state is malformed: ${workflowPath}`,
     };
   }
 
@@ -109,12 +109,12 @@ export const recoverThinPlanV2ExecuteHandoff = async ({
     };
   }
 
-  const executionPath = thinPlanV2ArtifactPath(
+  const executionPath = thinPlanArtifactPath(
     plan.planName,
     "events",
     `execution-v${executionVersion}.md`,
   );
-  const validationPath = thinPlanV2ArtifactPath(
+  const validationPath = thinPlanArtifactPath(
     plan.planName,
     "events",
     `validation-v${validationVersion}.md`,
@@ -131,12 +131,12 @@ export const recoverThinPlanV2ExecuteHandoff = async ({
     .map((entry) => entry.path);
   const now = timestamp();
 
-  const filesPath = thinPlanV2ArtifactPath(
+  const filesPath = thinPlanArtifactPath(
     plan.planName,
     "state",
     "files.json",
   );
-  const ownershipPath = thinPlanV2ArtifactPath(
+  const ownershipPath = thinPlanArtifactPath(
     plan.planName,
     "state",
     "file-ownership.json",
@@ -264,7 +264,7 @@ export const recoverThinPlanV2ExecuteHandoff = async ({
   } catch (error) {
     return {
       ok: false,
-      reason: `thin-plan-v2 execute handoff recovery failed: ${String(error)}`,
+      reason: `thin-plan execute handoff recovery failed: ${String(error)}`,
     };
   }
 

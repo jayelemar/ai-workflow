@@ -108,6 +108,7 @@ Rules:
 - MUST NOT remove, rename, or reorder sections
 - MUST NOT omit any section
 - ONLY fill in placeholders
+- The plan template supplies `plan-manifest@1`. Do not alter `## Document Format`.
 
 ---
 
@@ -312,6 +313,10 @@ Follow `.ai/instructions/shared/flow-trace-artifacts.md` for the exact
 Write the mapping to `.ai/artifacts/<plan-name>/implementation-map.md`, not
 into the plan manifest.
 
+Start the mapping with its title followed immediately by `## Document Format`
+and `implementation-map@1`. Do the same for every created user journey,
+manual handoff, and spec using their respective current document formats.
+
 If any user action cannot be mapped to implementation or validation coverage:
 
 → STOP  
@@ -351,6 +356,8 @@ execution\``. Do not create `manual-handoff.md` for runner-managed work.
 
 Write `.ai/artifacts/<plan-name>/state/files.json` with:
 
+- `documentFormat`: `files-state@1`
+
 - `created`
 - `modified`
 - `deleted`
@@ -365,6 +372,8 @@ This artifact is the review and commit changed-file inventory. It should list th
 Do not write workflow state into `files.json`. Workflow state belongs only in the plan manifest and `workflow.json`.
 
 Write `.ai/artifacts/<plan-name>/state/workflow.json` with:
+
+- `documentFormat`: `workflow-state@1`
 
 - `planPath`
 - `workflowState`
@@ -403,6 +412,7 @@ Write `.ai/artifacts/<plan-name>/state/file-ownership.json` with the planning-ti
 
 It MUST be valid JSON with exactly the runner-required ownership fields:
 
+- `documentFormat`: `file-ownership@1`
 - `planPath`: string
 - `owns`: string array of repo-relative exact file paths or directory globs ending in `/**`
 - `released`: string array; use `[]` during initial plan creation
@@ -424,7 +434,7 @@ It MUST:
 
 Create `.ai/artifacts/<plan-name>/events/` as a directory before returning from create-plan.
 
-The directory may be empty for a new draft plan, but it MUST exist because thin-plan-v2 validation treats it as a required artifact.
+The directory may be empty for a new draft plan, but it MUST exist because thin-plan validation treats it as a required artifact.
 - `updatedAt`: ISO timestamp string
 
 Rules:
