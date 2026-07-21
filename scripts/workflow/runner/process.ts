@@ -14,6 +14,10 @@ import type { ProcessResult, ProcessRunner, WorkflowProcessStdio, WorkflowRunner
 const CODEX_PROFILE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 export const CODEX_BINARY_COMMAND = "codex";
 const CODEX_WORK_NODE_VERSION = "v20.20.2";
+export const CODEX_TURN_COMPLETION_GRACE_MS = 1_000;
+
+const codexTurnCompleted = (output: string): boolean =>
+  /"type"\s*:\s*"turn\.completed"/.test(output);
 
 const prependPath = (pathValue: string, entry: string): string => {
   const entries = pathValue.split(path.delimiter).filter(Boolean);
@@ -140,12 +144,44 @@ export const defaultProcessRunner: ProcessRunner = (call) =>
     let stderr = "";
     let stdinError = "";
     let settled = false;
+    let completionWatchdog: ReturnType<typeof setTimeout> | undefined;
+    let completionWatchdogTriggered = false;
+
+    const clearCompletionWatchdog = () => {
+      if (!completionWatchdog) {
+        return;
+      }
+      clearTimeout(completionWatchdog);
+      completionWatchdog = undefined;
+    };
+
+    const armCompletionWatchdog = () => {
+      if (
+        completionWatchdog ||
+        call.binaryCommand !== CODEX_BINARY_COMMAND ||
+        call.promptPath !== COMMIT_SUMMARY_PROMPT_PATH ||
+        call.abortSignal?.aborted ||
+        !codexTurnCompleted(stdout)
+      ) {
+        return;
+      }
+      completionWatchdog = setTimeout(() => {
+        completionWatchdog = undefined;
+        if (settled || call.abortSignal?.aborted) {
+          return;
+        }
+        completionWatchdogTriggered = true;
+        child.kill("SIGTERM");
+      }, CODEX_TURN_COMPLETION_GRACE_MS);
+      completionWatchdog.unref?.();
+    };
 
     child.stdout?.setEncoding("utf8");
     child.stderr?.setEncoding("utf8");
     child.stdout?.on("data", (chunk) => {
       stdout += chunk;
       call.onStdout?.(chunk);
+      armCompletionWatchdog();
     });
     child.stderr?.on("data", (chunk) => {
       stderr += chunk;
@@ -168,6 +204,7 @@ export const defaultProcessRunner: ProcessRunner = (call) =>
       if (settled) {
         return;
       }
+      clearCompletionWatchdog();
       call.abortSignal?.removeEventListener("abort", abortChild);
       settled = true;
       resolve({
@@ -182,6 +219,7 @@ export const defaultProcessRunner: ProcessRunner = (call) =>
       if (settled) {
         return;
       }
+      clearCompletionWatchdog();
       call.abortSignal?.removeEventListener("abort", abortChild);
       settled = true;
       resolve({
@@ -189,9 +227,11 @@ export const defaultProcessRunner: ProcessRunner = (call) =>
         stdout,
         stderr: [stderr, stdinError].filter(Boolean).join("\n"),
         exitCode:
-          exitCode ??
-          (signal === "SIGINT" ? 130 : signal === "SIGTERM" ? 143 : 1),
-        exitSignal: signal,
+          completionWatchdogTriggered
+            ? 0
+            : (exitCode ??
+              (signal === "SIGINT" ? 130 : signal === "SIGTERM" ? 143 : 1)),
+        exitSignal: completionWatchdogTriggered ? undefined : signal,
       });
     });
 

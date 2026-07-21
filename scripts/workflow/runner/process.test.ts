@@ -1,12 +1,18 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
+import { mkdtemp, rm, symlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Writable } from "node:stream";
 import test from "node:test";
 
 import { COMMIT_SUMMARY_PROMPT_PATH } from "../contracts/stage.ts";
 import {
+  CODEX_BINARY_COMMAND,
+  CODEX_TURN_COMPLETION_GRACE_MS,
   codexExecArgs,
   codexWorkEnvironment,
+  defaultProcessRunner,
   processStdioForInput,
   writeProcessInput,
 } from "./process.ts";
@@ -114,4 +120,34 @@ test("codexExecArgs adds git directory access only for commit summary prompts", 
       "Commit",
     ],
   );
+});
+
+test("commit summary finishes after Codex emits turn.completed but lingers", async () => {
+  const binDir = await mkdtemp(join(tmpdir(), "workflow-codex-"));
+  try {
+    await symlink(process.execPath, join(binDir, CODEX_BINARY_COMMAND));
+    const startedAt = Date.now();
+    const result = await defaultProcessRunner({
+      command: "codex-work",
+      binaryCommand: CODEX_BINARY_COMMAND,
+      args: [
+        "-e",
+        `process.stdout.write(JSON.stringify({ type: "turn.completed" }) + "\\n"); setInterval(() => {}, 1_000);`,
+      ],
+      cwd: process.cwd(),
+      input: "",
+      promptPath: COMMIT_SUMMARY_PROMPT_PATH,
+      env: { ...process.env, PATH: `${binDir}:${process.env.PATH ?? ""}` },
+    });
+
+    assert.equal(result.launched, true);
+    if (!result.launched) {
+      return;
+    }
+    assert.equal(result.exitCode, 0);
+    assert.match(result.stdout, /"type":"turn.completed"/);
+    assert.ok(Date.now() - startedAt < CODEX_TURN_COMPLETION_GRACE_MS + 3_000);
+  } finally {
+    await rm(binDir, { force: true, recursive: true });
+  }
 });
