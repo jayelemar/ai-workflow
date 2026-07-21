@@ -1,6 +1,9 @@
 import { COMMIT_SUMMARY_PROMPT_PATH } from "../../contracts/stage.ts";
 import { hasArtifactOnlyNoCommitReview } from "./artifact-only-review.ts";
-import { extractCommitSummarySubject } from "../tasks/summaries.ts";
+import {
+  extractCommitSummarySubject,
+  readCompletedTaskSavepoints,
+} from "../tasks/summaries.ts";
 import { parseCommitSummaryPathsForPlan } from "../review/commit.ts";
 import { parsePlan } from "../plan/state.ts";
 import { reopenPlanForNextTask } from "./task-recovery.ts";
@@ -10,6 +13,7 @@ import {
   readHeadTaskCommit,
   readTaskCommitRecoveryParent,
   writeTaskArtifact,
+  writeCurrentTaskPointer,
 } from "../tasks/savepoints.ts";
 import type {
   ParsedPlan,
@@ -91,6 +95,21 @@ export const recoverTaskSavepoint = async ({
       if (!artifact.ok) {
         return { kind: "failure", reason: artifact.reason };
       }
+      const pointer = await writeCurrentTaskPointer({
+        rootDir,
+        planName: plan.planName,
+        planPath: plan.planPath,
+        context: {
+          task: selectedTask,
+          stage: "committed",
+          artifactPath: selectedTaskArtifactPath,
+          commitSha: "no-commit",
+        },
+        timestamp: new Date().toISOString(),
+      });
+      if (!pointer.ok) {
+        return { kind: "failure", reason: pointer.reason };
+      }
       const reopened = await reopenPlanForNextTask(plan);
       if (!reopened.ok) {
         return { kind: "failure", reason: reopened.reason };
@@ -115,12 +134,23 @@ export const recoverTaskSavepoint = async ({
     if (!recoveryParent.ok) {
       return { kind: "failure", reason: recoveryParent.reason };
     }
+    const completedTaskArtifacts = await readCompletedTaskSavepoints({
+      rootDir,
+      planName: plan.planName,
+      tasks: planTasks,
+    });
+    if (!completedTaskArtifacts.ok) {
+      return { kind: "failure", reason: completedTaskArtifacts.reason };
+    }
     const recoveredCommit = await readHeadTaskCommit({
       rootDir,
       planName: plan.planName,
       planPath: plan.planPath,
       task: selectedTask,
       expectedParentSha: recoveryParent.headSha,
+      recordedCommitShas: completedTaskArtifacts.completedTasks.map(
+        ({ commitSha }) => commitSha,
+      ),
       processRunner,
     });
     if (!recoveredCommit.ok) {
@@ -137,6 +167,12 @@ export const recoverTaskSavepoint = async ({
       const artifactPath = await nextTaskArtifactRelativePath(
         rootDir,
         plan.planName,
+        selectedTask,
+      );
+      const nextTask = await nextTaskAfter(
+        rootDir,
+        plan.planName,
+        planTasks,
         selectedTask,
       );
       const artifact = await writeTaskArtifact({
@@ -158,16 +194,37 @@ export const recoverTaskSavepoint = async ({
           recoveredCommit.commit.message,
           selectedTask.name,
         ),
-        nextTask: await nextTaskAfter(
-          rootDir,
-          plan.planName,
-          planTasks,
-          selectedTask,
-        ),
+        nextTask,
       });
-      return artifact.ok
-        ? { kind: "continue", plan }
-        : { kind: "failure", reason: artifact.reason };
+      if (!artifact.ok) {
+        return { kind: "failure", reason: artifact.reason };
+      }
+      const pointer = await writeCurrentTaskPointer({
+        rootDir,
+        planName: plan.planName,
+        planPath: plan.planPath,
+        context: {
+          task: selectedTask,
+          stage: "committed",
+          artifactPath,
+          commitSha: recoveredCommit.commit.sha.slice(0, 9),
+        },
+        timestamp: new Date().toISOString(),
+      });
+      if (!pointer.ok) {
+        return { kind: "failure", reason: pointer.reason };
+      }
+      if (!nextTask) {
+        return { kind: "continue", plan };
+      }
+      const reopened = await reopenPlanForNextTask(plan);
+      if (!reopened.ok) {
+        return { kind: "failure", reason: reopened.reason };
+      }
+      const nextPlan = await parsePlan({ planName: planArgument, rootDir });
+      return nextPlan.ok
+        ? { kind: "continue", plan: nextPlan }
+        : { kind: "failure", reason: nextPlan.reason };
     }
   }
 

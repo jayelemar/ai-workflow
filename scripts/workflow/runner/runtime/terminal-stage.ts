@@ -4,6 +4,7 @@ import {
   nextIncompleteTask,
   readableTaskLabel,
   writeTaskArtifact,
+  writeCurrentTaskPointer,
 } from "../tasks/savepoints.ts";
 import {
   extractCommitSummarySubject,
@@ -261,6 +262,30 @@ export const handleTerminalStage = async ({
     });
     if (!bossSummary.ok) {
       return await finish(await finishFailure(bossSummary.reason));
+    }
+    const finalTask = planTasks.at(-1);
+    const finalSavepoint = completedTaskArtifacts.completedTasks.find(
+      ({ task }) => task.id === finalTask?.id,
+    );
+    if (!finalTask || !finalSavepoint) {
+      return await finish(
+        await finishFailure("final task savepoint is missing after aggregate summary"),
+      );
+    }
+    const pointer = await writeCurrentTaskPointer({
+      rootDir,
+      planName: plan.planName,
+      planPath: plan.planPath,
+      context: {
+        task: finalTask,
+        stage: "committed",
+        artifactPath: finalSavepoint.artifactPath,
+        commitSha: finalSavepoint.commitSha,
+      },
+      timestamp: new Date().toISOString(),
+    });
+    if (!pointer.ok) {
+      return await finish(await finishFailure(pointer.reason));
     }
   }
   const snapshotResult = await syncWorkflowSnapshot(plan);

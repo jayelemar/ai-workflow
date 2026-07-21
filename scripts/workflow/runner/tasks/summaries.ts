@@ -26,6 +26,37 @@ const executionSummaryRelativePath = (planName: string): string =>
 const bossSummaryRelativePath = (planName: string): string =>
   rel(".ai", "artifacts", planName, "boss-summary.md");
 
+export const hasCompletedTaskAggregateSummary = async ({
+  rootDir,
+  planName,
+  taskCount,
+}: {
+  rootDir: string;
+  planName: string;
+  taskCount: number;
+}): Promise<{ ok: true; completed: boolean } | Failure> => {
+  const artifactPath = path.join(rootDir, executionSummaryRelativePath(planName));
+  let content: string;
+  try {
+    content = await readFile(artifactPath, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return { ok: true, completed: false };
+    }
+    return {
+      ok: false,
+      reason: `execution summary cannot be read: ${String(error)}`,
+    };
+  }
+  return {
+    ok: true,
+    completed:
+      content.includes("## Overall Status\nCompleted") &&
+      content.includes(`Completed savepoints: ${taskCount}/${taskCount}`) &&
+      content.includes("## Final Rollup\n- Status: completed"),
+  };
+};
+
 const normalizeSummaryLine = (line: string): string =>
   line.replace(/^(?:--|[*-])\s+/, "").trim();
 

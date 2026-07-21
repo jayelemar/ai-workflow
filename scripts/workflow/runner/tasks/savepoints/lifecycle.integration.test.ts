@@ -682,7 +682,6 @@ test("task savepoint mode recovers a later thin-plan task from its saved commit 
 
 * Objective: Complete task-savepoint work.
 * Tasks:
-  1. [task:01-backend-endpoints] Add backend endpoints
   2. [task:02-web-surface] Add web surface
 `,
     );
@@ -703,8 +702,8 @@ test("task savepoint mode recovers a later thin-plan task from its saved commit 
     );
     mkdirSync(taskDir, { recursive: true });
     writeFileSync(
-      join(taskDir, "01-backend-endpoints-v1.md"),
-      `# Task Savepoint: 01-backend-endpoints
+      join(taskDir, "01-artifact-state-v1.md"),
+      `# Task Savepoint: 01-artifact-state
 
 ## Commit SHA
 
@@ -761,6 +760,157 @@ abc1234
       "utf8",
     );
     assert.match(recoveredTask, /Commit SHA\n\ndef5678de/);
+    const currentTask = await readFile(
+      join(
+        workspace.root,
+        ".ai",
+        "artifacts",
+        "artifact-state",
+        "state",
+        "current-task.md",
+      ),
+      "utf8",
+    );
+    assert.match(currentTask, /Task ID: 02-web-surface/);
+    assert.match(currentTask, /Stage: committed/);
+    assert.match(currentTask, /Commit SHA: def5678de/);
+
+    const repeatOutput = collectConsole();
+    const repeatCalls: Parameters<ProcessRunner>[0][] = [];
+    const repeatedResult = await runWorkflowRunner({
+      planName: planArg("artifact-state"),
+      rootDir: workspace.root,
+      console: repeatOutput.console,
+      processRunner: async (call) => {
+        repeatCalls.push(call);
+        if (call.command === "git") {
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
+        throw new Error(`unexpected workflow prompt: ${call.promptPath}`);
+      },
+    });
+
+    assert.equal(repeatedResult.success, true);
+    assert.equal(repeatCalls.every((call) => call.command === "git"), true);
+    assert.match(
+      repeatOutput.lines.join("\n"),
+      /\[\d+\/\d+\] task commits complete[\s\S]*SUCCESS/,
+    );
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("task commit recovery reopens the plan before the next task", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    mkdirSync(join(workspace.root, "src"), { recursive: true });
+    await writeFile(
+      join(workspace.root, "src", "task-work.ts"),
+      "task work\n",
+    );
+    await writePlan(
+      workspace.root,
+      "artifact-state",
+      `${thinPlanV2Manifest("completed", "commit-summary")}
+## Phases
+
+### Implementation
+
+* Objective: Complete task-savepoint work.
+* Tasks:
+  2. [task:02-web-surface] Add web surface
+  3. [task:03-app-shell] Add app shell
+`,
+    );
+    await writeThinPlanV2Artifacts(workspace.root, {
+      status: "completed",
+      nextAction: "commit-summary",
+      modified: ["src/task-work.ts"],
+      changedFiles: ["src/task-work.ts"],
+      owns: ["src/task-work.ts"],
+    });
+
+    const taskDir = join(
+      workspace.root,
+      ".ai",
+      "artifacts",
+      "artifact-state",
+      "tasks",
+    );
+    mkdirSync(taskDir, { recursive: true });
+    writeFileSync(
+      join(taskDir, "01-artifact-state-v1.md"),
+      `# Task Savepoint: 01-artifact-state
+
+## Commit SHA
+
+abc1234
+`,
+      "utf8",
+    );
+
+    const promptCalls: string[] = [];
+    const result = await runWorkflowRunner({
+      planName: planArg("artifact-state"),
+      rootDir: workspace.root,
+      console: collectConsole().console,
+      processRunner: async (call) => {
+        if (call.command === "git" && call.args[0] === "log") {
+          return {
+            launched: true,
+            stdout: [
+              "def5678def5678def5678def5678def5678",
+              "abc123",
+              "feat(web): add support ticket surface",
+            ].join("\n"),
+            stderr: "",
+            exitCode: 0,
+          };
+        }
+        if (call.command === "git") {
+          return {
+            launched: true,
+            stdout: call.args[0] === "rev-parse" ? "def5678\n" : "",
+            stderr: "",
+            exitCode: 0,
+          };
+        }
+        promptCalls.push(call.promptPath);
+        assert.equal(call.promptPath, ".ai/prompts/execute-plan.md");
+        assert.match(call.args.at(-1) ?? "", /Task ID: 03-app-shell/);
+        return {
+          launched: true,
+          stdout: codexAgentMessageLine("STOP: expected recovery handoff"),
+          stderr: "",
+          exitCode: 0,
+        };
+      },
+    });
+
+    assert.equal(result.success, false);
+    assert.deepEqual(
+      promptCalls,
+      [".ai/prompts/execute-plan.md"],
+      result.reason,
+    );
+    const manifest = await readFile(
+      join(workspace.root, ".ai", "plans", "artifact-state.md"),
+      "utf8",
+    );
+    assert.match(manifest, /## Workflow State\n\nactive/);
+    const workflow = await readFile(
+      join(
+        workspace.root,
+        ".ai",
+        "artifacts",
+        "artifact-state",
+        "state",
+        "workflow.json",
+      ),
+      "utf8",
+    );
+    assert.match(workflow, /"workflowState": "active"/);
   } finally {
     await workspace.cleanup();
   }

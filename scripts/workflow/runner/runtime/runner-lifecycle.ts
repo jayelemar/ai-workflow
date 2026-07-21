@@ -23,6 +23,7 @@ import { writeWorkflowContextSnapshot } from "../plan/context-snapshot.ts";
 import { generateWorkflowPrompt, isReviewPrompt, readPrompt } from "../plan/prompt.ts";
 import { parsePlan, preflightManualPlanExecutionMode, repairThinPlanV2ManifestStateFromWorkflow } from "../plan/state.ts";
 import { completedTaskCommitCount, currentTaskArtifactRelativePath, nextIncompleteTask, nextTaskAfter, readableTaskLabel, readableTaskProgressDescription, readTaskArtifactStage, writeTaskArtifact } from "../tasks/savepoints.ts";
+import { hasCompletedTaskAggregateSummary } from "../tasks/summaries.ts";
 import { parseCommitSummaryPathsForPlan, readDirtyPlanOwnedPaths } from "../review/commit.ts";
 import { checkForPreReviewStagedWork, runReviewStagingForPaths, runReviewUnstageForPaths } from "../review/staging.ts";
 import { routeFor } from "../transitions.ts";
@@ -256,6 +257,45 @@ export const runWorkflowRunnerLifecycle = async (
     if (taskRecovery.kind === "continue") {
       parsedPlan = taskRecovery.plan;
       continue;
+    }
+    if (taskSavepointAggregateSummary) {
+      const aggregateSummary = await hasCompletedTaskAggregateSummary({
+        rootDir,
+        planName: parsedPlan.planName,
+        taskCount: planTasks.length,
+      });
+      if (!aggregateSummary.ok) {
+        return await finishFailure(aggregateSummary.reason);
+      }
+      if (aggregateSummary.completed) {
+        iterations = nextIteration;
+        logger.log(
+          formatWorkflowProgressLine({
+            iteration: iterations,
+            maxIterations: MAX_WORKFLOW_ITERATIONS,
+            workflowState: parsedPlan.workflowState,
+            promptPath: route.promptPath,
+            model: executionConfig.model,
+            reasoning: executionConfig.reasoning,
+            color: colorOutput,
+          }),
+        );
+        logger.log(
+          streamOutput
+            ? `${formatCommitProgressLine(commitProgress!)}\n`
+            : formatCommitProgressLine(commitProgress!),
+        );
+        const snapshotResult = await syncWorkflowSnapshot(parsedPlan);
+        if (!snapshotResult.ok) {
+          return await finishFailure(snapshotResult.reason);
+        }
+        markWorkflowLogCreated(parsedPlan.planName);
+        markTokenUsageLogCreated(parsedPlan.planName);
+        return await finishSuccess(
+          "completed task savepoint aggregate summary already recorded",
+          iterations,
+        );
+      }
     }
     if (!selectedTask) {
       currentTaskContext = undefined;

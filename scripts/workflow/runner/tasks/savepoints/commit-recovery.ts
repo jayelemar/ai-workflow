@@ -18,6 +18,7 @@ export const readHeadTaskCommit = async ({
   planPath,
   task,
   expectedParentSha,
+  recordedCommitShas = [],
   processRunner,
 }: {
   rootDir: string;
@@ -25,6 +26,7 @@ export const readHeadTaskCommit = async ({
   planPath: string;
   task: PlanTask;
   expectedParentSha?: string;
+  recordedCommitShas?: string[];
   processRunner: ProcessRunner;
 }): Promise<
   { ok: true; commit?: { sha: string; message: string } } | Failure
@@ -60,7 +62,19 @@ export const readHeadTaskCommit = async ({
     (message.includes(planName) || message.includes(planPath));
   const matchesExpectedParent =
     !!expectedParentSha && parents.includes(expectedParentSha);
-  if (!sha || (!hasTaskMetadata && !matchesExpectedParent)) {
+  const commitAlreadyRecorded = recordedCommitShas.some((recordedSha) => {
+    const normalizedRecordedSha = recordedSha.toLowerCase();
+    const normalizedSha = sha.toLowerCase();
+    return (
+      normalizedSha.startsWith(normalizedRecordedSha) ||
+      normalizedRecordedSha.startsWith(normalizedSha)
+    );
+  });
+  if (
+    !sha ||
+    commitAlreadyRecorded ||
+    (!hasTaskMetadata && !matchesExpectedParent)
+  ) {
     return { ok: true };
   }
 

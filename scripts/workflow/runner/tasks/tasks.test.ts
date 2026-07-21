@@ -26,6 +26,7 @@ import {
   writeBossSummary,
   writeExecutionSummary,
 } from "./summaries.ts";
+import { readHeadTaskCommit } from "./savepoints/commit-recovery.ts";
 
 const testTask = (id: string, name: string): PlanTask => ({
   id,
@@ -287,4 +288,31 @@ test("task progress labels preserve ellipsized task descriptions", () => {
     }),
     /\[REVIEW\] Task 1 of 2[\s\S]*Review scope: 2 staged files/,
   );
+});
+
+test("task commit recovery does not reuse a commit recorded by another savepoint", async () => {
+  const recovered = await readHeadTaskCommit({
+    rootDir: "/repo",
+    planName: "workflow-runner",
+    planPath: ".ai/plans/workflow-runner.md",
+    task: testTask("03-browser-recovery-bootstrap", "Route browser bootstrap"),
+    expectedParentSha: "abc1234",
+    recordedCommitShas: ["def5678de"],
+    processRunner: async () => ({
+      launched: true,
+      stdout: [
+        "def5678def5678def5678def5678def5678",
+        "abc1234",
+        "feat(web): route bootstrap",
+      ].join("\n"),
+      stderr: "",
+      exitCode: 0,
+    }),
+  });
+
+  assert.equal(recovered.ok, true);
+  if (!recovered.ok) {
+    return;
+  }
+  assert.equal(recovered.commit, undefined);
 });
