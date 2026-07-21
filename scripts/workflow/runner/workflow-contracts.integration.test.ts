@@ -243,6 +243,104 @@ test("create-plan prompt defines manual and runner-managed execution modes", asy
   assert.doesNotMatch(wrapper, /Default when omitted:\s*`manual`/i);
 });
 
+test("workflow selector defines all four classifications and exact next paths", async () => {
+  const [prompt, wrapper, workflowReadme, wrappersReadme] = await Promise.all([
+    readWorkflowPrompt("select-workflow.md"),
+    readWorkflowWrapper("select-workflow.md"),
+    readFile(new URL("../../../README.md", import.meta.url), "utf8"),
+    readWorkflowWrapper("README.md"),
+  ]);
+
+  for (const content of [prompt, workflowReadme, wrappersReadme]) {
+    assert.match(content, /`LOW`/);
+    assert.match(content, /`MEDIUM`/);
+    assert.match(content, /`HIGH-GOAL`/);
+    assert.match(content, /`HIGH-RUNNER`/);
+  }
+
+  assert.match(prompt, /analysis-only/i);
+  assert.match(prompt, /Do not create, modify, or delete files/i);
+  assert.match(prompt, /Simple session-local `\/plan`/i);
+  assert.match(prompt, /Spec \+ manual plan/i);
+  assert.match(prompt, /Codex `\/goal` path/i);
+  assert.match(prompt, /Runner-managed path/i);
+  assert.match(
+    prompt,
+    /\| `LOW` \| Simple session-local `\/plan` \| Start `\/plan` in this session; create no durable workflow artifacts\. \|/,
+  );
+  assert.match(
+    prompt,
+    /\| `MEDIUM` \| Spec \+ manual plan \| Create a spec, then use `create-plan` with `Execution mode: manual`\. \|/,
+  );
+  assert.match(
+    prompt,
+    /\| `HIGH-GOAL` \| Codex `\/goal` path \| Start `\/goal` with the approved objective and a stable kebab-case goal name\. \|/,
+  );
+  assert.match(
+    prompt,
+    /\| `HIGH-RUNNER` \| Runner-managed path \| Create a spec, use `create-plan` with `Execution mode: runner-managed`, complete review and approval, then invoke the runner\. \|/,
+  );
+  assert.match(prompt, /operator must explicitly choose `HIGH-GOAL` or\s+`HIGH-RUNNER`/i);
+  assert.match(prompt, /do not choose or override/i);
+  assert.match(prompt, /Next action:/);
+  assert.match(wrapper, /Use: `\.ai\/prompts\/select-workflow\.md`/);
+});
+
+test("manual plans keep portable handoffs at the artifact root and load them", async () => {
+  const [createPrompt, template, executePrompt, handoffPrompt, handoffWrapper] =
+    await Promise.all([
+      readWorkflowPrompt("create-plan.md"),
+      readPlanTemplate(),
+      readWorkflowPrompt("manual-execute-plan.md"),
+      readWorkflowPrompt("manual-handoff.md"),
+      readWorkflowWrapper("manual-handoff.md"),
+    ]);
+
+  for (const content of [createPrompt, template, executePrompt, handoffPrompt]) {
+    assert.match(content, /\.ai\/artifacts\/<plan-name>\/manual-handoff\.md/);
+  }
+  assert.match(createPrompt, /do not place it under `state\/` or `events\/`/i);
+  assert.match(executePrompt, /When `manual-handoff\.md` exists, read it before implementation/i);
+  assert.match(executePrompt, /spec, plan, and current Git state remain\s+authoritative/i);
+  assert.match(executePrompt, /Before pausing[\s\S]*switching agent or\s+provider/i);
+  assert.match(handoffPrompt, /Create or refresh only\s+`\.ai\/artifacts\/<plan-name>\/manual-handoff\.md`/i);
+  assert.match(createPrompt, /Initialize it with the `manual-handoff` structure/i);
+  assert.match(handoffWrapper, /before pausing manual plan work/i);
+});
+
+test("HIGH-GOAL checkpoints and resume stay portable and never write runner state", async () => {
+  const [checkpoint, resume, checkpointWrapper, resumeWrapper] = await Promise.all([
+    readWorkflowPrompt("goal-checkpoint.md"),
+    readWorkflowPrompt("resume-goal.md"),
+    readWorkflowWrapper("goal-checkpoint.md"),
+    readWorkflowWrapper("resume-goal.md"),
+  ]);
+
+  for (const content of [checkpoint, resume]) {
+    assert.match(content, /\.ai\/artifacts\/<goal-name>\/goal-handoff\.md/);
+    assert.match(content, /runner state/i);
+    assert.match(content, /Do not invoke the workflow runner/i);
+  }
+  assert.match(checkpoint, /checkpoint-only/i);
+  assert.match(checkpoint, /before `\/goal pause`, ending a session, or\s+switching provider or account/i);
+  assert.match(checkpoint, /stable kebab-case identifier/i);
+  for (const section of [
+    "Exact Goal",
+    "Repository State",
+    "Verified Progress",
+    "Decisions",
+    "Blockers",
+    "Next Action",
+  ]) {
+    assert.match(checkpoint, new RegExp(`## ${section}`));
+  }
+  assert.match(checkpoint, /Never copy secrets, raw diffs, or full command output/i);
+  assert.match(resume, /In Codex, restore the saved objective with `\/goal <exact goal>`/i);
+  assert.match(resume, /another provider/i);
+  assert.match(checkpointWrapper, /Goal name:/);
+  assert.match(resumeWrapper, /Other providers use the same artifact/i);
+});
+
 test("create-plan hard-stops on protected branches before planning", async () => {
   const [prompt, wrapper] = await Promise.all([
     readWorkflowPrompt("create-plan.md"),

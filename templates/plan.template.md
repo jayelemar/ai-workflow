@@ -35,6 +35,7 @@ draft-artifact-sync
 
 * User journey: `.ai/artifacts/<plan-name>/user-journey.md` or `N/A: <concrete reason>`
 * Implementation map: `.ai/artifacts/<plan-name>/implementation-map.md` or `N/A: <concrete reason>`
+* Manual handoff: `.ai/artifacts/<plan-name>/manual-handoff.md` or `N/A: runner-managed execution`
 * Workflow state: `.ai/artifacts/<plan-name>/state/workflow.json` or `N/A: manual plan-bound execution`
 * File ownership: `.ai/artifacts/<plan-name>/state/file-ownership.json` or `N/A: manual plan-bound execution`
 * Files: `.ai/artifacts/<plan-name>/state/files.json` or `N/A: manual plan-bound execution`

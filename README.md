@@ -189,6 +189,8 @@ Notes:
 Main workflow artifacts:
 
 - spec: the behavior contract
+- manual handoff: the explicit portable checkpoint for a MEDIUM manual plan
+- goal handoff: the portable companion checkpoint for HIGH-GOAL work
 - user-journey artifact: the optional flow-trace contract generated from the
   approved spec plus codebase inspection when the scope needs end-to-end flow
   mapping
@@ -203,12 +205,44 @@ Default locations:
 - user-journey artifacts for flow-trace-required work:
   `.ai/artifacts/<name>/user-journey.md`
 - plans: `.ai/plans/<name>.md`
+- manual handoffs: `.ai/artifacts/<name>/manual-handoff.md`
+- goal handoffs: `.ai/artifacts/<goal-name>/goal-handoff.md`
 - prompts: `.ai/prompts/*.md`
 - runner: `.ai/scripts/workflow/runner.ts`
 
 Plan `## Spec` entries may also point to any repo-relative `*.spec.md` path
 when a workflow companion spec belongs elsewhere, such as
 `.ai/scripts/workflow/runner.spec.md`.
+
+## Workflow Selection
+
+Start with the analysis-only selector:
+
+```text
+.ai/wrappers/select-workflow.md
+```
+
+It creates no files and returns the classification, selected path, concise
+reason, and exact next action.
+
+| Classification | Path | Durable continuity |
+| --- | --- | --- |
+| `LOW` | Simple session-local `/plan` | None. Do not create spec, plan, or workflow artifacts. |
+| `MEDIUM` | Spec + manual plan | `.ai/artifacts/<plan-name>/manual-handoff.md`; refresh it explicitly before pausing, ending a session, or switching agent/provider. |
+| `HIGH-GOAL` | Codex `/goal` path | `.ai/artifacts/<goal-name>/goal-handoff.md`; refresh it only before `/goal pause`, ending a session, or switching provider/account. |
+| `HIGH-RUNNER` | Runner-managed path | Existing plan, context snapshot, event, review, and validation lifecycle. |
+
+For HIGH work, the operator explicitly selects `HIGH-GOAL` or `HIGH-RUNNER`.
+The selector explains the tradeoff but never overrides that choice.
+
+`HIGH-GOAL` is Codex-only for the live `/goal`; its handoff is portable. Choose
+a stable kebab-case `<goal-name>` when starting it. To resume, Codex restores
+the saved `## Exact Goal` with `/goal`; other providers start by reading the
+same handoff. Neither goal checkpoint nor resume writes runner state.
+
+Deleting `.ai/artifacts/<plan-name>/` or `.ai/artifacts/<goal-name>/` removes
+all local state for that work item. Artifacts stay local/ignored by default;
+sync the relevant artifact directory separately when moving machines.
 
 ## Standard Workflow
 
@@ -315,7 +349,11 @@ review until it returns `OKAY`. The operator must then review the finalized
 spec and plan and reply `APPROVE IMPLEMENTATION`.
 
 In `manual` mode, keep the spec and plan discipline but do not create
-runner-only state artifacts just to continue execution.
+runner-only state artifacts just to continue execution. Create
+`.ai/artifacts/<plan-name>/manual-handoff.md` at the manual artifact root and
+refresh it explicitly before pausing, ending a session, or switching
+agent/provider. During manual execution, read the handoff when present, while
+the spec, plan, and current Git state remain authoritative.
 
 ### Choose A Post-Plan Path
 

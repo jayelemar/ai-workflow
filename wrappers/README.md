@@ -9,6 +9,23 @@ text to paste when starting a spec or plan task.
 For cloning, installation, publishing, runner setup, and troubleshooting, use
 `.ai/README.md`. This file focuses only on day-to-day wrapper usage.
 
+## Workflow Selection
+
+Before intake or implementation, use `.ai/wrappers/select-workflow.md` in an
+analysis-only session. It does not write files.
+
+| Classification | Path | Exact next action |
+| --- | --- | --- |
+| `LOW` | Simple session-local `/plan` | Start `/plan`; do not create durable workflow artifacts. |
+| `MEDIUM` | Spec + manual plan | Create a spec, then use `create-plan` with `Execution mode: manual`. |
+| `HIGH-GOAL` | Codex `/goal` path | Start `/goal` with the approved objective and a stable kebab-case goal name. |
+| `HIGH-RUNNER` | Runner-managed path | Create a spec, then use `create-plan` with `Execution mode: runner-managed`. |
+
+For HIGH work, the operator must explicitly choose `HIGH-GOAL` or
+`HIGH-RUNNER`. `HIGH-GOAL` supports long or exploratory Codex work and has a
+portable handoff; `HIGH-RUNNER` uses the existing state-machine lifecycle. The
+selector explains this tradeoff but does not choose for the operator.
+
 ## Recommended Flow
 
 Canonical lifecycle:
@@ -56,16 +73,20 @@ spec -> optional user-journey artifact -> plan -> (manual execute | sync artifac
 6. The operator reviews the finalized spec and plan, then replies
    `APPROVE IMPLEMENTATION` before any code changes or workflow execution.
 7. Use the selected post-plan path:
-   - `manual` for medium-risk work or an explicit operator choice.
-   - `runner-managed` for high-risk work or an explicit operator choice.
-   - Low-risk work normally proceeds through direct implementation after
-     operator approval; do not create runner state solely for a narrow change.
+   - `LOW`: session-local `/plan`; no durable workflow artifacts.
+   - `MEDIUM`: `manual` spec-and-plan execution.
+   - `HIGH-GOAL`: Codex `/goal` with portable goal checkpoints.
+   - `HIGH-RUNNER`: `runner-managed` spec-and-plan lifecycle.
 
 Manual post-plan path:
 
 - Continue execution in the same conversation from the spec and plan.
 - Do not create runner-only workflow state just to keep working.
 - For explicit manual execution, use `.ai/wrappers/manual-execute-plan.md`.
+- Create and refresh `.ai/artifacts/<plan-name>/manual-handoff.md` with
+  `.ai/wrappers/manual-handoff.md` before pausing, ending a session, or
+  switching agent/provider. Manual execution reads it when present; the spec,
+  plan, and current Git state remain authoritative.
 - Repo-local Codex hooks can auto-append token checkpoints after manual
   `spec`, `plan`, and final `execute` when you use the tracked wrappers or
   prompts and the agent emits the required completion marker lines.
@@ -82,6 +103,16 @@ Runner-managed post-plan path:
   `APPROVE IMPLEMENTATION` before invoking the runner.
 - The runner first performs `sync-plan-artifacts`, then continues to
   validation.
+
+HIGH-GOAL continuity:
+
+- Choose a stable kebab-case `<goal-name>` when the Codex `/goal` starts.
+- Before `/goal pause`, ending a session, or switching provider/account, use
+  `.ai/wrappers/goal-checkpoint.md` to refresh
+  `.ai/artifacts/<goal-name>/goal-handoff.md` only.
+- Use `.ai/wrappers/resume-goal.md` to resume: Codex restores the saved goal
+  with `/goal`; another provider reads the same handoff as starting context.
+- Goal checkpoints and resume never write runner state.
 
 Default runner path:
 
@@ -123,6 +154,9 @@ That snapshot is intentionally compact: prefer its `## Summary`, `## Key Details
   `APPROVE IMPLEMENTATION`, before the runner command is invoked.
 - Manual plans may continue execution in the same conversation without
   `sync-plan-artifacts`, `plan-validator`, or runner-managed state files.
+- Deleting `.ai/artifacts/<plan-name>/` or `.ai/artifacts/<goal-name>/` removes
+  all local state for that work item. These artifacts are local/ignored by
+  default; sync the relevant directory separately when moving machines.
 - Review stages use harness review only. Do not add a separate subagent or
   plugin review system inside the default runner review path.
 - `manual-preview` is a standalone ad hoc helper, not a workflow stage.

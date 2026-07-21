@@ -11,6 +11,21 @@ requires a plan or runner-managed execution.
 
 Do not start a spec, plan, or code change until this intake gate is complete.
 
+## Workflow Selection
+
+Run the analysis-only `.ai/wrappers/select-workflow.md` before choosing a
+workflow. It creates no files.
+
+| Classification | Path |
+| --- | --- |
+| `LOW` | Simple session-local `/plan`; no durable artifacts. |
+| `MEDIUM` | Spec + manual plan, with a portable manual handoff. |
+| `HIGH-GOAL` | Codex `/goal` path, with a portable goal handoff. |
+| `HIGH-RUNNER` | Existing runner-managed spec-and-plan lifecycle. |
+
+For HIGH work, the operator explicitly chooses `HIGH-GOAL` or `HIGH-RUNNER`.
+The selector may explain the tradeoff, but does not override that decision.
+
 ## Bug Intake Gate
 
 Before asking Codex for RCA, collect and provide:
@@ -47,12 +62,12 @@ After RCA approval, classify the work before implementation.
 | --- | --- | --- |
 | Low | Isolated behavior; one or few files; no auth, database, public API, or shared contract | Direct implementation, targeted review, local verification |
 | Medium | Multiple files; unclear regression risk; shared UI or service behavior | Bug spec, `manual` plan, operator plan approval, manual execution, targeted review, local verification |
-| High | Auth, RLS, permissions, migration, payments, public API, multi-route flow, destructive data behavior, or broad customer impact | Bug spec, `runner-managed` plan, operator plan approval, harness execution, strong review, local verification and rollback check |
+| High | Auth, RLS, permissions, migration, payments, public API, multi-route flow, destructive data behavior, or broad customer impact | Operator-selected `HIGH-GOAL` or `HIGH-RUNNER` path; HIGH-RUNNER uses the full runner-managed lifecycle. |
 
 For medium or high-risk bugs, use existing wrappers in this order:
 
 1. `.ai/wrappers/generate-bugfix-spec.md`
-2. `.ai/wrappers/create-plan.md`, selecting `manual` or `runner-managed`
+2. `.ai/wrappers/create-plan.md`, selecting `manual` or `runner-managed` when the selected path uses a plan
 3. For `manual` only: `.ai/wrappers/manual-execute-plan.md`
 
 Do not invoke `.ai/scripts/workflow/runner.ts` for low or medium work unless the operator
@@ -83,8 +98,8 @@ unknown.
 Then use:
 
 1. `.ai/wrappers/generate-feature-spec.md`
-2. `.ai/wrappers/create-plan.md`, selecting `manual` for ordinary work or
-   `runner-managed` for high-risk or multi-route work
+2. `.ai/wrappers/create-plan.md`, selecting `manual` for MEDIUM work or
+   `runner-managed` for HIGH-RUNNER work
 3. `.ai/wrappers/manual-execute-plan.md` when using `manual`
 
 ## Review Gates
@@ -125,11 +140,11 @@ Before merge, request code review, resolve material findings, and run the
 smallest local validation that covers the changed behavior. For high-risk work,
 also confirm rollback or recovery behavior.
 
-When creating the plan, the operator must explicitly select `manual` or
-`runner-managed`; risk classification recommends a mode but does not supply it
-implicitly. Planning questions should be limited to undiscoverable technical,
-rollback, or task-boundary decisions after the requirements interview has
-completed.
+When creating a plan, the operator must explicitly select `manual` or
+`runner-managed`. For HIGH work, the earlier selector decision must explicitly
+choose `HIGH-GOAL` or `HIGH-RUNNER`; it is not inferred from risk alone.
+Planning questions should be limited to undiscoverable technical, rollback, or
+task-boundary decisions after the requirements interview has completed.
 
 ## Routing Rules
 

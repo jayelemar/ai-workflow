@@ -83,6 +83,11 @@ before `plan-validator`.
 
 For `manual` plans, set `## Workflow State` to
 `N/A: manual plan-bound execution`; do not create routing state artifacts.
+Create `.ai/artifacts/<plan-name>/manual-handoff.md` as the portable manual
+continuity record. It is refreshed explicitly before pausing, ending a session,
+or switching agent/provider. Initialize it with the `manual-handoff` structure,
+record no execution progress yet, and set its one next action to manual
+execution after approval.
 After saving either a `manual` or `runner-managed` plan, append the plan token
 checkpoint. This records pre-run planning usage in the same ledger the runner
 will continue to use:
@@ -321,12 +326,15 @@ These artifact-state files are required only for `runner-managed` mode.
 
 If execution mode is `manual`:
 
+- create `.ai/artifacts/<plan-name>/manual-handoff.md` at the manual plan
+  artifact root; do not place it under `state/` or `events/`
 - do NOT create or update `.ai/artifacts/<plan-name>/state/files.json`
 - do NOT create or update `.ai/artifacts/<plan-name>/state/workflow.json`
 - do NOT create or update `.ai/artifacts/<plan-name>/state/file-ownership.json`
 - do NOT create or update `.ai/artifacts/<plan-name>/state/context.md`
 - do NOT create or update `.ai/artifacts/<plan-name>/events/`
 - in the plan manifest `## Artifacts` section, write exactly:
+  - `* Manual handoff: \`.ai/artifacts/<plan-name>/manual-handoff.md\``
   - `* Workflow state: \`N/A: manual plan-bound execution\``
   - `* File ownership: \`N/A: manual plan-bound execution\``
   - `* Files: \`N/A: manual plan-bound execution\``
@@ -337,6 +345,9 @@ If execution mode is `manual`:
 
 If execution mode is `runner-managed`, create the following artifacts exactly as
 specified below.
+
+In the plan manifest, record `* Manual handoff: \`N/A: runner-managed
+execution\``. Do not create `manual-handoff.md` for runner-managed work.
 
 Write `.ai/artifacts/<plan-name>/state/files.json` with:
 

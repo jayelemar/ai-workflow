@@ -21,10 +21,15 @@ Required Behavior:
 - Read `.ai/instructions/index.md` and load the relevant routed instructions.
 - Read the plan file.
 - Read the plan's spec file.
+- Read `.ai/artifacts/<plan-name>/manual-handoff.md` when it exists; the spec,
+  plan, and Git state remain authoritative.
 - Read `user-journey.md` and `implementation-map.md` only when the plan
   requires them.
 - Apply the requested code and test changes.
 - Run the smallest validation that covers the changed behavior.
+- Before pausing, ending the session, or switching agent/provider, refresh
+  `.ai/artifacts/<plan-name>/manual-handoff.md` with
+  `.ai/wrappers/manual-handoff.md`.
 
 Final Output:
 Return only:

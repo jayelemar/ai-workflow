@@ -56,6 +56,7 @@ Strict Constraints:
 - For `manual` mode, you are only allowed to create or update:
   - `.ai/artifacts/<feature-or-bug-name>/user-journey.md`
   - `.ai/artifacts/<feature-or-bug-name>/implementation-map.md`
+  - `.ai/artifacts/<feature-or-bug-name>/manual-handoff.md`
   - `.ai/plans/<feature-or-bug-name>.md`
 - For `runner-managed` mode, you are only allowed to create or update:
   - `.ai/artifacts/<feature-or-bug-name>/user-journey.md`
@@ -109,7 +110,14 @@ Required Behavior:
 - Follow the plan template exactly.
 - Save the plan to `.ai/plans/<feature-or-bug-name>.md`.
 - In `manual` mode, record runner-only artifact entries as `N/A: manual plan-bound execution` and do not create runner-only state files or event directories.
-- In `runner-managed` mode, create every artifact listed in the plan template's `## Artifacts` section before returning, including `state/context.md` and the `events/` directory.
+- In `manual` mode, create `.ai/artifacts/<feature-or-bug-name>/manual-handoff.md`
+  at the artifact root. It must be refreshed before pausing, ending a session,
+  or switching agent/provider; initialize it with no execution progress and
+  manual execution after approval as the next action.
+- In `runner-managed` mode, record `Manual handoff` as
+  `N/A: runner-managed execution`, then create every runner-managed artifact
+  listed in the plan template's `## Artifacts` section, including
+  `state/context.md` and the `events/` directory.
 
 Initial Plan State:
 - In `runner-managed` mode:
