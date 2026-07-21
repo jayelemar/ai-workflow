@@ -85,7 +85,10 @@ export const generateWorkflowPrompt = ({
   taskContext?: WorkflowTaskContext;
   taskSavepointAggregateSummary?: boolean;
 }): string => {
-  const actionLabel = workflowStageContractForPrompt(promptPath)?.humanLabel;
+  const defaultActionLabel = workflowStageContractForPrompt(promptPath)?.humanLabel;
+  const actionLabel = taskSavepointAggregateSummary
+    ? "Final task summary"
+    : defaultActionLabel;
   if (!actionLabel) {
     throw new Error(`unknown workflow prompt path: ${promptPath}`);
   }

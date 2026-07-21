@@ -1,13 +1,14 @@
-# Commit Summary (State-Machine Driven)
+# Commit or Final Summary (State-Machine Driven)
 
-This prompt stages completed plan implementation files, then generates the final commit message and user-facing summary.
+This prompt either commits a reviewed task savepoint or, after every task has
+already been committed, records the final no-commit summary.
 
 It does NOT modify code.
 
-For `completed`, it will create exactly one local git commit
-from runner-injected plan-owned paths by default. A task-savepoint plan may define
-an explicit `## Commit Boundaries` entry for the current task; in that case,
-create one local commit per listed boundary instead.
+For a normal `completed` plan, it creates exactly one local git commit from
+runner-injected plan-owned paths by default. A task-savepoint plan may define an
+explicit `## Commit Boundaries` entry for the current task; in that case, it
+creates one local commit per listed boundary instead.
 
 It does NOT perform validation or review.
 
@@ -347,8 +348,17 @@ Use this shared terminal-facing contract for non-review stages.
 Rules:
 
 * `**Summary**` starts with the stage result/state line, then at most 2-3 short high-signal bullets.
-* `**Key Details**` must use a single conventional-commit subject line followed by a short user-facing summary list prefixed with `--`.
 * Do not include a branch line in `**Key Details**`.
+
+When `Task savepoint aggregate summary` is present:
+
+* `**Summary**` starts with `FINAL SUMMARY RECORDED — no additional commit created.`
+* `**Key Details**` starts with `Task commits complete`, then lists the task
+  commit subjects or SHAs and the user-facing outcomes prefixed with `--`.
+* Do not use `COMMIT CREATED` or a conventional-commit subject line.
+
+Otherwise, `**Key Details**` must use a single conventional-commit subject line
+followed by a short user-facing summary list prefixed with `--`.
 
 **Plan**
 
@@ -356,13 +366,13 @@ Rules:
 
 **Summary**
 
-* COMMIT CREATED
+* COMMIT CREATED (or `FINAL SUMMARY RECORDED — no additional commit created.` for an aggregate summary)
 * stage result/state line first
 * at most 2-3 short high-signal bullets
 
 **Key Details**
 
-<type>(<feature>): <summary>
+<type>(<feature>): <summary> (or `Task commits complete` for an aggregate summary)
 -- short user-facing outcome
 -- short user-facing outcome
 -- short user-facing outcome

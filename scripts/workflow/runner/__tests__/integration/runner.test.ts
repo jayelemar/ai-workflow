@@ -969,6 +969,10 @@ test("task savepoint mode commits each reviewed task, writes artifacts, logs tas
       /\[TASK COMPLETE\] Task 2 of 2 — Web surface\nProgress: 2 tasks committed · Created 1 commit/,
     );
     assert.match(consoleOutput, /\[2\/2\] task commits complete/);
+    assert.match(
+      consoleOutput,
+      /STAGE FINAL SUMMARY\nworkflowState: completed/,
+    );
 
     const currentTask = await readFile(
       join(

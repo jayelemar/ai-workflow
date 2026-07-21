@@ -275,6 +275,7 @@ export const runWorkflowRunnerLifecycle = async (
             maxIterations: MAX_WORKFLOW_ITERATIONS,
             workflowState: parsedPlan.workflowState,
             promptPath: route.promptPath,
+            stageLabel: "FINAL SUMMARY",
             model: executionConfig.model,
             reasoning: executionConfig.reasoning,
             color: colorOutput,
@@ -409,6 +410,9 @@ export const runWorkflowRunnerLifecycle = async (
           maxIterations: MAX_WORKFLOW_ITERATIONS,
           workflowState: parsedPlan.workflowState,
           promptPath: route.promptPath,
+          stageLabel: taskSavepointAggregateSummary
+            ? "FINAL SUMMARY"
+            : undefined,
           model: executionConfig.model,
           reasoning: executionConfig.reasoning,
           color: colorOutput,

@@ -1137,6 +1137,7 @@ test("workflow prompt includes task savepoint current task and aggregate-only co
   });
 
   assert.match(aggregatePrompt, /Task savepoint aggregate summary:/);
+  assert.match(aggregatePrompt, /Final task summary:/);
   assert.match(aggregatePrompt, /Do not create a git commit/);
   assert.doesNotMatch(
     aggregatePrompt,

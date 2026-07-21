@@ -123,3 +123,18 @@ test("formatWorkflowProgressLine reports stage, action, task, and iteration cont
     "\n\n[2/100] STAGE EXECUTE\nworkflowState: active\nmodel: gpt-5.4 | reasoning: high\n",
   );
 });
+
+test("formatWorkflowProgressLine supports a final-summary stage label", () => {
+  assert.equal(
+    formatWorkflowProgressLine({
+      workflowState: "completed",
+      promptPath: ".ai/prompts/commit-summary.md",
+      stageLabel: "FINAL SUMMARY",
+      model: "gpt-5.6-terra",
+      reasoning: "medium",
+      iteration: 8,
+      maxIterations: 100,
+    }),
+    "\n\n[8/100] STAGE FINAL SUMMARY\nworkflowState: completed\nmodel: gpt-5.6-terra | reasoning: medium\n",
+  );
+});

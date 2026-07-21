@@ -75,6 +75,7 @@ export const formatWorkflowProgressLine = ({
   maxIterations,
   workflowState,
   promptPath,
+  stageLabel,
   model,
   reasoning,
   color = false,
@@ -83,13 +84,18 @@ export const formatWorkflowProgressLine = ({
   maxIterations: number;
   workflowState: WorkflowState;
   promptPath: string;
+  stageLabel?: string;
   model: CodexModel;
   reasoning: ReasoningEffort;
   color?: boolean;
 }): string => {
-  const stage = stageStylesByPromptPath[promptPath] ?? {
+  const defaultStage = stageStylesByPromptPath[promptPath] ?? {
     label: "WORKFLOW",
     colorCode: "\u001b[37;45m",
+  };
+  const stage = {
+    ...defaultStage,
+    label: stageLabel ?? defaultStage.label,
   };
   const progressPrefix = `[${iteration}/${maxIterations}] STAGE ${stage.label}`;
   const formattedProgressPrefix = color
