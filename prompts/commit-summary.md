@@ -121,10 +121,11 @@ For every created commit, generate:
 * one conventional-commit subject line
 * one concise GitHub-readable body with two to four concise `-` bullets
 
-Use this exact command shape:
+Use this exact command shape after the required `pnpm lint-staged` command has
+completed successfully:
 
 ```bash
-git commit --cleanup=verbatim -F - <<'EOF'
+SKIP_LINT_STAGED=1 git commit --cleanup=verbatim -F - <<'EOF'
 <generated subject>
 
 <generated body>
@@ -221,7 +222,7 @@ Use:
 * runner-injected path-scoped second `git add --all -- <plan-owned paths>`
 * runner-injected path-scoped `git diff --staged --name-status -- <plan-owned paths>`
 * full `git diff --staged --name-status` to confirm the staged set contains only plan-owned paths
-* the exact multiline `git commit --cleanup=verbatim -F - <<'EOF'` flow with `<generated subject>` and `<generated body>`
+* the exact multiline `SKIP_LINT_STAGED=1 git commit --cleanup=verbatim -F - <<'EOF'` flow with `<generated subject>` and `<generated body>`
 
 Do NOT use repository-wide `git add --all`.
 
@@ -237,6 +238,16 @@ If no plan-related files can be staged:
 → output `STOP`
 → state blocking reason (`no plan-related files to stage`)
 → do not generate a commit message
+
+`pnpm lint-staged` can take longer than a normal command-output window. Start
+it once and wait or poll that same command until it exits; do not start a
+second lint or commit command while it is still running.
+
+After `pnpm lint-staged` succeeds and the same plan-owned paths are restaged,
+set `SKIP_LINT_STAGED=1` only on the final `git commit` or `git commit --amend`
+command. The pre-commit hook still enforces branch, ignored-file, environment
+file, and secret checks; this flag skips only the duplicate formatter/linter
+pass. Do not use `HUSKY=0` or `--no-verify`.
 
 ---
 
@@ -272,10 +283,11 @@ If the current task has explicit commit boundaries:
 2. Create one commit per boundary in the documented order. For each boundary,
    stage only its listed files or narrowly scoped file group, including its
    focused tests in the same commit.
-3. Run `pnpm lint-staged`, restage that same boundary, inspect its staged path
-   list, and confirm every staged path belongs to that boundary and to the
-   runner-injected plan-owned path list before creating one conventional commit
-   using the required multiline command.
+3. Run `pnpm lint-staged` once, wait for it to exit, restage that same
+   boundary, inspect its staged path list, and confirm every staged path
+   belongs to that boundary and to the runner-injected plan-owned path list
+   before creating one conventional commit using the required multiline
+   command with `SKIP_LINT_STAGED=1`.
 4. Before moving to the next boundary, confirm the preceding commit is clean
    and no files outside the runner-injected plan-owned path list are staged.
 5. After the final boundary, confirm no plan-owned changes remain, report every
@@ -293,7 +305,7 @@ Otherwise:
 7. Create one local git commit using:
 
 ```bash
-git commit --cleanup=verbatim -F - <<'EOF'
+SKIP_LINT_STAGED=1 git commit --cleanup=verbatim -F - <<'EOF'
 <generated subject>
 
 <generated body>
@@ -305,8 +317,8 @@ EOF
    command. If it is clean, continue. If it contains only mechanical formatter
    or linter output from this commit path, repeat the scoped
    add/lint-staged/restage sequence, amend the just-created commit with
-   `git commit --amend --no-edit`, and rerun that status check. Do not amend
-   product behavior edited after review: output `STOP` with reason
+   `SKIP_LINT_STAGED=1 git commit --amend --no-edit`, and rerun that status
+   check. Do not amend product behavior edited after review: output `STOP` with reason
    `plan-owned changes remain after commit-summary` instead.
 
 Rules:

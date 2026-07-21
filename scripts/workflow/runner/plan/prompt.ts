@@ -176,7 +176,7 @@ pnpm lint-staged
 git add --all -- ${shellPathspecs(commitSummaryPaths)}
 git diff --staged --name-status -- ${shellPathspecs(commitSummaryPaths)}
 git diff --staged --name-status
-git commit --cleanup=verbatim -F - <<'EOF'
+SKIP_LINT_STAGED=1 git commit --cleanup=verbatim -F - <<'EOF'
 <generated subject>
 
 <generated body>
@@ -187,7 +187,8 @@ Do not stage .ai files. Do not stage unrelated paths as commit candidates.
 Before committing, the full staged path list must contain only paths from the plan-owned implementation list above.
 If any staged path falls outside this path list, output \`STOP\` with reason \`non plan-scoped staged changes detected\`.
 If no files are staged by the path-scoped git add, output \`STOP\` with reason \`no plan-related files to stage\`.
-After the commit, the path-scoped status must be clean. If the only remaining changes are mechanical formatter or linter output from this commit path, repeat the scoped add/lint-staged/restage sequence, amend the just-created commit with \`git commit --amend --no-edit\`, then rerun the path-scoped status check. Do not amend product behavior that was edited after review; output \`STOP\` with reason \`plan-owned changes remain after commit-summary\` instead.
+Run \`pnpm lint-staged\` once and wait or poll that same command until it exits; do not start a second lint or commit command while it is still running. After it succeeds and the same paths are restaged, \`SKIP_LINT_STAGED=1\` on the final commit skips only the duplicate formatter/linter pass; the pre-commit hook still enforces branch, ignored-file, environment-file, and secret checks. Do not use \`HUSKY=0\` or \`--no-verify\`.
+After the commit, the path-scoped status must be clean. If the only remaining changes are mechanical formatter or linter output from this commit path, repeat the scoped add/lint-staged/restage sequence, amend the just-created commit with \`SKIP_LINT_STAGED=1 git commit --amend --no-edit\`, then rerun the path-scoped status check. Do not amend product behavior that was edited after review; output \`STOP\` with reason \`plan-owned changes remain after commit-summary\` instead.
 `
       : "";
   const taskSavepointBoundary = taskContext

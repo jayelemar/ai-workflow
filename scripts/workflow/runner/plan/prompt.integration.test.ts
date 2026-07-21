@@ -1042,13 +1042,18 @@ test("commit-summary workflow prompt includes plan-scoped staging commands for p
     /git diff --staged --name-status -- apps\/web\/src\/simple\.ts 'docs\/plan notes\.md'/,
   );
   assert.match(prompt, /git diff --staged --name-status\n/);
-  assert.match(prompt, /git commit --cleanup=verbatim -F - <<'EOF'/);
+  assert.match(
+    prompt,
+    /SKIP_LINT_STAGED=1 git commit --cleanup=verbatim -F - <<'EOF'/,
+  );
   assert.match(prompt, /<generated subject>/);
   assert.match(prompt, /<generated body>/);
   assert.doesNotMatch(
     prompt,
-    /git commit --cleanup=verbatim -F - <<'EOF' -- apps\/web\/src\/simple\.ts 'docs\/plan notes\.md'/,
+    /SKIP_LINT_STAGED=1 git commit --cleanup=verbatim -F - <<'EOF' -- apps\/web\/src\/simple\.ts 'docs\/plan notes\.md'/,
   );
+  assert.match(prompt, /wait or poll that same command until it exits/);
+  assert.match(prompt, /Do not use `HUSKY=0` or `--no-verify`/);
   assert.match(prompt, /non plan-scoped staged changes detected/);
   assert.match(prompt, /Do not stage \.ai files/);
   assert.doesNotMatch(prompt, /use sub-agents/);
@@ -1113,7 +1118,10 @@ test("workflow prompt includes task savepoint current task and aggregate-only co
     },
   });
 
-  assert.match(commitPrompt, /git commit --cleanup=verbatim -F - <<'EOF'/);
+  assert.match(
+    commitPrompt,
+    /SKIP_LINT_STAGED=1 git commit --cleanup=verbatim -F - <<'EOF'/,
+  );
   assert.match(commitPrompt, /execution-summary\.md/);
   assert.doesNotMatch(
     commitPrompt,
@@ -1132,7 +1140,7 @@ test("workflow prompt includes task savepoint current task and aggregate-only co
   assert.match(aggregatePrompt, /Do not create a git commit/);
   assert.doesNotMatch(
     aggregatePrompt,
-    /git commit --cleanup=verbatim -F - <<'EOF'/,
+    /SKIP_LINT_STAGED=1 git commit --cleanup=verbatim -F - <<'EOF'/,
   );
 });
 
