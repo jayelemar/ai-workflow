@@ -29,7 +29,7 @@ export const latestString = (
 export type RelevantWorkflowEvent = {
   kind: "execution" | "validation" | "review" | "unblock" | "reopen";
   label: "Execution" | "Validation" | "Review" | "Unblock" | "Reopen";
-  stateField: "Result" | "Decision" | "Status";
+  stateField: "Outcome";
   stateValue?: string;
   summary?: string;
   evidence?: string;
@@ -42,28 +42,29 @@ const details = (
   reason: string,
 ): RelevantWorkflowEvent | undefined => {
   if (!latestNumber(latest)) return undefined;
-  const executionOrValidation = kind === "execution" || kind === "validation";
-  const review = kind === "review";
   return {
     kind,
-    label: executionOrValidation
-      ? kind === "execution"
-        ? "Execution"
-        : "Validation"
-      : review
-        ? "Review"
-        : kind === "unblock"
-          ? "Unblock"
-          : "Reopen",
-    stateField: executionOrValidation ? "Result" : review ? "Decision" : "Status",
-    stateValue: latestString(
-      latest,
-      executionOrValidation ? "result" : review ? "decision" : "status",
-    ),
+    label: kind === "execution" ? "Execution" : kind === "validation" ? "Validation" : kind === "review" ? "Review" : kind === "unblock" ? "Unblock" : "Reopen",
+    stateField: "Outcome",
+    stateValue: latestString(latest, "outcome"),
     summary: latestString(latest, "summary"),
     evidence: latestString(latest, "evidence"),
     reason,
   };
+};
+
+const supersededByProgress = (
+  workflow: ThinPlanWorkflowState,
+  event: Record<string, unknown> | undefined,
+): boolean => {
+  const history = workflow.history ?? [];
+  const evidence = latestString(event, "evidence");
+  const index = evidence ? history.indexOf(evidence) : -1;
+  if (index < 0) return false;
+  return ["execution", "validation"].some((kind) => {
+    const laterEvidence = latestString(latestRecord(workflow, kind), "evidence");
+    return Boolean(laterEvidence && history.indexOf(laterEvidence) > index);
+  });
 };
 
 export const selectRelevantWorkflowEvent = (
@@ -79,7 +80,8 @@ export const selectRelevantWorkflowEvent = (
   const reviewFindings = asStringArray(review?.unresolvedFindings) ?? [];
   const workflowState = workflow.workflowState;
   if (workflowState === "approved" || workflowState === "active") {
-    if (workflowState === "active" && review && !workflowReviewSupersededByProgress(workflow.latest, workflow.history) && (reviewFindings.length > 0 || latestString(review, "decision") === "active")) return details("review", review, "latest review remediation for the next execute-plan run");
+    if (workflowState === "active" && reopen && !supersededByProgress(workflow, reopen)) return details("reopen", reopen, "latest reopen remediation for the next execute-plan run");
+    if (workflowState === "active" && review && !workflowReviewSupersededByProgress(workflow.latest, workflow.history) && (reviewFindings.length > 0 || latestString(review, "outcome") === "active")) return details("review", review, "latest review remediation for the next execute-plan run");
     if (workflowState === "approved" && validation) return details("validation", validation, "latest approval evidence before execution starts");
     if (execution) return details("execution", execution, "latest execution checkpoint for the active implementation loop");
     if (validation) return details("validation", validation, "latest validation evidence still relevant to execution");
@@ -93,8 +95,8 @@ export const selectRelevantWorkflowEvent = (
     if (unblock) return details("unblock", unblock, "latest unblock attempt for the current blocked state");
   }
   if (workflowState === "reopening") {
+    if (reopen) return details("reopen", reopen, "latest reopen remediation for the next execution stage");
     if (review) return details("review", review, "latest completion review evidence behind the reopen request");
-    if (reopen) return details("reopen", reopen, "latest reopen attempt for the current request");
   }
   if (workflowState === "completed") {
     if (review) return details("review", review, "latest approval evidence before commit summary");

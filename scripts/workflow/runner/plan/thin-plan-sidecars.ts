@@ -58,6 +58,39 @@ const workflowEventHistoryIndex = (
   return indexes.length > 0 ? Math.min(...indexes) : -1;
 };
 
+const canonicalLatestRecord = (
+  stage: string,
+  value: unknown,
+  artifactPath: string,
+): Failure | undefined => {
+  const record = asRecord(value);
+  if (!record) {
+    return { ok: false, reason: `thin-plan latest.${stage} is malformed: ${artifactPath}` };
+  }
+  const allowed = new Set(
+    stage === "review" && record.outcome === "active"
+      ? ["version", "outcome", "summary", "evidence", "unresolvedFindings"]
+      : ["version", "outcome", "summary", "evidence"],
+  );
+  if (
+    !Number.isInteger(record.version) ||
+    (record.version as number) <= 0 ||
+    typeof record.outcome !== "string" ||
+    typeof record.summary !== "string" ||
+    typeof record.evidence !== "string" ||
+    Object.keys(record).some((key) => !allowed.has(key)) ||
+    ("unresolvedFindings" in record &&
+      (!Array.isArray(record.unresolvedFindings) ||
+        !record.unresolvedFindings.every((item) => typeof item === "string")))
+  ) {
+    return {
+      ok: false,
+      reason: `thin-plan latest.${stage} must use canonical version, outcome, summary, and evidence fields: ${artifactPath}`,
+    };
+  }
+  return undefined;
+};
+
 export const normalizeWorkflowEventHistory = (
   value: unknown,
 ): string[] | undefined => {
@@ -127,6 +160,12 @@ export const parseThinPlanWorkflowState = (
   }
 
   const latest = asRecord(record?.latest) ?? undefined;
+  if (latest) {
+    for (const [stage, value] of Object.entries(latest)) {
+      const invalid = canonicalLatestRecord(stage, value, artifactPath);
+      if (invalid) return invalid;
+    }
+  }
   return {
     documentFormat: DOCUMENT_FORMATS.workflowState,
     planPath,

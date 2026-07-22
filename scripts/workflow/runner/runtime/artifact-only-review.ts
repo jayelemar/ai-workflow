@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { uniquePaths } from "../plan/parser.ts";
@@ -91,15 +91,12 @@ export const completeArtifactOnlyNoCommitReview = async ({
     ...(asRecord(workflowRecord.latest) ?? {}),
     review: {
       version: reviewVersion,
+      outcome: "completed",
       summary:
         continueExecution
           ? "Runner accepted artifact-only task review; continuing to the next task."
           : "Runner accepted declared artifact-only review; no committable paths exist.",
-      decision: continueExecution ? "active" : "completed",
-      result: "PASS",
       evidence: reviewPath,
-      noCommit: true,
-      unresolvedFindings: [],
     },
   };
   const history = uniquePaths([
@@ -116,6 +113,7 @@ export const completeArtifactOnlyNoCommitReview = async ({
       path.join(rootDir, reviewPath),
       workflowEventBody({
         title: `# Review v${reviewVersion}`,
+        outcome: "completed",
         summary:
           continueExecution
             ? "Declared artifact-only task review passed; remaining tasks continue without a commit."
@@ -123,6 +121,7 @@ export const completeArtifactOnlyNoCommitReview = async ({
         evidenceLines: [
           "All active plan-owned changed paths are under .ai/.",
           "Plan Commit Boundaries explicitly declares N/A.",
+          "Runner artifact-only no-commit review.",
           "Runner skipped git staging, review Codex execution, and commit-summary Codex execution.",
         ],
       }),
@@ -184,7 +183,19 @@ export const hasArtifactOnlyNoCommitReview = async ({
     return workflowRaw;
   }
   const review = asRecord(asRecord(workflowRaw)?.latest)?.review;
-  return { ok: true, noCommit: asRecord(review)?.noCommit === true };
+  const evidence = asRecord(review)?.evidence;
+  if (typeof evidence !== "string") return { ok: true, noCommit: false };
+  try {
+    const event = await readFile(path.join(rootDir, evidence), "utf8");
+    return {
+      ok: true,
+      noCommit: event.includes("Runner artifact-only no-commit review."),
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      reason: `artifact-only review event cannot be read: ${evidence}: ${String(error)}`,
+    };
+  }
 };
-
 

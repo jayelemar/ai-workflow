@@ -1,18 +1,16 @@
-import { EXECUTE_PLAN_PROMPT_PATH } from "../../contracts/stage.ts";
 import { isReviewPrompt } from "../plan/prompt.ts";
+import { parsePlan } from "../plan/state.ts";
 import {
-  parsePlan,
-  recoverThinPlanPartialExecuteReviewHandoff,
-} from "../plan/state.ts";
-import { transitionAllowed } from "../transitions.ts";
+  completeStageFinalization,
+  finalizeStageDescriptor,
+  type RunnerStageDescriptor,
+} from "./stage-finalization.ts";
 import type {
   Failure,
   ParsedPlan,
-  ProcessRunner,
   RunnerResult,
   WorkflowContextSnapshotResult,
 } from "../types.ts";
-import { recoverThinPlanExecuteHandoff } from "./execute-handoff-recovery.ts";
 
 type BlockedOutcome = {
   kind: "blocked";
@@ -30,9 +28,7 @@ export const handleSuccessfulNonterminalIteration = async ({
   planArgument,
   plan,
   promptPath,
-  stdout,
-  timestamp,
-  processRunner,
+  descriptor,
   appendIterationLog,
   syncWorkflowSnapshot,
   cleanupReviewStagingPaths,
@@ -45,9 +41,7 @@ export const handleSuccessfulNonterminalIteration = async ({
   planArgument: string;
   plan: ParsedPlan;
   promptPath: string;
-  stdout: string;
-  timestamp: () => string;
-  processRunner: ProcessRunner;
+  descriptor: RunnerStageDescriptor;
   appendIterationLog: (
     stopReason?: string,
     endingPlan?: ParsedPlan,
@@ -63,206 +57,49 @@ export const handleSuccessfulNonterminalIteration = async ({
   ) => Promise<RunnerResult>;
   finishFailure: (reason: string) => Promise<RunnerResult>;
 }): Promise<SuccessfulIterationOutcome> => {
-  const finish = async (
-    result: RunnerResult,
-  ): Promise<SuccessfulIterationOutcome> => ({ kind: "finish", result });
-  const previousContent = plan.content;
-  const updated = await parsePlan({ planName: planArgument, rootDir });
-  if (!updated.ok) {
+  const finish = async (result: RunnerResult): Promise<SuccessfulIterationOutcome> => ({
+    kind: "finish",
+    result,
+  });
+  const finalized = await finalizeStageDescriptor({ rootDir, plan, descriptor });
+  if (!finalized.ok) {
     const cleanup = await cleanupReviewStagingPaths();
-    const reason = cleanup.ok
-      ? updated.reason
-      : `${updated.reason}; ${cleanup.reason}`;
+    const reason = cleanup.ok ? finalized.reason : `${finalized.reason}; ${cleanup.reason}`;
     const logResult = await appendIterationLog(reason);
-    if (!logResult.ok) {
-      return await finish(await finishFailure(logResult.reason));
-    }
+    if (!logResult.ok) return await finish(await finishFailure(logResult.reason));
     const snapshotResult = await syncWorkflowSnapshot(plan);
-    if (!snapshotResult.ok) {
-      return await finish(await finishFailure(snapshotResult.reason));
-    }
+    if (!snapshotResult.ok) return await finish(await finishFailure(snapshotResult.reason));
     return await finish(await finishFailure(reason));
   }
-  emitWorkflowThresholdWarnings(updated.warnings);
-  if (promptPath === EXECUTE_PLAN_PROMPT_PATH) {
-    const recovered = await recoverThinPlanPartialExecuteReviewHandoff({
-      rootDir,
-      previous: plan,
-      updated,
-    });
-    if (!recovered.ok) {
-      const cleanup = await cleanupReviewStagingPaths();
-      const reason = cleanup.ok
-        ? recovered.reason
-        : `${recovered.reason}; ${cleanup.reason}`;
-      const logResult = await appendIterationLog(reason, updated);
-      if (!logResult.ok) {
-        return await finish(await finishFailure(logResult.reason));
-      }
-      const snapshotResult = await syncWorkflowSnapshot(updated);
-      if (!snapshotResult.ok) {
-        return await finish(await finishFailure(snapshotResult.reason));
-      }
-      return await finish(await finishFailure(reason));
-    }
-    if (recovered.recovered) {
-      const recoveredPlan = await parsePlan({ planName: planArgument, rootDir });
-      if (!recoveredPlan.ok) {
-        const logResult = await appendIterationLog(recoveredPlan.reason);
-        if (!logResult.ok) {
-          return await finish(await finishFailure(logResult.reason));
-        }
-        const snapshotResult = await syncWorkflowSnapshot(plan);
-        if (!snapshotResult.ok) {
-          return await finish(await finishFailure(snapshotResult.reason));
-        }
-        return await finish(await finishFailure(recoveredPlan.reason));
-      }
-      const logResult = await appendIterationLog(
-        "repaired partial execute-plan review handoff",
-        recoveredPlan,
-      );
-      if (!logResult.ok) {
-        return await finish(await finishFailure(logResult.reason));
-      }
-      const snapshotResult = await syncWorkflowSnapshot(recoveredPlan);
-      if (!snapshotResult.ok) {
-        return await finish(await finishFailure(snapshotResult.reason));
-      }
-      return { kind: "continue", plan: recoveredPlan, clearCarriedReviewStaging: false };
-    }
+  const updated = await parsePlan({ planName: planArgument, rootDir });
+  if (!updated.ok) {
+    const logResult = await appendIterationLog(updated.reason);
+    if (!logResult.ok) return await finish(await finishFailure(logResult.reason));
+    return await finish(await finishFailure(updated.reason));
   }
+  emitWorkflowThresholdWarnings(updated.warnings);
+  const snapshotResult = await syncWorkflowSnapshot(updated);
+  if (!snapshotResult.ok) return await finish(await finishFailure(snapshotResult.reason));
+  const completed = await completeStageFinalization({ rootDir, planName: updated.planName });
+  if (!completed.ok) return await finish(await finishFailure(completed.reason));
   const nonterminalOutcome = nonterminalRouteOutcome(updated);
   if (nonterminalOutcome) {
     const logResult = await appendIterationLog(undefined, updated);
-    if (!logResult.ok) {
-      return await finish(await finishFailure(logResult.reason));
-    }
-    const snapshotResult = await syncWorkflowSnapshot(updated);
-    if (!snapshotResult.ok) {
-      return await finish(await finishFailure(snapshotResult.reason));
-    }
+    if (!logResult.ok) return await finish(await finishFailure(logResult.reason));
     return await finish(await finishNonterminalRouteOutcome(nonterminalOutcome));
-  }
-  if (updated.content === previousContent) {
-    if (promptPath === EXECUTE_PLAN_PROMPT_PATH) {
-      const recovered = await recoverThinPlanExecuteHandoff({
-        rootDir,
-        plan,
-        processRunner,
-        stdout,
-        timestamp,
-      });
-      if (!recovered.ok) {
-        const logResult = await appendIterationLog(recovered.reason);
-        if (!logResult.ok) {
-          return await finish(await finishFailure(logResult.reason));
-        }
-        const snapshotResult = await syncWorkflowSnapshot(plan);
-        if (!snapshotResult.ok) {
-          return await finish(await finishFailure(snapshotResult.reason));
-        }
-        return await finish(await finishFailure(recovered.reason));
-      }
-      if (recovered.recovered) {
-        const recoveredPlan = await parsePlan({ planName: planArgument, rootDir });
-        if (!recoveredPlan.ok) {
-          const logResult = await appendIterationLog(recoveredPlan.reason);
-          if (!logResult.ok) {
-            return await finish(await finishFailure(logResult.reason));
-          }
-          const snapshotResult = await syncWorkflowSnapshot(plan);
-          if (!snapshotResult.ok) {
-            return await finish(await finishFailure(snapshotResult.reason));
-          }
-          return await finish(await finishFailure(recoveredPlan.reason));
-        }
-        const transition = transitionAllowed(promptPath, plan, recoveredPlan);
-        if (!transition.ok) {
-          const logResult = await appendIterationLog(
-            transition.reason,
-            recoveredPlan,
-          );
-          if (!logResult.ok) {
-            return await finish(await finishFailure(logResult.reason));
-          }
-          const snapshotResult = await syncWorkflowSnapshot(recoveredPlan);
-          if (!snapshotResult.ok) {
-            return await finish(await finishFailure(snapshotResult.reason));
-          }
-          return await finish(await finishFailure(transition.reason));
-        }
-        const logResult = await appendIterationLog(undefined, recoveredPlan);
-        if (!logResult.ok) {
-          return await finish(await finishFailure(logResult.reason));
-        }
-        const snapshotResult = await syncWorkflowSnapshot(recoveredPlan);
-        if (!snapshotResult.ok) {
-          return await finish(await finishFailure(snapshotResult.reason));
-        }
-        return { kind: "continue", plan: recoveredPlan, clearCarriedReviewStaging: false };
-      }
-    }
-    const cleanup = await cleanupReviewStagingPaths();
-    const reason = cleanup.ok
-      ? "plan content unchanged after successful nonterminal workflow action"
-      : `plan content unchanged after successful nonterminal workflow action; ${cleanup.reason}`;
-    const logResult = await appendIterationLog(reason);
-    if (!logResult.ok) {
-      return await finish(await finishFailure(logResult.reason));
-    }
-    const snapshotResult = await syncWorkflowSnapshot(plan);
-    if (!snapshotResult.ok) {
-      return await finish(await finishFailure(snapshotResult.reason));
-    }
-    return await finish(await finishFailure(reason));
-  }
-  const transition = transitionAllowed(promptPath, plan, updated);
-  if (!transition.ok) {
-    const cleanup = await cleanupReviewStagingPaths();
-    const reason = cleanup.ok
-      ? transition.reason
-      : `${transition.reason}; ${cleanup.reason}`;
-    const logResult = await appendIterationLog(reason);
-    if (!logResult.ok) {
-      return await finish(await finishFailure(logResult.reason));
-    }
-    const snapshotResult = await syncWorkflowSnapshot(updated);
-    if (!snapshotResult.ok) {
-      return await finish(await finishFailure(snapshotResult.reason));
-    }
-    return await finish(await finishFailure(reason));
   }
   if (isReviewPrompt(promptPath) && updated.workflowState === "active") {
     const cleanup = await cleanupReviewStagingPaths();
     if (!cleanup.ok) {
-      const logResult = await appendIterationLog(cleanup.reason);
-      if (!logResult.ok) {
-        return await finish(await finishFailure(logResult.reason));
-      }
-      const snapshotResult = await syncWorkflowSnapshot(updated);
-      if (!snapshotResult.ok) {
-        return await finish(await finishFailure(snapshotResult.reason));
-      }
+      const logResult = await appendIterationLog(cleanup.reason, updated);
+      if (!logResult.ok) return await finish(await finishFailure(logResult.reason));
       return await finish(await finishFailure(cleanup.reason));
     }
     const logResult = await appendIterationLog(undefined, updated);
-    if (!logResult.ok) {
-      return await finish(await finishFailure(logResult.reason));
-    }
-    const snapshotResult = await syncWorkflowSnapshot(updated);
-    if (!snapshotResult.ok) {
-      return await finish(await finishFailure(snapshotResult.reason));
-    }
+    if (!logResult.ok) return await finish(await finishFailure(logResult.reason));
     return { kind: "continue", plan: updated, clearCarriedReviewStaging: true };
   }
   const logResult = await appendIterationLog(undefined, updated);
-  if (!logResult.ok) {
-    return await finish(await finishFailure(logResult.reason));
-  }
-  const snapshotResult = await syncWorkflowSnapshot(updated);
-  if (!snapshotResult.ok) {
-    return await finish(await finishFailure(snapshotResult.reason));
-  }
+  if (!logResult.ok) return await finish(await finishFailure(logResult.reason));
   return { kind: "continue", plan: updated, clearCarriedReviewStaging: false };
 };

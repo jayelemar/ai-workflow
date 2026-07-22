@@ -184,9 +184,8 @@ Example:
 
 Use:
 
-* completed phases
-* execution log
-* review history
+* runner-provided context snapshot
+* latest relevant finalized event artifact
 * spec goal
 
 Do NOT use:
@@ -213,9 +212,8 @@ Commit-summary relies on `.ai/artifacts/<plan-name>/state/files.json` as the cha
 
 Use:
 
-* plan completed phases
-* execution log
-* review history
+* runner-provided context snapshot
+* latest relevant finalized event artifact
 * runner-injected path-scoped `git status --short -- <plan-owned paths>`
 * runner-injected path-scoped `git diff --name-status -- <plan-owned paths>`
 * runner-injected path-scoped first `git add --all -- <plan-owned paths>`

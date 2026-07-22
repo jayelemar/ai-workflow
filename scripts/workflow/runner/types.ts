@@ -124,6 +124,7 @@ export type ReviewScopeMetadata = {
   narrowPass: number;
   reviewAllPaths: string[];
   reviewPrimaryPaths: string[];
+  reviewPrimaryPathBatches?: string[][];
   summaryOnlyPaths?: string[];
   diffBytes?: number;
   autoNarrowReason?: string;

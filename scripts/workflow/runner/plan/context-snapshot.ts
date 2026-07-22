@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   isFailure,
@@ -22,14 +22,13 @@ import {
   readJsonArtifact,
   thinPlanArtifactPath,
 } from "./thin-plan-sidecars.ts";
-import { selectRelevantWorkflowEvent } from "./state-synthesis.ts";
+import {
+  latestRecord,
+  latestString,
+  selectRelevantWorkflowEvent,
+} from "./state-synthesis.ts";
 import {
   extractCurrentPhaseSummary,
-  extractLatestExecutionSummary,
-  extractLatestReviewRemediationContext,
-  extractLatestReviewSummary,
-  extractLatestValidationSummary,
-  extractSnapshotActiveBlockers,
   formatSnapshotSection,
   summarizeLatestTokenUsage,
 } from "./context-snapshot-extractors.ts";
@@ -51,17 +50,24 @@ export const generateWorkflowContextSnapshot = ({
   planContent,
   latestTokenUsage,
   workflowState,
+  eventRemediation,
 }: {
   planName: string;
   planPath: string;
   planContent: string;
   latestTokenUsage?: WorkflowContextSnapshotTokenUsage;
   workflowState?: ThinPlanWorkflowState;
+  eventRemediation?: string[];
 }): string => {
-  const validation = extractLatestValidationSummary(planContent);
-  const review = extractLatestReviewSummary(planContent);
+  const validation = workflowState ? latestRecord(workflowState, "validation") : undefined;
+  const review = workflowState ? latestRecord(workflowState, "review") : undefined;
   const relevantEvent = selectRelevantWorkflowEvent(planContent, workflowState);
-  const reviewRemediationContext = extractLatestReviewRemediationContext(planContent);
+  const reviewFindings = Array.isArray(review?.unresolvedFindings)
+    ? review.unresolvedFindings.filter((item): item is string => typeof item === "string")
+    : [];
+  const remediationContext = eventRemediation && eventRemediation.length > 0
+    ? eventRemediation
+    : reviewFindings;
   const tokenSummary = summarizeLatestTokenUsage(latestTokenUsage);
   const currentWorkflowState = workflowState?.workflowState ?? extractSectionValue(planContent, "## Workflow State") ?? undefined;
   return `# Workflow Context Snapshot: ${planName}
@@ -82,21 +88,22 @@ ${extractPlanOwnedFileSection(planContent).length > 0 ? extractPlanOwnedFileSect
 
 ${formatSnapshotSection("## Summary", extractCurrentPhaseSummary(planContent))}
 
-${formatSnapshotSection("## Key Details", extractLatestExecutionSummary(planContent))}
+${formatSnapshotSection("## Key Details", relevantEvent?.summary ? [relevantEvent.summary] : [])}
 
-## Validation
+## Generated Latest Validation Context
 
-* Result: ${validation.result ?? "(none recorded)"}
-${validation.details.length > 0 ? validation.details.map((detail) => `* ${detail}`).join("\n") : "(none)"}
+* Outcome: ${latestString(validation, "outcome") ?? "(none recorded)"}
+* Summary: ${latestString(validation, "summary") ?? "(none recorded)"}
+* Evidence: ${latestString(validation, "evidence") ?? "(none recorded)"}
 
-## Review
+## Generated Latest Review Context
 
-* Summary: ${review.summary ?? "(none recorded)"}
-* Decision: ${review.decision ?? "(none recorded)"}
-* Evidence: ${review.evidence ?? "(none recorded)"}
-${formatSnapshotSection("### Unresolved Findings", review.unresolvedFindings)}
+* Outcome: ${latestString(review, "outcome") ?? "(none recorded)"}
+* Summary: ${latestString(review, "summary") ?? "(none recorded)"}
+* Evidence: ${latestString(review, "evidence") ?? "(none recorded)"}
+${formatSnapshotSection("### Generated Unresolved Findings", reviewFindings)}
 
-## Latest Relevant Event
+## Generated Latest Event Context
 
 ${relevantEvent ? `* Kind: ${relevantEvent.label}
 * Why: ${relevantEvent.reason}
@@ -104,12 +111,34 @@ ${relevantEvent ? `* Kind: ${relevantEvent.label}
 * ${relevantEvent.stateField}: ${relevantEvent.stateValue ?? "(none recorded)"}
 * Evidence: ${relevantEvent.evidence ?? "(none recorded)"}` : "(none)"}
 
-${formatSnapshotSection("## Latest Review Remediation Context", reviewRemediationContext)}
+${formatSnapshotSection("## Generated Remediation Context", remediationContext)}
 
-${formatSnapshotSection("## Active Blockers", extractSnapshotActiveBlockers(planContent))}
+${formatSnapshotSection("## Generated Active Blockers", workflowState?.unresolvedBlockers ?? [])}
 
 ${formatSnapshotSection("## Latest Token Usage Summary", tokenSummary)}
 `;
+};
+
+const readEventRemediation = async (
+  rootDir: string,
+  evidencePath: string | undefined,
+): Promise<string[]> => {
+  if (!evidencePath) return [];
+  try {
+    const content = await readFile(path.join(rootDir, evidencePath), "utf8");
+    const lines = content.split(/\r?\n/);
+    const start = lines.findIndex((line) => line.trim() === "## Remediation");
+    if (start < 0) return [];
+    const remediation: string[] = [];
+    for (const line of lines.slice(start + 1)) {
+      if (line.trim().startsWith("## ")) break;
+      const value = line.trim().replace(/^[*-]\s*/, "");
+      if (value) remediation.push(value);
+    }
+    return remediation;
+  } catch {
+    return [];
+  }
 };
 
 export const activeContextPacket = ({
@@ -156,7 +185,15 @@ export const writeWorkflowContextSnapshot = async ({ rootDir, plan, latestTokenU
     workflowState = parsedWorkflow;
   }
   const snapshotPath = workflowContextSnapshotRelativePath(plan.planName);
-  const snapshot = generateWorkflowContextSnapshot({ planName: plan.planName, planPath: plan.planPath, planContent: plan.content, latestTokenUsage, workflowState });
+  const relevantEvent = selectRelevantWorkflowEvent(plan.content, workflowState);
+  const snapshot = generateWorkflowContextSnapshot({
+    planName: plan.planName,
+    planPath: plan.planPath,
+    planContent: plan.content,
+    latestTokenUsage,
+    workflowState,
+    eventRemediation: await readEventRemediation(rootDir, relevantEvent?.evidence),
+  });
   try {
     await mkdir(path.dirname(workflowContextSnapshotAbsolutePath(rootDir, plan.planName)), { recursive: true });
     await writeFile(workflowContextSnapshotAbsolutePath(rootDir, plan.planName), snapshot, "utf8");

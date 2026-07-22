@@ -43,13 +43,19 @@ export const nextWorkflowEventVersion = async ({
 
 export const workflowEventBody = ({
   title,
+  outcome,
   summary,
   evidenceLines,
 }: {
   title: string;
+  outcome: string;
   summary: string;
   evidenceLines: string[];
 }): string => `${title}
+
+## Outcome
+
+${outcome}
 
 ## Summary
 

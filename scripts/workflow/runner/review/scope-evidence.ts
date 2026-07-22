@@ -2,6 +2,7 @@ import path from "node:path";
 
 import {
   WORKFLOW_AUTO_NARROW_PASS_LIMIT,
+  WORKFLOW_REVIEW_FULL_DIFF_BYTE_LIMIT,
   WORKFLOW_REVIEW_PRIMARY_PATH_LIMIT,
   decideWorkflowAutoNarrow,
 } from "../../telemetry/token-warnings.ts";
@@ -28,7 +29,7 @@ const readCachedDiffForPaths = async (
     args: [
       "diff",
       "--cached",
-      `--unified=${options.unified ?? 0}`,
+      ...(options.unified === undefined ? [] : [`--unified=${options.unified}`]),
       "--",
       ...paths,
     ],
@@ -152,6 +153,37 @@ export const selectReviewPrimaryPaths = ({
   return all.slice(0, WORKFLOW_REVIEW_PRIMARY_PATH_LIMIT);
 };
 
+export const splitReviewPrimaryPathsIntoBatches = ({
+  paths,
+  diffBytesByPath,
+}: {
+  paths: string[];
+  diffBytesByPath: Map<string, number>;
+}): string[][] => {
+  const batches: string[][] = [];
+  let batch: string[] = [];
+  let batchBytes = 0;
+
+  for (const reviewPath of paths) {
+    const pathBytes = diffBytesByPath.get(reviewPath) ?? 0;
+    if (
+      batch.length > 0 &&
+      batchBytes + pathBytes > WORKFLOW_REVIEW_FULL_DIFF_BYTE_LIMIT
+    ) {
+      batches.push(batch);
+      batch = [];
+      batchBytes = 0;
+    }
+    batch.push(reviewPath);
+    batchBytes += pathBytes;
+  }
+
+  if (batch.length > 0) {
+    batches.push(batch);
+  }
+  return batches;
+};
+
 export const buildReviewScopeMetadata = async ({
   rootDir,
   paths,
@@ -209,28 +241,60 @@ export const buildReviewScopeMetadata = async ({
           },
         )
       : undefined;
-    const diffBytes = Buffer.byteLength(fullDiff ?? "", "utf8");
+    const fullDiffBytes = Buffer.byteLength(fullDiff ?? "", "utf8");
+    let reviewPrimaryPathBatches = reviewPrimaryPaths.length
+      ? [reviewPrimaryPaths]
+      : [];
+    let diffBytes = fullDiffBytes;
+
+    if (
+      fullDiffBytes > WORKFLOW_REVIEW_FULL_DIFF_BYTE_LIMIT &&
+      reviewPrimaryPaths.length > 1
+    ) {
+      const diffBytesByPath = new Map<string, number>();
+      for (const reviewPath of reviewPrimaryPaths) {
+        const pathDiff = await readCachedDiffForPaths(
+          rootDir,
+          [reviewPath],
+          processRunner,
+          { promptPath: "git-review-primary-diff-size" },
+        );
+        diffBytesByPath.set(
+          reviewPath,
+          Buffer.byteLength(pathDiff ?? "", "utf8"),
+        );
+      }
+      reviewPrimaryPathBatches = splitReviewPrimaryPathsIntoBatches({
+        paths: reviewPrimaryPaths,
+        diffBytesByPath,
+      });
+      diffBytes = Math.max(
+        0,
+        ...reviewPrimaryPathBatches.map((batch) =>
+          batch.reduce(
+            (total, reviewPath) =>
+              total + (diffBytesByPath.get(reviewPath) ?? 0),
+            0,
+          ),
+        ),
+      );
+    }
     const decision = decideWorkflowAutoNarrow({
       currentPass: effectivePass,
       diffBytes,
     });
 
     if (!decision.shouldNarrow) {
-      if (decision.shouldStop) {
-        return {
-          ok: false,
-          reason: `review scope remains too broad after ${WORKFLOW_AUTO_NARROW_PASS_LIMIT} narrow passes: ${decision.reason}`,
-        };
-      }
       return {
         ok: true,
         scope: {
           narrowPass: effectivePass,
           reviewAllPaths,
           reviewPrimaryPaths,
+          reviewPrimaryPathBatches,
           summaryOnlyPaths,
           diffBytes,
-          autoNarrowReason: reason,
+          autoNarrowReason: reason ?? decision.reason,
         },
       };
     }

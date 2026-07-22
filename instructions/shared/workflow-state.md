@@ -1,66 +1,50 @@
-Version: 2.0
-Last Updated: 2026-07-20
+Version: 3.0
+Last Updated: 2026-07-22
 
 # Workflow State Instructions
 
-## Purpose
+## Authority
 
-`workflowState` is sole persisted workflow-routing value. Runner-managed plan
-manifests contain only `## Workflow State`; `workflow.json` contains only
-`workflowState` for routing. Do not persist or require secondary state labels.
+The workflow runner is the sole normal writer of a runner-managed plan's
+`## Workflow State`, `workflow.json`, latest-event records, event history,
+blockers, and context snapshot. A stage agent may write implementation files
+and only the exact event artifact named in its runner-issued descriptor. It
+must never edit routing documents, phases, task IDs, task boundaries, or
+inline history sections.
+
+The runner validates the reserved event and finalizes every allowed transition
+through its transition journal. No prompt, terminal summary, or partial
+sidecar is a transition authority.
 
 ## Canonical State Matrix
 
-`.ai/scripts/workflow/contracts/stage.ts` is executable source. This table is
-machine-checked by `stage.test.ts`.
+`.ai/scripts/workflow/contracts/stage.ts` is executable source.
 
-| Workflow State | Routed Stage |
-| --- | --- |
-| `draft-artifact-sync` | `sync-plan-artifacts` |
-| `draft-validation` | `plan-validator` |
-| `approved` | `execute-plan` |
-| `active` | `execute-plan` |
-| `blocked` | `unblock-plan` |
-| `review` | `review-changes` |
-| `reopening` | `reopen-plan` |
-| `completed` | `commit-summary` |
+| Workflow State | Routed Stage | Valid event outcomes |
+| --- | --- | --- |
+| `draft-artifact-sync` | `sync-plan-artifacts` | `ready`, `retry` |
+| `draft-validation` | `plan-validator` | `approved`, `retry`, `blocked` |
+| `approved` / `active` | `execute-plan` | `review-ready`, `active`, `blocked` |
+| `blocked` | `unblock-plan` | `active`, `blocked` |
+| `review` | `review-changes` | `active`, `completed` |
+| `reopening` | `reopen-plan` | `active` |
+| `completed` | `commit-summary` | terminal |
 
-## Persistence Rules
+## Event Contract
 
-* Update manifest and `workflow.json` together before stage output.
-* Reread both locations after every transition. Stop with exact mismatch if
-  either cannot be written or states differ.
-* `files.json`, file-ownership artifacts, event history, and logs do not own
-  routing state.
-* Manual plans remain outside runner state and do not need `workflowState`.
-* Plans without a valid canonical `workflowState` stop before prompt launch.
+Each nonterminal stage receives `{ stage, sourceWorkflowState, version,
+eventPath }` from the runner. Its event must use the matching `# <Stage> vN`
+title and non-empty `## Outcome`, `## Summary`, and `## Evidence` sections.
+Failed review and reopen events require `## Remediation`; event artifacts hold
+all detailed findings, validation, blockers, and risks.
 
-## Allowed Transitions
-
-* `draft-artifact-sync` → `draft-validation` or itself.
-* `draft-validation` → `approved` or itself.
-* `approved` → `active`, `review`, or `blocked` only through execution output.
-* `active` → `active`, `review`, or `blocked`.
-* `blocked` → `active` or itself.
-* `review` → `active` or `completed`.
-* `completed` → `reopening` when operator reopens plan.
-* `reopening` → `active`.
-* `completed` remains terminal after successful one-final-commit summary.
-
-Task-savepoint `completed` summaries return to `active` while tasks remain;
-after final aggregate summary they terminate at `completed` without another
-aggregate commit.
+The runner writes only canonical latest records: `version`, `outcome`,
+`summary`, and `evidence`, plus `unresolvedFindings` for a failed review. It
+rebuilds context from that finalized state.
 
 ## Recovery
 
-Partial execute/review, failed-review, and blocked-validation recoveries repair
-both persisted locations to one canonical state. On write error, stop and name
-failed path. Recovery preserves event history, ownership safeguards, and task
-savepoint behavior.
-
-## Validation
-
-* Every state resolves exactly one stage prompt, model, and reasoning level in
-  `stage.ts`.
-* State-machine prompts explicitly load this instruction.
-* Prompts must never persist secondary workflow-routing fields.
+Normal runs never strip inline sections or infer a state handoff from agent
+output. Restart recovery uses only the exact transition journal. Existing
+malformed plans require the explicit workflow artifact migration command; they
+are not repaired automatically during a stage.

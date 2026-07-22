@@ -24,7 +24,10 @@ test("every canonical workflow state resolves one executable contract", () => {
     assert.ok(contract.reasoning);
   }
   assert.equal(workflowStageContractForState("review")?.id, "review-changes");
-  assert.equal(WORKFLOW_STAGE_CONTRACTS.filter((item) => item.workflowState).length, states.length);
+  assert.equal(
+    WORKFLOW_STAGE_CONTRACTS.filter((item) => "workflowState" in item).length,
+    states.length,
+  );
 });
 
 test("workflow-state matrix exactly matches executable contract", async () => {
@@ -32,9 +35,11 @@ test("workflow-state matrix exactly matches executable contract", async () => {
     "## Persistence Rules",
   )[0] ?? "";
   const documented = Array.from(
-    content.matchAll(/^\| `([^`]+)` \| `([^`]+)` \|$/gm),
-    ([, workflowState, action]) => ({ workflowState, action }),
-  );
+    content.matchAll(/^\| `([^`]+)`(?: \/ `([^`]+)`)? \| `([^`]+)` \|/gm),
+    ([, firstState, secondState, action]) => [firstState, secondState]
+      .filter((workflowState): workflowState is string => Boolean(workflowState))
+      .map((workflowState) => ({ workflowState, action })),
+  ).flat();
   const executable = states.map((workflowState) => ({
     workflowState,
     action: workflowStageContractForState(workflowState)?.id,

@@ -70,6 +70,7 @@ export const generateWorkflowPrompt = ({
   workflowTokenGuardrail,
   taskContext,
   taskSavepointAggregateSummary = false,
+  stageDescriptor,
 }: {
   promptPath: string;
   planPath: string;
@@ -84,6 +85,7 @@ export const generateWorkflowPrompt = ({
   workflowTokenGuardrail?: WorkflowTokenGuardrail;
   taskContext?: WorkflowTaskContext;
   taskSavepointAggregateSummary?: boolean;
+  stageDescriptor?: string;
 }): string => {
   const defaultActionLabel = workflowStageContractForPrompt(promptPath)?.humanLabel;
   const actionLabel = taskSavepointAggregateSummary
@@ -97,12 +99,23 @@ export const generateWorkflowPrompt = ({
   const resolvedReviewPrimaryPaths = uniquePaths(
     reviewPrimaryPaths ?? reviewScopeMetadata?.reviewPrimaryPaths ?? [],
   ).filter((primaryPath) => reviewAllPaths.includes(primaryPath));
+  const resolvedReviewPrimaryPathBatches = (
+    reviewScopeMetadata?.reviewPrimaryPathBatches ??
+    (resolvedReviewPrimaryPaths.length > 0 ? [resolvedReviewPrimaryPaths] : [])
+  )
+    .map((batch) =>
+      uniquePaths(batch).filter((primaryPath) =>
+        resolvedReviewPrimaryPaths.includes(primaryPath),
+      ),
+    )
+    .filter((batch) => batch.length > 0);
   const reviewScopeLines =
     reviewScopeMetadata && isReviewPrompt(promptPath)
       ? [
           `Narrow pass: ${reviewScopeMetadata.narrowPass}`,
           `Review all path count: ${reviewScopeMetadata.reviewAllPaths.length}`,
           `Review primary path count: ${reviewScopeMetadata.reviewPrimaryPaths.length}`,
+          `Review primary batch count: ${resolvedReviewPrimaryPathBatches.length}`,
           `Full diff byte limit: ${WORKFLOW_REVIEW_FULL_DIFF_BYTE_LIMIT}`,
           `Full diff bytes: ${reviewScopeMetadata.diffBytes ?? "unknown"}`,
           reviewScopeMetadata.autoNarrowReason
@@ -113,7 +126,21 @@ export const generateWorkflowPrompt = ({
           .join("\n")
       : "";
   const reviewPrimaryBlock =
-    resolvedReviewPrimaryPaths.length > 0
+    resolvedReviewPrimaryPathBatches.length > 1
+      ? `
+Use only these narrowed primary path batches for full diff reads. Read one
+batch at a time; do not combine batches or let any one command exceed the
+full-diff byte limit:
+${resolvedReviewPrimaryPathBatches
+  .map(
+    (batch, index) =>
+      `Batch ${index + 1}:\n${batch
+        .map((stagingPath) => `- ${stagingPath}`)
+        .join("\n")}\ngit diff --staged -- ${shellPathspecs(batch)}`,
+  )
+  .join("\n\n")}
+`
+      : resolvedReviewPrimaryPaths.length > 0
       ? `
 Use only these narrowed primary paths for full diff reads:
 ${resolvedReviewPrimaryPaths.map((stagingPath) => `- ${stagingPath}`).join("\n")}
@@ -209,7 +236,7 @@ Task savepoint rules:
 - If the current task changed a shared contract, service invariant, schema, payload shape, generated type, or backend enforcement rule, fix the smallest compatibility path needed to keep existing later-task call sites from submitting invalid data.
 - Do not output \`STOP\` solely because that minimal compatibility fix touches a file named in a later \`[task:...]\` item.
 - If review feedback identifies a missing backend RPC, migration, generated database type, or database regression test required to uphold the current task's access/security invariant, treat it as that smallest compatibility repair.
-- If such a file is not currently listed in the plan file inventory, add the exact file to the current plan's ownership/inventory artifacts and continue.
+- If such a file is outside the declared plan-owned scope, record the exact required path and reason in the assigned event evidence. Do not edit the plan, ownership, or inventory artifacts; the runner will reject unauthorized routing mutations.
 - Do not output \`STOP\` solely because the required minimal backend contract repair touches a migration, generated database contract file, or database test outside the original current-task file list.
 - Keep \`.ai/\` artifacts out of git commits.
 - The runner owns .ai/artifacts/<plan-name>/execution-summary.md; do not edit it directly.
@@ -281,6 +308,7 @@ ${workflowGuardrail}
 ${terminalOutputRequirement}
 
 ${taskSavepointBoundary}${taskAggregateBoundary}
+${stageDescriptor ?? ""}
 
 ${actionLabel}:
 ${planPath}${reviewBoundary}${commitBoundary}${unblockEvidence}

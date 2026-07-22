@@ -18,6 +18,7 @@ import {
   runScopeCleanupForPathBatches,
   runScopeCleanupForPaths,
   selectReviewPrimaryPaths,
+  splitReviewPrimaryPathsIntoBatches,
 } from "../scope.ts";
 import {
   WORKFLOW_REVIEW_FULL_DIFF_BYTE_LIMIT,
@@ -131,6 +132,87 @@ test("review scope excludes generated output from the full-diff budget", async (
     result.scope.diffBytes,
     Buffer.byteLength("small non-generated diff"),
   );
+});
+
+test("review scope batches aggregate full diffs below the byte limit", async () => {
+  const paths = ["src/a.ts", "src/b.ts", "src/c.ts"];
+  const pathDiffs = new Map(paths.map((reviewPath) => [
+    reviewPath,
+    `${reviewPath}:${"x".repeat(30_000)}`,
+  ]));
+  const runner: ProcessRunner = async (call) => {
+    if (call.args.includes("--stat")) {
+      return {
+        launched: true,
+        exitCode: 0,
+        stdout: paths.map((reviewPath) => `${reviewPath} | 1`).join("\n"),
+        stderr: "",
+      };
+    }
+    const separatorIndex = call.args.indexOf("--");
+    const scopedPaths = call.args.slice(separatorIndex + 1);
+    return {
+      launched: true,
+      exitCode: 0,
+      stdout: scopedPaths.map((reviewPath) => pathDiffs.get(reviewPath)).join("\n"),
+      stderr: "",
+    };
+  };
+
+  const result = await buildReviewScopeMetadata({
+    rootDir: "/workspace",
+    paths,
+    planContent: "",
+    processRunner: runner,
+    narrowPass: 0,
+  });
+
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.deepEqual(result.scope.reviewPrimaryPathBatches, [
+    ["src/a.ts", "src/b.ts"],
+    ["src/c.ts"],
+  ]);
+  assert.ok(result.scope.diffBytes! <= WORKFLOW_REVIEW_FULL_DIFF_BYTE_LIMIT);
+});
+
+test("review primary batching keeps an oversized individual file isolated", () => {
+  assert.deepEqual(
+    splitReviewPrimaryPathsIntoBatches({
+      paths: ["src/large.sql", "src/small.sql"],
+      diffBytesByPath: new Map([
+        ["src/large.sql", WORKFLOW_REVIEW_FULL_DIFF_BYTE_LIMIT + 1],
+        ["src/small.sql", 1],
+      ]),
+    }),
+    [["src/large.sql"], ["src/small.sql"]],
+  );
+});
+
+test("review scope remains reviewable for an oversized individual diff", async () => {
+  const result = await buildReviewScopeMetadata({
+    rootDir: "/workspace",
+    paths: ["src/large.sql"],
+    planContent: "",
+    processRunner: async (call) => ({
+      launched: true,
+      exitCode: 0,
+      stdout: call.args.includes("--stat")
+        ? "src/large.sql | 1\n"
+        : "x".repeat(WORKFLOW_REVIEW_FULL_DIFF_BYTE_LIMIT + 1),
+      stderr: "",
+    }),
+    narrowPass: 3,
+  });
+
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.deepEqual(result.scope.reviewPrimaryPathBatches, [["src/large.sql"]]);
+  assert.equal(
+    result.scope.diffBytes,
+    WORKFLOW_REVIEW_FULL_DIFF_BYTE_LIMIT + 1,
+  );
+  assert.match(result.scope.autoNarrowReason ?? "", /review full diff/);
 });
 
 test("review staging clears stale staged path then re-adds before review", async () => {

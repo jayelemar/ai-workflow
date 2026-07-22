@@ -11,17 +11,20 @@ import {
 } from "../../telemetry/token-usage.ts";
 export { analyzeTokenUsageLedger } from "../../telemetry/token-ledger.ts";
 import {
+  CODEX_SELECTED_MODEL_CAPACITY_FALLBACK_ATTEMPTS,
+  CODEX_SELECTED_MODEL_CAPACITY_PRIMARY_ATTEMPTS,
+  codexCapacityFallbackConfig,
   codexExecutionConfig,
   WORKFLOW_RUNNER_CODEX_PROFILE,
 } from "../../config/codex.ts";
 import { COMMIT_SUMMARY_PROMPT_PATH } from "../../contracts/stage.ts";
-import { createWorkflowRunnerCodexRuntime, defaultProcessRunner, isValidCodexProfile } from "../process.ts";
+import { codexResultContainsSelectedModelCapacity, createWorkflowRunnerCodexRuntime, defaultProcessRunner, isValidCodexProfile } from "../process.ts";
 import { classifyFailureForLog, codexOutputStopReason, createWorkflowFailureDebugRecord } from "../terminal/codex-events.ts";
 import { formatCommitProgressLine, formatWorkflowElapsedTime, formatWorkflowProgressLine, supportsWorkflowAnsiColor } from "../terminal/formatters.ts";
 import { parsePlanTasks, parseTaskCommitBoundaries, taskCommitBoundaryCount, validateTaskCommitBoundaries } from "../plan/parser.ts";
 import { writeWorkflowContextSnapshot } from "../plan/context-snapshot.ts";
 import { generateWorkflowPrompt, isReviewPrompt, readPrompt } from "../plan/prompt.ts";
-import { parsePlan, preflightManualPlanExecutionMode, repairThinPlanManifestStateFromWorkflow } from "../plan/state.ts";
+import { parsePlan, preflightManualPlanExecutionMode } from "../plan/state.ts";
 import { completedTaskCommitCount, currentTaskArtifactRelativePath, nextIncompleteTask, nextTaskAfter, readableTaskLabel, readableTaskProgressDescription, readTaskArtifactStage, writeTaskArtifact } from "../tasks/savepoints.ts";
 import { hasCompletedTaskAggregateSummary } from "../tasks/summaries.ts";
 import { parseCommitSummaryPathsForPlan, readDirtyPlanOwnedPaths } from "../review/commit.ts";
@@ -50,6 +53,12 @@ import { appendWorkflowIterationRecord } from "./iteration-recorder.ts";
 import { createTaskProgress } from "./task-progress.ts";
 import { recoverTaskSavepoint } from "./task-savepoint-recovery.ts";
 import { resolveReviewStagingPaths } from "./review-staging-paths.ts";
+import {
+  formatStageDescriptor,
+  recoverPendingStageFinalization,
+  reserveStageDescriptor,
+  rollbackStageDescriptor,
+} from "./stage-finalization.ts";
 import type { CommitProgress, Failure, FileOwnershipPreflight, ParsedPlan, ReviewCleanupProcess, ReviewScopeMetadata, ReviewStagingProcess, RunnerResult, TaskStage, WorkflowContextSnapshotResult, WorkflowTaskContext } from "../types.ts";
 
 const rel = (...segments: string[]) => segments.join("/");
@@ -103,6 +112,10 @@ export const runWorkflowRunnerLifecycle = async (
   let carriedReviewStagingProcess: ReviewStagingProcess | undefined;
   let reviewNarrowPass = 0;
   let latestFailureDebugPath: string | undefined;
+  const capacityAttempts = new Map<
+    string,
+    { primary: number; fallback: number }
+  >();
   const markWorkflowLogCreated = (planName: string) => {
     workflowLogPath = rel(".ai", "artifacts", planName, "logs", "runner.log");
   };
@@ -166,6 +179,18 @@ export const runWorkflowRunnerLifecycle = async (
   }
   emitWorkflowThresholdWarnings(initialParsedPlan.warnings);
   let parsedPlan: ParsedPlan = initialParsedPlan;
+  const recoveredTransition = await recoverPendingStageFinalization({
+    rootDir,
+    plan: parsedPlan,
+  });
+  if (!recoveredTransition.ok) {
+    return await finishFailure(recoveredTransition.reason);
+  }
+  if (recoveredTransition.recovered) {
+    const reparsed = await parsePlan({ planName: planArgument, rootDir });
+    if (!reparsed.ok) return await finishFailure(reparsed.reason);
+    parsedPlan = reparsed;
+  }
   tokenUsageTotals = await readTokenUsageTotals(rootDir, parsedPlan.planName);
   const syncWorkflowSnapshot = async (
     plan: ParsedPlan,
@@ -191,7 +216,16 @@ export const runWorkflowRunnerLifecycle = async (
       return await finishFailure(prompt.reason);
     }
     const nextIteration = iterations + 1;
-    const executionConfig = codexExecutionConfig(route.promptPath);
+    const baseExecutionConfig = codexExecutionConfig(route.promptPath);
+    const capacityAttemptKey = `${parsedPlan.planPath}:${parsedPlan.workflowState}:${route.promptPath}`;
+    const previousCapacityAttempts = capacityAttempts.get(capacityAttemptKey) ?? {
+      primary: 0,
+      fallback: 0,
+    };
+    const executionConfig =
+      previousCapacityAttempts.primary >= CODEX_SELECTED_MODEL_CAPACITY_PRIMARY_ATTEMPTS
+        ? codexCapacityFallbackConfig(baseExecutionConfig) ?? baseExecutionConfig
+        : baseExecutionConfig;
     const planTasks = parsePlanTasks(parsedPlan.content);
     const taskSavepointMode = planTasks.length > 1;
     const selectedTask = taskSavepointMode
@@ -1000,6 +1034,12 @@ export const runWorkflowRunnerLifecycle = async (
     if (!contextSnapshot.ok) {
       return await finishFailure(contextSnapshot.reason);
     }
+    const stageDescriptor = route.terminal
+      ? undefined
+      : await reserveStageDescriptor({ rootDir, plan: parsedPlan });
+    if (stageDescriptor && "ok" in stageDescriptor && !stageDescriptor.ok) {
+      return await finishFailure(stageDescriptor.reason);
+    }
     const generatedPrompt = generateWorkflowPrompt({
       promptPath: route.promptPath,
       planPath: parsedPlan.planPath,
@@ -1014,6 +1054,9 @@ export const runWorkflowRunnerLifecycle = async (
       workflowTokenGuardrail,
       taskContext: currentTaskContext,
       taskSavepointAggregateSummary,
+      stageDescriptor: stageDescriptor && !("ok" in stageDescriptor)
+        ? formatStageDescriptor(stageDescriptor)
+        : undefined,
     });
     const executedIteration = await executeWorkflowIteration({
       rootDir,
@@ -1108,28 +1151,6 @@ export const runWorkflowRunnerLifecycle = async (
       return { ok: true };
     };
 
-    if (result.launched && result.exitCode === 0 && !interruptSignal) {
-      const manifestRepair = await repairThinPlanManifestStateFromWorkflow({
-        rootDir,
-        plan: parsedPlan,
-      });
-      if (!manifestRepair.ok) {
-        const cleanup = await cleanupReviewStagingPaths(reviewStagingPaths);
-        const reason = cleanup.ok
-          ? manifestRepair.reason
-          : `${manifestRepair.reason}; ${cleanup.reason}`;
-        const logResult = await appendIterationLog(reason);
-        if (!logResult.ok) {
-          return await finishFailure(logResult.reason);
-        }
-        const snapshotResult = await syncWorkflowSnapshot(parsedPlan);
-        if (!snapshotResult.ok) {
-          return await finishFailure(snapshotResult.reason);
-        }
-        return await finishFailure(reason);
-      }
-    }
-
     const nonterminalRouteOutcome = (
       updated: ParsedPlan,
     ):
@@ -1166,12 +1187,48 @@ export const runWorkflowRunnerLifecycle = async (
       );
     };
 
+    if (result.launched && codexResultContainsSelectedModelCapacity(result)) {
+      const rollback = stageDescriptor && !("ok" in stageDescriptor)
+        ? await rollbackStageDescriptor({ rootDir, plan: parsedPlan })
+        : { ok: true as const };
+      const nextAttempts = {
+        ...previousCapacityAttempts,
+        ...(executionConfig.model === baseExecutionConfig.model
+          ? { primary: previousCapacityAttempts.primary + 1 }
+          : { fallback: previousCapacityAttempts.fallback + 1 }),
+      };
+      capacityAttempts.set(capacityAttemptKey, nextAttempts);
+      const canRetryPrimary = nextAttempts.primary < CODEX_SELECTED_MODEL_CAPACITY_PRIMARY_ATTEMPTS;
+      const fallbackConfig = codexCapacityFallbackConfig(baseExecutionConfig);
+      const canRetryFallback =
+        !canRetryPrimary &&
+        fallbackConfig !== undefined &&
+        nextAttempts.fallback < CODEX_SELECTED_MODEL_CAPACITY_FALLBACK_ATTEMPTS;
+      const retryReason = rollback.ok
+        ? undefined
+        : rollback.reason;
+      const logResult = await appendIterationLog(retryReason);
+      if (!logResult.ok) return await finishFailure(logResult.reason);
+      if (canRetryPrimary || canRetryFallback) {
+        const model = canRetryPrimary ? baseExecutionConfig.model : fallbackConfig!.model;
+        logger.log(
+          `[workflow-runner] ${executionConfig.model} reported capacity; rebuilding state and snapshot before retrying ${route.promptPath} with ${model}.`,
+        );
+        const retriedPlan = await parsePlan({ planName: planArgument, rootDir });
+        if (!retriedPlan.ok) return await finishFailure(retriedPlan.reason);
+        parsedPlan = retriedPlan;
+        continue;
+      }
+      stopReason = stopReason ?? "selected model capacity retry limit reached";
+    }
+
     if (stopReason) {
       const stoppedOutcome = await handleStoppedIteration({
         rootDir,
-        planArgument,
         plan: parsedPlan,
-        promptPath: route.promptPath,
+        descriptor: stageDescriptor && !("ok" in stageDescriptor)
+          ? stageDescriptor
+          : undefined,
         stopReason,
         iterations,
         interruptSignal,
@@ -1181,9 +1238,6 @@ export const runWorkflowRunnerLifecycle = async (
           cleanupReviewStagingPaths(reviewStagingPaths),
         cleanupCommitSummaryPaths: () =>
           cleanupCommitSummaryPaths(commitSummaryPaths),
-        emitWorkflowThresholdWarnings,
-        nonterminalRouteOutcome,
-        finishNonterminalRouteOutcome,
         finishFailure,
       });
       if (stoppedOutcome.kind === "continue") {
@@ -1232,9 +1286,11 @@ export const runWorkflowRunnerLifecycle = async (
       planArgument,
       plan: parsedPlan,
       promptPath: route.promptPath,
-      stdout: result.stdout,
-      timestamp,
-      processRunner,
+      descriptor: stageDescriptor && !("ok" in stageDescriptor)
+        ? stageDescriptor
+        : (() => {
+            throw new Error("nonterminal workflow stage has no reserved descriptor");
+          })(),
       appendIterationLog,
       syncWorkflowSnapshot,
       cleanupReviewStagingPaths: () =>

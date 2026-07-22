@@ -1,13 +1,9 @@
 import {
-  CODEX_SELECTED_MODEL_CAPACITY_FALLBACK_ATTEMPTS,
-  CODEX_SELECTED_MODEL_CAPACITY_PRIMARY_ATTEMPTS,
-  codexCapacityFallbackConfig,
   type CodexExecutionConfig,
 } from "../../config/codex.ts";
 import {
   CODEX_BINARY_COMMAND,
   codexExecArgs,
-  codexResultContainsSelectedModelCapacity,
   codexWorkEnvironment,
 } from "../process.ts";
 import {
@@ -103,7 +99,6 @@ export const executeWorkflowIteration = async ({
       )
     : undefined;
   waitNotice.start();
-  let effectiveExecutionConfig = executionConfig;
   const runCodexAttempt = async (
     attemptExecutionConfig: CodexExecutionConfig,
   ): Promise<ProcessResult> =>
@@ -133,44 +128,7 @@ export const executeWorkflowIteration = async ({
     );
   let result: ProcessResult;
   try {
-    const retryNotices: string[] = [];
     result = await runCodexAttempt(executionConfig);
-    for (
-      let attempt = 2;
-      attempt <= CODEX_SELECTED_MODEL_CAPACITY_PRIMARY_ATTEMPTS &&
-      codexResultContainsSelectedModelCapacity(result);
-      attempt += 1
-    ) {
-      const retryNotice = `[workflow-runner] ${executionConfig.model} reported capacity; retrying ${promptPath} with the same model (${attempt}/${CODEX_SELECTED_MODEL_CAPACITY_PRIMARY_ATTEMPTS}).`;
-      retryNotices.push(retryNotice);
-      logger.log(streamOutput ? `${retryNotice}\n` : retryNotice);
-      result = await runCodexAttempt(executionConfig);
-    }
-    const fallbackExecutionConfig = codexResultContainsSelectedModelCapacity(result)
-      ? codexCapacityFallbackConfig(executionConfig)
-      : undefined;
-    if (fallbackExecutionConfig) {
-      effectiveExecutionConfig = fallbackExecutionConfig;
-      for (
-        let attempt = 1;
-        attempt <= CODEX_SELECTED_MODEL_CAPACITY_FALLBACK_ATTEMPTS &&
-        codexResultContainsSelectedModelCapacity(result);
-        attempt += 1
-      ) {
-        const retryNotice = `[workflow-runner] ${executionConfig.model} still reported capacity after ${CODEX_SELECTED_MODEL_CAPACITY_PRIMARY_ATTEMPTS} attempts; retrying ${promptPath} with fallback model ${fallbackExecutionConfig.model} (${attempt}/${CODEX_SELECTED_MODEL_CAPACITY_FALLBACK_ATTEMPTS}).`;
-        retryNotices.push(retryNotice);
-        logger.log(streamOutput ? `${retryNotice}\n` : retryNotice);
-        result = await runCodexAttempt(fallbackExecutionConfig);
-      }
-    }
-    if (result.launched && retryNotices.length > 0) {
-      result = {
-        ...result,
-        stderr: [...retryNotices, result.stderr]
-          .filter((part) => part.length > 0)
-          .join("\n"),
-      };
-    }
   } finally {
     waitNotice.stop();
   }
@@ -184,5 +142,5 @@ export const executeWorkflowIteration = async ({
     outputStream.stdout("\n");
   }
   liveOutput?.flush();
-  return { result, durationMs, effectiveExecutionConfig, editedFiles };
+  return { result, durationMs, effectiveExecutionConfig: executionConfig, editedFiles };
 };

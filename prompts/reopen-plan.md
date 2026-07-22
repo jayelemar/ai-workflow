@@ -1,198 +1,45 @@
-# Reopen Plan (State-Machine Driven)
+# Reopen Plan (Runner-Finalized)
 
-This prompt reopens a completed plan when post-completion bugs or regressions are found.
+Analyze only the concrete post-completion findings supplied by the user or the
+latest relevant event. This stage plans the remediation handoff; it does not
+implement fixes, review changes, or create a commit summary.
 
-It does NOT implement fixes.
+## Routing Boundary (MANDATORY)
 
-It does NOT perform review.
+Do not edit the plan manifest, workflow state, phases, task IDs, task
+boundaries, workflow sidecars, context snapshot, or any inline reopen/history
+section. A reopen must not change the active plan's task boundaries. The
+runner owns every state and history write.
 
-It does NOT generate a commit summary.
+Write only the event artifact assigned in the runner-issued descriptor:
 
----
+```md
+# Reopen v<reserved-version>
 
-## Instruction Loading
-
-Read:
-
-* `.codex/AGENTS.md`
-* `.ai/instructions/shared/workflow-state.md`
-* `.ai/instructions/shared/reasoning-quality.md`
-* `.ai/instructions/shared/debugging.md`
-* runner-owned context snapshot `.ai/artifacts/<plan-name>/state/context.md` as the primary current-state source
-* the repo-relative `*.spec.md` path(s) listed under the plan's `## Spec` section (if any)
-* Active Context Packet instruction files selected from `.ai/instructions/index.md`
-* the plan file
-
-Read the full plan only when exact plan edits are required or the snapshot is insufficient.
-Do not load full historical sections unless the snapshot is insufficient.
-Do not inspect workflow `history` during normal reopen runs; use the snapshot,
-latest review pointer, unresolved blockers, and the latest relevant event
-pointer first, then open only that exact event artifact when specific evidence
-is needed.
-Preserve exact reopen findings, workflow state, event evidence, user-provided findings, and issue-report reads required to avoid unsafe reopen transitions.
-Use the runner-provided Active Context Packet and index-selected instruction files only. Do not broadly load `.ai/instructions/**`.
-
-Apply shared reasoning-quality and debugging guidance for evidence checks,
-root-cause validation, and safe workflow transitions.
-
----
-
-## Plan Input (MANDATORY)
-
-.ai/plans/<plan-name>.md
-
-If not provided:
-
--> output `STOP`
--> state blocking reason (`plan file is required`)
--> do not proceed
-
----
-
-## Reopen Findings Input (MANDATORY)
-
-Use the latest bug findings from one of:
-
-* the user's current request
-* the latest review pointer, latest relevant event pointer, and unresolved blockers in `.ai/artifacts/<plan-name>/state/workflow.json`
-* the exact event artifact referenced by the latest relevant event pointer when that evidence is needed
-* a clearly referenced issue report in the plan
-
-These reopen findings, workflow state, and event evidence remain correctness-critical inputs even when the context snapshot is available.
-
-If no concrete findings exist:
-
--> output `STOP`
--> state blocking reason (`reopen findings are required`)
--> do not proceed
-
----
-
-## State Validation (CRITICAL)
-
-Read:
-
-## Workflow State
-
-### Already Reopened Fast Path
-
-IF Workflow State == `active` AND `## Reopen History` contains a latest reopen entry with `Decision: active`:
-
--> do not output `STOP`
--> do not edit the plan
--> output that the plan is already reopened
--> output the next step as `execute-plan`
--> end
-
-IF Workflow State == `active` and this fast path does not apply:
-
--> STOP (`plan is active but reopen handoff evidence is missing`)
-
----
-
-Expected:
-
-`reopening`
-
-IF Workflow State != `reopening`:
-
--> STOP (`plan must be in reopening state`)
-
----
-
-
-## Reopen Scope
-
-Analyze ONLY the concrete bug findings that caused reopening.
-
-Do NOT:
-
-* expand scope beyond the findings
-* introduce speculative behavior
-* remove previous validation, execution, review, or commit history
-* mark the plan completed
-* generate a commit summary
-
----
-
-## Required Plan Updates
-
-Update the plan with:
-
-* `## Reopen History` entry
-* required fixes
-* missing or repeated validations
-* unresolved risks
-* implementation gaps
-* phase/task updates needed to execute the fixes
-
-Rules:
-
-* preserve existing history sections
-* append new history entries
-* keep file ownership explicit
-* keep fixes traceable to the reopen findings
-
----
-
-## State Transition (MANDATORY)
-
-After the plan is updated for the reopened work:
-
-update:
-
-## Workflow State
+## Outcome
 
 active
 
----
+## Summary
 
-## Reopen History (MANDATORY)
+<concise reopen decision>
 
-Append the next sequential reopen entry.
+## Evidence
 
-Before updating the plan, create `.ai/artifacts/<plan-name>/events/reopen-vX.md` with `# Reopen vX`, `## Summary`, and `## Evidence`.
+* <exact findings and supporting evidence>
 
-If the plan already contains `## Reopen History`, append only:
+## Remediation
 
-### Reopen vX
+* <required fix>
+* <required validation>
+* <remaining risk>
+```
 
-* Summary:
-* Decision: active
-* Evidence: .ai/artifacts/<plan-name>/events/reopen-vX.md
+`## Remediation` must contain the exact findings, required remediation,
+validation, and risks needed by the next execution stage. If concrete findings
+are absent, output `STOP`; do not create routing state as a fallback.
 
-Rules:
+## Output
 
-* Every reopen MUST append a new entry
-* MUST NOT overwrite previous reopen entries
-* Reopen versions MUST be sequential
-* Reopen History entries may contain only `Summary`, `Decision`, and `Evidence`
-* Put findings, required fixes, required validation, and detailed reopen reasoning in the reopen artifact
-* MUST NOT duplicate the `## Reopen History` heading when it already exists
-* MUST create `## Reopen History` only if the section is missing
-
----
-
-## Output (MANDATORY)
-
-Use this shared terminal-facing contract for non-review stages.
-
-**Plan**
-
-.ai/plans/<plan-name>.md
-
-**Summary**
-
-* REOPENED
-* stage result/state line first
-* at most 2-3 short high-signal bullets
-
-**Key Details**
-
-* findings used
-* fixes added to the plan
-* validation added to the plan
-
-**Next**
-
-Workflow State: `active`
+Report the reopen findings and assigned event path. Do not claim to have
+changed workflow state, history, phases, or tasks.

@@ -12,7 +12,6 @@ export type WorkflowThresholdTokenUsage = {
 
 export type WorkflowAutoNarrowDecision = {
   shouldNarrow: boolean;
-  shouldStop: boolean;
   nextPass: number;
   reason?: string;
 };
@@ -50,13 +49,12 @@ export const decideWorkflowAutoNarrow = ({
   ].filter((reason): reason is string => Boolean(reason));
 
   if (reasons.length === 0) {
-    return { shouldNarrow: false, shouldStop: false, nextPass: currentPass };
+    return { shouldNarrow: false, nextPass: currentPass };
   }
 
   const nextPass = Math.min(currentPass + 1, WORKFLOW_AUTO_NARROW_PASS_LIMIT);
   return {
     shouldNarrow: currentPass < WORKFLOW_AUTO_NARROW_PASS_LIMIT,
-    shouldStop: currentPass >= WORKFLOW_AUTO_NARROW_PASS_LIMIT,
     nextPass,
     reason: reasons.join("; "),
   };

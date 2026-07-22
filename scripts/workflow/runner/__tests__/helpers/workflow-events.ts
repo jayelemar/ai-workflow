@@ -6,6 +6,15 @@ export const writeWorkflowEventArtifactSync = ({
   planName,
   kind,
   version,
+  outcome = kind === "sync"
+    ? "ready"
+    : kind === "validation"
+      ? "approved"
+      : kind === "review"
+        ? "completed"
+        : kind === "reopen" || kind === "unblock"
+          ? "active"
+          : "review-ready",
   summary = "Artifact summary.",
   evidence = "Artifact evidence.",
 }: {
@@ -13,6 +22,7 @@ export const writeWorkflowEventArtifactSync = ({
   planName: string;
   kind: string;
   version: number;
+  outcome?: string;
   summary?: string;
   evidence?: string;
 }) => {
@@ -27,7 +37,11 @@ export const writeWorkflowEventArtifactSync = ({
   mkdirSync(dirname(artifactPath), { recursive: true });
   writeFileSync(
     artifactPath,
-    `# ${kind} v${version}
+    `# ${kind.slice(0, 1).toUpperCase()}${kind.slice(1)} v${version}
+
+## Outcome
+
+${outcome}
 
 ## Summary
 
