@@ -11,10 +11,17 @@ Default:
 Execution mode:
 `manual` or `runner-managed`
 
+Workflow classification:
+`ordinary manual`, `HIGH-GOAL`, or `runner-managed`
+
 Mode selection:
 Mandatory. If the operator did not explicitly choose `manual` or
 `runner-managed`, ask which execution mode to use and stop before creating or
 modifying any files.
+
+For manual HIGH work, also record whether it is ordinary manual or
+`HIGH-GOAL`; only the latter creates `goal-handoff.md` and starts `/goal` after
+spec-and-plan approval.
 
 User-journey artifact for flow-trace-required work:
 .ai/artifacts/<feature-or-bug-name>/user-journey.md
@@ -56,7 +63,8 @@ Strict Constraints:
 - For `manual` mode, you are only allowed to create or update:
   - `.ai/artifacts/<feature-or-bug-name>/user-journey.md`
   - `.ai/artifacts/<feature-or-bug-name>/implementation-map.md`
-  - `.ai/artifacts/<feature-or-bug-name>/manual-handoff.md`
+  - `.ai/artifacts/<feature-or-bug-name>/manual-handoff.md` for ordinary manual work
+  - `.ai/artifacts/<feature-or-bug-name>/goal-handoff.md` for selected HIGH-GOAL work
   - `.ai/plans/<feature-or-bug-name>.md`
 - For `runner-managed` mode, you are only allowed to create or update:
   - `.ai/artifacts/<feature-or-bug-name>/user-journey.md`
@@ -110,10 +118,13 @@ Required Behavior:
 - Follow the plan template exactly.
 - Save the plan to `.ai/plans/<feature-or-bug-name>.md`.
 - In `manual` mode, record runner-only artifact entries as `N/A: manual plan-bound execution` and do not create runner-only state files or event directories.
-- In `manual` mode, create `.ai/artifacts/<feature-or-bug-name>/manual-handoff.md`
+- In ordinary `manual` mode, create `.ai/artifacts/<feature-or-bug-name>/manual-handoff.md`
   at the artifact root. It must be refreshed before pausing, ending a session,
   or switching agent/provider; initialize it with no execution progress and
   manual execution after approval as the next action.
+- For selected `HIGH-GOAL` manual work, create only
+  `.ai/artifacts/<feature-or-bug-name>/goal-handoff.md` using `goal-handoff@1`.
+  It must link the approved spec and plan; do not create `manual-handoff.md`.
 - In `runner-managed` mode, record `Manual handoff` as
   `N/A: runner-managed execution`, then create every runner-managed artifact
   listed in the plan template's `## Artifacts` section, including

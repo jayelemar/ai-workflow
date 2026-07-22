@@ -18,7 +18,7 @@ analysis-only session. It does not write files.
 | --- | --- | --- |
 | `LOW` | Simple session-local `/plan` | Start `/plan`; do not create durable workflow artifacts. |
 | `MEDIUM` | Spec + manual plan | Create a spec, then use `create-plan` with `Execution mode: manual`. |
-| `HIGH-GOAL` | Codex `/goal` path | Start `/goal` with the approved objective and a stable kebab-case goal name. |
+| `HIGH-GOAL` | Approved manual goal package | Create and approve the spec and manual plan, create only `goal-handoff.md`, then start `/goal` with its Exact Goal. |
 | `HIGH-RUNNER` | Runner-managed path | Create a spec, then use `create-plan` with `Execution mode: runner-managed`. |
 
 For HIGH work, the operator must explicitly choose `HIGH-GOAL` or
@@ -75,7 +75,8 @@ spec -> optional user-journey artifact -> plan -> (manual execute | sync artifac
 7. Use the selected post-plan path:
    - `LOW`: session-local `/plan`; no durable workflow artifacts.
    - `MEDIUM`: `manual` spec-and-plan execution.
-   - `HIGH-GOAL`: Codex `/goal` with portable goal checkpoints.
+- `HIGH-GOAL`: approved manual spec-and-plan package, then Codex `/goal` with
+  its sole portable goal checkpoint.
    - `HIGH-RUNNER`: `runner-managed` spec-and-plan lifecycle.
 
 Manual post-plan path:
@@ -83,10 +84,13 @@ Manual post-plan path:
 - Continue execution in the same conversation from the spec and plan.
 - Do not create runner-only workflow state just to keep working.
 - For explicit manual execution, use `.ai/wrappers/manual-execute-plan.md`.
-- Create and refresh `.ai/artifacts/<plan-name>/manual-handoff.md` with
+- For ordinary manual work, create and refresh
+  `.ai/artifacts/<plan-name>/manual-handoff.md` with
   `.ai/wrappers/manual-handoff.md` before pausing, ending a session, or
-  switching agent/provider. Manual execution reads it when present; the spec,
-  plan, and current Git state remain authoritative.
+  switching agent/provider. HIGH-GOAL instead uses only
+  `.ai/artifacts/<goal-name>/goal-handoff.md` after its spec and plan are
+  approved. In both paths, the spec, plan, and current Git state remain
+  authoritative.
 - Repo-local Codex hooks can auto-append token checkpoints after manual
   `spec`, `plan`, and final `execute` when you use the tracked wrappers or
   prompts and the agent emits the required completion marker lines.

@@ -6,7 +6,8 @@ analysis-only resume step; it does not write files or runner state.
 ## Required Behavior
 
 1. Read `.ai/artifacts/<goal-name>/goal-handoff.md`.
-2. Treat `## Exact Goal` as the saved objective and `## Next Action` as the
+2. Validate `goal-handoff@1`, then read the linked `## Spec` and `## Plan`.
+   Treat `## Exact Goal` as the saved objective and `## Next Action` as the
    immediate starting point. Re-check current Git state before acting because
    the handoff is a checkpoint, not the authority for repository state.
 3. In Codex, restore the saved objective with `/goal <exact goal>`.
@@ -22,8 +23,9 @@ analysis-only resume step; it does not write files or runner state.
 - Never infer progress beyond verified entries in the handoff and current Git
   state.
 
-If the handoff is missing or incomplete, STOP and request the relevant
-`goal-handoff.md`; do not recreate it during resume.
+If the handoff, linked spec, or linked manual plan is missing or incomplete,
+STOP and request the relevant artifact; do not create runner state as a
+fallback during resume.
 
 ## Final Output
 

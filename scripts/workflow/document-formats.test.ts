@@ -26,11 +26,75 @@ test("validates every current document format", () => {
     ["userJourney", markdown("Journey", "user-journey@1", ["## Goal", "## Actors", "## Entry Points", "## User Flows", "## Mermaid Diagram", "## States", "## Failures", "## Acceptance Scenarios", "## Open Decisions"])],
     ["implementationMap", markdown("Map", "implementation-map@1", ["## Source Versions", "### User Action: Test"])],
     ["manualHandoff", markdown("Handoff", "manual-handoff@1", ["## Plan", "## Repository State", "## Verified Progress", "## Decisions", "## Blockers", "## Next Action"])],
+    ["goalHandoff", markdown("Goal Handoff", "goal-handoff@1", ["## Exact Goal", "## Spec", "## Plan", "## Repository State", "## Verified Progress", "## Decisions", "## Blockers", "## Next Action"])],
     ["workflowState", { documentFormat: "workflow-state@1", planPath: ".ai/plans/example.md", workflowState: "approved", latest: {}, history: [], unresolvedBlockers: [], updatedAt: "2026-01-01T00:00:00.000Z" }],
     ["fileOwnership", { documentFormat: "file-ownership@1", planPath: ".ai/plans/example.md", owns: [], released: [], resolvedFiles: [], changedFiles: [], headSha: "abc", updatedAt: "2026-01-01T00:00:00.000Z" }],
     ["filesState", { documentFormat: "files-state@1", created: [], modified: [], deleted: [], changedFiles: [], released: [], headSha: "abc" }],
   ];
   for (const [kind, content] of documents) assert.deepEqual(validateDocumentFormat(kind, content, `example-${kind}`), { ok: true });
+});
+
+test("HIGH-GOAL manual bundles require one goal handoff and no manual handoff", async () => {
+  const root = await mkdtemp(join(tmpdir(), "goal-handoff-bundle-"));
+  const planPath = ".ai/plans/example.md";
+  const plan = `# Plan: example
+
+## Document Format
+
+plan-manifest@1
+
+## Workflow Content Rules
+
+manual
+
+## Execution Mode
+
+manual
+
+## Spec
+
+.ai/specs/example.spec.md
+
+## Artifacts
+
+* User journey: N/A: no end-to-end product flow.
+* Implementation map: N/A: internal workflow package.
+* Manual handoff: N/A: HIGH-GOAL uses the goal handoff.
+* Goal handoff: .ai/artifacts/example/goal-handoff.md
+* Workflow state: N/A: manual HIGH-GOAL.
+* File ownership: N/A: manual HIGH-GOAL.
+* Files: N/A: manual HIGH-GOAL.
+
+## Phases
+
+### Implementation
+
+* Objective: Follow the approved manual package.
+`;
+  try {
+    await Promise.all([
+      mkdir(join(root, ".ai", "plans"), { recursive: true }),
+      mkdir(join(root, ".ai", "specs"), { recursive: true }),
+      mkdir(join(root, ".ai", "artifacts", "example"), { recursive: true }),
+    ]);
+    await Promise.all([
+      writeFile(join(root, planPath), plan),
+      writeFile(join(root, ".ai/specs/example.spec.md"), markdown("Example", "feature-spec@1", ["## Version", "## Goal", "## Inputs / Outputs", "## Behavior", "## Edge Cases", "## Constraints", "## Acceptance Criteria"])),
+      writeFile(join(root, ".ai/artifacts/example/goal-handoff.md"), markdown("Goal Handoff", "goal-handoff@1", ["## Exact Goal", "## Spec", "## Plan", "## Repository State", "## Verified Progress", "## Decisions", "## Blockers", "## Next Action"]).replace("content", "Follow the approved spec.\n\n## Spec\n\n.ai/specs/example.spec.md\n\n## Plan\n\n.ai/plans/example.md")),
+    ]);
+    const valid = await validatePlanDocumentBundle({ rootDir: root, planPath, planName: "example", planContent: plan });
+    assert.deepEqual(valid, { ok: true });
+    const invalid = await validatePlanDocumentBundle({
+      rootDir: root,
+      planPath,
+      planName: "example",
+      planContent: plan.replace("N/A: HIGH-GOAL uses the goal handoff.", ".ai/artifacts/example/manual-handoff.md"),
+    });
+    assert.equal(invalid.ok, false);
+    assert.match(invalid.ok ? "" : invalid.reason, /must mark manual handoff N\/A/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("rejects missing, misplaced, mismatched, and future formats", () => {

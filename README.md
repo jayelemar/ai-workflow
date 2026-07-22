@@ -229,7 +229,7 @@ reason, and exact next action.
 | --- | --- | --- |
 | `LOW` | Simple session-local `/plan` | None. Do not create spec, plan, or workflow artifacts. |
 | `MEDIUM` | Spec + manual plan | `.ai/artifacts/<plan-name>/manual-handoff.md`; refresh it explicitly before pausing, ending a session, or switching agent/provider. |
-| `HIGH-GOAL` | Codex `/goal` path | `.ai/artifacts/<goal-name>/goal-handoff.md`; refresh it only before `/goal pause`, ending a session, or switching provider/account. |
+| `HIGH-GOAL` | Approved manual spec-and-plan package, then Codex `/goal` | `.ai/artifacts/<goal-name>/goal-handoff.md`; refresh it only before `/goal pause`, ending a session, or switching provider/account. |
 | `HIGH-RUNNER` | Runner-managed path | Existing plan, context snapshot, event, review, and validation lifecycle. |
 
 For HIGH work, the operator explicitly selects `HIGH-GOAL` or `HIGH-RUNNER`.
@@ -337,10 +337,10 @@ Choose an execution mode when you create the plan:
   runner-managed workflow state
 - `runner-managed` for the harness path
 
-In `runner-managed` mode, new draft plans start at
-`draft + sync-plan-artifacts`. The default runner reconciles the plan, spec,
-user-journey artifact, implementation map, and thin-plan state before
-moving to validation.
+In `runner-managed` mode, new draft plans start at `draft-artifact-sync`.
+The sync stage records an event-only artifact-consistency decision; the runner
+validates that event and moves the canonical state to `draft-validation` only
+when the package is ready.
 
 Before invoking the runner, review every `runner-managed` plan with
 `.ai/wrappers/review-high-risk-plan.md` in a fresh Plan Mode or analysis-only
@@ -349,11 +349,12 @@ review until it returns `OKAY`. The operator must then review the finalized
 spec and plan and reply `APPROVE IMPLEMENTATION`.
 
 In `manual` mode, keep the spec and plan discipline but do not create
-runner-only state artifacts just to continue execution. Create
-`.ai/artifacts/<plan-name>/manual-handoff.md` at the manual artifact root and
-refresh it explicitly before pausing, ending a session, or switching
-agent/provider. During manual execution, read the handoff when present, while
-the spec, plan, and current Git state remain authoritative.
+runner-only state artifacts just to continue execution. Ordinary manual work
+uses `.ai/artifacts/<plan-name>/manual-handoff.md`. HIGH-GOAL work starts only
+after the spec and manual plan are approved and uses exactly
+`.ai/artifacts/<goal-name>/goal-handoff.md`; it must not create a manual
+handoff. During manual execution, the spec, plan, and current Git state remain
+authoritative.
 
 ### Choose A Post-Plan Path
 
@@ -393,41 +394,41 @@ Runner expectations:
 
 ### How The Runner Works
 
-The runner reads the plan state machine and selects the next prompt from the
-plan `Status` and `Next Action`.
+The runner reads the canonical `## Workflow State`, issues a stage descriptor,
+and finalizes state only from that descriptor's validated event artifact.
 
 Common stages:
 
-- `draft + sync-plan-artifacts`
-- `draft + plan-validator`
-- `approved + execute-plan`
-- `active + execute-plan`
-- `review + review-plan`
-- `blocked + unblock-plan`
-- `reopening + reopen-plan`
-- `completed + commit-summary`
+- `draft-artifact-sync -> sync-plan-artifacts`
+- `draft-validation -> plan-validator`
+- `approved` or `active -> execute-plan`
+- `review -> review-changes`
+- `blocked -> unblock-plan`
+- `reopening -> reopen-plan`
+- `completed -> commit-summary`
 
 Default stage routing:
 
 | Stage | Model | Reasoning |
 | --- | --- | --- |
 | `sync-plan-artifacts` | `gpt-5.6-luna` | `medium` |
-| `plan-validator` | `gpt-5.6-terra` | `medium` |
+| `plan-validator` | `gpt-5.5` | `medium` |
 | `execute-plan` | `gpt-5.5` | `high` |
 | `unblock-plan` | `gpt-5.6-luna` | `medium` |
-| `review-changes` | `gpt-5.6-terra` | `xhigh` |
+| `review-changes` | `gpt-5.6-sol` | `xhigh` |
 | `reopen-plan` | `gpt-5.6-luna` | `medium` |
-| `commit-summary` | `gpt-5.6-terra` | `medium` |
+| `commit-summary` | `gpt-5.5` | `medium` |
 | `scope-cleanup` | `gpt-5.6-terra` | `high` |
 
 Notes:
 
-- `review + review-plan` remains the public review entrypoint.
+- `review-changes` is the runner's review stage; it writes only its assigned
+  review event, and the runner persists the outcome.
 - The runner runs one combined harness review through `review-changes`.
 - Harness prompts use native `.ai/instructions/shared/*` guidance for reasoning,
   debugging, testing, and workflow state. Additional review, when desired, is a
   separate manual decision outside the default runner review path.
-- `commit-summary` uses `gpt-5.6-terra` with medium reasoning. It remains a
+- `commit-summary` uses `gpt-5.5` with medium reasoning. It remains a
   low-risk formatting stage: final commit subject and user-facing summary, not
   implementation correctness validation.
 - `scope-cleanup` is not a visible workflow state, but the runner uses it
@@ -440,10 +441,11 @@ The runner writes a hot-path context snapshot for each plan:
 ```
 
 Baseline snapshot-first guidance means runner-driven prompts should use that
-snapshot as the primary current-state source. The full plan remains the source
-of truth for exact history and edits, and prompts may open exact plan sections,
-event artifacts, workflow state, validation evidence, blocker evidence, or diffs
-when the snapshot is insufficient for correctness.
+snapshot as the primary current-state source. The manifest remains the source
+of truth for plan edits; finalized event artifacts and `workflow.json` are the
+source for exact workflow history and evidence. Prompts may open only exact
+event, state, validation, blocker, or diff evidence when the snapshot is
+insufficient for correctness.
 
 Threshold crossings add stronger workflow token guardrail guidance for guarded
 stages. That escalation is prompt guidance, not a hard block, and it preserves
@@ -454,13 +456,14 @@ Snapshot sections are intentionally compact and stage-aligned. Expect:
 
 - `## Summary`
 - `## Key Details`
-- `## Validation`
-- `## Review`
-- `## Latest Review Remediation Context`
+- `## Generated Latest Validation Context`
+- `## Generated Latest Review Context`
+- `## Generated Remediation Context`
 
-New workflow plans use `thin-plan`. Existing historical plans remain
-supported as legacy input and are not migrated by the runner. Versioned
-workflow history entries stay short and point to event artifacts:
+New workflow plans use `thin-plan`. Existing malformed history is never
+repaired by a normal run; use the explicit workflow-artifact migration only
+when its proof requirements are met. Versioned workflow history entries are
+runner-written pointers to event artifacts:
 
 ```text
 .ai/artifacts/<plan-name>/events/<kind>-v<N>.md
@@ -478,6 +481,10 @@ Each event artifact must include:
 
 ```markdown
 # <Event> v<N>
+
+## Outcome
+
+<stage-specific outcome>
 
 ## Summary
 
@@ -521,8 +528,7 @@ manual `spec` and `plan` checkpoints either through the repo-local hooks or
 explicitly with the script.
 
 When the runner warns that a plan is too large, move bulky workflow detail into
-event artifacts and keep only bounded summaries plus exact `Evidence:` paths in
-the plan.
+event artifacts and keep only bounded plan summaries plus exact artifact paths.
 
 Non-review workflow stages share one terminal-facing output contract:
 

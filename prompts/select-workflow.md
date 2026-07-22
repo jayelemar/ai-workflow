@@ -17,7 +17,7 @@ change. This is an analysis-only operator gate.
 | --- | --- | --- |
 | `LOW` | Simple session-local `/plan` | Start `/plan` in this session; create no durable workflow artifacts. |
 | `MEDIUM` | Spec + manual plan | Create a spec, then use `create-plan` with `Execution mode: manual`. |
-| `HIGH-GOAL` | Codex `/goal` path | Start `/goal` with the approved objective and a stable kebab-case goal name. |
+| `HIGH-GOAL` | Approved manual goal package | Create and approve a spec and manual plan, create exactly `goal-handoff.md`, then start `/goal` with the saved exact objective. |
 | `HIGH-RUNNER` | Runner-managed path | Create a spec, use `create-plan` with `Execution mode: runner-managed`, complete review and approval, then invoke the runner. |
 
 Classify as `LOW` only when the work is narrow, well understood, and safe to

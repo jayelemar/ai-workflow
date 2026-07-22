@@ -14,8 +14,9 @@ identifier before writing a checkpoint.
 ## Strict Constraints
 
 - This is a checkpoint-only action. Do not implement work or change the goal.
-- Do not invoke the workflow runner or create a spec, plan, runner state,
-  runner event, or review artifact.
+- Do not invoke the workflow runner or create runner state, runner event, or
+  review artifact. The linked approved spec and manual plan are required
+  inputs, not artifacts to recreate here.
 - Create or refresh only `.ai/artifacts/<goal-name>/goal-handoff.md`.
 - Inspect current repository state read-only as needed to record verified
   progress.
@@ -31,6 +32,14 @@ Write concise, verified Markdown with exactly these sections:
 ## Exact Goal
 
 <the exact saved objective>
+
+## Spec
+
+<linked approved feature spec path>
+
+## Plan
+
+<linked approved manual plan path>
 
 ## Repository State
 

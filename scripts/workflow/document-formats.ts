@@ -7,6 +7,7 @@ export const DOCUMENT_FORMATS = {
   userJourney: "user-journey@1",
   implementationMap: "implementation-map@1",
   manualHandoff: "manual-handoff@1",
+  goalHandoff: "goal-handoff@1",
   workflowState: "workflow-state@1",
   fileOwnership: "file-ownership@1",
   filesState: "files-state@1",
@@ -18,7 +19,7 @@ export type DocumentFormatSuccess = { ok: true };
 export type DocumentFormatResult = DocumentFormatSuccess | DocumentFormatFailure;
 
 const markdownRequirements: Record<
-  Extract<DocumentKind, "featureSpec" | "planManifest" | "userJourney" | "implementationMap" | "manualHandoff">,
+  Extract<DocumentKind, "featureSpec" | "planManifest" | "userJourney" | "implementationMap" | "manualHandoff" | "goalHandoff">,
   string[]
 > = {
   featureSpec: ["## Version", "## Goal", "## Inputs / Outputs", "## Behavior", "## Edge Cases", "## Constraints", "## Acceptance Criteria"],
@@ -26,6 +27,7 @@ const markdownRequirements: Record<
   userJourney: ["## Goal", "## Actors", "## Entry Points", "## User Flows", "## Mermaid Diagram", "## States", "## Failures", "## Acceptance Scenarios", "## Open Decisions"],
   implementationMap: ["## Source Versions"],
   manualHandoff: ["## Plan", "## Repository State", "## Verified Progress", "## Decisions", "## Blockers", "## Next Action"],
+  goalHandoff: ["## Exact Goal", "## Spec", "## Plan", "## Repository State", "## Verified Progress", "## Decisions", "## Blockers", "## Next Action"],
 };
 
 const markdownKinds = new Set<DocumentKind>([
@@ -34,6 +36,7 @@ const markdownKinds = new Set<DocumentKind>([
   "userJourney",
   "implementationMap",
   "manualHandoff",
+  "goalHandoff",
 ]);
 
 const valueAfterHeading = (lines: string[], heading: string): string | undefined => {
@@ -43,7 +46,7 @@ const valueAfterHeading = (lines: string[], heading: string): string | undefined
 };
 
 const markdownFormat = (
-  kind: Extract<DocumentKind, "featureSpec" | "planManifest" | "userJourney" | "implementationMap" | "manualHandoff">,
+  kind: Extract<DocumentKind, "featureSpec" | "planManifest" | "userJourney" | "implementationMap" | "manualHandoff" | "goalHandoff">,
   content: string,
   documentPath: string,
 ): DocumentFormatResult => {
@@ -148,7 +151,6 @@ export const validatePlanDocumentBundle = async ({ rootDir, planPath, planName, 
   const artifactKinds: Array<[string, DocumentKind, string]> = [
     ["User journey", "userJourney", `.ai/artifacts/${planName}/user-journey.md`],
     ["Implementation map", "implementationMap", `.ai/artifacts/${planName}/implementation-map.md`],
-    ["Manual handoff", "manualHandoff", `.ai/artifacts/${planName}/manual-handoff.md`],
   ];
   for (const [label, kind] of artifactKinds) {
     const value = artifactValue(planContent, label)?.replace(/^`|`$/g, "");
@@ -157,6 +159,31 @@ export const validatePlanDocumentBundle = async ({ rootDir, planPath, planName, 
     const relativePath = value;
     const artifact = await readAndValidate(rootDir, relativePath, kind);
     if (artifact.ok === false) return fail(artifact.reason);
+  }
+  const executionMode = valueAfterHeading(planContent.split(/\r?\n/), "## Execution Mode")?.toLowerCase();
+  const manualHandoff = artifactValue(planContent, "Manual handoff")?.replace(/^`|`$/g, "");
+  const goalHandoff = artifactValue(planContent, "Goal handoff")?.replace(/^`|`$/g, "");
+  if (executionMode === "manual") {
+    if (!manualHandoff) return fail(`plan is missing required manual handoff artifact entry: ${planPath}`);
+    if (!goalHandoff) return fail(`plan is missing required goal handoff artifact entry: ${planPath}`);
+    const highGoal = !goalHandoff.startsWith("N/A:");
+    if (highGoal) {
+      if (!manualHandoff.startsWith("N/A:")) return fail(`HIGH-GOAL manual plan must mark manual handoff N/A: ${planPath}`);
+      const goal = await readAndValidate(rootDir, goalHandoff, "goalHandoff");
+      if (!goal.ok) return fail(goal.reason);
+      const handoffContent = await readFile(path.join(rootDir, goalHandoff), "utf8");
+      if (!handoffContent.includes(specPath) || !handoffContent.includes(planPath)) {
+        return fail(`goal handoff must link the approved spec and plan: ${goalHandoff}`);
+      }
+    } else {
+      if (manualHandoff.startsWith("N/A:")) return fail(`normal manual plan cannot mark manual handoff N/A: ${planPath}`);
+      const handoff = await readAndValidate(rootDir, manualHandoff, "manualHandoff");
+      if (!handoff.ok) return fail(handoff.reason);
+    }
+    return { ok: true };
+  }
+  if (goalHandoff && !goalHandoff.startsWith("N/A:")) {
+    return fail(`runner-managed plan must mark goal handoff N/A: ${planPath}`);
   }
   for (const [label, kind] of [
     ["Workflow state", "workflowState"],

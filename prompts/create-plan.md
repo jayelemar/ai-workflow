@@ -68,7 +68,8 @@ If the operator does not explicitly specify a mode:
 Mode rules:
 
 - `manual` means create a spec, create a plan, and execute in the same
-  conversation without invoking the workflow runner.
+  conversation without invoking the workflow runner. If the selected taxonomy
+  is `HIGH-GOAL`, the plan must be approved before `/goal` starts.
 - `runner-managed` means create a plan that will continue through
   `sync-plan-artifacts`, `plan-validator`, and later runner-managed stages.
 - Both modes MUST use the same spec discipline, flow-artifact gating rules,
@@ -81,13 +82,14 @@ For `runner-managed` plans, new draft plans MUST start at
 The workflow runner performs `sync-plan-artifacts` after plan creation and
 before `plan-validator`.
 
-For `manual` plans, set `## Workflow State` to
-`N/A: manual plan-bound execution`; do not create routing state artifacts.
-Create `.ai/artifacts/<plan-name>/manual-handoff.md` as the portable manual
-continuity record. It is refreshed explicitly before pausing, ending a session,
-or switching agent/provider. Initialize it with the `manual-handoff` structure,
-record no execution progress yet, and set its one next action to manual
-execution after approval.
+For `manual` plans, omit `## Workflow State` and do not create routing state
+artifacts. For an ordinary manual plan, create
+`.ai/artifacts/<plan-name>/manual-handoff.md` as its portable continuity
+record. For a selected `HIGH-GOAL` manual plan, create exactly
+`.ai/artifacts/<plan-name>/goal-handoff.md` using `goal-handoff@1`, link the
+approved spec and plan, set `Manual handoff` to `N/A`, and do not create
+`manual-handoff.md`. HIGH-GOAL starts only after the operator approves this
+spec-and-plan package.
 After saving either a `manual` or `runner-managed` plan, append the plan token
 checkpoint. This records pre-run planning usage in the same ledger the runner
 will continue to use:
@@ -331,15 +333,20 @@ These artifact-state files are required only for `runner-managed` mode.
 
 If execution mode is `manual`:
 
-- create `.ai/artifacts/<plan-name>/manual-handoff.md` at the manual plan
-  artifact root; do not place it under `state/` or `events/`
+- for ordinary manual work, create `.ai/artifacts/<plan-name>/manual-handoff.md`
+  at the manual plan artifact root; do not place it under `state/` or `events/`
+- for selected `HIGH-GOAL`, create exactly
+  `.ai/artifacts/<plan-name>/goal-handoff.md` with `goal-handoff@1`, `Exact
+  Goal`, `Spec`, `Plan`, `Repository State`, `Verified Progress`, `Decisions`,
+  `Blockers`, and `Next Action`; do not create `manual-handoff.md`
 - do NOT create or update `.ai/artifacts/<plan-name>/state/files.json`
 - do NOT create or update `.ai/artifacts/<plan-name>/state/workflow.json`
 - do NOT create or update `.ai/artifacts/<plan-name>/state/file-ownership.json`
 - do NOT create or update `.ai/artifacts/<plan-name>/state/context.md`
 - do NOT create or update `.ai/artifacts/<plan-name>/events/`
 - in the plan manifest `## Artifacts` section, write exactly:
-  - `* Manual handoff: \`.ai/artifacts/<plan-name>/manual-handoff.md\``
+  - ordinary manual: `* Manual handoff: \`.ai/artifacts/<plan-name>/manual-handoff.md\`` and `* Goal handoff: \`N/A: not a HIGH-GOAL manual plan\``
+  - HIGH-GOAL manual: `* Manual handoff: \`N/A: HIGH-GOAL uses goal handoff\`` and `* Goal handoff: \`.ai/artifacts/<plan-name>/goal-handoff.md\``
   - `* Workflow state: \`N/A: manual plan-bound execution\``
   - `* File ownership: \`N/A: manual plan-bound execution\``
   - `* Files: \`N/A: manual plan-bound execution\``
@@ -352,7 +359,8 @@ If execution mode is `runner-managed`, create the following artifacts exactly as
 specified below.
 
 In the plan manifest, record `* Manual handoff: \`N/A: runner-managed
-execution\``. Do not create `manual-handoff.md` for runner-managed work.
+execution\`` and `* Goal handoff: \`N/A: runner-managed execution\``. Do not
+create either handoff for runner-managed work.
 
 Write `.ai/artifacts/<plan-name>/state/files.json` with:
 

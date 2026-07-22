@@ -14,7 +14,8 @@ Read:
 - relevant `.ai/instructions/**/*.md`
 - the plan file
 - the plan's spec file
-- `.ai/artifacts/<plan-name>/manual-handoff.md` when it exists
+- `.ai/artifacts/<plan-name>/manual-handoff.md` for an ordinary manual plan,
+  or `.ai/artifacts/<plan-name>/goal-handoff.md` for a HIGH-GOAL manual plan
 - the user-journey artifact only when the plan requires flow-trace artifacts
 - `.ai/artifacts/<plan-name>/implementation-map.md` only when it exists and is
   required by the plan
@@ -39,12 +40,12 @@ Execute the plan manually in this conversation.
 - Do not create or update `.ai/artifacts/<plan-name>/state/*`,
   `.ai/artifacts/<plan-name>/events/*`, or runner review artifacts unless the
   operator explicitly switches the task to runner-managed execution.
-- When `manual-handoff.md` exists, read it before implementation. It is a
-  continuation aid only: the spec, plan, and current Git state remain
-  authoritative.
-- Before pausing this manual work, ending the session, or switching agent or
-  provider, explicitly refresh `.ai/artifacts/<plan-name>/manual-handoff.md`
-  with `.ai/prompts/manual-handoff.md`.
+- When `manual-handoff.md` or `goal-handoff.md` exists, read the applicable
+  one before implementation. For HIGH-GOAL, the linked approved spec and plan
+  must exist before work starts; the goal handoff is its sole continuity aid.
+- Before pausing ordinary manual work, refresh `manual-handoff.md`. Before
+  pausing HIGH-GOAL work, refresh the sole `goal-handoff.md` with
+  `.ai/prompts/goal-checkpoint.md`; never create a manual handoff for it.
 - Validation should still be real and scoped to the changed behavior.
 - If the plan becomes invalid, incomplete, or contradicted by the spec or
   codebase, STOP and explain the exact conflict.
