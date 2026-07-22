@@ -1,8 +1,21 @@
 # Review Changes (Runner-Finalized)
 
 Review only the runner-staged, plan-owned diff boundary and the linked spec.
-Use the generated review scope and context snapshot first. Do not spawn
-subagents, do not broaden to unrelated changes, and do not alter staging.
+Use the generated review scope and context snapshot first.
+
+- You must not spawn subagents.
+- Do not broaden to unrelated changes or alter staging.
+
+## Instruction Loading
+
+Read the runner-provided context first, then load only the review guidance that
+applies to the staged scope:
+
+- `.ai/instructions/shared/reasoning-quality.md`
+- `.ai/instructions/shared/debugging.md`
+- `.ai/instructions/shared/testing.md`
+- `.ai/instructions/testing.md`
+- `.ai/instructions/shared/flow-trace-artifacts.md` when the plan requires it
 
 ## Routing Boundary (MANDATORY)
 
@@ -39,6 +52,11 @@ required fix or unresolved review risk, and include one or more actionable
 remediation bullets. Do not put findings in the plan or sidecar. The runner
 uses this event to move the workflow and exposes failed-review remediation to
 the next execution stage.
+
+`active` is a normal nonterminal review result, not a blocked workflow. When
+the review needs fixes, write `NEEDS FIX` in `## Summary` and return the event
+path; do not emit a `STOP` directive in the final response. Reserve `STOP` for
+an actual inability to write or validate the required event artifact.
 
 ## Output
 

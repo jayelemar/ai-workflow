@@ -19,7 +19,7 @@ import {
 } from "../../config/codex.ts";
 import { COMMIT_SUMMARY_PROMPT_PATH } from "../../contracts/stage.ts";
 import { codexResultContainsSelectedModelCapacity, createWorkflowRunnerCodexRuntime, defaultProcessRunner, isValidCodexProfile } from "../process.ts";
-import { classifyFailureForLog, codexOutputStopReason, createWorkflowFailureDebugRecord } from "../terminal/codex-events.ts";
+import { classifyFailureForLog, codexOutputStopReason, createWorkflowFailureDebugRecord, isReviewNeedsFixStopReason } from "../terminal/codex-events.ts";
 import { formatCommitProgressLine, formatWorkflowElapsedTime, formatWorkflowProgressLine, supportsWorkflowAnsiColor } from "../terminal/formatters.ts";
 import { parsePlanTasks, parseTaskCommitBoundaries, taskCommitBoundaryCount, validateTaskCommitBoundaries } from "../plan/parser.ts";
 import { writeWorkflowContextSnapshot } from "../plan/context-snapshot.ts";
@@ -28,7 +28,7 @@ import { parsePlan, preflightManualPlanExecutionMode } from "../plan/state.ts";
 import { completedTaskCommitCount, currentTaskArtifactRelativePath, nextIncompleteTask, nextTaskAfter, readableTaskLabel, readableTaskProgressDescription, readTaskArtifactStage, writeTaskArtifact } from "../tasks/savepoints.ts";
 import { hasCompletedTaskAggregateSummary } from "../tasks/summaries.ts";
 import { parseCommitSummaryPathsForPlan, readDirtyPlanOwnedPaths } from "../review/commit.ts";
-import { checkForPreReviewStagedWork, runReviewStagingForPaths, runReviewUnstageForPaths } from "../review/staging.ts";
+import { checkForPreReviewStagedWork, checkReviewStagingWorktreeClean, clearStagedWorkForExecution, runReviewStagingForPaths, runReviewUnstageForPaths } from "../review/staging.ts";
 import { routeFor } from "../transitions.ts";
 import { workflowBranch, workflowHeadSha } from "./preflight.ts";
 import { appendLog } from "./logging.ts";
@@ -55,6 +55,7 @@ import { recoverTaskSavepoint } from "./task-savepoint-recovery.ts";
 import { resolveReviewStagingPaths } from "./review-staging-paths.ts";
 import {
   formatStageDescriptor,
+  readStageEventOutcome,
   recoverPendingStageFinalization,
   reserveStageDescriptor,
   rollbackStageDescriptor,
@@ -432,6 +433,7 @@ export const runWorkflowRunnerLifecycle = async (
     let fileOwnershipPreflight: FileOwnershipPreflight | undefined;
     let reviewAutoNarrowReason: string | undefined;
     let noCommitReviewCompletion = false;
+    let retryReviewAfterRestaging = false;
     let progressLogged = false;
     const logWorkflowProgress = () => {
       if (progressLogged) {
@@ -568,6 +570,15 @@ export const runWorkflowRunnerLifecycle = async (
         );
       }
       fileOwnershipPreflight = preflight;
+    }
+    if (route.promptPath === rel(".ai", "prompts", "execute-plan.md")) {
+      const executeIndexCleanup = await clearStagedWorkForExecution(
+        rootDir,
+        processRunner,
+      );
+      if (!executeIndexCleanup.ok) {
+        return await finishFailure(executeIndexCleanup.reason);
+      }
     }
     const workflowTokenGuardrail = await readWorkflowTokenGuardrail({
       rootDir,
@@ -768,17 +779,6 @@ export const runWorkflowRunnerLifecycle = async (
           return await finishFailure(preExistingStagedWork.reason);
         }
         logWorkflowProgress();
-        if (selectedTask) {
-          const taskStage = await setTaskStage({
-            stage: "reviewing",
-            detail: `staged ${parsedPaths.paths.length} ${
-              parsedPaths.paths.length === 1 ? "file" : "files"
-            }`,
-          });
-          if (!taskStage.ok) {
-            return await finishFailure(taskStage.reason);
-          }
-        }
         if (!selectedTask) {
           logger.log(
             `Staging ${parsedPaths.paths.length} plan-owned ${
@@ -858,6 +858,21 @@ export const runWorkflowRunnerLifecycle = async (
           }
           markWorkflowLogCreated(parsedPlan.planName);
           return await finishFailure(stopReason);
+        }
+        if (selectedTask) {
+          const taskStage = await setTaskStage({
+            stage: "reviewing",
+            detail: `staged ${staged.paths.length} ${
+              staged.paths.length === 1 ? "file" : "files"
+            }`,
+          });
+          if (!taskStage.ok) {
+            const cleanup = await cleanupReviewStagingPaths(staged.paths);
+            const stopReason = cleanup.ok
+              ? taskStage.reason
+              : `${taskStage.reason}; ${cleanup.reason}`;
+            return await finishFailure(stopReason);
+          }
         }
         const scope = await prepareReviewScopeForPaths({
           codexRuntime,
@@ -1105,6 +1120,30 @@ export const runWorkflowRunnerLifecycle = async (
         codexRuntime.execLabel,
       );
     }
+    if (isReviewPrompt(route.promptPath) && isReviewNeedsFixStopReason(stopReason)) {
+      stopReason = undefined;
+    }
+    if (!stopReason && isReviewPrompt(route.promptPath) && reviewStagingPaths && stageDescriptor && !("ok" in stageDescriptor)) {
+      const reviewOutcome = await readStageEventOutcome({
+        rootDir,
+        descriptor: stageDescriptor,
+      });
+      if (reviewOutcome.ok && reviewOutcome.outcome === "completed") {
+        const worktreeCheck = await checkReviewStagingWorktreeClean(
+          rootDir,
+          reviewStagingPaths,
+          processRunner,
+        );
+        if (!worktreeCheck.ok) {
+          retryReviewAfterRestaging =
+            worktreeCheck.reason ===
+            "review scope changed after staging; rerun review so every changed file is restaged";
+          if (!retryReviewAfterRestaging) {
+            stopReason = worktreeCheck.reason;
+          }
+        }
+      }
+    }
 
     const appendIterationLog = async (
       iterationStopReason?: string,
@@ -1220,6 +1259,30 @@ export const runWorkflowRunnerLifecycle = async (
         continue;
       }
       stopReason = stopReason ?? "selected model capacity retry limit reached";
+    }
+
+    if (retryReviewAfterRestaging) {
+      const cleanup = await cleanupReviewStagingPaths(reviewStagingPaths);
+      if (!cleanup.ok) {
+        return await finishFailure(cleanup.reason);
+      }
+      const rollback = stageDescriptor && !("ok" in stageDescriptor)
+        ? await rollbackStageDescriptor({ rootDir, plan: parsedPlan })
+        : { ok: true as const };
+      if (!rollback.ok) {
+        return await finishFailure(rollback.reason);
+      }
+      const logResult = await appendIterationLog();
+      if (!logResult.ok) return await finishFailure(logResult.reason);
+      logger.log(
+        "[workflow-runner] review scope changed after staging; restaging the updated worktree and rerunning review.",
+      );
+      carriedReviewStagingPaths = undefined;
+      carriedReviewStagingProcess = undefined;
+      const retriedPlan = await parsePlan({ planName: planArgument, rootDir });
+      if (!retriedPlan.ok) return await finishFailure(retriedPlan.reason);
+      parsedPlan = retriedPlan;
+      continue;
     }
 
     if (stopReason) {

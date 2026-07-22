@@ -8,4 +8,5 @@ export { createWorkflowFailureDebugRecord } from "./failure-debug.ts";
 export {
   codexOutputContainsStop,
   codexOutputStopReason,
+  isReviewNeedsFixStopReason,
 } from "./stop.ts";

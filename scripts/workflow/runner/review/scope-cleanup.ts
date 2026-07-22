@@ -91,6 +91,27 @@ export const runScopeCleanupForPaths = async ({ codexRuntime, rootDir, planPath,
   const decision = parseScopeCleanupDecision(result.stdout);
   if (!decision || decision.action !== "unstage" || !decision.patch) return { ok: true, diffBytes };
   await processRunner({ command: "git", args: ["apply", "--cached", "-R", "--unidiff-zero"], cwd: rootDir, input: `${decision.patch.trimEnd()}\n`, promptPath: "git-scope-cleanup-unstage" }).catch((): ProcessResult => ({ launched: false, stdout: "", stderr: "", error: "scope cleanup apply failed" }));
+  const remainingDiff = await readCachedDiffForPaths(rootDir, paths, processRunner, {
+    promptPath: "git-scope-cleanup-postcheck",
+  });
+  if (!remainingDiff) {
+    // Scope cleanup may remove unrelated hunks, but it must never leave an
+    // otherwise valid review with nothing to inspect. Re-stage the runner's
+    // complete plan-owned scope; review then decides whether remediation is
+    // required from concrete staged evidence.
+    await processRunner({
+      command: "git",
+      args: ["add", "--all", "--", ...paths],
+      cwd: rootDir,
+      input: "",
+      promptPath: "git-scope-cleanup-restage-empty-scope",
+    }).catch((): ProcessResult => ({
+      launched: false,
+      stdout: "",
+      stderr: "",
+      error: "scope cleanup restage failed",
+    }));
+  }
   return { ok: true, diffBytes };
 };
 

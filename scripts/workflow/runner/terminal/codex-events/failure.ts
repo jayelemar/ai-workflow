@@ -1,8 +1,5 @@
 import type { FailureMetadataLogFields } from "../../types.ts";
 
-export const REVIEW_ENTRY_STAGED_WORK_REASON_PREFIX =
-  "review blocked before review-plan because staged files already exist; human may manually unstage them, then rerun workflow-runner so it owns review staging";
-
 export const classifyFailureForLog = (
   reason: string,
 ): FailureMetadataLogFields => {
@@ -34,12 +31,15 @@ export const classifyFailureForLog = (
         "inspect workflow log, fix runtime failure, then rerun workflow-runner",
     };
   }
-  if (reason.startsWith(REVIEW_ENTRY_STAGED_WORK_REASON_PREFIX)) {
+  if (
+    reason.startsWith("review preflight unstage git reset") ||
+    reason.startsWith("could not launch review preflight unstage git reset")
+  ) {
     return {
-      failureKind: "review-entry-staged-work",
+      failureKind: "review-unstage",
       failureReason: reason,
       nextSuggestedAction:
-        "human may manually unstage existing staged work before starting review-plan, then rerun workflow-runner",
+        "fix review preflight index cleanup, then rerun workflow-runner",
     };
   }
   if (
@@ -78,17 +78,6 @@ export const classifyFailureForLog = (
       failureReason: reason,
       nextSuggestedAction:
         "fix commit preflight errors, then rerun workflow-runner; plan remains completed + commit-summary",
-    };
-  }
-  if (
-    reason ===
-    "plan content unchanged after successful nonterminal workflow action"
-  ) {
-    return {
-      failureKind: "unchanged-plan",
-      failureReason: reason,
-      nextSuggestedAction:
-        "inspect workflow output and update plan state, then rerun workflow-runner",
     };
   }
   if (reason.includes("may only hand off")) {

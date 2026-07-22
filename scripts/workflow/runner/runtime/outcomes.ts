@@ -1,8 +1,8 @@
 import { boundedInlineExcerpt } from "../types.ts";
 
-const sectionLines = (content: string, heading: string): string[] | null => {
+const sectionLines = (content: string, headings: string[]): string[] | null => {
   const lines = content.split(/\r?\n/);
-  const start = lines.findIndex((line) => line.trim() === heading);
+  const start = lines.findIndex((line) => headings.includes(line.trim()));
   if (start === -1) {
     return null;
   }
@@ -19,7 +19,7 @@ const sectionLines = (content: string, heading: string): string[] | null => {
 const extractLatestUnresolvedBlockerDetail = (
   content: string,
 ): string | undefined => {
-  const lines = sectionLines(content, "## Blockers");
+  const lines = sectionLines(content, ["## Blockers", "## Generated Active Blockers"]);
   if (lines === null) {
     return undefined;
   }
@@ -28,7 +28,7 @@ const extractLatestUnresolvedBlockerDetail = (
   let current: { heading: string; lines: string[] } | undefined;
   for (const line of lines) {
     const trimmed = line.trim();
-    if (/^###\s+Blocker\b/i.test(trimmed)) {
+    if (/^###\s+(?:Generated )?Blocker\b/i.test(trimmed)) {
       current = { heading: trimmed, lines: [] };
       blockerSections.push(current);
       continue;
@@ -72,7 +72,7 @@ const extractLatestUnresolvedBlockerDetail = (
 };
 
 const hasBrowserValidationBlockerSignal = (content: string): boolean => {
-  const lines = sectionLines(content, "## Blockers");
+  const lines = sectionLines(content, ["## Blockers", "## Generated Active Blockers"]);
   if (lines === null) {
     return false;
   }

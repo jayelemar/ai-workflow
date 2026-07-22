@@ -24,6 +24,11 @@ history, blocker, and task-progress persistence.
 
 You may edit implementation files and run focused validation. At the end,
 write only the exact event artifact assigned in the runner-issued descriptor.
+
+Do not run `git add`, `git restore --staged`, `git reset`, or otherwise modify
+the Git index. Leave every implementation change unstaged: the workflow-runner
+owns staging and performs it only for the review boundary.
+
 It must contain exactly this compact structure:
 
 ```md

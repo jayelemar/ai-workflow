@@ -17,6 +17,7 @@ export const writeWorkflowEventArtifactSync = ({
           : "review-ready",
   summary = "Artifact summary.",
   evidence = "Artifact evidence.",
+  remediation = [],
 }: {
   root: string;
   planName: string;
@@ -25,6 +26,7 @@ export const writeWorkflowEventArtifactSync = ({
   outcome?: string;
   summary?: string;
   evidence?: string;
+  remediation?: string[];
 }) => {
   const artifactPath = join(
     root,
@@ -50,6 +52,11 @@ ${summary}
 ## Evidence
 
 ${evidence}
+${remediation.length > 0 ? `
+## Remediation
+
+${remediation.map((item) => `* ${item}`).join("\n")}
+` : ""}
 `,
     "utf8",
   );

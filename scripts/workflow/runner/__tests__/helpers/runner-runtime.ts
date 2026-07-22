@@ -324,14 +324,10 @@ export const runnerReturning =
     onRun?: (call: Parameters<ProcessRunner>[0]) => Promise<void> | void,
   ): ProcessRunner =>
   async (call) => {
-    await onRun?.(call);
-    if (
-      call.command === "git" &&
-      call.args[0] === "status" &&
-      call.args[1] === "--short"
-    ) {
+    if (call.command === "git") {
       return { launched: true, stdout: "", stderr: "", exitCode: 0 };
     }
+    await onRun?.(call);
     return result;
   };
 

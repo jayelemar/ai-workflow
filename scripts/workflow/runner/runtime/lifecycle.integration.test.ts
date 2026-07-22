@@ -22,13 +22,14 @@ import {
   join,
   mkdirSync,
   readFile,
+  writeFile,
   writeFileSync,
   writeWorkflowEventArtifact,
   planWith,
   type ProcessRunner,
 } from "../__tests__/helpers/runner-runtime.ts";
 
-test("oversized aggregate thin-plan history warns without blocking the workflow", async () => {
+test("runner rejects legacy inline thin-plan history", async () => {
   const workspace = await setupWorkspace();
   try {
     for (let version = 1; version <= 18; version += 1) {
@@ -59,12 +60,9 @@ ${aggregateEntries}
 `,
       ),
     );
-    const output = collectConsole();
-
     const result = await runWorkflowRunner({
       planName: planArg("oversized-thin-history"),
       rootDir: workspace.root,
-      console: output.console,
       processRunner: runnerReturning({
         launched: true,
         stdout: turnCompletedUsageDetailLine({
@@ -78,13 +76,8 @@ ${aggregateEntries}
       }),
     });
 
-    assert.equal(result.success, true, result.success ? "" : result.reason);
-    assert.equal(
-      output.lines.some((line) =>
-        /WARNING: Thin-plan workflow history is .* > 4 KB/i.test(line),
-      ),
-      true,
-    );
+    assert.equal(result.success, false);
+    assert.match(result.reason, /thin-plan contains forbidden inline section Validation History/i);
   } finally {
     await workspace.cleanup();
   }
@@ -95,27 +88,7 @@ test("execute-plan blocked output is concise and includes the latest unresolved 
     await writePlan(
       workspace.root,
       "blocked",
-      planWith(
-        "active",
-        "execute-plan",
-        `## Blockers
-
-### Blocker 1
-
-* Status: resolved
-* Description: old resolved blocker
-* Required Action: old action
-* Next Step: old next step
-
-### Blocker 2
-
-* Type: source-of-truth conflict
-* Status: unresolved
-* Description: spec must be updated before plan can be fixed
-* Required Action: update the workflow runner spec
-* Next Step: rerun plan-validator after the spec changes
-`,
-      ),
+      planWith("active", "execute-plan"),
     );
 
     const output = collectConsole();
@@ -124,33 +97,21 @@ test("execute-plan blocked output is concise and includes the latest unresolved 
       planName: planArg("blocked"),
       rootDir: workspace.root,
       console: output.console,
-      processRunner: async () => {
+      processRunner: async (call) => {
+        if (call.command === "git") {
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
         launches += 1;
-        await writePlan(
-          workspace.root,
-          "blocked",
-          planWith(
-            "blocked",
-            "unblock-plan",
-            `## Blockers
-
-### Blocker 1
-
-* Status: resolved
-* Description: old resolved blocker
-* Required Action: old action
-* Next Step: old next step
-
-### Blocker 2
-
-* Type: source-of-truth conflict
-* Status: unresolved
-* Description: spec must be updated before plan can be fixed
-* Required Action: update the workflow runner spec
-* Next Step: rerun plan-validator after the spec changes
-`,
-          ),
-        );
+        await writeWorkflowEventArtifact({
+          root: workspace.root,
+          planName: "blocked",
+          kind: "execution",
+          version: 1,
+          outcome: "blocked",
+          summary: "spec must be updated before plan can be fixed",
+          evidence: "The current spec conflicts with the plan.",
+          remediation: ["spec must be updated before plan can be fixed"],
+        });
         return { launched: true, stdout: "", stderr: "", exitCode: 0 };
       },
     });
@@ -193,25 +154,20 @@ test("execute-plan browser validation blockers use a short browser validation re
       planName: planArg("browser-blocked"),
       rootDir: workspace.root,
       console: output.console,
-      processRunner: async () => {
-        await writePlan(
-          workspace.root,
-          "browser-blocked",
-          planWith(
-            "blocked",
-            "unblock-plan",
-            `## Blockers
-
-### Blocker 1
-
-* Type: browser validation
-* Status: unresolved
-* Description: Mandatory browser validation cannot be performed because no authenticated dashboard session is available.
-* Required Action: Provide an authenticated browser session.
-* Next Step: Rerun unblock-plan with manual validation evidence.
-`,
-          ),
-        );
+      processRunner: async (call) => {
+        if (call.command === "git") {
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
+        await writeWorkflowEventArtifact({
+          root: workspace.root,
+          planName: "browser-blocked",
+          kind: "execution",
+          version: 1,
+          outcome: "blocked",
+          summary: "Mandatory browser validation cannot be performed because no authenticated dashboard session is available.",
+          evidence: "Authenticated dashboard session was unavailable.",
+          remediation: ["Mandatory browser validation cannot be performed because no authenticated dashboard session is available."],
+        });
         return { launched: true, stdout: "", stderr: "", exitCode: 0 };
       },
     });
@@ -247,8 +203,10 @@ test("full .ai/plans path invocation writes to the normalized plan log", async (
     await writePlan(
       workspace.root,
       "workflow-runner",
-      planWith("completed", "commit-summary"),
+      planWith("completed", "commit-summary", "* Files: src/artifact-state.ts"),
     );
+    mkdirSync(join(workspace.root, "src"), { recursive: true });
+    writeFileSync(join(workspace.root, "src", "artifact-state.ts"), "export {};\n");
     const result = await runWorkflowRunner({
       argv: [".ai/plans/workflow-runner.md"],
       rootDir: workspace.root,
@@ -298,13 +256,15 @@ test(`commit-summary stops before ${CODEX_COMMAND} when all plan-owned paths are
     await writePlan(
       workspace.root,
       "workflow-runner",
-      planWith("completed", "commit-summary"),
+      planWith("completed", "commit-summary", "* Files: src/artifact-state.ts"),
     );
+    mkdirSync(join(workspace.root, "src"), { recursive: true });
+    writeFileSync(join(workspace.root, "src", "artifact-state.ts"), "export {};\n");
     const calls: Parameters<ProcessRunner>[0][] = [];
     const result = await runWorkflowRunner({
       argv: [".ai/plans/workflow-runner.md"],
       rootDir: workspace.root,
-      isIgnored: async (relativePath) => relativePath.startsWith(".ai/"),
+      isIgnored: async () => true,
       processRunner: async (call) => {
         calls.push(call);
         return { launched: true, stdout: "summary", stderr: "", exitCode: 0 };
@@ -328,8 +288,10 @@ test("CLI failure output includes the stop reason and workflow log path", async 
     await writePlan(
       workspace.root,
       "workflow-runner",
-      planWith("completed", "commit-summary"),
+      planWith("completed", "commit-summary", "* Files: src/artifact-state.ts"),
     );
+    mkdirSync(join(workspace.root, "src"), { recursive: true });
+    writeFileSync(join(workspace.root, "src", "artifact-state.ts"), "export {};\n");
     const { lines, console } = collectConsole();
     const result = await runWorkflowRunner({
       argv: [".ai/plans/workflow-runner.md"],
@@ -371,7 +333,7 @@ test("CLI failure output includes the stop reason and workflow log path", async 
   }
 });
 
-test(`${CODEX_COMMAND} launch failures, nonzero exits, STOP output, and empty captures stop without retry`, async () => {
+test(`${CODEX_COMMAND} launch failures, nonzero exits, and STOP output stop without retry`, async () => {
   const workspace = await setupWorkspace();
   try {
     const cases = [
@@ -449,21 +411,6 @@ test(`${CODEX_COMMAND} launch failures, nonzero exits, STOP output, and empty ca
         nextSuggestedAction:
           /nextSuggestedAction: inspect STOP reason, fix code or workflow evidence, then rerun workflow-runner/,
       },
-      {
-        name: "empty-captures",
-        processResult: {
-          launched: true as const,
-          stdout: "",
-          stderr: "",
-          exitCode: 0,
-        },
-        reason: /plan content unchanged/,
-        failureKind: "unchanged-plan",
-        failureReason:
-          /failureReason: plan content unchanged after successful nonterminal workflow action/,
-        nextSuggestedAction:
-          /nextSuggestedAction: inspect workflow output and update plan state, then rerun workflow-runner/,
-      },
     ];
     for (const item of cases) {
       await writePlan(
@@ -512,31 +459,110 @@ test(`${CODEX_COMMAND} launch failures, nonzero exits, STOP output, and empty ca
   }
 });
 
-test("unblock-plan STOP that keeps the plan blocked reports a blocked outcome", async () => {
+test("active execution progress is finalized even when the plan manifest is unchanged", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(
+      workspace.root,
+      "active-progress",
+      planWith("active", "execute-plan"),
+    );
+    const manifestPath = join(
+      workspace.root,
+      ".ai",
+      "plans",
+      "active-progress.md",
+    );
+    await writeFile(
+      manifestPath,
+      (await readFile(manifestPath, "utf8")).replace(/\n{3,}/g, "\n\n"),
+      "utf8",
+    );
+    const manifestBefore = await readFile(manifestPath, "utf8");
+    let launches = 0;
+
+    const result = await runWorkflowRunner({
+      planName: planArg("active-progress"),
+      rootDir: workspace.root,
+      processRunner: async (call) => {
+        if (call.command === "git") {
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
+        launches += 1;
+        if (launches === 1) {
+          await writeWorkflowEventArtifact({
+            root: workspace.root,
+            planName: "active-progress",
+            kind: "execution",
+            version: 1,
+            outcome: "active",
+            summary: "Implementation remains in progress.",
+            evidence: "Focused validation is pending.",
+          });
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
+        return { launched: true, stdout: "STOP", stderr: "", exitCode: 0 };
+      },
+    });
+
+    assert.equal(launches, 2);
+    assert.match(result.reason, new RegExp(`${CODEX_EXEC_LABEL} output contained STOP`));
+    assert.equal(await readFile(manifestPath, "utf8"), manifestBefore);
+    const workflow = JSON.parse(await readFile(
+      join(
+        workspace.root,
+        ".ai",
+        "artifacts",
+        "active-progress",
+        "state",
+        "workflow.json",
+      ),
+      "utf8",
+    ));
+    assert.equal(workflow.workflowState, "active");
+    assert.deepEqual(workflow.latest.execution, {
+      version: 1,
+      outcome: "active",
+      summary: "Implementation remains in progress.",
+      evidence: ".ai/artifacts/active-progress/events/execution-v1.md",
+    });
+    assert.deepEqual(workflow.history, [
+      ".ai/artifacts/active-progress/events/execution-v1.md",
+    ]);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("unblock-plan event that keeps the plan blocked reports a blocked outcome", async () => {
   const workspace = await setupWorkspace();
   try {
     await writePlan(
       workspace.root,
       "still-blocked",
-      planWith(
-        "blocked",
-        "unblock-plan",
-        "\n## Blockers\n\n### Blocker 1\n\n* Type: runtime setup\n* Description: Docker unavailable\n* Required Action: Start Docker.\n",
-      ),
+      planWith("blocked", "unblock-plan"),
     );
     const { lines, console } = collectConsole();
     const result = await runWorkflowRunner({
       planName: planArg("still-blocked"),
       rootDir: workspace.root,
       console,
-      processRunner: runnerReturning({
-        launched: true,
-        stdout: codexAgentMessageLine(
-          "STOP\nBlocking reason: `blocker resolution evidence is required`\n\n**Summary**\n- STILL BLOCKED",
-        ),
-        stderr: "",
-        exitCode: 0,
-      }),
+      processRunner: async (call) => {
+        if (call.command === "git") {
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
+        await writeWorkflowEventArtifact({
+          root: workspace.root,
+          planName: "still-blocked",
+          kind: "unblock",
+          version: 1,
+          outcome: "blocked",
+          summary: "Docker unavailable",
+          evidence: "Docker daemon was unavailable during validation.",
+          remediation: ["Start Docker."],
+        });
+        return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+      },
     });
 
     assert.equal(result.success, false);

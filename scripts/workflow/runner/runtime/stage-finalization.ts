@@ -228,6 +228,19 @@ const parseEvent = async ({
   return { outcome, summary, evidence, remediation };
 };
 
+export const readStageEventOutcome = async ({
+  rootDir,
+  descriptor,
+}: {
+  rootDir: string;
+  descriptor: RunnerStageDescriptor;
+}): Promise<{ ok: true; outcome: string } | Failure> => {
+  const event = await parseEvent({ rootDir, descriptor });
+  return isFailure(event)
+    ? event
+    : { ok: true, outcome: event.outcome };
+};
+
 const validateEventTransition = async ({
   rootDir,
   descriptor,

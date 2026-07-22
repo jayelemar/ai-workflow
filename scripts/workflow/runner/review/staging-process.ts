@@ -15,6 +15,19 @@ export const stagedStatusHasMixedReviewPath = (statusOutput: string): boolean =>
   return Boolean(pathValue) && line[0] !== " " && line[0] !== "?" && line[0] !== "!" && line[1] !== " ";
 });
 
+export const checkReviewStagingWorktreeClean = async (rootDir: string, paths: string[], processRunner: ProcessRunner): Promise<{ ok: true } | { ok: false; reason: string }> => {
+  if (paths.length === 0) return { ok: true };
+  const result = await processRunner({ command: "git", args: ["diff", "--quiet", "--", ...paths], cwd: rootDir, input: "", promptPath: "git-review-staging-worktree-check" }).catch(processFailure);
+  if (!result.launched) {
+    return { ok: false, reason: `could not launch review staging worktree check: ${result.error}` };
+  }
+  if (result.exitCode === 0) return { ok: true };
+  if (result.exitCode === 1) {
+    return { ok: false, reason: "review scope changed after staging; rerun review so every changed file is restaged" };
+  }
+  return { ok: false, reason: `review staging worktree check exited with code ${result.exitCode}${details(result) ? `: ${details(result)}` : ""}` };
+};
+
 export const runReviewStagingForPaths = async (rootDir: string, paths: string[], processRunner: ProcessRunner): Promise<{ ok: true; staging: ReviewStagingProcess; paths: string[] } | { ok: false; reason: string; staging?: ReviewStagingProcess }> => {
   const changedPathResult = await processRunner({ command: "git", args: ["status", "--porcelain=v1", "--untracked-files=all", "--", ...paths], cwd: rootDir, input: "", promptPath: "git-review-staging-changed-paths" }).catch(processFailure);
   if (!changedPathResult.launched) return { ok: false, reason: `could not launch review staging changed-path check: ${changedPathResult.error}` };

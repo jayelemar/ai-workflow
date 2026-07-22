@@ -13,6 +13,7 @@ export {
 export {
   codexOutputContainsStop,
   codexOutputStopReason,
+  isReviewNeedsFixStopReason,
   createCodexLiveOutputFormatter,
   formatCodexJsonlEventForTerminal,
 } from "./runner/terminal/codex-events.ts";

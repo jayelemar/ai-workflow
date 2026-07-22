@@ -58,20 +58,7 @@ export const prepareFreshReviewStaging = async ({
   qualityReview: boolean;
 }): Promise<PreparedReviewStaging> => {
   logWorkflowProgress();
-  if (selectedTask) {
-    const taskStage = await setTaskStage({
-      stage: "reviewing",
-      detail: `staged ${paths.length} ${paths.length === 1 ? "file" : "files"}`,
-    });
-    if (!taskStage.ok) {
-      return {
-        ok: false,
-        reason: taskStage.reason,
-        kind: "scope",
-        paths,
-      };
-    }
-  } else {
+  if (!selectedTask) {
     logger.log(
       `Staging ${paths.length} plan-owned ${
         paths.length === 1 ? "file" : "files"
@@ -87,6 +74,23 @@ export const prepareFreshReviewStaging = async ({
       paths,
       staging: staged.staging,
     };
+  }
+  if (selectedTask) {
+    const taskStage = await setTaskStage({
+      stage: "reviewing",
+      detail: `staged ${staged.paths.length} ${
+        staged.paths.length === 1 ? "file" : "files"
+      }`,
+    });
+    if (!taskStage.ok) {
+      return {
+        ok: false,
+        reason: taskStage.reason,
+        kind: "scope",
+        paths: staged.paths,
+        staging: staged.staging,
+      };
+    }
   }
   const scope = await prepareReviewScopeForPaths({
     codexRuntime,

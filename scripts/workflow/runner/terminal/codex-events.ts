@@ -2,6 +2,7 @@ export {
   codexAgentMessageTexts,
   codexOutputContainsStop,
   codexOutputStopReason,
+  isReviewNeedsFixStopReason,
   createCodexLiveOutputFormatter,
   createWorkflowFailureDebugRecord,
   formatCodexJsonlEventForTerminal,
@@ -12,5 +13,4 @@ export {
 } from "./codex-events/command-records.ts";
 export {
   classifyFailureForLog,
-  REVIEW_ENTRY_STAGED_WORK_REASON_PREFIX,
 } from "./codex-events/failure.ts";

@@ -1,6 +1,10 @@
 import test from "node:test";
 
 import { runWorkflowRunner } from "../runtime.ts";
+import {
+  checkForPreReviewStagedWork,
+  clearStagedWorkForExecution,
+} from "./staging.ts";
 
 import {
   CODEX_COMMAND,
@@ -52,12 +56,6 @@ test(`review staging git add runs before review ${CODEX_COMMAND}, unstages plan-
           };
         }
         if (call.command === "git" && call.args[0] === "add") {
-          assert.equal(
-            output.lines.some((line) =>
-              /Staging 2 plan-owned files for review/i.test(line),
-            ),
-            true,
-          );
           return { launched: true, stdout: "", stderr: "fatal", exitCode: 1 };
         }
         return { launched: true, stdout: "", stderr: "", exitCode: 0 };
@@ -77,8 +75,7 @@ test(`review staging git add runs before review ${CODEX_COMMAND}, unstages plan-
       "add",
       "--all",
       "--",
-      ".ai/scripts/workflow/runner/__tests__/integration/runner.test.ts",
-      ".ai/scripts/workflow/runner.ts",
+      ".ai/artifacts/workflow-runner/state/files.json",
     ]);
     const log = await readFile(
       join(
@@ -104,79 +101,83 @@ test(`review staging git add runs before review ${CODEX_COMMAND}, unstages plan-
     await workspace.cleanup();
   }
 });
-test("review-plan stops before staging or prompt execution when any staged files already exist", async () => {
-  const workspace = await setupWorkspace();
-  try {
-    await writePlan(
-      workspace.root,
-      "review-guard",
-      planWith("review", "review-plan"),
-    );
-    const calls: Parameters<ProcessRunner>[0][] = [];
-    const output = collectConsole();
-    const failed = await runWorkflowRunner({
-      planName: planArg("review-guard"),
-      rootDir: workspace.root,
-      console: output.console,
-      processRunner: async (call) => {
-        calls.push(call);
-        if (
-          call.command === "git" &&
-          call.args[0] === "diff" &&
-          call.args[1] === "--staged" &&
-          call.args[2] === "--name-status"
-        ) {
-          return {
-            launched: true,
-            stdout: ["M\tother-plan.ts", "A\tsrc/leftover.ts"].join("\n"),
-            stderr: "",
-            exitCode: 0,
-          };
-        }
-        return { launched: true, stdout: "", stderr: "", exitCode: 0 };
-      },
-    });
+test("review preflight unstages stale out-of-scope work while preserving plan-owned staging", async () => {
+  const calls: Parameters<ProcessRunner>[0][] = [];
+  const result = await checkForPreReviewStagedWork(
+    "/workspace",
+    async (call) => {
+      calls.push(call);
+      if (call.promptPath === "git-pre-review-staged-check") {
+        return {
+          launched: true,
+          stdout: [
+            "M\tsrc/plan-owned.ts",
+            "A\tsupabase/migrations/legacy_regression_fixture.sql",
+          ].join("\n"),
+          stderr: "",
+          exitCode: 0,
+        };
+      }
+      return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+    },
+    ["src/plan-owned.ts"],
+  );
 
-    assert.equal(failed.success, false);
-    assert.match(
-      failed.reason,
-      /review blocked before review-plan because staged files already exist; human may manually unstage them, then rerun workflow-runner so it owns review staging:\n\nM  other-plan\.ts;\nA  src\/leftover\.ts/,
-    );
-    assert.doesNotMatch(failed.reason, /other-plan\.ts; A\tsrc\/leftover\.ts/);
-    assert.deepEqual(
-      calls.map((call) => [call.command, call.args[0] ?? "", call.promptPath]),
-      [["git", "diff", "git-pre-review-staged-check"]],
-    );
-    assert.equal(
-      output.lines.some((line) =>
-        /staged files already exist; human may manually unstage them, then rerun workflow-runner so it owns review staging:\n\nM  other-plan\.ts;\nA  src\/leftover\.ts/.test(
-          line,
-        ),
-      ),
-      true,
-    );
+  assert.equal(result.ok, true);
+  assert.deepEqual(
+    calls.map((call) => [call.command, call.args, call.promptPath]),
+    [
+      ["git", ["diff", "--staged", "--name-status", "--"], "git-pre-review-staged-check"],
+      [
+        "git",
+        [
+          "reset",
+          "--quiet",
+          "--",
+          "supabase/migrations/legacy_regression_fixture.sql",
+        ],
+        "git-pre-review-unstage-out-of-scope",
+      ],
+    ],
+  );
+});
 
-    const log = await readFile(
-      join(
-        workspace.root,
-        ".ai",
-        "artifacts",
-        "review-guard",
-        "logs",
-        "runner.log",
-      ),
-      "utf8",
-    );
-    assertFailureMetadata(log, {
-      kind: "review-entry-staged-work",
-      reason:
-        /failureReason: review blocked before review-plan because staged files already exist; human may manually unstage them, then rerun workflow-runner so it owns review staging:\n\nM  other-plan\.ts;\nA  src\/leftover\.ts/,
-      nextSuggestedAction:
-        /nextSuggestedAction: human may manually unstage existing staged work before starting review-plan, then rerun workflow-runner/,
-    });
-  } finally {
-    await workspace.cleanup();
-  }
+test("execute entry clears every staged path before implementation starts", async () => {
+  const calls: Parameters<ProcessRunner>[0][] = [];
+  const result = await clearStagedWorkForExecution("/workspace", async (call) => {
+    calls.push(call);
+    if (call.promptPath === "git-execute-staged-check") {
+      return {
+        launched: true,
+        stdout: [
+          "src/plan-owned.ts",
+          "supabase/migrations/legacy_regression_fixture.sql",
+        ].join("\n"),
+        stderr: "",
+        exitCode: 0,
+      };
+    }
+    return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(
+    calls.map((call) => [call.command, call.args, call.promptPath]),
+    [
+      ["git", ["diff", "--staged", "--name-only", "--"], "git-execute-staged-check"],
+      [
+        "git",
+        [
+          "reset",
+          "--quiet",
+          "--",
+          "src/plan-owned.ts",
+          "supabase/migrations/legacy_regression_fixture.sql",
+        ],
+        "git-execute-unstage",
+      ],
+    ],
+  );
 });
 
 test("review-plan stages plan-owned files normally when the repo has no pre-existing staged work", async () => {
@@ -185,8 +186,12 @@ test("review-plan stages plan-owned files normally when the repo has no pre-exis
     await writePlan(
       workspace.root,
       "review-clean-entry",
-      planWith("review", "review-plan"),
+      planWithFileScope("review", "review-plan", {
+        modified: ["src/artifact-state.ts"],
+      }),
     );
+    mkdirSync(join(workspace.root, "src"), { recursive: true });
+    writeFileSync(join(workspace.root, "src", "artifact-state.ts"), "export {};\n");
     const calls: Parameters<ProcessRunner>[0][] = [];
     const result = await runWorkflowRunner({
       planName: planArg("review-clean-entry"),
@@ -211,11 +216,6 @@ test("review-plan stages plan-owned files normally when the repo has no pre-exis
             kind: "review",
             version: 1,
           });
-          await writePlan(
-            workspace.root,
-            "review-clean-entry",
-            planWith("completed", "commit-summary"),
-          );
         }
         return { launched: true, stdout: "summary", stderr: "", exitCode: 0 };
       },
@@ -229,6 +229,148 @@ test("review-plan stages plan-owned files normally when the repo has no pre-exis
       [CODEX_COMMAND, "exec", ".ai/prompts/review-changes.md"],
       [CODEX_COMMAND, "exec", ".ai/prompts/commit-summary.md"],
       ["git", "status", "git-commit-summary-clean-check"],
+    ]);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("runner restages and reruns review when a staged review path changes during review", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(
+      workspace.root,
+      "review-worktree-mutation",
+      planWith("review", "review-plan"),
+    );
+    const calls: Parameters<ProcessRunner>[0][] = [];
+    let reviewCount = 0;
+    let worktreeCheckCount = 0;
+    const result = await runWorkflowRunner({
+      planName: planArg("review-worktree-mutation"),
+      rootDir: workspace.root,
+      processRunner: async (call) => {
+        calls.push(call);
+        if (
+          call.command === "git" &&
+          call.args[0] === "diff" &&
+          call.args[1] === "--staged" &&
+          call.args[2] === "--name-status"
+        ) {
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
+        if (call.promptPath === ".ai/prompts/review-changes.md") {
+          reviewCount += 1;
+          writeWorkflowEventArtifactSync({
+            root: workspace.root,
+            planName: "review-worktree-mutation",
+            kind: "review",
+            version: reviewCount,
+            ...(reviewCount === 2
+              ? {
+                  outcome: "active" as const,
+                  remediation: ["Review the restaged worktree."],
+                }
+              : {}),
+          });
+          return { launched: true, stdout: "review complete", stderr: "", exitCode: 0 };
+        }
+        if (call.promptPath === "git-review-staging-worktree-check") {
+          worktreeCheckCount += 1;
+          return { launched: true, stdout: "", stderr: "", exitCode: 1 };
+        }
+        if (call.promptPath === ".ai/prompts/execute-plan.md") {
+          return { launched: true, stdout: "STOP: rerun completed", stderr: "", exitCode: 0 };
+        }
+        if (call.command === "git") {
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
+        return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+      },
+    });
+
+    assert.equal(result.success, false);
+    assert.match(result.reason, /STOP: rerun completed/);
+    assert.equal(reviewCount, 2);
+    assert.equal(worktreeCheckCount, 1);
+    assertCallSubsequence(calls, [
+      [CODEX_COMMAND, "exec", ".ai/prompts/review-changes.md"],
+      ["git", "diff", "git-review-staging-worktree-check"],
+      ["git", "reset", "git-review-unstage"],
+      ["git", "add", "git-staging"],
+      [CODEX_COMMAND, "exec", ".ai/prompts/review-changes.md"],
+      [CODEX_COMMAND, "exec", ".ai/prompts/execute-plan.md"],
+    ]);
+    assert.equal(calls.some((call) => call.promptPath === ".ai/prompts/commit-summary.md"), false);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("runner accepts a needs-fix review result when its review scope changes", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(
+      workspace.root,
+      "review-worktree-needs-fix",
+      planWith("review", "review-plan"),
+    );
+    const calls: Parameters<ProcessRunner>[0][] = [];
+    const result = await runWorkflowRunner({
+      planName: planArg("review-worktree-needs-fix"),
+      rootDir: workspace.root,
+      console: { log: () => {}, error: () => {} },
+      processRunner: async (call) => {
+        calls.push(call);
+        if (
+          call.command === "git" &&
+          call.args[0] === "diff" &&
+          call.args[1] === "--staged" &&
+          call.args[2] === "--name-status"
+        ) {
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
+        if (call.promptPath === ".ai/prompts/review-changes.md") {
+          writeWorkflowEventArtifactSync({
+            root: workspace.root,
+            planName: "review-worktree-needs-fix",
+            kind: "review",
+            version: 1,
+            outcome: "active",
+            remediation: ["Fix the staged migration regression."],
+          });
+          return { launched: true, stdout: "review complete", stderr: "", exitCode: 0 };
+        }
+        if (call.promptPath === ".ai/prompts/execute-plan.md") {
+          return { launched: true, stdout: "STOP", stderr: "", exitCode: 0 };
+        }
+        if (call.command === "git") {
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
+        return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+      },
+    });
+
+    assert.equal(result.success, false);
+    assert.match(result.reason, /output contained STOP/);
+    assert.equal(
+      calls.some((call) => call.promptPath === "git-review-staging-worktree-check"),
+      false,
+    );
+    const workflow = JSON.parse(await readFile(
+      join(
+        workspace.root,
+        ".ai",
+        "artifacts",
+        "review-worktree-needs-fix",
+        "state",
+        "workflow.json",
+      ),
+      "utf8",
+    ));
+    assert.equal(workflow.workflowState, "active");
+    assert.deepEqual(workflow.latest.review.unresolvedFindings, [
+      "Fix the staged migration regression.",
     ]);
   } finally {
     await workspace.cleanup();
@@ -258,7 +400,7 @@ test("runner rejects split-review evidence", async () => {
     });
 
     assert.equal(result.success, false);
-    assert.match(result.reason, /events\/review-v1\.md/i);
+    assert.match(result.reason, /thin-plan contains forbidden inline section Review History/i);
     assert.equal(
       calls.filter((call) => call.command === CODEX_COMMAND).length,
       0,
@@ -278,6 +420,8 @@ test("review staging auto-unstages unrelated hunks before review prompt runs", a
         modified: ["src/file.ts"],
       }),
     );
+    mkdirSync(join(workspace.root, "src"), { recursive: true });
+    writeFileSync(join(workspace.root, "src", "file.ts"), "export {};\n");
     const calls: Parameters<ProcessRunner>[0][] = [];
     const result = await runWorkflowRunner({
       planName: planArg("review-scope-cleanup"),
@@ -339,13 +483,6 @@ test("review staging auto-unstages unrelated hunks before review prompt runs", a
             kind: "review",
             version: 1,
           });
-          await writePlan(
-            workspace.root,
-            "review-scope-cleanup",
-            planWithFileScope("completed", "commit-summary", {
-              modified: ["src/file.ts"],
-            }),
-          );
         }
         return { launched: true, stdout: "summary", stderr: "", exitCode: 0 };
       },
@@ -384,6 +521,8 @@ test("review scope cleanup receives prior non-plan-scoped STOP evidence", async 
         modified: ["e2e/support-issue-widget.spec.ts"],
       }),
     );
+    mkdirSync(join(workspace.root, "e2e"), { recursive: true });
+    writeFileSync(join(workspace.root, "e2e", "support-issue-widget.spec.ts"), "export {};\n");
     const failureLogDir = join(
       workspace.root,
       ".ai",
@@ -443,13 +582,6 @@ test("review scope cleanup receives prior non-plan-scoped STOP evidence", async 
             kind: "review",
             version: 1,
           });
-          await writePlan(
-            workspace.root,
-            "review-scope-cleanup-retry",
-            planWithFileScope("completed", "commit-summary", {
-              modified: ["e2e/support-issue-widget.spec.ts"],
-            }),
-          );
         }
         return { launched: true, stdout: "summary", stderr: "", exitCode: 0 };
       },
@@ -481,6 +613,8 @@ test("review scope cleanup ignores prior non-plan-scoped STOP evidence after new
         modified: ["e2e/support-issue-widget.spec.ts"],
       }),
     );
+    mkdirSync(join(workspace.root, "e2e"), { recursive: true });
+    writeFileSync(join(workspace.root, "e2e", "support-issue-widget.spec.ts"), "export {};\n");
     const failureLogDir = join(
       workspace.root,
       ".ai",
@@ -512,13 +646,13 @@ test("review scope cleanup ignores prior non-plan-scoped STOP evidence after new
       "workflow.json",
       `${JSON.stringify(
         {
+          documentFormat: "workflow-state@1",
           planPath: `.ai/plans/${planName}.md`,
-          status: "review",
-          nextAction: "review-plan",
+          workflowState: "review",
           latest: {
             execution: {
               version: 1,
-              result: "PASS",
+              outcome: "review-ready",
               summary: "Execution remediated the prior review STOP.",
               evidence: `.ai/artifacts/${planName}/events/execution-v1.md`,
             },
@@ -571,13 +705,6 @@ test("review scope cleanup ignores prior non-plan-scoped STOP evidence after new
             kind: "review",
             version: 1,
           });
-          await writePlan(
-            workspace.root,
-            planName,
-            planWithFileScope("completed", "commit-summary", {
-              modified: ["e2e/support-issue-widget.spec.ts"],
-            }),
-          );
         }
         return { launched: true, stdout: "summary", stderr: "", exitCode: 0 };
       },
@@ -599,27 +726,18 @@ test("review scope cleanup ignores prior non-plan-scoped STOP evidence after new
   }
 });
 
-test("review-plan does not require hunk ownership before review", async () => {
+test("review-plan accepts plan-owned file scope without hunk ownership metadata", async () => {
   const workspace = await setupWorkspace();
   try {
     await writePlan(
       workspace.root,
       "review-shared-hunk-scope",
-      planWithFileScope(
-        "review",
-        "review-plan",
-        {
-          modified: ["schema/openapi.generated.json"],
-        },
-        `## Hunk Ownership
-
-### schema/openapi.generated.json
-
-* Owned: generated \`users\` endpoint entries produced by the current plan.
-* Excluded: generated \`billing\` endpoint entries owned by billing API work.
-`,
-      ),
+      planWithFileScope("review", "review-plan", {
+        modified: ["schema/openapi.generated.json"],
+      }),
     );
+    mkdirSync(join(workspace.root, "schema"), { recursive: true });
+    writeFileSync(join(workspace.root, "schema", "openapi.generated.json"), "{}\n");
     const diff = [
       "diff --git a/schema/openapi.generated.json b/schema/openapi.generated.json",
       "index 1111111..2222222 100644",
@@ -668,13 +786,6 @@ test("review-plan does not require hunk ownership before review", async () => {
             kind: "review",
             version: 1,
           });
-          await writePlan(
-            workspace.root,
-            "review-shared-hunk-scope",
-            planWithFileScope("completed", "commit-summary", {
-              modified: ["schema/openapi.generated.json"],
-            }),
-          );
         }
         return { launched: true, stdout: "summary", stderr: "", exitCode: 0 };
       },
@@ -712,6 +823,20 @@ test(`review ${CODEX_COMMAND} failure after staging unstages plan-owned files be
       rootDir: workspace.root,
       processRunner: async (call) => {
         calls.push(call);
+        if (call.promptPath === "git-pre-review-staged-check") {
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
+        if (call.promptPath === "git-review-unstage-staged-paths") {
+          return {
+            launched: true,
+            stdout: [
+              ".ai/scripts/workflow/runner/__tests__/integration/runner.test.ts",
+              ".ai/scripts/workflow/runner.ts",
+            ].join("\n"),
+            stderr: "",
+            exitCode: 0,
+          };
+        }
         if (call.command === "git") {
           return { launched: true, stdout: "", stderr: "", exitCode: 0 };
         }
@@ -742,8 +867,7 @@ test(`review ${CODEX_COMMAND} failure after staging unstages plan-owned files be
       "reset",
       "--quiet",
       "--",
-      ".ai/scripts/workflow/runner/__tests__/integration/runner.test.ts",
-      ".ai/scripts/workflow/runner.ts",
+      ".ai/artifacts/review-stop/state/files.json",
     ]);
   } finally {
     await workspace.cleanup();

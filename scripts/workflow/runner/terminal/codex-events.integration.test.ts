@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   codexOutputContainsStop,
   codexOutputStopReason,
+  isReviewNeedsFixStopReason,
   codexWorkEnvironment,
   createCodexLiveOutputFormatter,
   createWorkflowWaitNotice,
@@ -204,6 +205,21 @@ test("codex JSON STOP reason extraction accepts inline-code STOP agent directive
       "",
     ),
     `${CODEX_EXEC_LABEL} output contained STOP: spec must be updated before plan can be fixed`,
+  );
+});
+
+test("review NEEDS FIX STOP summaries are recognized as event-backed outcomes", () => {
+  assert.equal(
+    isReviewNeedsFixStopReason(
+      `${CODEX_EXEC_LABEL} output contained STOP: NEEDS FIX.`,
+    ),
+    true,
+  );
+  assert.equal(
+    isReviewNeedsFixStopReason(
+      `${CODEX_EXEC_LABEL} output contained STOP: plan must be in review state`,
+    ),
+    false,
   );
 });
 

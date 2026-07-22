@@ -9,6 +9,7 @@ import {
   parseCommitSummaryPathsForPlan,
 } from "../commit.ts";
 import {
+  checkReviewStagingWorktreeClean,
   parseReviewStagingPaths,
   runReviewStagingForPaths,
   stagedStatusHasMixedReviewPath,
@@ -62,6 +63,37 @@ const ownershipReleaseSection = (
 * Evidence: current-plan file-specific validation passed
 * Status: transferred
 `;
+
+const reviewFileScope = (
+  {
+    created = [],
+    modified = [],
+    deleted = [],
+  }: {
+    created?: string[];
+    modified?: string[];
+    deleted?: string[];
+  },
+  extra = "",
+) => {
+  const bullets = (paths: string[]) =>
+    paths.length > 0 ? paths.map((file) => `* ${file}`).join("\n") : "* None";
+  return `## Files (MANDATORY)
+
+### Created files
+
+${bullets(created)}
+
+### Modified files
+
+${bullets(modified)}
+
+### Deleted files
+
+${bullets(deleted)}
+
+${extra}`;
+};
 
 const codexAgentMessageLine = (text: string) =>
   JSON.stringify({
@@ -313,6 +345,21 @@ test("review staging fails when path remains mixed staged and unstaged", async (
   assert.equal(stagedStatusHasMixedReviewPath("M  src/a.ts\n"), false);
 });
 
+test("review staging rejects a worktree mutation that occurs after staging", async () => {
+  const result = await checkReviewStagingWorktreeClean(
+    "/tmp/repo",
+    ["src/a.ts"],
+    async (call) => {
+      assert.deepEqual(call.args, ["diff", "--quiet", "--", "src/a.ts"]);
+      assert.equal(call.promptPath, "git-review-staging-worktree-check");
+      return { launched: true, exitCode: 1, stdout: "", stderr: "" };
+    },
+  );
+
+  assert.equal(result.ok, false);
+  assert.match(result.ok ? "" : result.reason, /review scope changed after staging/);
+});
+
 test("scope cleanup skips Codex when staged diff exceeds 80 KB", async () => {
   const workspace = await setupWorkspace();
   try {
@@ -346,6 +393,70 @@ test("scope cleanup skips Codex when staged diff exceeds 80 KB", async () => {
     assert.equal(
       calls.some((call) => call.command === "codex"),
       false,
+    );
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("scope cleanup restages the review scope when an unstage decision empties it", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    const calls: Parameters<ProcessRunner>[0][] = [];
+    const stagedDiff = [
+      "diff --git a/src/a.ts b/src/a.ts",
+      "--- a/src/a.ts",
+      "+++ b/src/a.ts",
+      "@@ -1,0 +1 @@",
+      "+const implementation = true;",
+    ].join("\n");
+    let scopeWasUnstaged = false;
+    const result = await runScopeCleanupForPaths({
+      codexRuntime: {
+        command: "codex",
+        profile: WORKFLOW_RUNNER_CODEX_PROFILE,
+        execLabel: "codex exec",
+      },
+      rootDir: workspace.root,
+      planPath: ".ai/plans/workflow-runner.md",
+      planContent: planWithFileScope("review", "review-plan", {
+        modified: ["src/a.ts"],
+      }),
+      paths: ["src/a.ts"],
+      processRunner: async (call) => {
+        calls.push(call);
+        if (call.command === "git" && call.args[0] === "diff") {
+          return {
+            launched: true,
+            exitCode: 0,
+            stdout: scopeWasUnstaged ? "" : stagedDiff,
+            stderr: "",
+          };
+        }
+        if (call.command === "codex") {
+          return {
+            launched: true,
+            exitCode: 0,
+            stdout: codexAgentMessageLine(
+              JSON.stringify({ action: "unstage", patch: stagedDiff }),
+            ),
+            stderr: "",
+          };
+        }
+        if (call.promptPath === "git-scope-cleanup-unstage") {
+          scopeWasUnstaged = true;
+        }
+        return { launched: true, exitCode: 0, stdout: "", stderr: "" };
+      },
+      mode: "review",
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(
+      calls.some(
+        (call) => call.promptPath === "git-scope-cleanup-restage-empty-scope",
+      ),
+      true,
     );
   } finally {
     await workspace.cleanup();
@@ -451,11 +562,7 @@ test("review staging parses and filters concrete non-ignored files and rejects u
       ["directory", "* src/dir"],
     ] as const) {
       const unsafe = await parseReviewStagingPaths({
-        content: planWith(
-          "review",
-          "review-plan",
-          `### Created files\n\n${bullet}\n`,
-        ),
+        content: reviewFileScope({ created: [bullet.slice(2)] }),
         rootDir: workspace.root,
         isIgnored: async () => false,
       });
@@ -463,11 +570,7 @@ test("review staging parses and filters concrete non-ignored files and rejects u
     }
 
     const ignoredOnly = await parseReviewStagingPaths({
-      content: planWith(
-        "review",
-        "review-plan",
-        "### Created files\n\n* ignored.log\n",
-      ),
+      content: reviewFileScope({ created: ["ignored.log"] }),
       rootDir: workspace.root,
       isIgnored: async () => true,
     });
@@ -483,12 +586,8 @@ test("review staging parses and filters concrete non-ignored files and rejects u
 
 test("review staging excludes transferred file ownership releases", async () => {
   const parsed = await parseReviewStagingPaths({
-    content: planWithFileScope(
-      "review",
-      "review-plan",
-      {
-        modified: ["src/shared.ts", "src/owned.ts"],
-      },
+    content: reviewFileScope(
+      { modified: ["src/shared.ts", "src/owned.ts"] },
       ownershipReleaseSection("src/shared.ts", ".ai/plans/dependent-plan.md"),
     ),
     isIgnored: async () => false,
@@ -512,12 +611,8 @@ test("review staging rejects unsafe transferred file ownership release paths", a
       ],
     ] as const) {
       const parsed = await parseReviewStagingPaths({
-        content: planWithFileScope(
-          "review",
-          "review-plan",
-          {
-            modified: ["src/owned.ts"],
-          },
+        content: reviewFileScope(
+          { modified: ["src/owned.ts"] },
           ownershipReleaseSection(releasePath, ".ai/plans/dependent-plan.md"),
         ),
         rootDir: workspace.root,
