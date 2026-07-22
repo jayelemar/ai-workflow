@@ -16,7 +16,7 @@ Manual preview does not update `## Workflow State`.
 
 Read:
 
-* `.codex/AGENTS.md`
+* `.codex/.AGENTS.md`
 * `.ai/instructions/index.md`
 * `.ai/instructions/shared/reasoning-quality.md`
 * `.ai/instructions/shared/debugging.md` before diagnosing failed preview or validation behavior
