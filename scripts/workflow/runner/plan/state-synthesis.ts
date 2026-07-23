@@ -5,6 +5,7 @@ import {
 } from "../types.ts";
 import { replaceManifestWorkflowValue } from "./state-recovery.ts";
 import { latestNumber, latestRecord, latestString } from "./state-events.ts";
+import { workflowReviewSupersededByProgress } from "./thin-plan-sidecars.ts";
 
 export {
   latestNumber,
@@ -77,7 +78,12 @@ export const synthesizeThinPlanContent = ({
   const execution = latestRecord(workflow, "execution");
   const unblock = latestRecord(workflow, "unblock");
   const reopen = latestRecord(workflow, "reopen");
-  const reviewFindings = asStringArray(review?.unresolvedFindings);
+  const reviewFindings = workflowReviewSupersededByProgress(
+    workflow.latest,
+    workflow.history,
+  )
+    ? []
+    : asStringArray(review?.unresolvedFindings);
   const generatedEvents = [
     synthesizedEvent({ label: "Execution", latest: execution }),
     synthesizedEvent({ label: "Validation", latest: validation }),
