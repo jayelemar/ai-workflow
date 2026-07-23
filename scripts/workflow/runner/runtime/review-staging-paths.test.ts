@@ -118,3 +118,46 @@ test("review staging includes dirty candidates already owned by the plan", async
     ],
   });
 });
+
+test("task review staging excludes later-task paths from the plan-wide ownership inventory", async () => {
+  const result = await resolveReviewStagingPaths({
+    rootDir: "/workspace",
+    planContent: "",
+    selectedTask: {
+      id: "01-mode-scoped-billing-schema",
+      words: "mode-scoped-billing-schema",
+      name: "Add mode-scoped billing state",
+      artifactWords: "mode-scoped-billing-schema",
+      files: ["supabase/migrations/mode-scoped-billing.sql"],
+    },
+    ownershipPreflight: {
+      hasOwnershipScope: true,
+      artifact: {
+        documentFormat: "file-ownership@1",
+        planPath: ".ai/plans/example.md",
+        owns: [
+          "supabase/migrations/mode-scoped-billing.sql",
+          "apps/backend/src/payments/webhooks/whop-webhook.service.ts",
+        ],
+        released: [],
+        resolvedFiles: [
+          "supabase/migrations/mode-scoped-billing.sql",
+          "apps/backend/src/payments/webhooks/whop-webhook.service.ts",
+        ],
+        changedFiles: [],
+        headSha: "abc123",
+        updatedAt: "2026-07-23T00:00:00.000Z",
+      },
+      reviewStagingPaths: [
+        "supabase/migrations/mode-scoped-billing.sql",
+        "apps/backend/src/payments/webhooks/whop-webhook.service.ts",
+      ],
+    },
+    isIgnored: async () => false,
+  });
+
+  assert.deepEqual(result, {
+    ok: true,
+    paths: ["supabase/migrations/mode-scoped-billing.sql"],
+  });
+});

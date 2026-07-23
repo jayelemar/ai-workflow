@@ -229,15 +229,15 @@ Task savepoint current task:
 - Task Name: ${taskContext.task.name}
 - Task Stage: ${taskContext.stage}
 - Task Artifact: ${taskContext.artifactPath}
+- Task Files:\n${taskContext.task.files.map((filePath) => `  - ${filePath}`).join("\n") || "  - (none declared)"}
 
 Task savepoint rules:
 - Work only on the current task above.
 - Do not start another \`[task:...]\` item in the same run.
-- If the current task changed a shared contract, service invariant, schema, payload shape, generated type, or backend enforcement rule, fix the smallest compatibility path needed to keep existing later-task call sites from submitting invalid data.
-- Do not output \`STOP\` solely because that minimal compatibility fix touches a file named in a later \`[task:...]\` item.
-- If review feedback identifies a missing backend RPC, migration, generated database type, or database regression test required to uphold the current task's access/security invariant, treat it as that smallest compatibility repair.
-- If such a file is outside the declared plan-owned scope, record the exact required path and reason in the assigned event evidence. Do not edit the plan, ownership, or inventory artifacts; the runner will reject unauthorized routing mutations.
-- Do not output \`STOP\` solely because the required minimal backend contract repair touches a migration, generated database contract file, or database test outside the original current-task file list.
+- Edit only the declared Task Files. A file shared by ordered tasks is available only when it is declared by this current task.
+- Do not implement a later task's compatibility path, even when it is needed by a shared contract or review finding. Record the exact path and reason in the assigned event evidence, then output \`STOP\` so the plan can be repaired or routed to the owning task.
+- If review feedback identifies a missing backend RPC, migration, generated database type, or database regression test outside the declared Task Files, record it as downstream work; do not edit it in this task.
+- Do not edit the plan, ownership, or inventory artifacts to broaden this boundary.
 - Keep \`.ai/\` artifacts out of git commits.
 - The runner owns .ai/artifacts/<plan-name>/execution-summary.md; do not edit it directly.
 - If this stage cannot complete for the current task, output \`STOP\` and keep the same current task active for remediation.

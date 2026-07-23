@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { uniquePaths } from "../runner/plan/parser.ts";
+import { parsePlanTasks, uniquePaths } from "../runner/plan/parser.ts";
 import {
   defaultIsIgnored,
   parseReviewStagingPaths,
@@ -210,6 +210,13 @@ export const readThinPlanFileOwnershipPreflight = async ({
   const activeChangedFiles = files.changedFiles.filter(
     (filePath) => !files.released.includes(filePath),
   );
+  const releasedFiles = new Set([...artifact.released, ...files.released]);
+  const taskDeclaredFiles = uniquePaths(
+    parsePlanTasks(plan.content)
+      .flatMap((task) => task.files)
+      .filter((filePath) => !releasedFiles.has(filePath)),
+  );
+  let repaired = false;
   if (
     activeChangedFiles.length > 0 &&
     artifact.owns.length === 0 &&
@@ -228,6 +235,26 @@ export const readThinPlanFileOwnershipPreflight = async ({
       headSha: head.sha,
       updatedAt: new Date().toISOString(),
     };
+    repaired = true;
+  }
+  const reconciledOwns = uniquePaths([...artifact.owns, ...taskDeclaredFiles]);
+  const reconciledResolvedFiles = uniquePaths([
+    ...artifact.resolvedFiles,
+    ...taskDeclaredFiles,
+  ]);
+  if (
+    reconciledOwns.length !== artifact.owns.length ||
+    reconciledResolvedFiles.length !== artifact.resolvedFiles.length
+  ) {
+    artifact = {
+      ...artifact,
+      owns: reconciledOwns,
+      resolvedFiles: reconciledResolvedFiles,
+      updatedAt: new Date().toISOString(),
+    };
+    repaired = true;
+  }
+  if (repaired) {
     try {
       await writeFile(
         path.join(rootDir, fileOwnershipPath),

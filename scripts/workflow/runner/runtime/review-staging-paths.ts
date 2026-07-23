@@ -3,7 +3,7 @@ import {
   parseReviewStagingPaths,
   validateConcretePlanFilePath,
 } from "../review/staging.ts";
-import type { FileOwnershipPreflight } from "../types.ts";
+import type { FileOwnershipPreflight, PlanTask } from "../types.ts";
 
 const uniquePaths = (paths: string[]): string[] => [...new Set(paths)];
 
@@ -82,11 +82,13 @@ export const resolveReviewStagingPaths = async ({
   rootDir,
   planContent,
   ownershipPreflight,
+  selectedTask,
   isIgnored,
 }: {
   rootDir: string;
   planContent: string;
   ownershipPreflight?: FileOwnershipPreflight;
+  selectedTask?: PlanTask;
   isIgnored?: (relativePath: string) => Promise<boolean>;
 }) => {
   const ignored =
@@ -96,13 +98,27 @@ export const resolveReviewStagingPaths = async ({
     rootDir,
     isIgnored: ignored,
   });
+  const taskFiles = selectedTask && selectedTask.files.length > 0
+    ? new Set(await nonIgnoredPaths(selectedTask.files, ignored))
+    : undefined;
+  const inTaskScope = (candidate: string): boolean =>
+    taskFiles === undefined || taskFiles.has(candidate);
+  const outOfScopeRemediation = remediationPaths.filter(
+    (candidate) => !inTaskScope(candidate),
+  );
+  if (selectedTask && outOfScopeRemediation.length > 0) {
+    return {
+      ok: false as const,
+      reason: `review remediation for task ${selectedTask.id} names paths outside its declared Files boundary: ${outOfScopeRemediation.join(", ")}`,
+    };
+  }
   if (
     ownershipPreflight?.hasOwnershipScope &&
     ownershipPreflight.reviewStagingPaths
   ) {
-    // The task file inventory can lag an execution repair. Include every
-    // concrete path already owned by this plan; runReviewStagingForPaths later
-    // filters this candidate list down to files that are actually dirty.
+    // For single-savepoint plans, include every concrete plan-owned path so a
+    // repaired inventory cannot hide a dirty file. Task-savepoint plans use
+    // their declared Files boundary instead.
     const planOwnedPaths = await nonIgnoredPaths(
       ownershipPreflight.artifact.resolvedFiles,
       ignored,
@@ -111,7 +127,7 @@ export const resolveReviewStagingPaths = async ({
       ...ownershipPreflight.reviewStagingPaths,
       ...planOwnedPaths,
       ...remediationPaths,
-    ]);
+    ]).filter(inTaskScope);
     return paths.length > 0
       ? { ok: true as const, paths }
       : {
@@ -127,5 +143,15 @@ export const resolveReviewStagingPaths = async ({
   if (!parsed.ok) {
     return parsed;
   }
-  return { ok: true as const, paths: uniquePaths([...parsed.paths, ...remediationPaths]) };
+  const paths = uniquePaths([...parsed.paths, ...remediationPaths]).filter(
+    inTaskScope,
+  );
+  return paths.length > 0
+    ? { ok: true as const, paths }
+    : {
+        ok: false as const,
+        reason: selectedTask && taskFiles
+          ? `task ${selectedTask.id} has no active review staging paths within its declared Files boundary`
+          : "plan has no active review staging paths",
+      };
 };

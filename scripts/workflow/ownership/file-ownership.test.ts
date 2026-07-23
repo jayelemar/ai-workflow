@@ -9,6 +9,7 @@ import {
   canonicalFileOwnershipArtifact,
   parseFileOwnershipArtifact,
   parseGitStatusChangedFileEntries,
+  readThinPlanFileOwnershipPreflight,
   refreshAndCheckFileOwnershipArtifact,
 } from "./file-ownership.ts";
 import type {
@@ -152,6 +153,72 @@ test("file ownership refresh resolves globs to changed files and writes sidecar"
       ),
     ) as FileOwnershipArtifact;
     assert.equal(written.headSha, "headsha");
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("thin-plan ownership repairs omitted task-declared files", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    const stateDirectory = join(
+      workspace.root,
+      ".ai",
+      "artifacts",
+      "current-plan",
+      "state",
+    );
+    mkdirSync(stateDirectory, { recursive: true });
+    await writeFile(
+      join(stateDirectory, "file-ownership.json"),
+      `${JSON.stringify({
+        documentFormat: "file-ownership@1",
+        planPath: ".ai/plans/current-plan.md",
+        owns: ["apps/backend/src/payments/whop/whop.client.ts"],
+        released: [],
+        resolvedFiles: ["apps/backend/src/payments/whop/whop.client.ts"],
+        changedFiles: [],
+        headSha: "headsha",
+        updatedAt: "2026-07-23T00:00:00.000Z",
+      }, null, 2)}\n`,
+    );
+    await writeFile(
+      join(stateDirectory, "files.json"),
+      `${JSON.stringify({
+        documentFormat: "files-state@1",
+        created: [],
+        modified: ["apps/backend/src/payments/whop/whop.client.ts"],
+        deleted: [],
+        changedFiles: ["apps/backend/src/payments/whop/whop.client.ts"],
+        released: [],
+        headSha: "headsha",
+      }, null, 2)}\n`,
+    );
+
+    const result = await readThinPlanFileOwnershipPreflight({
+      rootDir: workspace.root,
+      plan: parsedPlan(`### Implementation
+
+1. [task:01-checkout] Enforce checkout mode
+   - Files: \`apps/backend/src/payments/whop/whop.client.ts\`, \`apps/backend/test/payments/whop.client.spec.ts\`
+`),
+      processRunner: async () => ({ launched: true, stdout: "", stderr: "", exitCode: 0 }),
+      isIgnored: async () => false,
+    });
+
+    if ("ok" in result) {
+      assert.fail(result.reason);
+    }
+    assert.deepEqual(result.artifact.resolvedFiles, [
+      "apps/backend/src/payments/whop/whop.client.ts",
+      "apps/backend/test/payments/whop.client.spec.ts",
+    ]);
+
+    const written = JSON.parse(
+      await readFile(join(stateDirectory, "file-ownership.json"), "utf8"),
+    ) as FileOwnershipArtifact;
+    assert.deepEqual(written.owns, result.artifact.owns);
+    assert.deepEqual(written.resolvedFiles, result.artifact.resolvedFiles);
   } finally {
     await workspace.cleanup();
   }

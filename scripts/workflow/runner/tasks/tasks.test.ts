@@ -33,6 +33,7 @@ const testTask = (id: string, name: string): PlanTask => ({
   words: id.replace(/^[0-9]+-/, ""),
   name,
   artifactWords: id.replace(/^[0-9]+-/, ""),
+  files: [],
 });
 
 const withWorkspace = async <T>(

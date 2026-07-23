@@ -50,6 +50,7 @@ export type PlanTask = {
   words: string;
   name: string;
   artifactWords: string;
+  files: string[];
 };
 export type WorkflowTaskContext = {
   task: PlanTask;

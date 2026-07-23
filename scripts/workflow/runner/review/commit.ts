@@ -114,13 +114,14 @@ export const readDirtyPlanOwnedPaths = async (
   rootDir: string,
   paths: string[],
   processRunner: ProcessRunner,
+  promptPath = "git-commit-boundary-preflight",
 ): Promise<{ ok: true; paths: string[] } | Failure> => {
   const result = await processRunner({
     command: "git",
     args: ["status", "--short", "--", ...paths],
     cwd: rootDir,
     input: "",
-    promptPath: "git-commit-boundary-preflight",
+    promptPath,
   }).catch(
     (error): ProcessResult => ({
       launched: false,

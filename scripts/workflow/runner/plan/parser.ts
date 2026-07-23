@@ -61,10 +61,11 @@ export const planSectionLines = (content: string, heading: string): string[] => 
 export const parsePlanTasks = (content: string): PlanTask[] => {
   const tasks: PlanTask[] = [];
   const seen = new Set<string>();
+  const lines = content.split(/\r?\n/);
   const taskPattern =
     /^\s*\d+\.\s+\[task:([0-9]{2}-[a-z0-9]+(?:-[a-z0-9]+)*)\]\s+(.+?)\s*$/;
 
-  for (const line of content.split(/\r?\n/)) {
+  for (const [index, line] of lines.entries()) {
     const match = line.match(taskPattern);
     if (!match) {
       continue;
@@ -76,11 +77,30 @@ export const parsePlanTasks = (content: string): PlanTask[] => {
     seen.add(id);
     const name = match[2].trim();
     const words = id.replace(/^[0-9]{2}-/, "");
+    const taskLines = lines.slice(index + 1);
+    const nextTaskIndex = taskLines.findIndex((candidate) =>
+      taskPattern.test(candidate),
+    );
+    const filesLine = taskLines
+      .slice(0, nextTaskIndex === -1 ? undefined : nextTaskIndex)
+      .find((candidate) => /^\s*-\s+Files:\s*(.+)$/i.test(candidate));
+    const filesValue = filesLine?.match(/^\s*-\s+Files:\s*(.+)$/i)?.[1];
+    const files = filesValue
+      ? filesValue
+          .split(",")
+          .map((value) => value.trim().replace(/^`|`$/g, ""))
+          .filter(
+            (value) =>
+              value.length > 0 &&
+              !["none", "n/a", "na"].includes(value.toLowerCase()),
+          )
+      : [];
     tasks.push({
       id,
       words,
       name,
       artifactWords: words,
+      files: uniquePaths(files),
     });
   }
 

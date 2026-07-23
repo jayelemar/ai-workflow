@@ -54,6 +54,30 @@ test("generated stage prompt injects the exact runner descriptor", () => {
   assert.match(prompt, /Active Context Packet:/);
 });
 
+test("task savepoint prompts inject and enforce the declared file boundary", () => {
+  const prompt = generateWorkflowPrompt({
+    promptPath: ".ai/prompts/execute-plan.md",
+    planPath: ".ai/plans/example.md",
+    planContent: "# Plan\n",
+    promptContent: "unused",
+    taskContext: {
+      stage: "implementing",
+      artifactPath: ".ai/artifacts/example/tasks/01-schema-v1.md",
+      task: {
+        id: "01-schema",
+        words: "schema",
+        name: "Add schema",
+        artifactWords: "schema",
+        files: ["supabase/migrations/example.sql"],
+      },
+    },
+  });
+
+  assert.match(prompt, /Task Files:\n  - supabase\/migrations\/example\.sql/);
+  assert.match(prompt, /Edit only the declared Task Files/);
+  assert.match(prompt, /Do not implement a later task's compatibility path/);
+});
+
 test("generated snapshot uses labeled context instead of manifest history", () => {
   const snapshot = generateWorkflowContextSnapshot({
     planName: "example",

@@ -239,8 +239,11 @@ Rules:
 - Each acceptance criterion MUST become fully satisfied in exactly one task.
   Inseparable criteria MAY share one task; independently achievable criteria
   MUST not.
-- Shared source, test, migration, or generated paths MAY appear in multiple
-  ordered tasks. Count each unique expected commit path once per task.
+- A shared source, test, migration, or generated path MAY appear in multiple
+  ordered tasks only when each affected task declares that exact path and its
+  `Coupling rationale` names the path and explains the ordered handoff. Do not
+  use a shared path to absorb a later task's implementation or review finding.
+  Count each unique expected commit path once per task.
 - Expected directory ownership contributes every resolved concrete commit
   path. Paths marked `(assumed)` still count.
 - Ignore `.ai/` paths excluded from implementation commits when calculating

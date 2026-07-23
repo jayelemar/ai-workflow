@@ -53,6 +53,7 @@ import { appendWorkflowIterationRecord } from "./iteration-recorder.ts";
 import { createTaskProgress } from "./task-progress.ts";
 import { recoverTaskSavepoint } from "./task-savepoint-recovery.ts";
 import { resolveReviewStagingPaths } from "./review-staging-paths.ts";
+import { checkTaskFileScope, unstagePathsOutsideTaskFileScope } from "./task-file-scope.ts";
 import { acquireWorkflowRunnerLock } from "./runner-lock.ts";
 import {
   formatStageDescriptor,
@@ -181,7 +182,6 @@ export const runWorkflowRunnerLifecycle = async (
   }
   emitWorkflowThresholdWarnings(initialParsedPlan.warnings);
   let parsedPlan: ParsedPlan = initialParsedPlan;
-  const recoveredTransition = await recoverPendingStageFinalization({
   const runnerLock = await acquireWorkflowRunnerLock({
     rootDir,
     planName: parsedPlan.planName,
@@ -190,6 +190,7 @@ export const runWorkflowRunnerLifecycle = async (
     return await finishFailure(runnerLock.reason);
   }
   try {
+  const recoveredTransition = await recoverPendingStageFinalization({
     rootDir,
     plan: parsedPlan,
   });
@@ -579,6 +580,37 @@ export const runWorkflowRunnerLifecycle = async (
         );
       }
       fileOwnershipPreflight = preflight;
+      if (
+        selectedTask &&
+        selectedTask.files.length > 0 &&
+        preflight.hasOwnershipScope
+      ) {
+        const taskScope = await checkTaskFileScope({
+          task: selectedTask,
+          planOwnedPaths: preflight.artifact.resolvedFiles,
+        });
+        if (!taskScope.ok) {
+          return await finishFailure(`workflow task scope invalid: ${taskScope.reason}`);
+        }
+        const taskScopeStaging = await unstagePathsOutsideTaskFileScope({
+          rootDir,
+          task: selectedTask,
+          planOwnedPaths: preflight.artifact.resolvedFiles,
+          processRunner,
+        });
+        if (!taskScopeStaging.ok) {
+          return await finishFailure(
+            `workflow task scope cleanup failed: ${taskScopeStaging.reason}`,
+          );
+        }
+        if (taskScopeStaging.unstagedPaths.length > 0) {
+          await appendLog(
+            rootDir,
+            parsedPlan.planName,
+            `Preserved later-task changes outside task ${selectedTask.id} by unstaging: ${taskScopeStaging.unstagedPaths.join(", ")}`,
+          );
+        }
+      }
     }
     if (route.promptPath === rel(".ai", "prompts", "execute-plan.md")) {
       const executeIndexCleanup = await clearStagedWorkForExecution(
@@ -661,6 +693,7 @@ export const runWorkflowRunnerLifecycle = async (
           rootDir,
           planContent: parsedPlan.content,
           ownershipPreflight: fileOwnershipPreflight,
+          selectedTask,
           isIgnored: options.isIgnored,
         });
         if (!parsedPaths.ok) {
@@ -914,6 +947,7 @@ export const runWorkflowRunnerLifecycle = async (
             rootDir,
             planContent: parsedPlan.content,
             ownershipPreflight: fileOwnershipPreflight,
+            selectedTask,
             isIgnored: options.isIgnored,
           });
           if (!parsedPaths.ok) {
@@ -989,7 +1023,19 @@ export const runWorkflowRunnerLifecycle = async (
             `commit summary file scope invalid: ${parsedPaths.reason}`,
           );
         }
-        commitSummaryPaths = parsedPaths.paths;
+        const taskScopedPaths = selectedTask && selectedTask.files.length > 0
+          ? parsedPaths.paths.filter((filePath) =>
+              selectedTask.files.includes(filePath),
+            )
+          : parsedPaths.paths;
+        if (taskScopedPaths.length === 0) {
+          return await finishFailure(
+            selectedTask && selectedTask.files.length > 0
+              ? `commit summary file scope invalid: task ${selectedTask.id} has no paths within its declared Files boundary`
+              : "commit summary file scope invalid: no active plan-owned paths",
+          );
+        }
+        commitSummaryPaths = taskScopedPaths;
         if (
           selectedTask &&
           parseTaskCommitBoundaries(parsedPlan.content, selectedTask.id).declared
@@ -1382,7 +1428,7 @@ export const runWorkflowRunnerLifecycle = async (
     }
     return successfulOutcome.result;
   }
-};
   } finally {
     await runnerLock.release();
   }
+};
