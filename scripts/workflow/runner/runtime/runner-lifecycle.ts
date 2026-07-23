@@ -1341,6 +1341,24 @@ export const runWorkflowRunnerLifecycle = async (
       continue;
     }
 
+    if (
+      !stopReason &&
+      !route.terminal &&
+      stageDescriptor &&
+      !("ok" in stageDescriptor)
+    ) {
+      const reservedEvent = await readStageEventOutcome({
+        rootDir,
+        descriptor: stageDescriptor,
+      });
+      if (
+        !reservedEvent.ok &&
+        /reserved stage event cannot be read:/i.test(reservedEvent.reason)
+      ) {
+        stopReason = `${codexRuntime.execLabel} completed without writing its reserved stage event: ${stageDescriptor.eventPath}`;
+      }
+    }
+
     if (stopReason) {
       const stoppedOutcome = await handleStoppedIteration({
         rootDir,
@@ -1357,6 +1375,8 @@ export const runWorkflowRunnerLifecycle = async (
           cleanupReviewStagingPaths(reviewStagingPaths),
         cleanupCommitSummaryPaths: () =>
           cleanupCommitSummaryPaths(commitSummaryPaths),
+        reparsePlan: () => parsePlan({ planName: planArgument, rootDir }),
+        finishBlocked,
         finishFailure,
       });
       if (stoppedOutcome.kind === "continue") {

@@ -57,6 +57,29 @@ work remains. Choose `blocked` only for a true external or missing-input
 blocker; include exact remediation. Do not infer a state transition from a
 terminal response: the runner validates the event and finalizes it.
 
+If the current task cannot become `review-ready` because it needs an
+undeclared prerequisite outside its injected `Files` boundary (for example a
+forward-only migration, database contract, generated type, or independently
+deployed compatibility change), do **not** output `STOP`. Write the assigned
+event with outcome `blocked`, state the exact missing prerequisite in
+`## Summary`, and put the separate prerequisite plan or implementation action
+in `## Remediation`. This preserves the task boundary while allowing the
+runner to persist a resumable blocked handoff instead of reporting a generic
+workflow failure.
+
+If the latest unblock event says that a previously external prerequisite is
+complete and the current task's scoped code calls that completed contract,
+treat it as a satisfied dependency. Cite the unblock event in `## Evidence`;
+do not block again merely because the prerequisite's files remain outside the
+current task boundary.
+
+If a required broad validation command fails only in paths outside the current
+task boundary and its errors do not reference current-task code, do not expand
+scope to repair unrelated code or block this task solely for that baseline
+failure. Run the narrowest applicable focused build, typecheck, and tests;
+record the broad failure as deferred validation evidence. Block only when the
+failure implicates the current task or no focused validation can cover it.
+
 ## Output
 
 Report the implementation and validation performed, then name the assigned

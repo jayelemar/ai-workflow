@@ -140,6 +140,145 @@ test("execute-plan blocked output is concise and includes the latest unresolved 
   }
 });
 
+test("execution STOP for an undeclared task prerequisite becomes a resumable blocked handoff", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(
+      workspace.root,
+      "task-boundary-prerequisite",
+      planWith("active", "execute-plan"),
+    );
+
+    const output = collectConsole();
+    const result = await runWorkflowRunner({
+      planName: planArg("task-boundary-prerequisite"),
+      rootDir: workspace.root,
+      console: output.console,
+      processRunner: async (call) => {
+        if (call.command === "git") {
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
+        return {
+          launched: true,
+          stdout: codexAgentMessageLine(
+            "STOP: the task cannot become review-ready inside its declared file boundary because it requires a downstream database-owned migration and generated contract outside the current task files.",
+          ),
+          stderr: "",
+          exitCode: 0,
+        };
+      },
+    });
+
+    assert.equal(result.success, false);
+    assert.equal(
+      result.reason,
+      "plan blocked after execute-plan: Current task needs a separate prerequisite outside its declared Files boundary",
+    );
+    assert.equal(output.lines.includes("BLOCKED"), true);
+    assert.equal(output.lines.some((line) => line.startsWith("FAILED:")), false);
+
+    const event = await readFile(
+      join(
+        workspace.root,
+        ".ai",
+        "artifacts",
+        "task-boundary-prerequisite",
+        "events",
+        "execution-v1.md",
+      ),
+      "utf8",
+    );
+    assert.match(event, /## Outcome\s+blocked/);
+    assert.match(event, /separate plan or savepoint/i);
+
+    const workflow = JSON.parse(
+      await readFile(
+        join(
+          workspace.root,
+          ".ai",
+          "artifacts",
+          "task-boundary-prerequisite",
+          "state",
+          "workflow.json",
+        ),
+        "utf8",
+      ),
+    ) as { workflowState: string; unresolvedBlockers: string[] };
+    assert.equal(workflow.workflowState, "blocked");
+    assert.deepEqual(workflow.unresolvedBlockers, [
+      "Complete the required prerequisite in a separate plan or savepoint that owns its files, then rerun this plan.",
+    ]);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("unblock stages that exit without their reserved event become resumable blocked handoffs", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(
+      workspace.root,
+      "unblock-missing-event",
+      planWith("blocked", "unblock-plan"),
+    );
+
+    const output = collectConsole();
+    const result = await runWorkflowRunner({
+      planName: planArg("unblock-missing-event"),
+      rootDir: workspace.root,
+      console: output.console,
+      processRunner: async (call) => {
+        if (call.command === "git") {
+          return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
+        return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+      },
+    });
+
+    assert.equal(result.success, false);
+    assert.equal(
+      result.reason,
+      "plan blocked after unblock-plan: The unblock stage ended without writing its reserved event",
+    );
+    assert.equal(output.lines.includes("BLOCKED"), true);
+    assert.equal(output.lines.some((line) => line.startsWith("FAILED:")), false);
+
+    const event = await readFile(
+      join(
+        workspace.root,
+        ".ai",
+        "artifacts",
+        "unblock-missing-event",
+        "events",
+        "unblock-v1.md",
+      ),
+      "utf8",
+    );
+    assert.match(event, /## Outcome\s+blocked/);
+    assert.match(event, /without writing its reserved event/i);
+
+    const workflow = JSON.parse(
+      await readFile(
+        join(
+          workspace.root,
+          ".ai",
+          "artifacts",
+          "unblock-missing-event",
+          "state",
+          "workflow.json",
+        ),
+        "utf8",
+      ),
+    ) as { workflowState: string; unresolvedBlockers: string[] };
+    assert.equal(workflow.workflowState, "blocked");
+    assert.deepEqual(workflow.unresolvedBlockers, [
+      "Repair the stage-agent environment or event write failure, then rerun this plan with the existing unblock evidence.",
+    ]);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
 test("execute-plan browser validation blockers use a short browser validation reason", async () => {
   const workspace = await setupWorkspace();
   try {

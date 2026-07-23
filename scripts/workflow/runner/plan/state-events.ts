@@ -67,6 +67,22 @@ const supersededByProgress = (
   });
 };
 
+const occurredAfter = (
+  workflow: ThinPlanWorkflowState,
+  candidate: Record<string, unknown> | undefined,
+  earlier: Record<string, unknown> | undefined,
+): boolean => {
+  const history = workflow.history ?? [];
+  const candidateEvidence = latestString(candidate, "evidence");
+  const earlierEvidence = latestString(earlier, "evidence");
+  if (!candidateEvidence) return false;
+  const candidateIndex = history.indexOf(candidateEvidence);
+  if (candidateIndex < 0) return false;
+  if (!earlierEvidence) return true;
+  const earlierIndex = history.indexOf(earlierEvidence);
+  return earlierIndex < 0 || candidateIndex > earlierIndex;
+};
+
 export const selectRelevantWorkflowEvent = (
   _planContent: string,
   workflow: ThinPlanWorkflowState | undefined,
@@ -80,6 +96,13 @@ export const selectRelevantWorkflowEvent = (
   const reviewFindings = asStringArray(review?.unresolvedFindings) ?? [];
   const workflowState = workflow.workflowState;
   if (workflowState === "approved" || workflowState === "active") {
+    if (
+      workflowState === "active" &&
+      latestString(unblock, "outcome") === "active" &&
+      occurredAfter(workflow, unblock, execution)
+    ) {
+      return details("unblock", unblock, "latest resolved prerequisite for the next execute-plan run");
+    }
     if (workflowState === "active" && reopen && !supersededByProgress(workflow, reopen)) return details("reopen", reopen, "latest reopen remediation for the next execute-plan run");
     if (workflowState === "active" && review && !workflowReviewSupersededByProgress(workflow.latest, workflow.history) && (reviewFindings.length > 0 || latestString(review, "outcome") === "active")) return details("review", review, "latest review remediation for the next execute-plan run");
     if (workflowState === "approved" && validation) return details("validation", validation, "latest approval evidence before execution starts");

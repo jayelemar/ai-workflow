@@ -4,6 +4,10 @@ Analyze only the current execution blockers and the runner-provided unblock
 evidence. Use the context snapshot and latest relevant event first; do not
 inspect broad workflow history.
 
+This is a workflow decision stage, not a database implementation stage. Do not
+load provider or database implementation skills solely because the blocker
+mentions them; use the routed workflow guidance and the supplied evidence.
+
 ## Routing Boundary (MANDATORY)
 
 Do not edit the plan manifest, workflow state, sidecars, context snapshot,
