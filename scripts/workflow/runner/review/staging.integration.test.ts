@@ -28,6 +28,15 @@ import {
   type ProcessRunner,
 } from "../__tests__/helpers/runner-runtime.ts";
 
+const reviewStagingChange = (call: Parameters<ProcessRunner>[0]) => {
+  if (call.promptPath !== "git-review-staging-changed-paths") return undefined;
+  const pathSeparator = call.args.indexOf("--");
+  const changedPath = call.args[pathSeparator + 1];
+  return changedPath
+    ? { launched: true as const, stdout: ` M ${changedPath}\n`, stderr: "", exitCode: 0 }
+    : undefined;
+};
+
 test(`review staging git add runs before review ${CODEX_COMMAND}, unstages plan-owned files, and stops on staging failure`, async () => {
   const workspace = await setupWorkspace();
   try {
@@ -44,17 +53,8 @@ test(`review staging git add runs before review ${CODEX_COMMAND}, unstages plan-
       console: output.console,
       processRunner: async (call) => {
         calls.push(call);
-        if (call.promptPath === "git-review-staging-changed-paths") {
-          return {
-            launched: true,
-            stdout: [
-              " M .ai/scripts/workflow/runner/__tests__/integration/runner.test.ts",
-              " M .ai/scripts/workflow/runner.ts",
-            ].join("\n"),
-            stderr: "",
-            exitCode: 0,
-          };
-        }
+        const stagedChange = reviewStagingChange(call);
+        if (stagedChange) return stagedChange;
         if (call.command === "git" && call.args[0] === "add") {
           return { launched: true, stdout: "", stderr: "fatal", exitCode: 1 };
         }
@@ -198,6 +198,8 @@ test("review-plan stages plan-owned files normally when the repo has no pre-exis
       rootDir: workspace.root,
       processRunner: async (call) => {
         calls.push(call);
+        const stagedChange = reviewStagingChange(call);
+        if (stagedChange) return stagedChange;
         if (
           call.command === "git" &&
           call.args[0] === "diff" &&
@@ -205,6 +207,14 @@ test("review-plan stages plan-owned files normally when the repo has no pre-exis
           call.args[2] === "--name-status"
         ) {
           return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+        }
+        if (call.promptPath === "git-review-staging-changed-paths") {
+          return {
+            launched: true,
+            stdout: " M src/artifact-state.ts\n",
+            stderr: "",
+            exitCode: 0,
+          };
         }
         if (call.command === "git") {
           return { launched: true, stdout: "", stderr: "", exitCode: 0 };
@@ -235,6 +245,95 @@ test("review-plan stages plan-owned files normally when the repo has no pre-exis
   }
 });
 
+test("review staging stops before git add when the plan-owned diff is empty", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(
+      workspace.root,
+      "review-empty-diff",
+      planWithFileScope("review", "review-plan", {
+        modified: ["src/artifact-state.ts", "src/not-created-yet.ts"],
+      }),
+    );
+    mkdirSync(join(workspace.root, "src"), { recursive: true });
+    writeFileSync(join(workspace.root, "src", "artifact-state.ts"), "export {};\n");
+    const calls: Parameters<ProcessRunner>[0][] = [];
+    const result = await runWorkflowRunner({
+      planName: planArg("review-empty-diff"),
+      rootDir: workspace.root,
+      console: { log: () => {}, error: () => {} },
+      processRunner: async (call) => {
+        calls.push(call);
+        return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+      },
+    });
+
+    assert.equal(result.success, false);
+    assert.match(result.reason, /review staging found no changed plan-owned files/);
+    assert.equal(calls.some((call) => call.promptPath === "git-staging"), false);
+    assert.equal(
+      calls.some((call) => call.promptPath === ".ai/prompts/review-changes.md"),
+      false,
+    );
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("review stops when the review agent moves git HEAD", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    await writePlan(
+      workspace.root,
+      "review-head-mutation",
+      planWithFileScope("review", "review-plan", {
+        modified: ["src/artifact-state.ts"],
+      }),
+    );
+    mkdirSync(join(workspace.root, ".git"), { recursive: true });
+    mkdirSync(join(workspace.root, "src"), { recursive: true });
+    writeFileSync(join(workspace.root, "src", "artifact-state.ts"), "export {};\n");
+    const calls: Parameters<ProcessRunner>[0][] = [];
+    let head = "before-review";
+    const result = await runWorkflowRunner({
+      planName: planArg("review-head-mutation"),
+      rootDir: workspace.root,
+      console: { log: () => {}, error: () => {} },
+      processRunner: async (call) => {
+        calls.push(call);
+        if (call.command === "git" && call.args.join(" ") === "rev-parse HEAD") {
+          return { launched: true, stdout: `${head}\n`, stderr: "", exitCode: 0 };
+        }
+        if (call.promptPath === "git-review-staging-changed-paths") {
+          return {
+            launched: true,
+            stdout: " M src/artifact-state.ts\n",
+            stderr: "",
+            exitCode: 0,
+          };
+        }
+        if (call.promptPath === ".ai/prompts/review-changes.md") {
+          head = "committed-during-review";
+          return { launched: true, stdout: "review complete", stderr: "", exitCode: 0 };
+        }
+        return { launched: true, stdout: "", stderr: "", exitCode: 0 };
+      },
+    });
+
+    assert.equal(result.success, false);
+    assert.match(
+      result.reason,
+      /review stage changed git HEAD from before-review to committed-during-review/,
+    );
+    assert.equal(
+      calls.some((call) => call.promptPath === ".ai/prompts/commit-summary.md"),
+      false,
+    );
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
 test("runner restages and reruns review when a staged review path changes during review", async () => {
   const workspace = await setupWorkspace();
   try {
@@ -251,6 +350,8 @@ test("runner restages and reruns review when a staged review path changes during
       rootDir: workspace.root,
       processRunner: async (call) => {
         calls.push(call);
+        const stagedChange = reviewStagingChange(call);
+        if (stagedChange) return stagedChange;
         if (
           call.command === "git" &&
           call.args[0] === "diff" &&
@@ -307,21 +408,28 @@ test("runner restages and reruns review when a staged review path changes during
   }
 });
 
-test("runner accepts a needs-fix review result when its review scope changes", async () => {
+test("runner continues through the execute-and-review repair loop after a needs-fix review STOP", async () => {
   const workspace = await setupWorkspace();
   try {
     await writePlan(
       workspace.root,
       "review-worktree-needs-fix",
-      planWith("review", "review-plan"),
+      planWithFileScope("review", "review-plan", {
+        modified: ["src/artifact-state.ts"],
+      }),
     );
+    mkdirSync(join(workspace.root, "src"), { recursive: true });
+    writeFileSync(join(workspace.root, "src", "artifact-state.ts"), "export {};\n");
     const calls: Parameters<ProcessRunner>[0][] = [];
+    let reviewCount = 0;
     const result = await runWorkflowRunner({
       planName: planArg("review-worktree-needs-fix"),
       rootDir: workspace.root,
       console: { log: () => {}, error: () => {} },
       processRunner: async (call) => {
         calls.push(call);
+        const stagedChange = reviewStagingChange(call);
+        if (stagedChange) return stagedChange;
         if (
           call.command === "git" &&
           call.args[0] === "diff" &&
@@ -331,18 +439,36 @@ test("runner accepts a needs-fix review result when its review scope changes", a
           return { launched: true, stdout: "", stderr: "", exitCode: 0 };
         }
         if (call.promptPath === ".ai/prompts/review-changes.md") {
+          reviewCount += 1;
           writeWorkflowEventArtifactSync({
             root: workspace.root,
             planName: "review-worktree-needs-fix",
             kind: "review",
-            version: 1,
-            outcome: "active",
-            remediation: ["Fix the staged migration regression."],
+            version: reviewCount,
+            ...(reviewCount === 1
+              ? {
+                  outcome: "active" as const,
+                  remediation: ["Fix the staged migration regression."],
+                }
+              : {}),
           });
-          return { launched: true, stdout: "review complete", stderr: "", exitCode: 0 };
+          return {
+            launched: true,
+            stdout: reviewCount === 1
+              ? codexAgentMessageLine("STOP — Review outcome is `active / NEEDS FIX`.")
+              : "review complete",
+            stderr: "",
+            exitCode: 0,
+          };
         }
         if (call.promptPath === ".ai/prompts/execute-plan.md") {
-          return { launched: true, stdout: "STOP", stderr: "", exitCode: 0 };
+          writeWorkflowEventArtifactSync({
+            root: workspace.root,
+            planName: "review-worktree-needs-fix",
+            kind: "execution",
+            version: 1,
+          });
+          return { launched: true, stdout: "execution complete", stderr: "", exitCode: 0 };
         }
         if (call.command === "git") {
           return { launched: true, stdout: "", stderr: "", exitCode: 0 };
@@ -351,12 +477,18 @@ test("runner accepts a needs-fix review result when its review scope changes", a
       },
     });
 
-    assert.equal(result.success, false);
-    assert.match(result.reason, /output contained STOP/);
+    assert.equal(result.success, true, result.reason);
+    assert.equal(reviewCount, 2);
     assert.equal(
       calls.some((call) => call.promptPath === "git-review-staging-worktree-check"),
-      false,
+      true,
     );
+    assertCallSubsequence(calls, [
+      [CODEX_COMMAND, "exec", ".ai/prompts/review-changes.md"],
+      [CODEX_COMMAND, "exec", ".ai/prompts/execute-plan.md"],
+      [CODEX_COMMAND, "exec", ".ai/prompts/review-changes.md"],
+      [CODEX_COMMAND, "exec", ".ai/prompts/commit-summary.md"],
+    ]);
     const workflow = JSON.parse(await readFile(
       join(
         workspace.root,
@@ -368,10 +500,7 @@ test("runner accepts a needs-fix review result when its review scope changes", a
       ),
       "utf8",
     ));
-    assert.equal(workflow.workflowState, "active");
-    assert.deepEqual(workflow.latest.review.unresolvedFindings, [
-      "Fix the staged migration regression.",
-    ]);
+    assert.equal(workflow.workflowState, "completed");
   } finally {
     await workspace.cleanup();
   }
@@ -549,6 +678,8 @@ test("review scope cleanup receives prior non-plan-scoped STOP evidence", async 
       rootDir: workspace.root,
       processRunner: async (call) => {
         calls.push(call);
+        const stagedChange = reviewStagingChange(call);
+        if (stagedChange) return stagedChange;
         if (call.command === "git" && call.args[0] === "diff") {
           return {
             launched: true,
@@ -672,6 +803,8 @@ test("review scope cleanup ignores prior non-plan-scoped STOP evidence after new
       rootDir: workspace.root,
       processRunner: async (call) => {
         calls.push(call);
+        const stagedChange = reviewStagingChange(call);
+        if (stagedChange) return stagedChange;
         if (call.command === "git" && call.args[0] === "diff") {
           return {
             launched: true,
@@ -757,6 +890,8 @@ test("review-plan accepts plan-owned file scope without hunk ownership metadata"
       rootDir: workspace.root,
       processRunner: async (call) => {
         calls.push(call);
+        const stagedChange = reviewStagingChange(call);
+        if (stagedChange) return stagedChange;
         if (
           call.command === "git" &&
           call.args[0] === "diff" &&
@@ -823,6 +958,8 @@ test(`review ${CODEX_COMMAND} failure after staging unstages plan-owned files be
       rootDir: workspace.root,
       processRunner: async (call) => {
         calls.push(call);
+        const stagedChange = reviewStagingChange(call);
+        if (stagedChange) return stagedChange;
         if (call.promptPath === "git-pre-review-staged-check") {
           return { launched: true, stdout: "", stderr: "", exitCode: 0 };
         }
@@ -886,17 +1023,8 @@ test("review cleanup failures write staging and cleanup command evidence to the 
       planName: planArg("review-cleanup-failure"),
       rootDir: workspace.root,
       processRunner: async (call) => {
-        if (call.promptPath === "git-review-staging-changed-paths") {
-          return {
-            launched: true,
-            stdout: [
-              " M .ai/scripts/workflow/runner/__tests__/integration/runner.test.ts",
-              " M .ai/scripts/workflow/runner.ts",
-            ].join("\n"),
-            stderr: "",
-            exitCode: 0,
-          };
-        }
+        const stagedChange = reviewStagingChange(call);
+        if (stagedChange) return stagedChange;
         if (call.command === "git" && call.args[0] === "status") {
           return { launched: true, stdout: "", stderr: "", exitCode: 0 };
         }

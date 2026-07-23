@@ -1179,6 +1179,12 @@ export const runWorkflowRunnerLifecycle = async (
     if (isReviewPrompt(route.promptPath) && isReviewNeedsFixStopReason(stopReason)) {
       stopReason = undefined;
     }
+    if (isReviewPrompt(route.promptPath) && startingHeadSha) {
+      const endingHeadSha = await workflowHeadSha(rootDir, processRunner);
+      if (endingHeadSha && endingHeadSha !== startingHeadSha) {
+        stopReason = `review stage changed git HEAD from ${startingHeadSha} to ${endingHeadSha}; review stages must not create commits or otherwise move HEAD`;
+      }
+    }
     if (!stopReason && isReviewPrompt(route.promptPath) && reviewStagingPaths && stageDescriptor && !("ok" in stageDescriptor)) {
       const reviewOutcome = await readStageEventOutcome({
         rootDir,

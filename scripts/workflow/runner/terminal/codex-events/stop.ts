@@ -70,4 +70,6 @@ export const codexOutputContainsStop = (stdout: string, stderr: string): boolean
   codexOutputStopReason(stdout, stderr) !== undefined;
 
 export const isReviewNeedsFixStopReason = (stopReason: string | undefined): boolean =>
-  /output contained STOP:\s*NEEDS FIX\.?$/i.test(stopReason ?? "");
+  /output contained STOP:\s*(?:NEEDS FIX\.?|Review outcome is `?active\s*\/\s*NEEDS FIX`?\.?)$/i.test(
+    stopReason ?? "",
+  );

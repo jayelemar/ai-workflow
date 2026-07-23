@@ -5,6 +5,9 @@ Use the generated review scope and context snapshot first.
 
 - You must not spawn subagents.
 - Do not broaden to unrelated changes or alter staging.
+- Do not commit, amend, merge, rebase, reset, switch, checkout, cherry-pick,
+  or otherwise move `HEAD`. The runner owns commits; review remains read-only
+  except for the assigned event artifact.
 
 ## Instruction Loading
 

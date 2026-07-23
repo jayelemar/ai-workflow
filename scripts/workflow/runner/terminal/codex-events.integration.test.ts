@@ -217,6 +217,12 @@ test("review NEEDS FIX STOP summaries are recognized as event-backed outcomes", 
   );
   assert.equal(
     isReviewNeedsFixStopReason(
+      `${CODEX_EXEC_LABEL} output contained STOP: Review outcome is \`active / NEEDS FIX\`.`,
+    ),
+    true,
+  );
+  assert.equal(
+    isReviewNeedsFixStopReason(
       `${CODEX_EXEC_LABEL} output contained STOP: plan must be in review state`,
     ),
     false,

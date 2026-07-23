@@ -909,14 +909,14 @@ test("logs are append-only and include required iteration and review staging fie
     await runWorkflowRunner({
       planName: planArg("workflow-runner"),
       rootDir: workspace.root,
+      isIgnored: async () => false,
       processRunner: async (call) => {
         if (call.promptPath === "git-review-staging-changed-paths") {
           return {
-            launched: true,
-            stdout: [
-              " M .ai/scripts/workflow/runner/__tests__/integration/runner.test.ts",
-              " M .ai/scripts/workflow/runner.ts",
-            ].join("\n"),
+          launched: true,
+          stdout: [
+              ` M ${call.args.at(-1)}`,
+          ].join("\n"),
             stderr: "",
             exitCode: 0,
           };

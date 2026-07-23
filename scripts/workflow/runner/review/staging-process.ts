@@ -34,7 +34,13 @@ export const runReviewStagingForPaths = async (rootDir: string, paths: string[],
   if (changedPathResult.exitCode !== 0) return { ok: false, reason: `review staging changed-path check exited with code ${changedPathResult.exitCode}${details(changedPathResult) ? `: ${details(changedPathResult)}` : ""}` };
   const requestedPaths = new Set(paths);
   const changedPaths = uniquePaths([changedPathResult.stdout, changedPathResult.stderr].flatMap((output) => output.split(/\r?\n/)).map(gitStatusPathFromPorcelainLine).filter((pathValue): pathValue is string => pathValue !== undefined && requestedPaths.has(pathValue)));
-  const stagingPaths = changedPaths.length > 0 ? changedPaths : paths;
+  if (changedPaths.length === 0) {
+    return {
+      ok: false,
+      reason: "review staging found no changed plan-owned files; cannot review an empty diff",
+    };
+  }
+  const stagingPaths = changedPaths;
   const stagedPathResult = await processRunner({ command: "git", args: ["diff", "--cached", "--name-only", "--", ...stagingPaths], cwd: rootDir, input: "", promptPath: "git-review-staging-staged-paths" }).catch(processFailure);
   const stagingCommandForPaths = (candidatePaths: string[], restorePaths: string[]) => restorePaths.length > 0 ? `git restore --staged -- ${shellPathspecs(restorePaths)} && git add --all -- ${shellPathspecs(candidatePaths)}` : `git add --all -- ${shellPathspecs(candidatePaths)}`;
   const stagingFrom = (result: ProcessResult, restorePaths: string[], args: string[]): ReviewStagingProcess => ({ command: stagingCommandForPaths(stagingPaths, restorePaths), args, paths: result.launched && result.exitCode === 0 ? [...stagingPaths] : undefined, stdout: result.stdout, stderr: result.stderr, exitCode: result.launched ? result.exitCode : undefined });
