@@ -53,6 +53,7 @@ import { appendWorkflowIterationRecord } from "./iteration-recorder.ts";
 import { createTaskProgress } from "./task-progress.ts";
 import { recoverTaskSavepoint } from "./task-savepoint-recovery.ts";
 import { resolveReviewStagingPaths } from "./review-staging-paths.ts";
+import { acquireWorkflowRunnerLock } from "./runner-lock.ts";
 import {
   formatStageDescriptor,
   readStageEventOutcome,
@@ -181,6 +182,14 @@ export const runWorkflowRunnerLifecycle = async (
   emitWorkflowThresholdWarnings(initialParsedPlan.warnings);
   let parsedPlan: ParsedPlan = initialParsedPlan;
   const recoveredTransition = await recoverPendingStageFinalization({
+  const runnerLock = await acquireWorkflowRunnerLock({
+    rootDir,
+    planName: parsedPlan.planName,
+  });
+  if (!runnerLock.ok) {
+    return await finishFailure(runnerLock.reason);
+  }
+  try {
     rootDir,
     plan: parsedPlan,
   });
@@ -1374,3 +1383,6 @@ export const runWorkflowRunnerLifecycle = async (
     return successfulOutcome.result;
   }
 };
+  } finally {
+    await runnerLock.release();
+  }
