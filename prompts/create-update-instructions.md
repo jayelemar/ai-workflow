@@ -25,7 +25,7 @@ report needed baseline changes instead of editing them.
 
 Do NOT modify:
 
-* `.codex/AGENTS.md`
+* `.codex/.AGENTS.md`
 * application code
 * tests
 

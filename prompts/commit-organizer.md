@@ -23,6 +23,19 @@ Before staging or committing, inspect:
 * recent commit subjects
 * applicable repository instructions
 
+## Protected Branches
+
+Immediately after identifying the current branch, stop when it is one of:
+
+* `main`
+* `dev`
+* `staging`
+* `development`
+
+Ask the user for explicit permission to run the commit-organizer workflow on
+that branch before inspecting changes, staging files, or creating commits. Do
+not continue on a protected branch without that permission.
+
 ## Grouping Rules
 
 Create one coherent, independently reviewable purpose per commit.
