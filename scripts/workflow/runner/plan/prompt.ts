@@ -317,6 +317,9 @@ Workflow prompt controller:
 - The controlling workflow prompt file is already warm-loaded above.
 - Follow ${promptPath} exactly.
 - Do not restate or duplicate the full prompt text in this stage response.
+- Repository-local skills, when the current stage actually requires one, are under
+  .agents/skills/<skill-name>/SKILL.md. Do not stop solely because an unrelated
+  home-directory skill path is absent.
 `;
 };
 
