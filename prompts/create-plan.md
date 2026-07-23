@@ -88,8 +88,10 @@ artifacts. For an ordinary manual plan, create
 record. For a selected `HIGH-GOAL` manual plan, create exactly
 `.ai/artifacts/<plan-name>/goal-handoff.md` using `goal-handoff@1`, link the
 approved spec and plan, set `Manual handoff` to `N/A`, and do not create
-`manual-handoff.md`. HIGH-GOAL starts only after the operator approves this
-spec-and-plan package.
+`manual-handoff.md`. Include the canonical `## Task Commit Protocol` from
+`.ai/prompts/goal-checkpoint.md` so every implementation task is validated and
+committed separately during `/goal` execution. HIGH-GOAL starts only after the
+operator approves this spec-and-plan package.
 After saving either a `manual` or `runner-managed` plan, append the plan token
 checkpoint. This records pre-run planning usage in the same ledger the runner
 will continue to use:
@@ -341,7 +343,9 @@ If execution mode is `manual`:
 - for selected `HIGH-GOAL`, create exactly
   `.ai/artifacts/<plan-name>/goal-handoff.md` with `goal-handoff@1`, `Exact
   Goal`, `Spec`, `Plan`, `Repository State`, `Verified Progress`, `Decisions`,
-  `Blockers`, and `Next Action`; do not create `manual-handoff.md`
+  `Task Commit Protocol`, `Blockers`, and `Next Action`; copy the canonical
+  protocol from `.ai/prompts/goal-checkpoint.md` verbatim; do not create
+  `manual-handoff.md`
 - do NOT create or update `.ai/artifacts/<plan-name>/state/files.json`
 - do NOT create or update `.ai/artifacts/<plan-name>/state/workflow.json`
 - do NOT create or update `.ai/artifacts/<plan-name>/state/file-ownership.json`

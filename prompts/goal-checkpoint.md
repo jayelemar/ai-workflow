@@ -29,6 +29,10 @@ Write concise, verified Markdown with exactly these sections:
 ```md
 # Goal Handoff: <goal-name>
 
+## Document Format
+
+goal-handoff@1
+
 ## Exact Goal
 
 <the exact saved objective>
@@ -52,6 +56,24 @@ Write concise, verified Markdown with exactly these sections:
 ## Decisions
 
 <decisions that remain relevant; use None when none exist>
+
+## Task Commit Protocol
+
+For every implementation task in the linked approved plan:
+
+1. Implement only the task's planned scope.
+2. Run the task's exact declared validation successfully.
+3. Review the task diff for regressions and out-of-scope files.
+4. Stage only files owned by that task; never stage `.ai/` artifacts.
+5. Create exactly one local, conventional, task-specific Git commit before
+   starting the next task.
+6. Confirm no remaining change owned by the completed task is left uncommitted.
+7. Record the commit SHA, subject, and validation result in `## Verified Progress`.
+
+Never commit when validation fails, the task boundary is ambiguous, or the
+commit would include unrelated user changes. Stop and request operator
+direction in those cases. Do not push, open a pull request, amend, squash, or
+force-push unless the operator explicitly requests it.
 
 ## Blockers
 
