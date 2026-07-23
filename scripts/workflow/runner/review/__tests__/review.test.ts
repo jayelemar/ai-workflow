@@ -675,6 +675,48 @@ test("commit-summary uses thin-plan files artifact instead of inline files", asy
   }
 });
 
+test("commit-summary supplements a thin-plan inventory with declared task files", async () => {
+  const workspace = await setupWorkspace();
+  try {
+    mkdirSync(join(workspace.root, "src"), { recursive: true });
+    await writeFile(join(workspace.root, "src", "task.ts"), "task\n");
+    await writeThinPlanArtifacts(workspace.root, {
+      status: "completed",
+      nextAction: "commit-summary",
+      modified: ["src/earlier-task.ts"],
+      changedFiles: ["src/earlier-task.ts"],
+    });
+
+    const parsed = await parseCommitSummaryPathsForPlan(
+      workspace.root,
+      {
+        planName: "artifact-state",
+        planPath: ".ai/plans/artifact-state.md",
+        absolutePlanPath: join(
+          workspace.root,
+          ".ai",
+          "plans",
+          "artifact-state.md",
+        ),
+        manifestContent: thinPlanManifest("completed", "commit-summary"),
+        content: planWithFileScope("completed", "commit-summary", {
+          modified: ["src/inline-should-not-be-used.ts"],
+        }),
+        thinPlanContract: "thin-plan",
+        status: "completed",
+        nextAction: "commit-summary",
+        warnings: [],
+      },
+      async () => false,
+      ["src/task.ts"],
+    );
+
+    assert.deepEqual(parsed.ok && parsed.paths, ["src/task.ts"]);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
 test("commit-summary omits absent non-deleted files from its thin-plan scope", async () => {
   const workspace = await setupWorkspace();
   try {

@@ -1017,6 +1017,7 @@ export const runWorkflowRunnerLifecycle = async (
           rootDir,
           parsedPlan,
           options.isIgnored,
+          selectedTask?.files,
         );
         if (!parsedPaths.ok) {
           return await finishFailure(

@@ -97,9 +97,37 @@ export const parseCommitSummaryPathsForPlan = async (
   rootDir: string,
   plan: ParsedPlan,
   isIgnored?: (relativePath: string) => Promise<boolean>,
+  taskFiles?: string[],
 ): Promise<ReviewStagingResult> => {
   if (plan.thinPlanContract === "thin-plan") {
-    return parseThinPlanCommitSummaryPaths(rootDir, plan.planName, isIgnored);
+    const parsed = await parseThinPlanCommitSummaryPaths(
+      rootDir,
+      plan.planName,
+      isIgnored,
+    );
+    if (!taskFiles || taskFiles.length === 0) {
+      return parsed;
+    }
+
+    const ignored =
+      isIgnored ??
+      ((relativePath: string) => defaultIsIgnored(rootDir, relativePath));
+    const declaredTaskFiles: string[] = [];
+    for (const filePath of taskFiles) {
+      if (!(await ignored(filePath))) {
+        declaredTaskFiles.push(filePath);
+      }
+    }
+    if (declaredTaskFiles.length === 0) {
+      return parsed;
+    }
+    return {
+      ok: true,
+      paths: uniquePaths([
+        ...(parsed.ok ? parsed.paths : []),
+        ...declaredTaskFiles,
+      ]),
+    };
   }
 
   const parsed = await parseCommitSummaryPaths(
