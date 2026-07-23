@@ -124,7 +124,8 @@ Locations:
 
 - Instruction index: `.ai/instructions/index.md`
 - Area instructions: `.ai/instructions/**/*.md`
-- Instruction changelogs: `.ai/changelogs/*.changelog.md`
+- Project-local instruction changelogs: `.ai/changelogs/*.changelog.md`
+- Shared instruction changelogs: `.ai/changelogs/shared/*.changelog.md`
 - Instruction update prompt: `.ai/prompts/create-update-instructions.md`
 
 Rules:

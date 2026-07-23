@@ -10,14 +10,8 @@ Tracked workflow source:
 - `scripts/`
 - `templates/`
 - `wrappers/`
-- `instructions/shared/security.md`
-- `instructions/shared/testing.md`
-- `instructions/shared/workflow-state.md`
-- `instructions/shared/flow-trace-artifacts.md`
-- `changelogs/security.changelog.md`
-- `changelogs/testing.changelog.md`
-- `changelogs/workflow-state.changelog.md`
-- `changelogs/flow-trace-artifacts.changelog.md`
+- `instructions/shared/`
+- `changelogs/shared/`
 
 Local-only directories that are intentionally excluded:
 

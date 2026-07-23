@@ -11,17 +11,17 @@ Create or update:
 * project-local `.ai/instructions/*.md`
 * project-local `.ai/changelogs/*.changelog.md`
 
-Shared baseline exceptions:
+Project-local changelogs are intentionally ignored by the nested `.ai` Git
+repository. Shared instruction changelogs are source files and use
+`.ai/changelogs/shared/*.changelog.md`.
 
-* `.ai/instructions/shared/security.md`
-* `.ai/instructions/shared/testing.md`
-* `.ai/instructions/shared/workflow-state.md`
-* `.ai/changelogs/security.changelog.md`
-* `.ai/changelogs/testing.changelog.md`
-* `.ai/changelogs/workflow-state.changelog.md`
+Shared source files:
 
-Treat shared baseline exceptions as read-only. Inspect them when routed, but
-report needed baseline changes instead of editing them.
+* `.ai/instructions/shared/*.md`
+* `.ai/changelogs/shared/*.changelog.md`
+
+Treat shared source files as read-only. Inspect them when routed, but report
+needed shared-source changes instead of editing them.
 
 Do NOT modify:
 
@@ -41,11 +41,12 @@ Read:
 When updating existing instruction content, also read:
 
 * the matching existing `.ai/instructions/*.md` files selected by `.ai/instructions/index.md`
-* the matching existing `.ai/changelogs/*.changelog.md` files
+* the matching existing changelog at the ownership-specific location defined
+  below
 * shared baseline instruction files named by `.ai/instructions/index.md`, including `.ai/instructions/shared/security.md` when routed for the task
 
-Before editing, read every project-local instruction file and matching
-changelog, plus each routed shared baseline file.
+Before editing, read every project-local instruction file and its matching
+changelog, plus each routed shared baseline file and matching shared changelog.
 
 Rules:
 
@@ -68,8 +69,8 @@ Before creating or updating files:
 * keep overlapping validation commands only when the area needs a concrete, narrower command
 * do not delete an existing instruction file without explicit user approval; report an un-routed or unsupported file instead
 
-For read-only shared baseline exceptions, report duplicate or stale baseline
-rules as follow-up work; do not edit them.
+For read-only shared source files, report duplicate or stale baseline rules as
+follow-up work; do not edit them.
 
 ---
 
@@ -216,9 +217,13 @@ Rules:
 
 ## Changelog
 
-For each instruction file:
+For a project-local instruction file:
 
 `.ai/changelogs/<area>.changelog.md`
+
+For a shared instruction file under `.ai/instructions/shared/`:
+
+`.ai/changelogs/shared/<area>.changelog.md`
 
 Format:
 
@@ -230,7 +235,8 @@ Format:
 
 Rules:
 
-* changelog ONLY in `.ai/changelogs/`
+* use the ownership-specific changelog path above
+* only shared instruction changelogs are tracked by the nested `.ai` repository
 * no duplication inside instruction files
 
 ---
