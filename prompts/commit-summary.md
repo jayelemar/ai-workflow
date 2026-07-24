@@ -242,6 +242,18 @@ If no plan-related files can be staged:
 it once and wait or poll that same command until it exits; do not start a
 second lint or commit command while it is still running.
 
+If the terminal session closes or loses stdin before it reports an exit status,
+first confirm that no `lint-staged` or ESLint child process remains. Then run
+`pnpm lint-staged` once more in a fresh terminal session and wait for its
+confirmed result. Do not output `STOP` solely because a stale terminal session
+has no exit status; output `STOP` only when the fresh run exits nonzero or the
+process is still active and cannot be safely observed.
+
+If the terminal command record reports that `pnpm lint-staged` exited with
+code `0`, that is a confirmed successful result even if the interactive
+terminal subsequently loses stdin. Restage and continue the commit; do not
+output `STOP` or run a duplicate lint command in that case.
+
 After `pnpm lint-staged` succeeds and the same plan-owned paths are restaged,
 set `SKIP_LINT_STAGED=1` only on the final `git commit` or `git commit --amend`
 command. The pre-commit hook still enforces branch, ignored-file, environment

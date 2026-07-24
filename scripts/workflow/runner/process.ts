@@ -159,7 +159,6 @@ export const defaultProcessRunner: ProcessRunner = (call) =>
       if (
         completionWatchdog ||
         call.binaryCommand !== CODEX_BINARY_COMMAND ||
-        call.promptPath !== COMMIT_SUMMARY_PROMPT_PATH ||
         call.abortSignal?.aborted ||
         !codexTurnCompleted(stdout)
       ) {
@@ -172,6 +171,19 @@ export const defaultProcessRunner: ProcessRunner = (call) =>
         }
         completionWatchdogTriggered = true;
         child.kill("SIGTERM");
+        // A Codex subprocess can emit its final turn, exit, and still leave a
+        // descendant holding one of its stdio pipes open. Waiting for the
+        // child's `close` event in that state blocks the workflow forever
+        // between stages. `turn.completed` is the authoritative successful
+        // terminal signal, so let the runner advance after the grace period.
+        call.abortSignal?.removeEventListener("abort", abortChild);
+        settled = true;
+        resolve({
+          launched: true,
+          stdout,
+          stderr: [stderr, stdinError].filter(Boolean).join("\n"),
+          exitCode: 0,
+        });
       }, CODEX_TURN_COMPLETION_GRACE_MS);
       completionWatchdog.unref?.();
     };

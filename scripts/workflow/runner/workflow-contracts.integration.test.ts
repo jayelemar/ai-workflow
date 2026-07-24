@@ -114,6 +114,10 @@ test("commit summary stays plan-scoped and never pushes", async () => {
   assert.match(prompt, /Plan-scoped commit boundary/i);
   assert.match(prompt, /Do not stage `\.ai\/` files/i);
   assert.match(prompt, /Task savepoint aggregate summary[\s\S]*do NOT create a git commit/i);
+  assert.match(
+    prompt,
+    /terminal session closes or loses stdin[\s\S]*fresh terminal session[\s\S]*fresh run exits nonzero/i,
+  );
 });
 
 test("task commit boundaries cover every dirty path exactly once", () => {

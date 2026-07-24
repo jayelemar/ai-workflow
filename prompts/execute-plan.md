@@ -80,6 +80,17 @@ failure. Run the narrowest applicable focused build, typecheck, and tests;
 record the broad failure as deferred validation evidence. Block only when the
 failure implicates the current task or no focused validation can cover it.
 
+## Validation Runtime Guidance (MANDATORY)
+
+Run each declared focused validation command to completion. Do not wrap a
+declared test command in an arbitrary timeout shorter than ten minutes unless
+the plan explicitly sets a shorter limit. A silent Jest/ts-jest startup is not
+by itself a failure: first confirm the process is still making progress, then
+allow the bounded command to finish. If the command reaches the ten-minute
+bound without results, record the exact command, elapsed time, and process
+evidence; block only after that investigation establishes an environment or
+task-relevant failure.
+
 ## Output
 
 Report the implementation and validation performed, then name the assigned

@@ -45,9 +45,12 @@ Execute the plan manually in this conversation.
   must exist before work starts; the goal handoff is its sole continuity aid.
 - For HIGH-GOAL work, enforce the `## Task Commit Protocol` in the goal
   handoff: complete, validate, review, and create exactly one task-scoped local
-  commit before beginning the next implementation task. Record each commit and
-  its validation result in `## Verified Progress`. If the protocol says to
-  stop, do not commit and request operator direction.
+  commit before beginning the next implementation task. Immediately before
+  each commit, run `git branch --show-current`; if it is `main`, `dev`,
+  `development`, or `staging`, stop and ask the operator whether to proceed,
+  then wait for an explicit answer. Record each commit and its validation
+  result in `## Verified Progress`. If the protocol says to stop, do not commit
+  and request operator direction.
 - Before pausing ordinary manual work, refresh `manual-handoff.md`. Before
   pausing HIGH-GOAL work, refresh the sole `goal-handoff.md` with
   `.ai/prompts/goal-checkpoint.md`; never create a manual handoff for it.

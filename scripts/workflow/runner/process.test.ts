@@ -122,7 +122,7 @@ test("codexExecArgs adds git directory access only for commit summary prompts", 
   );
 });
 
-test("commit summary finishes after Codex emits turn.completed but lingers", async () => {
+test("Codex stages finish after emitting turn.completed but lingering", async () => {
   const binDir = await mkdtemp(join(tmpdir(), "workflow-codex-"));
   try {
     await symlink(process.execPath, join(binDir, CODEX_BINARY_COMMAND));
@@ -136,7 +136,7 @@ test("commit summary finishes after Codex emits turn.completed but lingers", asy
       ],
       cwd: process.cwd(),
       input: "",
-      promptPath: COMMIT_SUMMARY_PROMPT_PATH,
+      promptPath: ".ai/prompts/scope-cleanup.md",
       env: { ...process.env, PATH: `${binDir}:${process.env.PATH ?? ""}` },
     });
 

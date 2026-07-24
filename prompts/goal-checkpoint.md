@@ -65,10 +65,14 @@ For every implementation task in the linked approved plan:
 2. Run the task's exact declared validation successfully.
 3. Review the task diff for regressions and out-of-scope files.
 4. Stage only files owned by that task; never stage `.ai/` artifacts.
-5. Create exactly one local, conventional, task-specific Git commit before
+5. Immediately before committing, run `git branch --show-current`. If the
+   current branch is `main`, `dev`, `development`, or `staging`, STOP and ask
+   the operator whether to proceed with that commit; wait for an explicit
+   answer. Do not commit on that branch without it.
+6. Create exactly one local, conventional, task-specific Git commit before
    starting the next task.
-6. Confirm no remaining change owned by the completed task is left uncommitted.
-7. Record the commit SHA, subject, and validation result in `## Verified Progress`.
+7. Confirm no remaining change owned by the completed task is left uncommitted.
+8. Record the commit SHA, subject, and validation result in `## Verified Progress`.
 
 Never commit when validation fails, the task boundary is ambiguous, or the
 commit would include unrelated user changes. Stop and request operator
