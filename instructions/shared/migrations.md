@@ -1,5 +1,5 @@
-Version: 1.0
-Last Updated: 2026-07-18
+Version: 1.1
+Last Updated: 2026-07-27
 
 # Migration Instructions
 
@@ -14,6 +14,8 @@ Standardize safe, observable, forward-only production data and schema changes.
 ## Rules
 
 - Never edit, split, reorder, or delete a migration already deployed to any production environment.
+- Treat a migration as immutable once it has been pushed to a shared branch or applied to any remote environment. A failed, unrecorded staging run does not by itself authorize editing it; confirm publication and deployment state before changing migration source.
+- Recover a pushed migration failure with an operator-approved forward recovery or a documented staging repair procedure; do not silently rewrite the already-published migration.
 - Use small, forward-only migrations with one clear compatibility objective.
 - For every production-affecting migration, document compatibility, backfill, rollout order, monitoring, rollback or recovery, and validation evidence.
 - Design additive-compatible changes before removals: add new structure, deploy compatible readers and writers, backfill safely, verify, then remove only in a later approved migration.
