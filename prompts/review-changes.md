@@ -1,67 +1,46 @@
-# Review Changes (Runner-Finalized)
+# Review Implemented Changes
 
-Review only the runner-staged, plan-owned diff boundary and the linked spec.
-Use the generated review scope and context snapshot first.
+Review actual implementation evidence only. This is never a pre-execution
+review of a spec or plan.
 
-- You must not spawn subagents.
-- Do not broaden to unrelated changes or alter staging.
-- Do not commit, amend, merge, rebase, reset, switch, checkout, cherry-pick,
-  or otherwise move `HEAD`. The runner owns commits; review remains read-only
-  except for the assigned event artifact.
+## MEDIUM Automatic Review
 
-## Instruction Loading
-
-Read the runner-provided context first, then load only the review guidance that
-applies to the staged scope:
-
-- `.ai/instructions/shared/reasoning-quality.md`
-- `.ai/instructions/shared/debugging.md`
-- `.ai/instructions/shared/testing.md`
-- `.ai/instructions/testing.md`
-- `.ai/instructions/shared/flow-trace-artifacts.md` when the plan requires it
-
-## Routing Boundary (MANDATORY)
-
-Do not edit the plan manifest, workflow state, workflow sidecars, context
-snapshot, task IDs, task boundaries, phases, or any inline review/history/
-blocker section. Review findings and remediation belong only in the assigned
-event artifact. The runner alone writes state, latest records, history, and
-blockers.
-
-Write only the event artifact assigned in the runner-issued descriptor:
+After MEDIUM validation, inspect the plan-owned actual diff, linked spec,
+required flow artifacts when applicable, current Git state, and validation
+evidence. Write `.ai/artifacts/<plan-name>/review.md` with exactly:
 
 ```md
-# Review v<reserved-version>
+# Implementation Review: <plan-name>
 
-## Outcome
+## Status
 
-<completed | active>
+Ready to complete | Fix required | Blocked
 
-## Summary
+## Scope Reviewed
 
-<SAFE, SAFE - DEFERRED VALIDATION, NEEDS FIX, or HIGH RISK>
+<actual diff paths and plan scope>
 
-## Evidence
+## Validation Evidence
 
-* <path-scoped commands and concise proof>
+* <command and result>
 
-## Remediation
+## Findings
 
-* <each required fix, missing validation, unresolved risk, and owner-facing next action when outcome is active>
+* None | <actionable finding>
+
+## Required Next Action
+
+<complete | in-scope fix and re-review | exact blocker resolution>
 ```
 
-Use `completed` only when no required code fix remains. Use `active` for every
-required fix or unresolved review risk, and include one or more actionable
-remediation bullets. Do not put findings in the plan or sidecar. The runner
-uses this event to move the workflow and exposes failed-review remediation to
-the next execution stage.
+Use `Ready to complete` only when no required in-scope fix remains. Use `Fix
+required` for actionable defects. Use `Blocked` only for a true external,
+missing-input, or unresolved-risk blocker.
 
-`active` is a normal nonterminal review result, not a blocked workflow. When
-the review needs fixes, write `NEEDS FIX` in `## Summary` and return the event
-path; do not emit a `STOP` directive in the final response. Reserve `STOP` for
-an actual inability to write or validate the required event artifact.
+## HIGH-GOAL Task Review
 
-## Output
-
-Give a concise review conclusion and the assigned event path. Do not claim to
-have updated workflow state, review history, or blockers.
+During an active `/goal`, review each completed task's actual diff against its
+plan scope and validation before committing it. Record the review and
+validation evidence in the HIGH-GOAL handoff or task record, then make the
+task-scoped commit before beginning the next task. Do not reuse MEDIUM's
+single `review.md` as the HIGH task-review protocol.

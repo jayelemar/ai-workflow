@@ -3,9 +3,8 @@
 Prepare the current repository's unstaged changes as a clean, reviewable local
 commit history.
 
-This prompt is repository-level. It is not the runner-managed
-`commit-summary.md` stage and may include `.ai` files when this repository is
-the `.ai` repository.
+This prompt is repository-level and may include `.ai` files when this
+repository is the `.ai` repository.
 
 Read before acting:
 
@@ -50,6 +49,8 @@ Create one coherent, independently reviewable purpose per commit.
   commit boundaries.
 * Keep dependency order explicit. Do not create an intermediate commit that
   leaves the repository unusable when a practical atomic migration is needed.
+* When organizing a HIGH-GOAL, the saved plan's task boundary overrides general
+  grouping: never combine changes from more than one planned task in a commit.
 
 ## Proposal Before Mutation
 

@@ -14,9 +14,9 @@ identifier before writing a checkpoint.
 ## Strict Constraints
 
 - This is a checkpoint-only action. Do not implement work or change the goal.
-- Do not invoke the workflow runner or create runner state, runner event, or
-  review artifact. The linked approved spec and manual plan are required
-  inputs, not artifacts to recreate here.
+- Do not create workflow state, event logs, sidecars, or a MEDIUM review
+  artifact. The linked approved spec and HIGH plan are required inputs, not
+  artifacts to recreate here.
 - Create or refresh only `.ai/artifacts/<goal-name>/goal-handoff.md`.
 - Inspect current repository state read-only as needed to record verified
   progress.
@@ -61,7 +61,11 @@ goal-handoff@1
 
 For every implementation task in the linked approved plan:
 
-1. Implement only the task's planned scope.
+Process tasks serially. Never combine two planned tasks in one commit, even
+when their changes are technically compatible. Do not start the next task
+until the current task has completed this protocol.
+
+1. Implement only the current task's planned scope.
 2. Run the task's exact declared validation successfully.
 3. Review the task diff for regressions and out-of-scope files.
 4. Stage only files owned by that task; never stage `.ai/` artifacts.
@@ -69,10 +73,14 @@ For every implementation task in the linked approved plan:
    current branch is `main`, `dev`, `development`, or `staging`, STOP and ask
    the operator whether to proceed with that commit; wait for an explicit
    answer. Do not commit on that branch without it.
-6. Create exactly one local, conventional, task-specific Git commit before
-   starting the next task.
+6. Create exactly one local, conventional, task-specific Git commit containing
+   only the current task before starting the next task.
 7. Confirm no remaining change owned by the completed task is left uncommitted.
 8. Record the commit SHA, subject, and validation result in `## Verified Progress`.
+
+If a task produces no tracked changes, record its validation and no-change
+result in `## Verified Progress` before starting the next task; do not create
+an empty commit to simulate task completion.
 
 Never commit when validation fails, the task boundary is ambiguous, or the
 commit would include unrelated user changes. Stop and request operator
