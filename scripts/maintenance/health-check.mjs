@@ -10,35 +10,16 @@ const REQUIRED_SOURCE_PATHS = [
   ".ai/AGENTS.md",
   ".ai/.gitignore",
   ".ai/instructions",
-  ".ai/changelogs",
-  ".ai/wrappers",
-  ".ai/prompts",
-  ".ai/prompts/generate-user-flow.md",
-  ".ai/wrappers/generate-user-flow.md",
-  ".ai/templates",
-  ".ai/scripts",
-  ".ai/scripts/workflow/runner.ts",
-  ".ai/scripts/workflow/runner/__tests__/integration/runner.test.ts",
-  ".ai/scripts/workflow/runner.spec.md",
-  ".ai/scripts/workflow/config/codex.ts",
-  ".ai/scripts/workflow/config/codex.test.ts",
-  ".ai/scripts/workflow/contracts/stage.ts",
-  ".ai/scripts/workflow/contracts/stage.test.ts",
-  ".ai/scripts/workflow/runner/cli.ts",
-  ".ai/scripts/workflow/runner/instruction-router.ts",
-  ".ai/scripts/workflow/runner/instruction-router.test.ts",
-  ".ai/scripts/workflow/runner/thin-plan.ts",
-  ".ai/scripts/workflow/document-formats.ts",
-  ".ai/scripts/workflow/migrate-document-formats.ts",
-  ".ai/scripts/workflow/runner/runner.manual-plan.test.ts",
+  ".ai/prompts/select-workflow.md",
+  ".ai/prompts/create-plan.md",
+  ".ai/prompts/execute-plan.md",
+  ".ai/prompts/review-changes.md",
+  ".ai/templates/plan.template.md",
+  ".ai/wrappers/select-workflow.md",
+  ".ai/wrappers/execute-plan.md",
+  ".ai/scripts/workflow/stage-contract.test.mjs",
   ".ai/scripts/workflow/telemetry/manual-token-usage.ts",
   ".ai/scripts/workflow/telemetry/manual-token-usage.test.ts",
-  ".ai/scripts/workflow/telemetry/token-ledger.ts",
-  ".ai/scripts/workflow/telemetry/token-usage.ts",
-  ".ai/scripts/workflow/telemetry/token-warnings.ts",
-  ".ai/scripts/workflow/ownership/reset-file-ownership.mjs",
-  ".ai/scripts/workflow/ownership/reset-file-ownership.test.mjs",
-  ".ai/scripts/maintenance/health-check.mjs",
   ".ai/scripts/maintenance/health-check.test.mjs",
 ];
 
@@ -60,30 +41,11 @@ const DEFAULT_COMMANDS = [
       ".ai/README.md",
     ],
   },
-  {
-    label: "workflow runner help",
-    command: "pnpm",
-    args: ["exec", "tsx", ".ai/scripts/workflow/runner.ts", "--help"],
-  },
 ];
 
-const RUNNER_TEST_COMMAND = {
-  label: "workflow runner tests",
+const FULL_TEST_COMMAND = {
+  label: "workflow script tests",
   command: "pnpm",
-  args: [
-    "exec",
-    "tsx",
-    "--test",
-    "$(find .ai/scripts/workflow -type f -name '*.test.*' -print | sort)",
-  ],
-  shell: true,
-};
-
-const FULL_WORKFLOW_TEST_COMMAND = {
-  label: "full workflow script tests",
-  command: "pnpm",
-  // `find` produces all nested target test paths. Paths are fixed internal
-  // source paths, not user-provided values.
   shell: true,
   args: [
     "exec",
@@ -92,15 +54,6 @@ const FULL_WORKFLOW_TEST_COMMAND = {
     "$(find .ai/scripts -type f -name '*.test.*' -print | sort)",
   ],
 };
-
-const quoteCommandPart = (part) => {
-  if (/^[A-Za-z0-9_./:=@+-]+$/.test(part)) {
-    return part;
-  }
-  return `'${part.replaceAll("'", "'\\''")}'`;
-};
-
-const formatCommand = ({ command, args }) => [command, ...args].map(quoteCommandPart).join(" ");
 
 const pathExists = async (path) => {
   try {
@@ -135,164 +88,76 @@ const runCommand = (command) =>
         });
     let stdout = "";
     let stderr = "";
-
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
-    child.stdout.on("data", (chunk) => {
-      stdout += chunk;
-    });
-    child.stderr.on("data", (chunk) => {
-      stderr += chunk;
-    });
-    child.on("error", (error) => {
-      resolve({ exitCode: 127, stdout, stderr: error.message });
-    });
-    child.on("close", (exitCode) => {
-      resolve({ exitCode: exitCode ?? 1, stdout, stderr });
-    });
+    child.stdout.on("data", (chunk) => (stdout += chunk));
+    child.stderr.on("data", (chunk) => (stderr += chunk));
+    child.on("error", (error) => resolve({ exitCode: 127, stdout, stderr: error.message }));
+    child.on("close", (exitCode) => resolve({ exitCode: exitCode ?? 1, stdout, stderr }));
   });
 
 export const parseHealthCheckArgs = (args) => {
-  const options = { runnerTests: false, full: false };
-
-  for (const arg of args) {
-    if (arg === "--runner-tests") {
-      options.runnerTests = true;
-      continue;
-    }
-    if (arg === "--full") {
-      options.full = true;
-      continue;
-    }
-    if (arg === "-h" || arg === "--help") {
-      return { help: true, runnerTests: false, full: false };
-    }
-    return { error: `Unknown option: ${arg}`, runnerTests: false, full: false };
-  }
-
-  return options;
+  if (args.length === 0) return { full: false };
+  if (args.length === 1 && args[0] === "--full") return { full: true };
+  if (args.length === 1 && ["-h", "--help"].includes(args[0])) return { help: true, full: false };
+  return { error: `Unknown option: ${args.join(" ")}`, full: false };
 };
 
-const fail = ({ label, command, message, result, stderr }) => {
+const runStep = async ({ label, command, cwd, commandExecutor, stderr }) => {
+  const result = await commandExecutor({ ...command, cwd });
+  if (result.exitCode === 0) return true;
   stderr(`FAIL ${label}`);
-  if (command) {
-    stderr(`Command: ${formatCommand(command)}`);
-  }
-  if (message) {
-    stderr(message);
-  }
-  if (result?.stdout?.trim()) {
-    stderr(result.stdout.trim());
-  }
-  if (result?.stderr?.trim()) {
-    stderr(result.stderr.trim());
-  }
-};
-
-const runStepCommand = async ({ label, command, cwd, runner, stderr }) => {
-  const commandWithCwd = { ...command, cwd };
-  const result = await runner(commandWithCwd);
-
-  if (result.exitCode === 0) {
-    return true;
-  }
-
-  fail({ label, command: commandWithCwd, result, stderr });
-  return false;
-};
-
-const checkPathExists = async ({ cwd, relativePath, stderr }) => {
-  const absolutePath = `${cwd}/${relativePath}`;
-  if (await pathExists(absolutePath)) {
-    return true;
-  }
-
-  fail({
-    label: `required source path exists: ${relativePath}`,
-    message: `Missing required path: ${relativePath}`,
-    stderr,
-  });
+  if (result.stdout?.trim()) stderr(result.stdout.trim());
+  if (result.stderr?.trim()) stderr(result.stderr.trim());
   return false;
 };
 
 export const runHealthCheck = async ({
   args = process.argv.slice(2),
   cwd = process.cwd(),
-  runner = runCommand,
+  commandExecutor = runCommand,
   stdout = console.log,
   stderr = console.error,
 } = {}) => {
   const options = parseHealthCheckArgs(args);
-
   if (options.help) {
-    stdout(`Usage: node .ai/scripts/maintenance/health-check.mjs [--runner-tests|--full]
-
-Checks the private .ai workflow source from the parent repository root.
-
-Options:
-  --runner-tests  Include workflow runner tests
-  --full          Run the complete workflow test command`);
+    stdout("Usage: node .ai/scripts/maintenance/health-check.mjs [--full]");
     return { ok: true };
   }
-
   if (options.error) {
-    fail({ label: "parse arguments", message: options.error, stderr });
+    stderr(`FAIL parse arguments: ${options.error}`);
     return { ok: false };
   }
-
   if (!(await pathIsDirectory(`${cwd}/.ai`))) {
-    fail({
-      label: "parent repository root containing .ai",
-      message: "Run this command from the parent repository root containing .ai/.",
-      stderr,
-    });
+    stderr("FAIL parent repository root containing .ai/");
     return { ok: false };
   }
+  if (!(await runStep({
+    label: "parent Git ignores .ai",
+    command: { command: "git", args: ["check-ignore", "-q", "--", ".ai"] },
+    cwd,
+    commandExecutor,
+    stderr,
+  }))) return { ok: false };
 
-  if (
-    !(await runStepCommand({
-      label: "parent Git ignores .ai",
-      command: { command: "git", args: ["check-ignore", "-q", "--", ".ai"] },
-      cwd,
-      runner,
-      stderr,
-    }))
-  ) {
-    return { ok: false };
-  }
-
-  for (const relativePath of REQUIRED_SOURCE_PATHS) {
-    if (!(await checkPathExists({ cwd, relativePath, stderr }))) {
+  for (const relativePath of [...REQUIRED_SOURCE_PATHS, ...LOCAL_ONLY_PATHS]) {
+    if (!(await pathExists(`${cwd}/${relativePath}`))) {
+      stderr(`FAIL missing required path: ${relativePath}`);
       return { ok: false };
     }
   }
-
   for (const relativePath of LOCAL_ONLY_PATHS) {
-    if (
-      !(await runStepCommand({
-        label: `local-only path remains ignored: ${relativePath}`,
-        command: { command: "git", args: ["check-ignore", "-q", "--", relativePath] },
-        cwd,
-        runner,
-        stderr,
-      }))
-    ) {
-      return { ok: false };
-    }
+    if (!(await runStep({
+      label: `local-only path remains ignored: ${relativePath}`,
+      command: { command: "git", args: ["check-ignore", "-q", "--", relativePath] },
+      cwd,
+      commandExecutor,
+      stderr,
+    }))) return { ok: false };
   }
-
-  const commands = options.full
-    ? [...DEFAULT_COMMANDS, FULL_WORKFLOW_TEST_COMMAND]
-    : options.runnerTests
-      ? [...DEFAULT_COMMANDS, RUNNER_TEST_COMMAND]
-      : DEFAULT_COMMANDS;
-
-  for (const command of commands) {
-    if (!(await runStepCommand({ label: command.label, command, cwd, runner, stderr }))) {
-      return { ok: false };
-    }
+  for (const command of options.full ? [...DEFAULT_COMMANDS, FULL_TEST_COMMAND] : DEFAULT_COMMANDS) {
+    if (!(await runStep({ label: command.label, command, cwd, commandExecutor, stderr }))) return { ok: false };
   }
-
   stdout("PASS .ai health check");
   return { ok: true };
 };
