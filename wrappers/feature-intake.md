@@ -39,13 +39,13 @@ When complete, return an Approval Brief containing only:
 2. Current facts and reuse points
 3. Explicit unknowns or decisions still needed
 4. Risk class and rationale
-5. Recommended route: LOW direct, MEDIUM manual, or HIGH runner-managed
+5. Recommended route: LOW, MEDIUM, or HIGH
 6. Required tests and rollout/rollback concerns
 
-Do not create any artifact. Stop for `APPROVE DIRECTION`.
+Do not create any artifact. State unresolved decisions explicitly.
 ```
 
-After the operator approves, use
+After the user explicitly invokes the next stage, use
 `.ai/wrappers/generate-feature-spec.md` in an agent session. Provide the
 approved brief as context; it is not a substitute for any still-unknown desired
 behavior.

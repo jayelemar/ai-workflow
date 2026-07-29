@@ -13,10 +13,10 @@ Strict Constraints:
 - Do not create a plan.
 - Limit output strictly to the spec creation process.
 
-RCA Approval Gate:
-- Create a spec only after the operator approves an evidence-backed RCA and
-  fix direction.
-- If `RCA Approved` is not `yes`, do not create a spec. Ask for missing
+RCA Evidence Gate:
+- Create a spec only when the supplied evidence establishes an evidence-backed
+  RCA and fix direction.
+- If the RCA is not established, do not create a spec. Ask for missing
   evidence or return to RCA-only analysis.
 - Production evidence may be `N/A: not a production issue`, but Codex must not
   claim production reproduction without supplied evidence.
@@ -24,7 +24,8 @@ RCA Approval Gate:
 Source Material:
 - You may inspect the codebase to confirm current behavior, affected files, routes, tests, logs, and reproduction facts.
 - You may inspect `.ai/instructions/**/*.md` when relevant.
-- Exclude `.ai/artifacts` from broad searches unless reading current-plan runner evidence.
+- Exclude `.ai/artifacts` from broad searches unless a saved plan explicitly
+  requires a flow artifact.
 - Do not infer desired behavior from the codebase.
 - Expected behavior must come from the user-provided details below.
 - If expected behavior, edge cases, constraints, or acceptance criteria are unclear, STOP and ask.
@@ -55,9 +56,6 @@ Constraints:
 
 RCA:
 <approved root cause and fix direction>
-
-RCA Approved:
-<yes or no>
 
 Known Decisions:
 - <explicit rule already decided>

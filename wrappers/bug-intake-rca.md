@@ -30,10 +30,10 @@ When complete, return an Approval Brief containing only:
 3. Recommended fix direction and constraints
 4. Blast radius and risk rationale
 5. Required regression tests and recovery/rollback risk
-6. Recommended route: LOW direct, MEDIUM manual, or HIGH runner-managed
+6. Recommended route: LOW, MEDIUM, or HIGH
 
-Do not create any artifact. Stop for `APPROVE RCA`.
+Do not create any artifact. State unresolved decisions explicitly.
 ```
 
-After approval, use `.ai/wrappers/generate-bugfix-spec.md` in an agent session
-with `RCA Approved: yes` and the approved brief.
+After the user explicitly invokes the next stage, use
+`.ai/wrappers/generate-bugfix-spec.md` in a fresh spec conversation.

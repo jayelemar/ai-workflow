@@ -47,7 +47,9 @@ Derive `<plan-name>` from the spec filename by removing the path and `.spec.md`.
 
 User-facing work means a feature, bugfix, or change that affects a customer, admin, or operator screen, route, workflow, visible state, or user-triggered API behavior.
 
-If the work is user-facing, this artifact is mandatory before plan creation.
+Create this artifact only when the selected MEDIUM or HIGH classification and
+`.ai/instructions/shared/flow-trace-artifacts.md` require end-to-end mapping.
+LOW work that needs it must escalate before planning.
 
 ---
 

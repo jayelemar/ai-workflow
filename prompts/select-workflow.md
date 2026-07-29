@@ -1,57 +1,48 @@
 # Select Workflow
 
-Classify a requested change before creating a spec, plan, artifact, or code
-change. This is an analysis-only operator gate.
+Classify every request before creating or changing a spec, plan, artifact, or
+implementation file. This is a read-only intake stage.
 
 ## Strict Constraints
 
+- Inspect only the request and repository evidence needed to classify it.
 - Do not create, modify, or delete files.
-- Do not create a spec, plan, artifact, runner state, or `/goal`.
-- Do not invoke the workflow runner or begin implementation.
-- You may inspect the request and repository read-only evidence needed to
-  classify the scope.
+- Do not create a spec, plan, artifact, or `/goal`; do not begin implementation.
+- Do not guess when evidence does not establish the classification.
 
-## Fixed Taxonomy
+## Classification
 
-| Classification | Path | Exact next action |
+Choose exactly one class:
+
+| Class | Use when | Next authorized stage |
 | --- | --- | --- |
-| `LOW` | Simple session-local `/plan` | Start `/plan` in this session; create no durable workflow artifacts. |
-| `MEDIUM` | Spec + manual plan | Create a spec, then use `create-plan` with `Execution mode: manual`. |
-| `HIGH-GOAL` | Approved manual goal package | Create and approve a spec and manual plan, create exactly `goal-handoff.md`, then start `/goal` with the saved exact objective. |
-| `HIGH-RUNNER` | Runner-managed path | Create a spec, use `create-plan` with `Execution mode: runner-managed`, complete review and approval, then invoke the runner. |
+| `LOW` | A narrow, understood, low-risk change has a bounded implementation and validation path. | Switch to Plan mode to create a compact plan, then switch to Agent mode and invoke `execute <plan-file>`. |
+| `MEDIUM` | The work needs durable behavior definition, integration tracing, or more than LOW safeguards, but does not require HIGH-GOAL task commits. | Create a spec in the intake conversation, switch to Plan mode to create the plan, then switch to Agent mode and invoke `execute <plan-file>`. |
+| `HIGH` | The work is long-running, exploratory, high-risk, cross-system, or needs task-level validation, review, and commits. | Create a spec in the intake conversation, switch to Plan mode to create the plan, then switch to Agent mode and invoke `/goal <description> <plan-file>`. |
 
-Classify as `LOW` only when the work is narrow, well understood, and safe to
-keep session-local. Classify as `MEDIUM` when it needs durable behavior and
-execution intent but not runner-managed lifecycle control. Classify as HIGH
-when the work is long, exploratory, high-risk, cross-system, or benefits from
-durable control.
+Escalate immediately when new evidence supports a higher class. Do not downgrade
+without documenting that the risk which justified the higher class is resolved.
 
-For HIGH work, the operator must explicitly choose `HIGH-GOAL` or
-`HIGH-RUNNER`. Explain the tradeoff, but do not choose or override it:
+Classify as at least `MEDIUM` before planning when the request needs a user
+journey, implementation map, broad integration trace, cross-cutting risk
+analysis, or another MEDIUM/HIGH safeguard. A small code diff does not avoid
+this rule.
 
-- `HIGH-GOAL` is for long or exploratory Codex work that benefits from `/goal`;
-  its portable companion is `goal-handoff.md`.
-- `HIGH-RUNNER` is for the existing durable state-machine lifecycle with plan,
-  context snapshot, events, review, and validation artifacts.
-
-If the request is HIGH and the operator has not selected one of those paths,
-STOP and ask: `For this HIGH work, choose HIGH-GOAL or HIGH-RUNNER.`
+If the available request and read-only evidence cannot distinguish the classes,
+STOP and ask for the exact missing decision input.
 
 ## Required Output
 
 Return exactly these four lines:
 
 ```text
-Classification: LOW | MEDIUM | HIGH-GOAL | HIGH-RUNNER
-Selected path: <path from the fixed taxonomy>
+Classification: LOW | MEDIUM | HIGH
 Reason: <concise evidence-based reason>
-Next action: <the exact next action from the fixed taxonomy>
+Missing decision: <None or the exact information required to classify>
+Next action: <the exact next authorized stage>
 ```
 
 ## Input
 
 Target:
 <requested work>
-
-For HIGH work, operator selection:
-`HIGH-GOAL` or `HIGH-RUNNER`

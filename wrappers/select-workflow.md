@@ -1,11 +1,9 @@
 # Select Workflow Wrapper
 
-Use: `.ai/prompts/select-workflow.md`
-
-This is analysis-only. Do not create or modify files.
+Use `.ai/prompts/select-workflow.md` in an analysis-only conversation.
 
 Target:
 <requested work>
 
-For HIGH work, operator selection:
-`HIGH-GOAL` or `HIGH-RUNNER`
+Do not create artifacts or implementation changes. Return only the
+LOW/MEDIUM/HIGH classification and its exact next stage.

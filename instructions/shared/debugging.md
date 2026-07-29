@@ -1,5 +1,5 @@
-Version: 1.1
-Last Updated: 2026-07-19
+Version: 1.2
+Last Updated: 2026-07-29
 
 # Debugging Instructions
 
@@ -14,7 +14,7 @@ work.
 - Failed workflow stages
 - Failed tests, lint, formatting, build, or validation commands
 - Review remediation
-- Prompt or runner behavior that differs from the documented workflow contract
+- Prompt behavior that differs from the documented workflow contract
 
 ## Rules
 
@@ -25,7 +25,7 @@ work.
   confirm or reject it.
 - Change one cause at a time when practical, then rerun the smallest relevant
   validation.
-- Preserve failure evidence in the plan, event artifact, or final summary when
+- Preserve failure evidence in the plan, required review artifact, or final summary when
   the workflow prompt requires it.
 - After three consecutive failed fix attempts for the same symptom, STOP and
   report the repeated symptom, attempted fixes, current evidence, and the next

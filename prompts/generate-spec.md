@@ -1,6 +1,8 @@
 # Generate Feature Spec (Deterministic, Interactive)
 
-Goal: create a complete, unambiguous, implementation-ready feature spec.
+Goal: create a complete, unambiguous, implementation-ready feature spec for a
+request classified MEDIUM or HIGH. Run this as the dedicated fresh-conversation
+spec stage; LOW work does not create a spec.
 
 ---
 
@@ -12,6 +14,8 @@ Goal: create a complete, unambiguous, implementation-ready feature spec.
 - Prefer explicit decisions over defaults
 - All behavior MUST be deterministic
 - No vague or subjective language allowed
+- Do not create a plan or begin implementation. Saving this spec does not
+  authorize the next stage; the user's explicit later invocation does.
 
 ---
 

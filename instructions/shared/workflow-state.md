@@ -1,50 +1,38 @@
-Version: 3.0
-Last Updated: 2026-07-22
+Version: 2.0
+Last Updated: 2026-07-29
 
-# Workflow State Instructions
+# Workflow Stage Instructions
 
 ## Authority
 
-The workflow runner is the sole normal writer of a runner-managed plan's
-`## Workflow State`, `workflow.json`, latest-event records, event history,
-blockers, and context snapshot. A stage agent may write implementation files
-and only the exact event artifact named in its runner-issued descriptor. It
-must never edit routing documents, phases, task IDs, task boundaries, or
-inline history sections.
+The explicit user invocation controls each stage. Saved specs, plans, current
+Git state, validation evidence, and the required MEDIUM review artifact are
+the only durable workflow context. No workflow manager, event journal, sidecar,
+or state schema is a transition authority.
 
-The runner validates the reserved event and finalizes every allowed transition
-through its transition journal. No prompt, terminal summary, or partial
-sidecar is a transition authority.
+## Stage Matrix
 
-## Canonical State Matrix
+| Class | Required saved inputs | Authorized execution | Completion evidence |
+| --- | --- | --- | --- |
+| LOW | compact plan | `execute <plan-file>` | scoped validation and self-check |
+| MEDIUM | spec and plan | `execute <plan-file>` | validation and `review.md` |
+| HIGH | spec and plan | `/goal <description> <plan-file>` | per-task validation, actual-diff review, and commits |
 
-`.ai/scripts/workflow/contracts/stage.ts` is executable source.
+## Rules
 
-| Workflow State | Routed Stage | Valid event outcomes |
-| --- | --- | --- |
-| `draft-artifact-sync` | `sync-plan-artifacts` | `ready`, `retry` |
-| `draft-validation` | `plan-validator` | `approved`, `retry`, `blocked` |
-| `approved` / `active` | `execute-plan` | `review-ready`, `active`, `blocked` |
-| `blocked` | `unblock-plan` | `active`, `blocked` |
-| `review` | `review-changes` | `active`, `completed` |
-| `reopening` | `reopen-plan` | `active` |
-| `completed` | `commit-summary` | terminal |
+- The classifier is read-only and must stop for unresolved uncertainty.
+- Saving an artifact does not execute it. Only the next explicit invocation
+  authorizes that stage.
+- MEDIUM resumes from its saved spec, plan, review artifact, and Git state.
+- A material discovery pauses work and returns to the correct planning stage;
+  classification can only escalate until the original risk is resolved.
+- `Ready to complete`, `Fix required`, and `Blocked` are the only MEDIUM
+  review statuses. A fix reruns validation and review; a blocker records the
+  exact required next action.
 
-## Event Contract
+## Anti-Patterns
 
-Each nonterminal stage receives `{ stage, sourceWorkflowState, version,
-eventPath }` from the runner. Its event must use the matching `# <Stage> vN`
-title and non-empty `## Outcome`, `## Summary`, and `## Evidence` sections.
-Failed review and reopen events require `## Remediation`; event artifacts hold
-all detailed findings, validation, blockers, and risks.
-
-The runner writes only canonical latest records: `version`, `outcome`,
-`summary`, and `evidence`, plus `unresolvedFindings` for a failed review. It
-rebuilds context from that finalized state.
-
-## Recovery
-
-Normal runs never strip inline sections or infer a state handoff from agent
-output. Restart recovery uses only the exact transition journal. Existing
-malformed plans require the explicit workflow artifact migration command; they
-are not repaired automatically during a stage.
+- Treating conversation output as a substitute for saved stage artifacts.
+- Creating state files, event histories, sidecars, or handoffs to route LOW or
+  MEDIUM work.
+- Starting implementation from a plan before its explicit execution command.
