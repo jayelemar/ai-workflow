@@ -86,7 +86,7 @@ const manualPromptPath = (stage: ManualTokenUsageStage): string => {
     case "plan":
       return ".ai/prompts/create-plan.md";
     case "execute":
-      return ".ai/manual/execute.md";
+      return ".ai/prompts/execute-plan.md";
   }
 };
 
