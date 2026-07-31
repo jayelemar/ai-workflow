@@ -65,18 +65,33 @@ Process tasks serially. Never combine two planned tasks in one commit, even
 when their changes are technically compatible. Do not start the next task
 until the current task has completed this protocol.
 
-1. Implement only the current task's planned scope.
-2. Run the task's exact declared validation successfully.
-3. Review the task diff for regressions and out-of-scope files.
-4. Stage only files owned by that task; never stage `.ai/` artifacts.
-5. Immediately before committing, run `git branch --show-current`. If the
+1. Read the current task's saved `Delegation` decision and required roles.
+2. If delegation is `REQUIRED`, announce in the root terminal each role's task,
+   bounded scope, and expected result, then spawn it with only that assignment.
+   On a verified material milestone or completion, announce the role, current
+   phase, evidence or changed paths, validation state, and next check. Before
+   waiting again, state the last known phase and the exact result awaited;
+   never substitute `Interacted with` or `Waiting for agents` transport text
+   for this status, repeat unchanged updates, or disclose private reasoning.
+   Wait for each result, then record the role, scope, and concise outcome in
+   `## Verified Progress` or the task review evidence. If a required role
+   cannot run or lacks its result, STOP the task as `Blocked`; do not continue
+   as a single agent. These terminal messages are ephemeral and never create a
+   progress artifact or authorization gate.
+3. Implement only the current task's planned scope.
+4. Run the task's exact declared validation successfully.
+5. Review the task diff for regressions, out-of-scope files, and every
+   required delegation outcome.
+6. Stage only files owned by that task; never stage `.ai/` artifacts.
+7. Immediately before committing, run `git branch --show-current`. If the
    current branch is `main`, `dev`, `development`, or `staging`, STOP and ask
    the operator whether to proceed with that commit; wait for an explicit
    answer. Do not commit on that branch without it.
-6. Create exactly one local, conventional, task-specific Git commit containing
+8. Create exactly one local, conventional, task-specific Git commit containing
    only the current task before starting the next task.
-7. Confirm no remaining change owned by the completed task is left uncommitted.
-8. Record the commit SHA, subject, and validation result in `## Verified Progress`.
+9. Confirm no remaining change owned by the completed task is left uncommitted.
+10. Record the commit SHA, subject, validation result, and required delegation
+    outcome in `## Verified Progress`.
 
 If a task produces no tracked changes, record its validation and no-change
 result in `## Verified Progress` before starting the next task; do not create

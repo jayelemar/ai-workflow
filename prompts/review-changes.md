@@ -40,7 +40,11 @@ missing-input, or unresolved-risk blocker.
 ## HIGH-GOAL Task Review
 
 During an active `/goal`, review each completed task's actual diff against its
-plan scope and validation before committing it. Record the review and
-validation evidence in the HIGH-GOAL handoff or task record, then make the
-task-scoped commit before beginning the next task. Do not reuse MEDIUM's
-single `review.md` as the HIGH task-review protocol.
+plan scope and validation before committing it. When the task declares
+`Delegation: REQUIRED`, also verify that every required role completed its
+saved bounded assignment and that its concise outcome is recorded. Missing or
+failed required delegation blocks the task; do not commit or continue alone.
+Record the review, validation, and delegation evidence in the HIGH-GOAL
+handoff or task record, then make the task-scoped commit before beginning the
+next task. Do not reuse MEDIUM's single `review.md` as the HIGH task-review
+protocol.

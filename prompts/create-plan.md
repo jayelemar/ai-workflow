@@ -42,9 +42,21 @@ Use `.ai/templates/plan.template.md` exactly.
 - MEDIUM and HIGH plans must be complete enough to execute without inventing
   behavior. Apply the flow-trace contract when it is required; otherwise use
   its exact `N/A` entries.
+- Before saving every task, reconcile its required behavior, public contracts,
+  framework routing conventions, and owned-file list. Include every
+  implementation artifact that is structurally required to deliver the saved
+  behavior—even when the artifact is implied by a framework convention rather
+  than named in the spec. For example, an exact nested Next.js API path must
+  own its corresponding nested `route.ts` file and focused test. Treat these
+  required artifacts as part of the task boundary, not as a later material
+  scope discovery. Do not use this rule to add unrelated refactors or behavior.
 - HIGH plans split independently implementable outcomes into task-scoped
-  items, each with files, validation, and a conventional-commit purpose. The
-  HIGH-GOAL task protocol governs execution.
+  items, each with files, validation, a conventional-commit purpose, and a
+  deterministic delegation decision. For every HIGH task, apply every matching
+  template rule and save `Delegation: REQUIRED` with the required roles,
+  bounded assignment, and expected result; otherwise save `Delegation: NONE`
+  with the exact reason. Do not use `OPTIONAL` or defer this decision to
+  execution. The HIGH-GOAL task protocol governs execution.
 - Do not create workflow state, event logs, sidecars, handoffs, previews, or
   progress records.
 - Record a MEDIUM review path at `.ai/artifacts/<plan-name>/review.md`; it is

@@ -1,11 +1,11 @@
 # Feature Intake Wrapper
 
-Use this before creating a feature spec. Run it in Plan Mode or another
-analysis-only session.
+Use this for feature requests before the next saved workflow artifact. It is a
+read-only intake that includes the universal workflow classification.
 
 ```text
-Requirements interview only. Do not write files, create a spec or plan, edit
-code, or run a workflow.
+Requirements interview and classification only. Do not write files, create a
+spec or plan, edit code, or begin implementation.
 
 Feature: <feature name>
 
@@ -25,27 +25,28 @@ infer desired behavior from the codebase. Ask one question at a time until all
 material behavior, roles, permissions, success criteria, failures, edge cases,
 non-goals, and validation expectations are explicit.
 
-Classify risk:
-- LOW: isolated additive behavior; no auth, database, API contract, shared
-  behavior, or broad impact.
-- MEDIUM: multiple files, shared behavior, a new dependency, cross-feature
-  interaction, or unclear regression risk.
-- HIGH: auth/RLS/permissions, database or migration, payments, public/shared
-  contract, destructive data, external integration, multi-route flow, or broad
-  customer impact.
+When requirements are complete, apply the exact classification, escalation,
+LOW-to-MEDIUM safeguard, uncertainty stop, and next-stage rules in
+`.ai/prompts/select-workflow.md`. Do not use a separate feature-risk scheme.
 
-When complete, return an Approval Brief containing only:
+When complete, return an Intake Brief followed by the exact four-line
+classification output:
+
 1. Confirmed requirements and success criteria
 2. Current facts and reuse points
 3. Explicit unknowns or decisions still needed
-4. Risk class and rationale
-5. Recommended route: LOW, MEDIUM, or HIGH
-6. Required tests and rollout/rollback concerns
+4. Required tests and rollout/rollback concerns
+
+```text
+Classification: LOW | MEDIUM | HIGH
+Reason: <concise evidence-based reason>
+Missing decision: <None or the exact information required to classify>
+Next action: <the exact next authorized stage>
+```
 
 Do not create any artifact. State unresolved decisions explicitly.
 ```
 
-After the user explicitly invokes the next stage, use
-`.ai/wrappers/generate-feature-spec.md` in an agent session. Provide the
-approved brief as context; it is not a substitute for any still-unknown desired
-behavior.
+Follow the classifier's next action. LOW switches to Plan mode for its compact
+plan. MEDIUM and HIGH create the feature spec in the same intake conversation;
+the Intake Brief provides context but never substitutes for unresolved behavior.

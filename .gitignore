@@ -12,6 +12,7 @@
 !/docs/
 !/docs/**
 !/instructions/
+!/instructions/ai-workflow.md
 !/instructions/shared/
 !/instructions/shared/**
 !/prompts/

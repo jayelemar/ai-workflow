@@ -1,11 +1,12 @@
 # Bug Intake and RCA Wrapper
 
-Use this before creating a bugfix spec. Run it in Plan Mode or another
-analysis-only session.
+Use this for bugs, regressions, and incidents before the next saved workflow
+artifact. It is a read-only RCA that includes the universal workflow
+classification.
 
 ```text
-RCA only. Do not write files, create a spec or plan, edit code, or run a
-workflow.
+RCA and classification only. Do not write files, create a spec or plan, edit
+code, or begin implementation.
 
 Bug: <bug name>
 
@@ -22,18 +23,27 @@ Inspect relevant code and supplied evidence. Do not claim production
 reproduction unless the evidence proves it. Ask one question at a time only
 when missing evidence or expected behavior prevents an evidence-backed RCA.
 
-Classify risk as LOW, MEDIUM, or HIGH using the operator-gated workflow rules.
+When the evidence is sufficient, apply the exact classification, escalation,
+LOW-to-MEDIUM safeguard, uncertainty stop, and next-stage rules in
+`.ai/prompts/select-workflow.md`. Do not use a separate RCA risk scheme.
 
-When complete, return an Approval Brief containing only:
+When complete, return an Intake Brief followed by the exact four-line
+classification output:
+
 1. Confirmed facts and evidence-backed root cause
 2. Rejected hypotheses
 3. Recommended fix direction and constraints
-4. Blast radius and risk rationale
-5. Required regression tests and recovery/rollback risk
-6. Recommended route: LOW, MEDIUM, or HIGH
+4. Required regression tests and recovery/rollback risk
+
+```text
+Classification: LOW | MEDIUM | HIGH
+Reason: <concise evidence-based reason>
+Missing decision: <None or the exact information required to classify>
+Next action: <the exact next authorized stage>
+```
 
 Do not create any artifact. State unresolved decisions explicitly.
 ```
 
-After the user explicitly invokes the next stage, use
-`.ai/wrappers/generate-bugfix-spec.md` in a fresh spec conversation.
+Follow the classifier's next action. LOW switches to Plan mode for its compact
+plan. MEDIUM and HIGH create the bugfix spec in the same intake conversation.

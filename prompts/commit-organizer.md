@@ -51,6 +51,8 @@ Create one coherent, independently reviewable purpose per commit.
   leaves the repository unusable when a practical atomic migration is needed.
 * When organizing a HIGH-GOAL, the saved plan's task boundary overrides general
   grouping: never combine changes from more than one planned task in a commit.
+* Before staging a HIGH task, verify its required delegation outcomes are
+  recorded. A missing or failed required delegation blocks the commit.
 
 ## Proposal Before Mutation
 

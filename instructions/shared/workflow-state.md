@@ -16,7 +16,7 @@ or state schema is a transition authority.
 | --- | --- | --- | --- |
 | LOW | compact plan | `execute <plan-file>` | scoped validation and self-check |
 | MEDIUM | spec and plan | `execute <plan-file>` | validation and `review.md` |
-| HIGH | spec and plan | `/goal <description> <plan-file>` | per-task validation, actual-diff review, and commits |
+| HIGH | spec and plan with task delegation | `/goal <description> <plan-file>` | required delegation evidence, per-task validation, actual-diff review, and commits |
 
 ## Rules
 
@@ -29,6 +29,9 @@ or state schema is a transition authority.
 - `Ready to complete`, `Fix required`, and `Blocked` are the only MEDIUM
   review statuses. A fix reruns validation and review; a blocker records the
   exact required next action.
+- HIGH execution reads the saved task delegation before implementation. A
+  required delegation that is unavailable or lacks recorded evidence blocks
+  that task; it is never silently treated as optional.
 
 ## Anti-Patterns
 

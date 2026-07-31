@@ -9,7 +9,8 @@ Classification:
 Inputs:
 
 - LOW: classifier result and request context.
-- MEDIUM/HIGH: saved spec path.
+- MEDIUM/HIGH: saved spec path. HIGH also requires a `REQUIRED` or `NONE`
+  delegation decision for every task, using the plan-template rubric.
 
 Create and save the plan only. Do not implement, review a speculative plan, or
 request a separate approval. After it is saved, the user explicitly invokes either
