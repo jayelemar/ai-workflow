@@ -87,6 +87,22 @@ test("HIGH keeps task review and commit sequencing", async () => {
   assert.match(review, /Missing or\s+failed required delegation blocks the task/);
 });
 
+test("HIGH planning creates a required initial handoff without authorizing execution", async () => {
+  const [workflow, plan, template, checkpoint] = await Promise.all([
+    readSource("instructions/ai-workflow.md"),
+    readSource("prompts/create-plan.md"),
+    readSource("templates/plan.template.md"),
+    readSource("prompts/goal-checkpoint.md"),
+  ]);
+  assert.match(plan, /HIGH planning must create the initial goal handoff/);
+  assert.match(plan, /\.ai\/artifacts\/<plan-name>\/goal-handoff\.md/);
+  assert.match(plan, /not its standalone final-output instruction/);
+  assert.match(template, /HIGH plans: `\.ai\/artifacts\/<plan-name>\/goal-handoff\.md`/);
+  assert.match(checkpoint, /initial HIGH planning/);
+  assert.match(workflow, /initial goal handoff alongside the plan/);
+  assert.match(workflow, /`\/goal <description> <plan-file>` remains the only execution authorization/);
+});
+
 test("HIGH delegation keeps terminal activity understandable without durable logs", async () => {
   const [workflow, checkpoint, template, readme] = await Promise.all([
     readSource("instructions/ai-workflow.md"),

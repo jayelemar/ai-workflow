@@ -17,7 +17,7 @@ LOW | MEDIUM | HIGH
 * User journey: `.ai/artifacts/<plan-name>/user-journey.md` | `N/A: <concrete reason>`
 * Implementation map: `.ai/artifacts/<plan-name>/implementation-map.md` | `N/A: <concrete reason>`
 * MEDIUM review: `.ai/artifacts/<plan-name>/review.md` | `N/A: not MEDIUM`
-* HIGH-GOAL handoff: `.ai/artifacts/<plan-name>/goal-handoff.md` | `N/A: not HIGH`
+* HIGH-GOAL handoff: HIGH plans: `.ai/artifacts/<plan-name>/goal-handoff.md` (created with the plan); LOW and MEDIUM: `N/A: not HIGH`
 
 ## Scope
 

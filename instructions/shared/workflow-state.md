@@ -16,7 +16,7 @@ or state schema is a transition authority.
 | --- | --- | --- | --- |
 | LOW | compact plan | `execute <plan-file>` | scoped validation and self-check |
 | MEDIUM | spec and plan | `execute <plan-file>` | validation and `review.md` |
-| HIGH | spec and plan with task delegation | `/goal <description> <plan-file>` | required delegation evidence, per-task validation, actual-diff review, and commits |
+| HIGH | spec, plan with task delegation, and initial goal handoff | `/goal <description> <plan-file>` | required delegation evidence, per-task validation, actual-diff review, and commits |
 
 ## Rules
 
@@ -32,6 +32,10 @@ or state schema is a transition authority.
 - HIGH execution reads the saved task delegation before implementation. A
   required delegation that is unavailable or lacks recorded evidence blocks
   that task; it is never silently treated as optional.
+- HIGH planning creates `.ai/artifacts/<plan-name>/goal-handoff.md` before the
+  plan is handed off. The initial handoff records only verified pre-execution
+  state; it does not authorize implementation or replace the required `/goal`
+  invocation.
 
 ## Anti-Patterns
 

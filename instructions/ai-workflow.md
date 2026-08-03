@@ -29,8 +29,9 @@ templates, and workflow artifacts.
   implementation only after `execute <plan-file>`; HIGH begins only after
   `/goal <description> <plan-file>`.
 - The next explicit invocation is the authorization boundary. Do not require
-  `APPROVE`, a pre-execution review, preview, manual handoff, or progress
-  update.
+  `APPROVE`, a pre-execution review, preview, user-supplied manual handoff, or
+  progress update. HIGH planning's required initial handoff is created by the
+  workflow and never adds an approval gate.
 - Escalate a classification when new evidence warrants it. Do not downgrade
   until the original risk has documented resolution.
 - A request requiring a user journey, implementation map, broad integration
@@ -45,8 +46,9 @@ templates, and workflow artifacts.
   complete`, `Fix required`, and `Blocked`.
 - HIGH-GOAL keeps task-scoped delegation when required, implementation,
   validation, actual-diff review, and one task-scoped commit before the next
-  task. The goal handoff is created when the explicit `/goal` invocation starts
-  HIGH execution.
+  task. HIGH planning creates the initial goal handoff alongside the plan;
+  `/goal <description> <plan-file>` remains the only execution authorization
+  and refreshes repository evidence before task work starts.
 - Every HIGH task declares `Delegation: REQUIRED` or `Delegation: NONE` in its
   saved plan. Planning applies the fixed investigator, builder, and reviewer
   rubric in the plan template; execution must run and record every required
@@ -64,8 +66,10 @@ templates, and workflow artifacts.
   extra approval requirement. The required delegation outcome remains recorded
   only in the existing HIGH review evidence or goal handoff.
 - Do not create runner state, event logs, sidecars, task pointers, previews,
-  or runner handoffs. Historical plan/spec wording and specifically preserved
-  historical flow artifacts are not active workflow sources.
+  or runner handoffs. The required initial HIGH goal handoff is a portable
+  checkpoint, not workflow state or an authorization gate. Historical
+  plan/spec wording and specifically preserved historical flow artifacts are
+  not active workflow sources.
 - Manual token telemetry remains available at
   `.ai/scripts/workflow/telemetry/manual-token-usage.ts`; it records explicit
   workflow checkpoints without stage orchestration.

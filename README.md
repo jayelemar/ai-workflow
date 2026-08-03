@@ -14,7 +14,7 @@ request -> classify LOW | MEDIUM | HIGH
 
 LOW    -> save compact plan -> execute <plan> -> validate + self-check
 MEDIUM -> save spec -> save plan -> execute <plan> -> validate + automatic diff review
-HIGH   -> save spec -> save plan -> /goal <description> <plan> -> task delegate/validate/review/commit
+HIGH   -> save spec -> save plan + initial handoff -> /goal <description> <plan> -> task delegate/validate/review/commit
 ```
 
 Specs and plans are saved artifacts, not approval gates. The explicit next
@@ -66,7 +66,10 @@ and saves `.ai/artifacts/<name>/review.md`.
 ### 4. HIGH
 
 In the intake conversation, create the spec. Then switch to Plan mode to save
-the plan. Switch to Agent mode and start the task workflow explicitly:
+the plan and its required initial handoff at
+`.ai/artifacts/<name>/goal-handoff.md`. The handoff records verified
+pre-execution state and does not authorize work. Switch to Agent mode and
+start the task workflow explicitly:
 
 ```text
 /goal <description> .ai/plans/<name>.md

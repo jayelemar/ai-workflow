@@ -1,7 +1,8 @@
 # Goal Checkpoint
 
 Create or refresh the portable checkpoint for a HIGH-GOAL work item. Use this
-only before `/goal pause`, ending a session, or switching provider or account.
+during initial HIGH planning to create the required handoff, and later before
+`/goal pause`, ending a session, or switching provider or account.
 
 ## Input
 
@@ -14,6 +15,10 @@ identifier before writing a checkpoint.
 ## Strict Constraints
 
 - This is a checkpoint-only action. Do not implement work or change the goal.
+- During initial HIGH planning, create the handoff before saving the plan's
+  final output. Record that implementation has not started, the current
+  repository state, `Awaiting explicit /goal invocation` as the blocker, and
+  the exact `/goal <description> <plan-file>` next action.
 - Do not create workflow state, event logs, sidecars, or a MEDIUM review
   artifact. The linked approved spec and HIGH plan are required inputs, not
   artifacts to recreate here.
@@ -112,6 +117,9 @@ force-push unless the operator explicitly requests it.
 ```
 
 ## Final Output
+
+When create-plan uses this prompt during initial HIGH planning, return control
+to create-plan instead of producing this standalone output.
 
 Return only:
 

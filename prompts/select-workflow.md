@@ -18,7 +18,7 @@ Choose exactly one class:
 | --- | --- | --- |
 | `LOW` | A narrow, understood, low-risk change has a bounded implementation and validation path. | Switch to Plan mode to create a compact plan, then switch to Agent mode and invoke `execute <plan-file>`. |
 | `MEDIUM` | The work needs durable behavior definition, integration tracing, or more than LOW safeguards, but does not require HIGH-GOAL task commits. | Create a spec in the intake conversation, switch to Plan mode to create the plan, then switch to Agent mode and invoke `execute <plan-file>`. |
-| `HIGH` | The work is long-running, exploratory, high-risk, cross-system, or needs task-level validation, review, and commits. | Create a spec in the intake conversation, switch to Plan mode to create the plan, then switch to Agent mode and invoke `/goal <description> <plan-file>`. |
+| `HIGH` | The work is long-running, exploratory, high-risk, cross-system, or needs task-level validation, review, and commits. | Create a spec in the intake conversation, switch to Plan mode to create the plan and initial goal handoff, then switch to Agent mode and invoke `/goal <description> <plan-file>`. |
 
 Escalate immediately when new evidence supports a higher class. Do not downgrade
 without documenting that the risk which justified the higher class is resolved.

@@ -21,6 +21,10 @@ and purpose. Do not infer behavior that belongs in a missing spec.
 - Saving the plan does not begin implementation. The later explicit
   `execute <plan-file>` or `/goal <description> <plan-file>` invocation is the
   authorization boundary.
+- HIGH planning must create the initial goal handoff at
+  `.ai/artifacts/<plan-name>/goal-handoff.md` alongside the saved plan. It is
+  a required execution artifact, not an approval gate; `/goal <description>
+  <plan-file>` remains the only execution authorization.
 - Do not require a separate approval, a plan preview, or a pre-execution plan
   review.
 
@@ -57,8 +61,18 @@ Use `.ai/templates/plan.template.md` exactly.
   bounded assignment, and expected result; otherwise save `Delegation: NONE`
   with the exact reason. Do not use `OPTIONAL` or defer this decision to
   execution. The HIGH-GOAL task protocol governs execution.
-- Do not create workflow state, event logs, sidecars, handoffs, previews, or
-  progress records.
+- For HIGH only, create the initial goal handoff using
+  `.ai/prompts/goal-checkpoint.md`'s exact format. It must link the saved spec
+  and plan, use the kebab-case `<plan-name>` as the goal name, record the
+  clean initial repository state and `No implementation started` in verified
+  progress, include the full task commit protocol, list `Awaiting explicit
+  /goal invocation` as its only blocker, and name the `/goal <description>
+  <plan-file>` invocation as its next action. Do not create a handoff for LOW
+  or MEDIUM plans. Use the checkpoint's required content and task protocol,
+  not its standalone final-output instruction; plan creation remains one stage
+  and returns the create-plan final output.
+- Do not create workflow state, event logs, sidecars, previews, or progress
+  records. The required HIGH goal handoff is the sole exception.
 - Record a MEDIUM review path at `.ai/artifacts/<plan-name>/review.md`; it is
   created automatically after implemented-diff review, not while planning.
 
