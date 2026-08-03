@@ -4,10 +4,27 @@ This standalone Git repository contains reusable AI workflow source. The
 parent repository intentionally ignores `.ai/`; plans, specs, and artifacts
 remain local unless explicitly published.
 
-## Explicit Workflow
+## Workflow Quick Reference
 
-Every request uses one read-only classifier. Feature and bug intake include it;
-use `select-workflow` directly for every other request type.
+This README is navigation, not a second workflow contract. Use the canonical
+sources below for exact rules:
+
+- Classification: `.ai/prompts/select-workflow.md`
+- Stage authority and saved artifacts: `.ai/instructions/shared/workflow-state.md`
+- Planning: `.ai/prompts/create-plan.md`
+- LOW and MEDIUM execution: `.ai/prompts/execute-plan.md`
+- HIGH checkpoint and task commits: `.ai/prompts/goal-checkpoint.md`
+- Actual-diff review: `.ai/prompts/review-changes.md`
+- HIGH task delegation structure: `.ai/templates/plan.template.md`
+
+Start with `select-workflow` for a new request that defines or changes product,
+implementation, or planning scope. Feature and bug intake include it; use the
+prompt directly for other such requests.
+
+Run utility and workflow-continuation prompts directly when their own
+preconditions are met. These include `commit-organizer`, `plan-progress`,
+`goal-checkpoint`, and `resume-goal`; they inspect, organize, or continue
+existing work and do not classify new scope or authorize implementation.
 
 ```text
 request -> classify LOW | MEDIUM | HIGH
@@ -21,9 +38,8 @@ Specs and plans are saved artifacts, not approval gates. The explicit next
 command authorizes the next stage. Classification uncertainty stops for the
 exact missing decision; a class may escalate when new evidence requires it.
 
-MEDIUM review evidence is saved at `.ai/artifacts/<plan-name>/review.md` with
-status `Ready to complete`, `Fix required`, or `Blocked`. HIGH uses the
-existing `/goal` task-level delegation, review, and commit protocol.
+MEDIUM review evidence and HIGH task delegation, review, and commit rules are
+defined by the canonical sources above.
 
 ## How To Run A Request
 
@@ -78,38 +94,19 @@ start the task workflow explicitly:
 Each HIGH task is implemented, validated, reviewed against its actual diff,
 and committed before the next task begins.
 
-### HIGH task delegation
+### HIGH delegation
 
-LOW and MEDIUM work are single-agent by default. During HIGH planning, every
-task declares `Delegation: REQUIRED` or `Delegation: NONE`; execution must
-follow that declaration exactly.
-
-| Rule that applies to the task | Required role |
-| --- | --- |
-| Its scope depends on independent evidence across three or more source areas. | `investigator` |
-| It is isolated from every other planned task, has no shared file ownership, and can be independently implemented and validated. | `builder` |
-| It changes authentication, authorization, payments, secrets, migrations, destructive behavior, or an external security boundary. | `reviewer` |
-
-Apply every matching role. If none apply, declare `Delegation: NONE` with the
-reason. A required role must finish its bounded assignment before task review;
-if it cannot run or its result is missing, the task is `Blocked`. Record the
-role, bounded scope, and concise outcome in the HIGH handoff or task review
-evidence. Do not create runner state or general-purpose subagent logs.
+The saved HIGH plan declares whether delegation is required for each task.
+Use the plan template for the role-selection rubric and the goal checkpoint
+for the execution, terminal-visibility, and commit protocol. Do not use this
+README as an alternate delegation rule set.
 
 ### Delegation terminal visibility
 
-Codex's native `Interacted with …` and `Waiting for agents` entries are only
-tool transport events. For every required delegated role, the root agent also
-prints concise terminal milestones: dispatch (task, role, bounded scope, and
-expected result), verified material progress or completion (phase, evidence or
-changed paths, validation state, and next check), and the last known phase
-before a continued wait. It does not repeat unchanged polling status, expose
-private reasoning, or create a persisted log. These messages are visibility
-only; they do not change the HIGH task protocol or add an approval gate.
-
-If execution reveals a material requirement, risk, dependency, or scope
-change, pause work, update the relevant spec or plan, escalate when needed,
-and resume only through the next explicit command.
+Required roles retain their bounded scope and required evidence in the saved
+plan and checkpoint. Native agent messages are transport events, not the
+required terminal milestones or a durable progress log; use the goal
+checkpoint for the exact visibility rules.
 
 ## Installation
 
