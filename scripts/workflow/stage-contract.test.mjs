@@ -50,6 +50,9 @@ test("plans require explicit authorization and LOW-to-MEDIUM safeguard", async (
   assert.match(flow, /LOW must\s+escalate before planning/);
   assert.match(template, /MEDIUM review/);
   assert.match(plan, /Plan mode after the intake conversation/);
+  assert.match(plan, /Plan saved to \.ai\/plans\/<plan-name>\.md \[<classification>\]/);
+  assert.match(template, /Plan saved to \.ai\/plans\/<plan-name>\.md \[<classification>\]/);
+  assert.match(plan, /selected `LOW`, `MEDIUM`, or `HIGH` value/);
 });
 
 test("execution requires post-implementation safeguards and review statuses", async () => {

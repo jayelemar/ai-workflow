@@ -65,4 +65,4 @@ does not produce its bounded result blocks the task.
 
 ## Final Output
 
-`Plan saved to .ai/plans/<plan-name>.md`
+`Plan saved to .ai/plans/<plan-name>.md [<classification>]`

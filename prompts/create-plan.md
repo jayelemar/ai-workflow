@@ -87,4 +87,6 @@ when required. Do not silently downgrade a prior classification.
 
 Return only:
 
-`Plan saved to .ai/plans/<plan-name>.md`
+`Plan saved to .ai/plans/<plan-name>.md [<classification>]`
+
+Replace `<classification>` with the selected `LOW`, `MEDIUM`, or `HIGH` value.
