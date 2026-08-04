@@ -1,5 +1,5 @@
-Version: 4.1
-Last Updated: 2026-07-31
+Version: 4.2
+Last Updated: 2026-08-03
 
 # AI Workflow Instructions
 
@@ -61,6 +61,13 @@ templates, and workflow artifacts.
   continued wait, state the last known phase and what result is awaited. Do not
   repeat an unchanged status, narrate tool transport events, expose a
   sub-agent's private reasoning, or present an inference as a result.
+- An active required delegation is not a workflow pause, task completion, or
+  terminal condition. The root agent continues independent in-scope work or
+  waits for the required result, then proceeds directly to the next required
+  review, validation, or remediation step. It must not describe the task as
+  stopped or leave it at a role handoff unless the user directs a stop, a
+  material discovery requires the documented stage pause, or the task has a
+  genuine recorded blocker.
 - Terminal delegation status is conversational visibility only: it must not
   create a workflow artifact, runner state, event log, authorization gate, or
   extra approval requirement. The required delegation outcome remains recorded
