@@ -25,7 +25,7 @@ needed shared-source changes instead of editing them.
 
 Do NOT modify:
 
-* `.codex/.AGENTS.md`
+* `.codex/AGENTS.md`
 * application code
 * tests
 
@@ -35,7 +35,7 @@ Do NOT modify:
 
 Read:
 
-* `.codex/.AGENTS.md`
+* `.codex/AGENTS.md`
 * `.ai/instructions/index.md` when it already exists
 
 When updating existing instruction content, also read:
@@ -53,7 +53,7 @@ Rules:
 * treat `.ai/instructions/index.md` as the repository instruction routing entrypoint
 * if `.ai/instructions/index.md` does not exist, bootstrap it first in the same run before using it for routing
 * use the index to discover existing repo-specific area files before deciding what to create, update, or skip
-* do not assume a missing area just because it is not mentioned in `.codex/.AGENTS.md`
+* do not assume a missing area just because it is not mentioned in `.codex/AGENTS.md`
 
 ---
 
@@ -92,7 +92,7 @@ Do NOT assume patterns without evidence.
 
 Ensure:
 
-* `.codex/.AGENTS.md` exists
+* `.codex/AGENTS.md` exists
 * `.ai/` exists
 
 If missing:
