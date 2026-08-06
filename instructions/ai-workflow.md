@@ -1,5 +1,5 @@
-Version: 4.2
-Last Updated: 2026-08-03
+Version: 4.3
+Last Updated: 2026-08-07
 
 # AI Workflow Instructions
 
@@ -23,36 +23,14 @@ templates, and workflow artifacts.
   RCA run the exact `.ai/prompts/select-workflow.md` rules as their final step;
   every other request invokes that prompt directly. It selects only LOW,
   MEDIUM, or HIGH and stops for unresolved classification uncertainty.
-- LOW saves a compact plan before implementation. It has no spec.
-- MEDIUM and HIGH create the spec in the intake conversation, switch to Plan
-  mode to save the plan, then switch to Agent mode. MEDIUM begins
-  implementation only after `execute <plan-file>`; HIGH begins only after
-  `/goal <description> <plan-file>`.
-- The next explicit invocation is the authorization boundary. Do not require
+- Follow `shared/workflow-state.md` for stage authority, saved artifacts,
+  explicit execution commands, review status, and HIGH delegation lifecycle.
+- Follow `shared/reasoning-quality.md` for scope discoveries and reasoning
+  safeguards, and `shared/flow-trace-artifacts.md` for flow-map classification
+  and artifacts.
+- The next explicit invocation remains the authorization boundary. Do not add
   `APPROVE`, a pre-execution review, preview, user-supplied manual handoff, or
-  progress update. HIGH planning's required initial handoff is created by the
-  workflow and never adds an approval gate.
-- Escalate a classification when new evidence warrants it. Do not downgrade
-  until the original risk has documented resolution.
-- A request requiring a user journey, implementation map, broad integration
-  tracing, or cross-cutting risk analysis is at least MEDIUM before planning.
-- Plan behavior stays within its saved spec. A material execution discovery
-  pauses work, updates the affected spec and/or plan, returns to the proper
-  stage, and waits for a new explicit invocation.
-- LOW completes with scoped validation and a concise self-check of the actual
-  diff.
-- MEDIUM completes with scoped validation plus automatic actual-diff review at
-  `.ai/artifacts/<plan-name>/review.md`. Its only statuses are `Ready to
-  complete`, `Fix required`, and `Blocked`.
-- HIGH-GOAL keeps task-scoped delegation when required, implementation,
-  validation, actual-diff review, and one task-scoped commit before the next
-  task. HIGH planning creates the initial goal handoff alongside the plan;
-  `/goal <description> <plan-file>` remains the only execution authorization
-  and refreshes repository evidence before task work starts.
-- Every HIGH task declares `Delegation: REQUIRED` or `Delegation: NONE` in its
-  saved plan. Planning applies the fixed investigator, builder, and reviewer
-  rubric in the plan template; execution must run and record every required
-  role, or stop the task as `Blocked`.
+  progress update as an additional gate.
 - During required delegation, the root agent keeps the terminal transcript
   understandable with concise, ephemeral status messages. Announce each role's
   dispatch with its task, bounded scope, and expected result; announce only
@@ -61,22 +39,9 @@ templates, and workflow artifacts.
   continued wait, state the last known phase and what result is awaited. Do not
   repeat an unchanged status, narrate tool transport events, expose a
   sub-agent's private reasoning, or present an inference as a result.
-- An active required delegation is not a workflow pause, task completion, or
-  terminal condition. The root agent continues independent in-scope work or
-  waits for the required result, then proceeds directly to the next required
-  review, validation, or remediation step. It must not describe the task as
-  stopped or leave it at a role handoff unless the user directs a stop, a
-  material discovery requires the documented stage pause, or the task has a
-  genuine recorded blocker.
-- Terminal delegation status is conversational visibility only: it must not
-  create a workflow artifact, runner state, event log, authorization gate, or
-  extra approval requirement. The required delegation outcome remains recorded
-  only in the existing HIGH review evidence or goal handoff.
-- Do not create runner state, event logs, sidecars, task pointers, previews,
-  or runner handoffs. The required initial HIGH goal handoff is a portable
-  checkpoint, not workflow state or an authorization gate. Historical
-  plan/spec wording and specifically preserved historical flow artifacts are
-  not active workflow sources.
+- Required delegation status is conversational visibility only: it must not
+  introduce runner selection, runner state, authorization gates, or additional
+  workflow artifacts.
 - Manual token telemetry remains available at
   `.ai/scripts/workflow/telemetry/manual-token-usage.ts`; it records explicit
   workflow checkpoints without stage orchestration.
@@ -85,9 +50,10 @@ templates, and workflow artifacts.
 
 - Keep flow-trace requirements in `shared/flow-trace-artifacts.md`.
 - Keep reasoning safeguards in `shared/reasoning-quality.md`.
+- Keep workflow-stage rules in `shared/workflow-state.md`.
 - Keep HIGH-GOAL checkpoint structure in `.ai/prompts/goal-checkpoint.md`.
-- Keep validation command selection in `testing.md` and test strategy in
-  `shared/testing.md`.
+- Keep repository validation commands in their owning local instruction and
+  test strategy in `shared/testing.md`.
 
 ## Validation
 
@@ -95,13 +61,10 @@ templates, and workflow artifacts.
   or focused script tests.
 - Verify active workflow source contains no runner selection or management and
   no pre-execution approval or review gate.
-- Verify the required LOW, MEDIUM, and HIGH stage boundaries and review
-  evidence paths remain explicit.
+- Verify prompts route stage behavior to `shared/workflow-state.md` without
+  introducing an extra authorization gate.
 
 ## Anti-Patterns
 
-- Treating a saved plan as authorization to implement without `execute` or
-  `/goal`.
-- Downgrading risk silently after a plan has been written.
-- Reviewing a speculative spec or plan instead of implemented evidence.
-- Reintroducing runner state or operational artifact requirements.
+- Bypassing the classifier or the shared workflow-stage authority.
+- Adding a runner-selection mechanism or pre-execution approval gate.
