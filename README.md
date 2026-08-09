@@ -98,8 +98,31 @@ and committed before the next task begins.
 
 The saved HIGH plan declares whether delegation is required for each task.
 Use the plan template for the role-selection rubric and the goal checkpoint
-for the execution, terminal-visibility, and commit protocol. Do not use this
-README as an alternate delegation rule set.
+for the token-efficient role runtime, execution, terminal-visibility, and
+commit protocol. Do not use this README as an alternate delegation rule set.
+
+Runtime roles map to capability tiers in
+`.ai/config/agent-models.toml`. This registry is the only `.ai` source that
+locks exact model IDs. The goal checkpoint enforces the role mapping,
+reasoning effort, bounded fork size, and fail-closed behavior.
+
+Check official OpenAI guidance for newer tier models without changing files:
+
+```bash
+rtk node .ai/scripts/models/update-agent-models.mjs
+```
+
+When an update is reported, run the representative checks in
+`.ai/config/agent-model-evals.md`. Apply only after those checks pass:
+
+```bash
+rtk node .ai/scripts/models/update-agent-models.mjs --apply --eval-approved
+```
+
+Apply updates the registry and project `.codex/config.toml`. Start a new Codex
+session for the parent runtime change, then refresh active HIGH handoffs. The
+updater fails when official guidance does not confirm both capability tiers;
+it never silently switches models.
 
 ### Delegation terminal visibility
 

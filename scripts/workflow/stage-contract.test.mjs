@@ -90,6 +90,30 @@ test("HIGH keeps task review and commit sequencing", async () => {
   assert.match(review, /Missing or\s+failed required delegation blocks the task/);
 });
 
+test("HIGH delegation uses role-specific models and bounded context", async () => {
+  const [checkpoint, template, readme, registry] = await Promise.all([
+    readSource("prompts/goal-checkpoint.md"),
+    readSource("templates/plan.template.md"),
+    readSource("README.md"),
+    readSource("config/agent-models.toml"),
+  ]);
+  assert.match(checkpoint, /\.ai\/config\/agent-models\.toml/);
+  assert.match(checkpoint, /Resolve each\s+role's `tier`/);
+  assert.doesNotMatch(checkpoint, /gpt-5\.6-(sol|terra)/);
+  assert.match(
+    checkpoint,
+    /required model is\s+unavailable, STOP the task as `Blocked`/,
+  );
+  assert.match(template, /Agent runtime/);
+  assert.match(template, /bounded-context policy/);
+  assert.match(readme, /update-agent-models\.mjs/);
+  assert.doesNotMatch(readme, /gpt-5\.6-(sol|terra)/);
+  assert.match(registry, /\[roles\.parent\][\s\S]*tier = "frontier"/);
+  assert.match(registry, /\[roles\.investigator\][\s\S]*tier = "balanced"/);
+  assert.match(registry, /\[roles\.builder\][\s\S]*tier = "balanced"/);
+  assert.match(registry, /\[roles\.reviewer\][\s\S]*tier = "frontier"/);
+});
+
 test("HIGH planning creates a required initial handoff without authorizing execution", async () => {
   const [workflow, plan, template, checkpoint] = await Promise.all([
     readSource("instructions/ai-workflow.md"),

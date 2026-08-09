@@ -45,6 +45,9 @@ LOW | MEDIUM | HIGH
 * Delegation: `REQUIRED` | `NONE`
 * Required roles: `investigator`, `builder`, and/or `reviewer` | `N/A: NONE`
 * Delegation rule and expected result: <exact matching rule and bounded deliverable>
+* Agent runtime: for `REQUIRED`, use the role-specific model, reasoning, and
+  bounded-context policy in `.ai/prompts/goal-checkpoint.md`; for `NONE`,
+  `N/A: no delegated role`.
 * Terminal visibility: for `REQUIRED`, the root agent announces role dispatch,
   verified material milestones or completion, and the last known phase before
   a continued wait; include task, role, bounded scope, evidence or changed

@@ -1,0 +1,29 @@
+schema_version = 1
+source_url = "https://developers.openai.com/api/docs/guides/latest-model.md"
+
+[tiers.frontier]
+model = "gpt-5.6-sol"
+
+[tiers.balanced]
+model = "gpt-5.6-terra"
+
+[roles.parent]
+tier = "frontier"
+reasoning_effort = "high"
+elevated_reasoning_effort = "xhigh"
+elevate_when = "security-critical, migration, destructive, or materially ambiguous architecture work"
+
+[roles.investigator]
+tier = "balanced"
+reasoning_effort = "high"
+
+[roles.builder]
+tier = "balanced"
+reasoning_effort = "high"
+
+[roles.reviewer]
+tier = "frontier"
+reasoning_effort = "xhigh"
+
+[spawn]
+fork_turns = 4

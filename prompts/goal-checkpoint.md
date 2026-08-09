@@ -70,6 +70,19 @@ Process tasks serially. Never combine two planned tasks in one commit, even
 when their changes are technically compatible. Do not start the next task
 until the current task has completed this protocol.
 
+Before HIGH work starts, read `.ai/config/agent-models.toml`. Resolve each
+role's `tier` to the locked model under `[tiers]`, then use that role's
+`reasoning_effort`. The parent may use its `elevated_reasoning_effort` only when
+the current work matches `elevate_when`. If the current parent does not match
+an allowed registry runtime, STOP and request a new session with the registry
+setting.
+
+For every required subagent, pass `[spawn].fork_turns` as a decimal string and
+provide a self-contained assignment naming the applicable `AGENTS.md`, saved
+spec, saved plan, owned files, and expected result. Never use full-history
+forks. If the registry is missing or invalid, or a required model is
+unavailable, STOP the task as `Blocked`; never substitute another model.
+
 1. Read the current task's saved `Delegation` decision and required roles.
 2. If delegation is `REQUIRED`, announce in the root terminal each role's task,
    bounded scope, and expected result, then spawn it with only that assignment.

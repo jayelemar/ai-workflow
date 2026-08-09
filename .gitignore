@@ -6,6 +6,8 @@
 !/README.md
 !/AGENTS.md
 # Allowlisted source directories
+!/config/
+!/config/**
 !/changelogs/
 !/changelogs/shared/
 !/changelogs/shared/**
