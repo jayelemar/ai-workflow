@@ -1,45 +1,49 @@
-Version: 2.0
-Last Updated: 2026-07-29
+Version: 3.0
+Last Updated: 2026-08-13
 
 # Workflow Stage Instructions
 
 ## Authority
 
-The explicit user invocation controls each stage. Saved specs, plans, current
-Git state, validation evidence, and the required MEDIUM review artifact are
-the only durable workflow context. No workflow manager, event journal, sidecar,
-or state schema is a transition authority.
+The explicit user invocation controls each stage. Finalized specs, saved plans,
+flow artifacts, Git state, validation evidence, and review/checkpoint artifacts
+provide durable context only; none authorizes a transition by itself. There is
+no workflow runner, transition state, event journal, or sidecar authority.
 
 ## Stage Matrix
 
-| Class | Required saved inputs | Authorized execution | Completion evidence |
-| --- | --- | --- | --- |
-| LOW | compact plan | `execute <plan-file>` | scoped validation and self-check |
-| MEDIUM | spec and plan | `execute <plan-file>` | validation and `review.md` |
-| HIGH | spec, plan with task delegation, and initial goal handoff | `/goal <description> <plan-file>` | required delegation evidence, per-task validation, actual-diff review, and commits |
+| Class    | Read-only intake result                | Next explicitly invoked stage                                           | Planning                                                       | Explicit execution                |
+| -------- | -------------------------------------- | ----------------------------------------------------------------------- | -------------------------------------------------------------- | --------------------------------- |
+| `LOW`    | classification and repository evidence | explicitly invoke plan creation in Plan mode                            | save a compact `.ai/plans/<plan-name>.md` reference            | `execute <plan-file>`             |
+| `MEDIUM` | classification and missing decisions   | invoke the spec prompt and finalize `feature-spec@1` or `bugfix-spec@1` | Plan mode saves `plan-manifest@2`                              | `execute <plan-file>`             |
+| `HIGH`   | classification and missing decisions   | invoke the spec prompt and finalize `feature-spec@1` or `bugfix-spec@1` | Plan mode saves `plan-manifest@2` and the initial goal handoff | `/goal <description> <plan-file>` |
+
+When the finalized MEDIUM/HIGH spec requires end-to-end tracing, explicitly
+invoke the flow-artifact prompt before Plan mode. That single stage saves both
+`user-journey@1` and `implementation-map@1`.
 
 ## Rules
 
-- The classifier is read-only and must stop for unresolved uncertainty.
-- Saving an artifact does not execute it. Only the next explicit invocation
-  authorizes that stage.
-- MEDIUM resumes from its saved spec, plan, review artifact, and Git state.
-- A material discovery pauses work and returns to the correct planning stage;
-  classification can only escalate until the original risk is resolved.
-- `Ready to complete`, `Fix required`, and `Blocked` are the only MEDIUM
-  review statuses. A fix reruns validation and review; a blocker records the
-  exact required next action.
-- HIGH execution reads the saved task delegation before implementation. A
-  required delegation that is unavailable or lacks recorded evidence blocks
-  that task; it is never silently treated as optional.
-- HIGH planning creates `.ai/artifacts/<plan-name>/goal-handoff.md` before the
-  plan is handed off. The initial handoff records only verified pre-execution
-  state; it does not authorize implementation or replace the required `/goal`
-  invocation.
+- Intake is read-only and stops for unresolved classification or behavior
+  decisions. It must not save the next artifact in the same invocation.
+- LOW cannot execute from a conversational plan. Plan mode must save the plan
+  file named by the later `execute <plan-file>` invocation.
+- A saved or finalized artifact never starts the next stage. The user must
+  explicitly invoke the spec, flow-artifact, planning, or execution stage.
+- A material discovery returns work to the appropriate explicit stage.
+  Classification escalates when newly established risk requires it.
+- `Ready to complete`, `Fix required`, and `Blocked` are the only MEDIUM review
+  statuses. An in-scope fix reruns required validation and review.
+- HIGH execution reads each saved task and delegation decision before work.
+  Required delegation, validation, actual-diff review, and one task-scoped
+  commit remain mandatory under the HIGH commit protocol.
+- HIGH planning creates `.ai/artifacts/<plan-name>/goal-handoff.md` as portable
+  context. It does not authorize implementation or replace `/goal`.
 
 ## Anti-Patterns
 
-- Treating conversation output as a substitute for saved stage artifacts.
-- Creating state files, event histories, sidecars, or handoffs to route LOW or
-  MEDIUM work.
-- Starting implementation from a plan before its explicit execution command.
+- Creating a spec during read-only intake.
+- Treating `saved`, `finalized`, or conversational agreement as execution
+  authorization.
+- Introducing runner selection, persisted transition state, event history,
+  sidecars, or a pre-execution approval gate.

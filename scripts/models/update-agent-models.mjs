@@ -62,14 +62,19 @@ export const parseArgs = (args) => {
 
 export const validateOptions = (options) => {
   if (options.apply && !options.evalApproved) {
-    throw new Error("--apply requires --eval-approved after representative role evals");
+    throw new Error(
+      "--apply requires --eval-approved after representative role evals",
+    );
   }
   if (options.evalApproved && !options.apply) {
     throw new Error("--eval-approved is valid only with --apply");
   }
   if (/^https?:\/\//.test(options.source)) {
     const sourceUrl = new URL(options.source);
-    if (sourceUrl.protocol !== "https:" || sourceUrl.hostname !== "developers.openai.com") {
+    if (
+      sourceUrl.protocol !== "https:" ||
+      sourceUrl.hostname !== "developers.openai.com"
+    ) {
       throw new Error("remote source must use https://developers.openai.com");
     }
   }
@@ -110,7 +115,9 @@ const parseLatestModelInfo = (markdown) => {
   const info = {};
   for (let index = start + 1; index < lines.length; index += 1) {
     if (!lines[index].trim()) continue;
-    const match = lines[index].match(/^ {2}([A-Za-z][A-Za-z0-9_-]*):\s*(.+?)\s*$/);
+    const match = lines[index].match(
+      /^ {2}([A-Za-z][A-Za-z0-9_-]*):\s*(.+?)\s*$/,
+    );
     if (!match) break;
     info[match[1]] = match[2].replace(/^["']|["']$/g, "");
   }
@@ -119,9 +126,10 @@ const parseLatestModelInfo = (markdown) => {
 
 const modelMentioned = (markdown, model) => {
   const escaped = model.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`(^|[^A-Za-z0-9_.-])${escaped}($|[^A-Za-z0-9_.-])`, "m").test(
-    markdown,
-  );
+  return new RegExp(
+    `(^|[^A-Za-z0-9_.-])${escaped}($|[^A-Za-z0-9_.-])`,
+    "m",
+  ).test(markdown);
 };
 
 const validateModelId = (model, label) => {
@@ -137,14 +145,18 @@ export const resolveLatestTiers = (markdown) => {
 
   const balanced =
     info.balancedModel?.trim() ||
-    (frontier.endsWith("-sol") ? frontier.replace(/-sol$/, "-terra") : undefined);
+    (frontier.endsWith("-sol")
+      ? frontier.replace(/-sol$/, "-terra")
+      : undefined);
   if (!balanced) {
     throw new Error("balanced model cannot be derived from official guidance");
   }
   validateModelId(frontier, "frontier");
   validateModelId(balanced, "balanced");
   if (!modelMentioned(markdown, balanced)) {
-    throw new Error(`balanced model ${balanced} is not confirmed by official guidance`);
+    throw new Error(
+      `balanced model ${balanced} is not confirmed by official guidance`,
+    );
   }
   return { frontier, balanced };
 };
@@ -167,7 +179,9 @@ const getSectionString = (toml, section, key) => {
   const lines = toml.replaceAll("\r\n", "\n").split("\n");
   const { start, end } = findSectionRange(lines, section);
   for (let index = start + 1; index < end; index += 1) {
-    const match = lines[index].match(new RegExp(`^\\s*${key}\\s*=\\s*"([^"]+)"\\s*$`));
+    const match = lines[index].match(
+      new RegExp(`^\\s*${key}\\s*=\\s*"([^"]+)"\\s*$`),
+    );
     if (match) return match[1];
   }
   throw new Error(`missing ${key} in [${section}]`);
@@ -177,7 +191,9 @@ const getSectionInteger = (toml, section, key) => {
   const lines = toml.replaceAll("\r\n", "\n").split("\n");
   const { start, end } = findSectionRange(lines, section);
   for (let index = start + 1; index < end; index += 1) {
-    const match = lines[index].match(new RegExp(`^\\s*${key}\\s*=\\s*(\\d+)\\s*$`));
+    const match = lines[index].match(
+      new RegExp(`^\\s*${key}\\s*=\\s*(\\d+)\\s*$`),
+    );
     if (match) return Number(match[1]);
   }
   throw new Error(`missing ${key} in [${section}]`);
@@ -218,10 +234,16 @@ const readRuntimeRegistry = (registry) => {
   for (const role of ["parent", "investigator", "builder", "reviewer"]) {
     const section = `roles.${role}`;
     const tier = getSectionString(registry, section, "tier");
-    const reasoningEffort = getSectionString(registry, section, "reasoning_effort");
+    const reasoningEffort = getSectionString(
+      registry,
+      section,
+      "reasoning_effort",
+    );
     if (!(tier in tiers)) throw new Error(`unknown tier ${tier} for ${role}`);
     if (!ALLOWED_REASONING_EFFORTS.has(reasoningEffort)) {
-      throw new Error(`unsupported reasoning effort ${reasoningEffort} for ${role}`);
+      throw new Error(
+        `unsupported reasoning effort ${reasoningEffort} for ${role}`,
+      );
     }
     roles[role] = { tier, model: tiers[tier], reasoningEffort };
   }
@@ -232,7 +254,9 @@ const readRuntimeRegistry = (registry) => {
 
 const upsertTopLevelString = (toml, key, value) => {
   const lines = toml.replaceAll("\r\n", "\n").split("\n");
-  const firstSection = lines.findIndex((line) => /^\s*\[[^\]]+\]\s*$/.test(line));
+  const firstSection = lines.findIndex((line) =>
+    /^\s*\[[^\]]+\]\s*$/.test(line),
+  );
   const end = firstSection < 0 ? lines.length : firstSection;
   for (let index = 0; index < end; index += 1) {
     if (new RegExp(`^\\s*${key}\\s*=`).test(lines[index])) {
@@ -268,7 +292,8 @@ const writeAtomically = async (filePath, contents) => {
 };
 
 const printHelp = () => {
-  process.stdout.write(`Usage: rtk node .ai/scripts/models/update-agent-models.mjs [options]
+  process.stdout
+    .write(`Usage: rtk node .ai/scripts/models/update-agent-models.mjs [options]
 
 Default behavior is read-only and reports model drift.
 

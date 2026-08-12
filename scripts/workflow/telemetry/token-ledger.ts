@@ -1,16 +1,18 @@
-import { readFile } from 'node:fs/promises';
+import { readFile } from "node:fs/promises";
 
-const rel = (...segments: string[]) => segments.join('/');
+const rel = (...segments: string[]) => segments.join("/");
 
 const asRecord = (value: unknown): Record<string, unknown> | null =>
-  typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : null;
+  typeof value === "object" && value !== null
+    ? (value as Record<string, unknown>)
+    : null;
 
 const isFiniteNumber = (value: unknown): value is number =>
-  typeof value === 'number' && Number.isFinite(value);
+  typeof value === "number" && Number.isFinite(value);
 
 const promptActionFromPath = (promptPath: string): string => {
-  const fileName = promptPath.split('/').pop() ?? promptPath;
-  return fileName.endsWith('.md') ? fileName.slice(0, -'.md'.length) : fileName;
+  const fileName = promptPath.split("/").pop() ?? promptPath;
+  return fileName.endsWith(".md") ? fileName.slice(0, -".md".length) : fileName;
 };
 
 export type TokenUsageLedgerAnalysis = {
@@ -29,7 +31,7 @@ export type TokenUsageLedgerAnalysis = {
 };
 
 export const tokenUsageLedgerRelativePath = (planName: string): string =>
-  rel('.ai', 'artifacts', planName, 'logs', 'token-usage.jsonl');
+  rel(".ai", "artifacts", planName, "logs", "token-usage.jsonl");
 
 export const analyzeTokenUsageLedger = async (
   rootDir: string,
@@ -38,7 +40,7 @@ export const analyzeTokenUsageLedger = async (
   const ledgerPath = tokenUsageLedgerRelativePath(planName);
   let content: string;
   try {
-    content = await readFile(`${rootDir}/${ledgerPath}`, 'utf8');
+    content = await readFile(`${rootDir}/${ledgerPath}`, "utf8");
   } catch {
     return { ledgerPath };
   }
@@ -61,14 +63,16 @@ export const analyzeTokenUsageLedger = async (
   }
 
   const promptPath =
-    typeof latest.promptPath === 'string' && latest.promptPath.length > 0
+    typeof latest.promptPath === "string" && latest.promptPath.length > 0
       ? latest.promptPath
-      : '(unknown)';
+      : "(unknown)";
 
   return {
     ledgerPath,
     latestStage: {
-      iteration: isFiniteNumber(latest.iteration) ? latest.iteration : undefined,
+      iteration: isFiniteNumber(latest.iteration)
+        ? latest.iteration
+        : undefined,
       promptPath,
       promptAction: promptActionFromPath(promptPath),
       totalInputTokens: isFiniteNumber(latest.stageInputTokens)
@@ -79,8 +83,12 @@ export const analyzeTokenUsageLedger = async (
         : undefined,
     },
     cumulative: {
-      inputTokens: isFiniteNumber(latest.inputTokens) ? latest.inputTokens : undefined,
-      totalTokens: isFiniteNumber(latest.totalTokens) ? latest.totalTokens : undefined,
+      inputTokens: isFiniteNumber(latest.inputTokens)
+        ? latest.inputTokens
+        : undefined,
+      totalTokens: isFiniteNumber(latest.totalTokens)
+        ? latest.totalTokens
+        : undefined,
     },
   };
 };

@@ -1,13 +1,12 @@
 # Review Implemented Changes
 
-Review actual implementation evidence only. This is never a pre-execution
-review of a spec or plan.
+Review actual implementation evidence only. Read `.ai/AGENTS.md`, the saved
+plan, finalized spec when declared, required flow artifacts, actual repository
+diffs, and validation evidence.
 
-## MEDIUM Automatic Review
+## MEDIUM Review
 
-After MEDIUM validation, inspect the plan-owned actual diff, linked spec,
-required flow artifacts when applicable, current Git state, and validation
-evidence. Write `.ai/artifacts/<plan-name>/review.md` with exactly:
+Save `.ai/artifacts/<plan-name>/review.md` with exactly:
 
 ```md
 # Implementation Review: <plan-name>
@@ -18,33 +17,30 @@ Ready to complete | Fix required | Blocked
 
 ## Scope Reviewed
 
-<actual diff paths and plan scope>
+<actual diff paths grouped by declared repository>
 
 ## Validation Evidence
 
-* <command and result>
+- <required command and result>
+- <optional deferred check, reason, and risk when applicable>
 
 ## Findings
 
-* None | <actionable finding>
+- None | <actionable finding>
 
 ## Required Next Action
 
 <complete | in-scope fix and re-review | exact blocker resolution>
 ```
 
-Use `Ready to complete` only when no required in-scope fix remains. Use `Fix
-required` for actionable defects. Use `Blocked` only for a true external,
-missing-input, or unresolved-risk blocker.
+Use `Ready to complete` only when no required in-scope fix or failed required
+validation remains. `Blocked` is limited to a true external or missing-input
+blocker.
 
-## HIGH-GOAL Task Review
+## HIGH Task Review
 
-During an active `/goal`, review each completed task's actual diff against its
-plan scope and validation before committing it. When the task declares
-`Delegation: REQUIRED`, also verify that every required role completed its
-saved bounded assignment and that its concise outcome is recorded. Missing or
-failed required delegation blocks the task; do not commit or continue alone.
-Record the review, validation, and delegation evidence in the HIGH-GOAL
-handoff or task record, then make the task-scoped commit before beginning the
-next task. Do not reuse MEDIUM's single `review.md` as the HIGH task-review
-protocol.
+During an explicitly invoked `/goal`, review each task's actual diff against
+its single-repository ownership, finalized spec, exact validation, and required
+delegation evidence. Missing or failed required evidence blocks the task.
+Record the result in the goal handoff, then follow the unchanged task commit
+protocol in `.ai/prompts/goal-checkpoint.md` before starting the next task.

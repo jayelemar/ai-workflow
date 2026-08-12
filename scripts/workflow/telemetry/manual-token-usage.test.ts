@@ -331,7 +331,10 @@ test("runManualTokenUsageCli prefers CODEX_HOME when --codex-home is omitted", a
       .trim()
       .split(/\r?\n/)
       .filter(Boolean);
-    const record = JSON.parse(line) as { sessionId: string; sessionFilePath: string };
+    const record = JSON.parse(line) as {
+      sessionId: string;
+      sessionFilePath: string;
+    };
     assert.equal(record.sessionId, "session-2");
     assert.equal(
       record.sessionFilePath,

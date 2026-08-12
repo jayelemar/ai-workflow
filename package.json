@@ -1,0 +1,20 @@
+{
+  "name": "@local/ai-workflow",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20.20.2"
+  },
+  "packageManager": "pnpm@10.34.4",
+  "scripts": {
+    "health": "node scripts/maintenance/health-check.mjs",
+    "health:full": "node scripts/maintenance/health-check.mjs --full",
+    "test:focused": "node --import tsx --test scripts/maintenance/health-check.test.mjs scripts/workflow/stage-contract.test.mjs",
+    "test:all": "node --import tsx --test scripts/maintenance/health-check.test.mjs scripts/models/update-agent-models.test.mjs scripts/workflow/stage-contract.test.mjs scripts/workflow/telemetry/manual-token-usage.test.ts"
+  },
+  "devDependencies": {
+    "prettier": "3.9.6",
+    "tsx": "4.23.12"
+  }
+}

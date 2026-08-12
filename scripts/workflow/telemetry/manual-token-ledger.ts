@@ -10,7 +10,11 @@ import {
   defaultCodexHome,
   detectLatestSessionSnapshot,
 } from "./manual-token-sessions.ts";
-import { addTotals, subtractTotals, zeroTotals } from "./manual-token-totals.ts";
+import {
+  addTotals,
+  subtractTotals,
+  zeroTotals,
+} from "./manual-token-totals.ts";
 
 export { parseSessionTokenSnapshot } from "./session-snapshot.ts";
 export {
@@ -245,7 +249,8 @@ export const appendManualTokenUsageCheckpoint = async ({
   if (
     latestManualCheckpoint &&
     latestManualCheckpoint.manualStage === stage &&
-    latestManualCheckpoint.sessionTotalTokens === sessionSnapshot.totals.totalTokens
+    latestManualCheckpoint.sessionTotalTokens ===
+      sessionSnapshot.totals.totalTokens
   ) {
     return {
       ok: true,

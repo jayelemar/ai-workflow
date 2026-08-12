@@ -4,10 +4,12 @@ Create or refresh the portable checkpoint for a HIGH-GOAL work item. Use this
 during initial HIGH planning to create the required handoff, and later before
 `/goal pause`, ending a session, or switching provider or account.
 
+Read `.ai/AGENTS.md` before inspecting or writing checkpoint context.
+
 ## Input
 
 - Goal name: a stable kebab-case identifier chosen when the goal starts
-- Exact goal: the current approved objective
+- Exact goal: the current saved objective
 
 If the goal name is missing or not kebab-case, STOP and request a stable
 identifier before writing a checkpoint.
@@ -20,7 +22,7 @@ identifier before writing a checkpoint.
   repository state, `Awaiting explicit /goal invocation` as the blocker, and
   the exact `/goal <description> <plan-file>` next action.
 - Do not create workflow state, event logs, sidecars, or a MEDIUM review
-  artifact. The linked approved spec and HIGH plan are required inputs, not
+  artifact. The linked finalized spec and saved HIGH plan are required inputs, not
   artifacts to recreate here.
 - Create or refresh only `.ai/artifacts/<goal-name>/goal-handoff.md`.
 - Inspect current repository state read-only as needed to record verified
@@ -44,11 +46,11 @@ goal-handoff@1
 
 ## Spec
 
-<linked approved feature spec path>
+<linked finalized feature or bugfix spec path>
 
 ## Plan
 
-<linked approved manual plan path>
+<linked saved plan path>
 
 ## Repository State
 
@@ -64,7 +66,7 @@ goal-handoff@1
 
 ## Task Commit Protocol
 
-For every implementation task in the linked approved plan:
+For every implementation task in the linked saved plan:
 
 Process tasks serially. Never combine two planned tasks in one commit, even
 when their changes are technically compatible. Do not start the next task

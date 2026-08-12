@@ -74,7 +74,9 @@ export const runManualTokenUsageCli = async (
     planName: args.planName,
     stage: args.stage,
     sessionId: args.sessionId,
-    codexHome: args.codexHome ? path.resolve(args.codexHome) : defaultCodexHome(),
+    codexHome: args.codexHome
+      ? path.resolve(args.codexHome)
+      : defaultCodexHome(),
   });
 
   if (!result.ok) {

@@ -1,7 +1,21 @@
-@../.ai/AGENTS.md
+# Codex Project Instruction Setup
 
-# Local Project Rules
+Codex discovers project instructions from `AGENTS.md` at the repository root
+and then from nested directories toward the working directory. `.ai/AGENTS.md`
+is workflow source, so active prompts read it directly.
 
-- Use `.ai/instructions/index.md` as the repository instruction routing entrypoint.
-- Keep project-specific instruction routing and architecture guidance in `.ai/instructions/`.
-- Treat `.ai/AGENTS.md` as the shared behavior source for projects using this workflow starter kit.
+Projects that want automatic discovery may add this optional repository-root
+template:
+
+```md
+# Repository AI Instructions
+
+Read and follow `.ai/AGENTS.md` before work.
+Use `.ai/instructions/index.md` to load only instructions relevant to the
+request.
+```
+
+Use the repository-root template for automatic discovery; no tool-specific
+indirection file is required.
+
+Reference: <https://learn.chatgpt.com/docs/agent-configuration/agents-md>

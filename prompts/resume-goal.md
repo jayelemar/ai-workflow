@@ -3,6 +3,8 @@
 Resume a HIGH-GOAL work item from its portable companion artifact. This is an
 analysis-only resume step; it does not write files or workflow state.
 
+Read `.ai/AGENTS.md` before loading the handoff.
+
 ## Required Behavior
 
 1. Read `.ai/artifacts/<goal-name>/goal-handoff.md`.
@@ -21,7 +23,7 @@ analysis-only resume step; it does not write files or workflow state.
 - Never infer progress beyond verified entries in the handoff and current Git
   state.
 
-If the handoff, linked spec, or linked manual plan is missing or incomplete,
+If the handoff, linked finalized spec, or linked saved plan is missing or incomplete,
 STOP and request the relevant artifact; do not create workflow state as a
 fallback during resume.
 

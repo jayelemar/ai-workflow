@@ -18,7 +18,7 @@ Standardize safe, observable, forward-only production data and schema changes.
 - Recover a pushed migration failure with an operator-approved forward recovery or a documented staging repair procedure; do not silently rewrite the already-published migration.
 - Use small, forward-only migrations with one clear compatibility objective.
 - For every production-affecting migration, document compatibility, backfill, rollout order, monitoring, rollback or recovery, and validation evidence.
-- Design additive-compatible changes before removals: add new structure, deploy compatible readers and writers, backfill safely, verify, then remove only in a later approved migration.
+- Design additive-compatible changes before removals: add new structure, deploy compatible readers and writers, backfill safely, verify, then remove only in a later finalized migration.
 - Make data backfills resumable, bounded, idempotent where practical, and observable.
 - Define rollback as a safe forward recovery when database rollback is unsafe or destructive.
 - Regenerate and validate dependent contracts or generated types when a migration changes them.

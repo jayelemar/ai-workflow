@@ -1,53 +1,43 @@
 # Execute Plan
 
-Run this prompt only when the user explicitly invokes:
+Run only when the user explicitly invokes:
 
 `execute <plan-file>`
 
-That invocation authorizes implementation from the saved plan. Read the plan,
-its saved spec when required, current Git state, and only the routed
-instructions that match the implementation scope.
+This command authorizes implementation of a saved LOW or MEDIUM
+`plan-manifest@2`. Read `.ai/AGENTS.md`, the plan, its finalized spec and flow
+artifacts when declared, current Git state in every declared repository, and
+only the project instructions routed for the implementation scope.
 
 ## Preconditions
 
-- The plan file must exist and declare `LOW` or `MEDIUM` execution.
-- LOW must contain its saved compact plan. MEDIUM must link to a readable saved
-  spec and plan. If either required artifact is missing, STOP and name it.
-- Preserve unrelated working-tree changes.
+- Every declared repository root and integration-base ref must resolve.
+- LOW requires its saved compact plan file; a conversational Plan-mode result
+  is not an execution input. MEDIUM requires a finalized typed spec.
+- Declared flow artifacts must be present and complete.
+- Preserve unrelated changes in every repository.
 
-## Execution Safeguards
+## Execution
 
-- Follow the plan and spec strictly. Do not start from a preview, handoff, or
-  informal approval.
-- If a material new requirement, dependency, risk, or scope change appears,
-  pause implementation. Update the affected spec and/or plan at the proper
-  stage, reclassify upward when required, then wait for the new explicit stage
-  invocation before resuming.
-- Run the plan's scoped validation before declaring implementation complete.
+- Follow the requested behavior, finalized spec, repository ownership, and plan
+  order strictly.
+- If a material new requirement, dependency, risk, or repository boundary
+  appears, stop. Return to the appropriate explicit spec or Plan-mode stage and
+  wait for a new execution command.
+- Run every required plan validation command. Optional external validation may
+  be deferred only under `.ai/AGENTS.md` disclosure rules.
 
-## Completion by Classification
+## Completion
 
-### LOW
+For LOW, self-check the actual diff, scope, required validation, declared
+repositories, and preserved unrelated work.
 
-Perform a concise self-check of the actual diff, plan scope, validation result,
-and untouched unrelated files. Report the validation and self-check outcome.
-LOW does not create a spec or independent review artifact.
+For MEDIUM, automatically run `.ai/prompts/review-changes.md` after validation
+and save `.ai/artifacts/<plan-name>/review.md` with exactly one status:
+`Ready to complete`, `Fix required`, or `Blocked`. Fix in-scope defects and
+repeat required validation/review; stop on a true blocker.
 
-### MEDIUM
+## Final Response
 
-After validation, automatically run `.ai/prompts/review-changes.md` against
-the actual diff. Save its complete result at:
-
-`.ai/artifacts/<plan-name>/review.md`
-
-Use exactly one status: `Ready to complete`, `Fix required`, or `Blocked`.
-
-- `Fix required`: make only in-scope fixes, rerun validation, then rerun and
-  overwrite the automatic review evidence.
-- `Blocked`: stop with the blocker and required next action in `review.md`.
-- `Ready to complete`: report completion with the validation and review path.
-
-## Final Output
-
-Report the changed scope, validation result, and either the LOW self-check or
-MEDIUM review artifact path.
+Report changed scope by repository, required validation results, deferred
+optional checks and risk, and either the LOW self-check or MEDIUM review path.

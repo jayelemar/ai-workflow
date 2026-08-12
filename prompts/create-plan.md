@@ -1,92 +1,83 @@
 # Create Plan
 
-Create one saved implementation plan for an already-classified request. This
-stage plans only; it does not implement or review speculative plans.
+Create one saved `plan-manifest@2` in Plan mode. This stage runs only when the
+user explicitly invokes plan creation after read-only intake and, for MEDIUM or
+HIGH, after the required spec and flow-artifact stages are finalized.
 
-## Input Contract
+## Input
 
-- `LOW`: the classifier result and repository evidence. Do not create a spec.
-- `MEDIUM` or `HIGH`: a complete saved spec at `.ai/specs/<name>.spec.md`.
-- The selected classification: `LOW`, `MEDIUM`, or `HIGH`.
+```text
+Classification: LOW | MEDIUM | HIGH
+Spec: .ai/specs/<name>.spec.md | N/A: LOW
+Flow artifacts: .ai/artifacts/<name>/ | N/A: <concrete reason>
+```
 
-If a required input is missing or unreadable, STOP and identify its exact path
-and purpose. Do not infer behavior that belongs in a missing spec.
+Read `.ai/AGENTS.md`, `.ai/instructions/index.md`, the routed workflow,
+reasoning, testing, and delivery instructions, plus every finalized input.
+Inspect repository facts needed for concrete ownership, contracts, dependencies,
+validation, Git roots, and integration bases.
 
-## Stage Boundaries
+## Preconditions
 
-- LOW planning may begin after the classifier selects LOW. Save a compact plan
-  before any implementation starts.
-- MEDIUM and HIGH planning begin in Plan mode after the intake conversation
-  has saved the required spec.
-- Saving the plan does not begin implementation. The later explicit
-  `execute <plan-file>` or `/goal <description> <plan-file>` invocation is the
-  authorization boundary.
-- HIGH planning must create the initial goal handoff at
-  `.ai/artifacts/<plan-name>/goal-handoff.md` alongside the saved plan. It is
-  a required execution artifact, not an approval gate; `/goal <description>
-  <plan-file>` remains the only execution authorization.
-- Do not require a separate approval, a plan preview, or a pre-execution plan
-  review.
+- LOW uses classifier evidence and does not create a spec.
+- MEDIUM/HIGH requires one readable `feature-spec@1` or `bugfix-spec@1` with
+  `Open Decisions` equal to `None`.
+- When flow tracing is required, both `user-journey@1` and
+  `implementation-map@1` must be readable and complete.
+- Stop for missing desired behavior, unresolved decisions, or an integration
+  base that cannot be identified. Do not infer or silently default it.
 
-## Instruction Loading
+## Planning Contract
 
-Read `.codex/AGENTS.md`, `.ai/instructions/index.md`, the routed workflow,
-reasoning, flow-trace, testing, and delivery instructions, plus the required
-spec when one exists. Inspect only the repository facts needed to create a
-concrete plan.
+Use `.ai/templates/plan.template.md` exactly and save:
 
-## Plan Requirements
+`.ai/plans/<plan-name>.md`
 
-Use `.ai/templates/plan.template.md` exactly.
+- Declare every Git repository by stable ID, explicit root, and explicit
+  integration-base ref. A repository root must resolve to a Git worktree.
+- Do not use a hard-coded base candidate order. Save the base established by
+  repository evidence or supplied by the user.
+- Reconcile desired behavior with current ownership, public/internal contracts,
+  framework conventions, data and service boundaries, and exact validation.
+- Do not add behavior beyond the finalized spec or LOW request.
+- LOW plans stay compact. MEDIUM/HIGH plans include sufficient ownership and
+  validation to execute without new behavior decisions.
+- A cross-repository outcome must be represented by dependent steps. For HIGH,
+  each task declares exactly one repository ID; split any cross-repository task
+  into dependent tasks before saving.
+- Every HIGH task declares owned files, exact validation, commit purpose, and a
+  deterministic delegation decision of `REQUIRED` or `NONE`. Never use
+  `OPTIONAL` or defer the decision to execution.
+- Use `REQUIRED` for every applicable rule: independent evidence across three
+  or more source areas requires an `investigator`; implementation isolated
+  from every other task with no shared file ownership requires a `builder`;
+  authentication, authorization, payments, secrets, migrations, destructive
+  behavior, or external security boundaries require a `reviewer`.
+- Create no workflow state, sidecar, event log, preview, validator artifact, or
+  progress record.
 
-- The saved plan must name its classification and source spec or `N/A: LOW
-  plans do not use a spec`.
-- LOW plans are compact: concrete scope, ordered implementation steps, focused
-  validation, and a completion self-check.
-- MEDIUM and HIGH plans must be complete enough to execute without inventing
-  behavior. Apply the flow-trace contract when it is required; otherwise use
-  its exact `N/A` entries.
-- Before saving every task, reconcile its required behavior, public contracts,
-  framework routing conventions, and owned-file list. Include every
-  implementation artifact that is structurally required to deliver the saved
-  behavior—even when the artifact is implied by a framework convention rather
-  than named in the spec. For example, an exact nested Next.js API path must
-  own its corresponding nested `route.ts` file and focused test. Treat these
-  required artifacts as part of the task boundary, not as a later material
-  scope discovery. Do not use this rule to add unrelated refactors or behavior.
-- HIGH plans split independently implementable outcomes into task-scoped
-  items, each with files, validation, a conventional-commit purpose, and a
-  deterministic delegation decision. For every HIGH task, apply every matching
-  template rule and save `Delegation: REQUIRED` with the required roles,
-  bounded assignment, and expected result; otherwise save `Delegation: NONE`
-  with the exact reason. Do not use `OPTIONAL` or defer this decision to
-  execution. The HIGH-GOAL task protocol governs execution.
-- For HIGH only, create the initial goal handoff using
-  `.ai/prompts/goal-checkpoint.md`'s exact format. It must link the saved spec
-  and plan, use the kebab-case `<plan-name>` as the goal name, record the
-  clean initial repository state and `No implementation started` in verified
-  progress, include the full task commit protocol, list `Awaiting explicit
-  /goal invocation` as its only blocker, and name the `/goal <description>
-  <plan-file>` invocation as its next action. Do not create a handoff for LOW
-  or MEDIUM plans. Use the checkpoint's required content and task protocol,
-  not its standalone final-output instruction; plan creation remains one stage
-  and returns the create-plan final output.
-- Do not create workflow state, event logs, sidecars, previews, or progress
-  records. The required HIGH goal handoff is the sole exception.
-- Record a MEDIUM review path at `.ai/artifacts/<plan-name>/review.md`; it is
-  created automatically after implemented-diff review, not while planning.
+## HIGH Handoff
 
-## Scope and Reclassification
+For HIGH only, create `.ai/artifacts/<plan-name>/goal-handoff.md` using
+`.ai/prompts/goal-checkpoint.md`. Link the finalized spec and saved plan, record
+the current repository state and `No implementation started`, use `Awaiting
+explicit /goal invocation` as the only blocker, and name `/goal <description>
+<plan-file>` as the next action. Use the checkpoint content and unchanged HIGH
+commit protocol, then return to this prompt. Do not create a handoff for LOW or
+MEDIUM.
 
-The spec defines behavior; the plan defines execution. If planning discovers a
-material risk, dependency, or scope change that invalidates the class or spec,
-stop, update the affected planning artifact in its correct stage, and escalate
-when required. Do not silently downgrade a prior classification.
+## Stage Boundary
 
-## Final Output
+Saving a plan does not implement it. The next stage must be explicitly invoked:
 
-Return only:
+- LOW/MEDIUM: `execute .ai/plans/<plan-name>.md`
+- HIGH: `/goal <description> .ai/plans/<plan-name>.md`
+
+Do not add a preview, approval, or plan-validation gate. Manual token telemetry
+is optional and never affects the saved plan or next stage.
+
+## Final Response
+
+Return exactly:
 
 `Plan saved to .ai/plans/<plan-name>.md [<classification>]`
-
-Replace `<classification>` with the selected `LOW`, `MEDIUM`, or `HIGH` value.

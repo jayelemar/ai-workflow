@@ -1,151 +1,326 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { access, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-const workflowRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const readSource = (relativePath) => readFile(path.join(workflowRoot, relativePath), "utf8");
+const workflowRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../..",
+);
+const readSource = (relativePath) =>
+  readFile(path.join(workflowRoot, relativePath), "utf8");
 
-test("classifier exposes only LOW, MEDIUM, and HIGH and stops for uncertainty", async () => {
-  const source = await readSource("prompts/select-workflow.md");
-  assert.match(source, /`LOW`/);
-  assert.match(source, /`MEDIUM`/);
-  assert.match(source, /`HIGH`/);
-  assert.match(source, /Classification: LOW \| MEDIUM \| HIGH/);
-  assert.match(source, /STOP and ask for the exact missing decision input/);
-  assert.match(source, /Escalate immediately/);
-  assert.match(source, /spec in the intake conversation/);
-  assert.match(source, /Plan mode/);
-  assert.match(source, /Agent mode/);
-});
-
-test("feature and bug intake run the universal classifier", async () => {
-  const [feature, bug, generic] = await Promise.all([
-    readSource("wrappers/feature-intake.md"),
-    readSource("wrappers/bug-intake-rca.md"),
-    readSource("wrappers/select-workflow.md"),
-  ]);
-  for (const source of [feature, bug]) {
-    assert.match(source, /exact classification, escalation,\s+LOW-to-MEDIUM safeguard, uncertainty stop, and next-stage rules/);
-    assert.match(source, /Classification: LOW \| MEDIUM \| HIGH/);
-    assert.doesNotMatch(source, /Approval Brief/);
-    assert.match(source, /same intake conversation/);
+const pathExists = async (relativePath) => {
+  try {
+    await access(path.join(workflowRoot, relativePath));
+    return true;
+  } catch {
+    return false;
   }
-  assert.match(generic, /neither a feature\s+nor a bug, regression, or incident/);
-});
+};
 
-test("plans require explicit authorization and LOW-to-MEDIUM safeguard", async () => {
-  const [plan, flow, template] = await Promise.all([
+const collectFiles = async (relativeDirectory, predicate) => {
+  const absoluteDirectory = path.join(workflowRoot, relativeDirectory);
+  const files = [];
+  for (const entry of await readdir(absoluteDirectory, {
+    withFileTypes: true,
+  })) {
+    const relativePath = path.posix.join(relativeDirectory, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...(await collectFiles(relativePath, predicate)));
+    } else if (predicate(relativePath)) {
+      files.push(relativePath);
+    }
+  }
+  return files.sort();
+};
+
+test("workflow uses explicit stages and LOW saves a reference plan", async () => {
+  const [agents, selection, workflow, createPlan, execute] = await Promise.all([
+    readSource("AGENTS.md"),
+    readSource("prompts/select-workflow.md"),
+    readSource("instructions/shared/workflow-state.md"),
     readSource("prompts/create-plan.md"),
-    readSource("instructions/shared/flow-trace-artifacts.md"),
-    readSource("templates/plan.template.md"),
-  ]);
-  assert.match(
-    plan,
-    /`execute <plan-file>` or `\/goal <description> <plan-file>` invocation is the\s+authorization boundary/,
-  );
-  assert.match(plan, /`LOW`: the classifier result and repository evidence\. Do not create a spec/);
-  assert.match(template, /LOW plans do not use a spec/);
-  assert.match(flow, /LOW must\s+escalate before planning/);
-  assert.match(template, /MEDIUM review/);
-  assert.match(plan, /Plan mode after the intake conversation/);
-  assert.match(plan, /Plan saved to \.ai\/plans\/<plan-name>\.md \[<classification>\]/);
-  assert.match(template, /Plan saved to \.ai\/plans\/<plan-name>\.md \[<classification>\]/);
-  assert.match(plan, /selected `LOW`, `MEDIUM`, or `HIGH` value/);
-});
-
-test("execution requires post-implementation safeguards and review statuses", async () => {
-  const [execute, review] = await Promise.all([
     readSource("prompts/execute-plan.md"),
-    readSource("prompts/review-changes.md"),
   ]);
-  assert.match(execute, /plan's scoped validation/);
-  assert.match(execute, /concise self-check/);
-  assert.match(execute, /\.ai\/artifacts\/<plan-name>\/review\.md/);
-  for (const status of ["Ready to complete", "Fix required", "Blocked"]) {
-    assert.match(execute, new RegExp(status));
-    assert.match(review, new RegExp(status));
+
+  assert.match(selection, /This invocation is read-only/);
+  assert.match(
+    selection,
+    /explicitly invoke `\.ai\/prompts\/generate-spec\.md`/i,
+  );
+  assert.match(selection, /must save `\.ai\/plans\/<plan-name>\.md`/);
+  assert.match(
+    selection,
+    /entering Plan mode or describing a plan in conversation is not enough/i,
+  );
+  assert.match(workflow, /read-only intake/i);
+  assert.match(workflow, /explicitly invoked stage/i);
+  assert.match(workflow, /LOW cannot execute from a conversational plan/);
+  assert.match(createPlan, /in Plan mode/);
+  assert.match(createPlan, /save:\s*\n\n`\.ai\/plans\/<plan-name>\.md`/);
+  assert.match(
+    execute,
+    /conversation(?:al)? Plan-mode result\s+is not an execution input/i,
+  );
+  assert.match(
+    agents,
+    /Planning occurs in Plan mode and always saves a\s+plan file, including for LOW/,
+  );
+
+  for (const command of [
+    "execute .ai/plans/<plan-name>.md",
+    "/goal <description> .ai/plans/<plan-name>.md",
+  ]) {
+    assert.match(createPlan, new RegExp(command.replace(/[./<>]/g, "\\$&")));
   }
-  assert.match(review, /before committing it/);
 });
 
-test("HIGH keeps task review and commit sequencing", async () => {
-  const [checkpoint, plan, review, template] = await Promise.all([
+test("one typed prompt owns feature and evidence-backed bugfix specs", async () => {
+  const spec = await readSource("prompts/generate-spec.md");
+
+  assert.match(spec, /Spec type: feature-spec@1 \| bugfix-spec@1/);
+  assert.match(spec, /feature-spec@1/);
+  assert.match(spec, /bugfix-spec@1/);
+  assert.match(spec, /root-cause analysis is mandatory/i);
+  assert.match(spec, /observed failure, affected boundary, causal mechanism/);
+  assert.match(
+    spec,
+    /A symptom, guess, temporal correlation, or desired\s+patch is not an RCA/,
+  );
+  assert.match(spec, /Evidence.*Root Cause Analysis/s);
+  assert.match(spec, /Open Decisions` must be exactly `None`/);
+  assert.match(spec, /Spec finalized at .*\[<spec-type>\]/);
+  assert.doesNotMatch(spec, /create a plan|begin implementation/i);
+});
+
+test("one flow stage creates user-journey@1 and implementation-map@1", async () => {
+  const [prompt, instruction] = await Promise.all([
+    readSource("prompts/generate-flow-artifacts.md"),
+    readSource("instructions/shared/flow-trace-artifacts.md"),
+  ]);
+
+  for (const source of [prompt, instruction]) {
+    assert.match(source, /user-journey@1/);
+    assert.match(source, /implementation-map@1/);
+    assert.match(source, /user-journey\.md/);
+    assert.match(source, /implementation-map\.md/);
+  }
+  for (const section of [
+    "Canonical Ownership",
+    "Contract and Data",
+    "Services",
+    "Validation",
+    "Open Decisions",
+  ]) {
+    assert.match(prompt, new RegExp(`## ${section}`));
+    assert.match(instruction, new RegExp(section));
+  }
+  assert.match(
+    prompt,
+    /Create one complete mapping for every user action and acceptance scenario/,
+  );
+  assert.equal(await pathExists("prompts/generate-user-flow.md"), false);
+  assert.equal(await pathExists("wrappers/generate-user-flow.md"), false);
+});
+
+test("plan-manifest@2 declares repositories, bases, and HIGH ownership", async () => {
+  const [createPlan, template, workflow] = await Promise.all([
+    readSource("prompts/create-plan.md"),
+    readSource("templates/plan.template.md"),
+    readSource("instructions/ai-workflow.md"),
+  ]);
+
+  for (const source of [createPlan, template, workflow]) {
+    assert.match(source, /plan-manifest@2/);
+    assert.match(source, /repository/i);
+    assert.match(source, /integration(?:-| )base/i);
+  }
+  assert.match(template, /## Repositories/);
+  assert.match(template, /### Repository: <repository-id>/);
+  assert.match(template, /[-*] Root: `<git-repository-root>`/);
+  assert.match(template, /[-*] Integration base: `<ref-or-commit>`/);
+  assert.match(template, /[-*] Repository: `<exactly-one-repository-id>`/);
+  assert.match(createPlan, /each task declares exactly one repository ID/);
+  assert.match(
+    createPlan,
+    /split any cross-repository task\s+into dependent tasks/,
+  );
+  assert.match(
+    template,
+    /Split cross-repository outcomes into dependent tasks/,
+  );
+});
+
+test("plan progress supports multiple declared repositories without fallback bases", async () => {
+  const progress = await readSource("prompts/plan-progress.md");
+
+  assert.match(progress, /Read every `## Repositories` entry/);
+  assert.match(progress, /For each stable repository ID/);
+  assert.match(
+    progress,
+    /declared `Root` and declared `Integration base` exactly/,
+  );
+  assert.match(progress, /across all declared\s+repositories/);
+  assert.match(progress, /repositories:\n--<repository-id>/);
+  assert.match(progress, /never try an\s+undeclared fallback base/i);
+  assert.doesNotMatch(progress, /origin\/(main|master|development)/);
+  assert.doesNotMatch(progress, /first available|candidate order/i);
+});
+
+test("HIGH keeps its reusable task commit protocol", async () => {
+  const [checkpoint, createPlan, review] = await Promise.all([
     readSource("prompts/goal-checkpoint.md"),
     readSource("prompts/create-plan.md"),
     readSource("prompts/review-changes.md"),
-    readSource("templates/plan.template.md"),
   ]);
-  assert.match(checkpoint, /Run the task's exact declared validation successfully/);
-  assert.match(checkpoint, /Review the task diff for regressions, out-of-scope files/);
-  assert.match(checkpoint, /Never combine two planned tasks in one commit/);
-  assert.match(checkpoint, /only the current task before starting the next task/);
-  assert.match(plan, /Do not use `OPTIONAL` or defer this decision to\s+execution/);
-  assert.match(template, /Delegation: `REQUIRED` \| `NONE`/);
-  assert.match(template, /investigator/);
-  assert.match(template, /builder/);
-  assert.match(template, /reviewer/);
-  assert.match(checkpoint, /If a required role\s+cannot run or lacks its result, STOP/);
-  assert.match(review, /Missing or\s+failed required delegation blocks the task/);
-});
 
-test("HIGH delegation uses role-specific models and bounded context", async () => {
-  const [checkpoint, template, readme, registry] = await Promise.all([
-    readSource("prompts/goal-checkpoint.md"),
-    readSource("templates/plan.template.md"),
-    readSource("README.md"),
-    readSource("config/agent-models.toml"),
-  ]);
-  assert.match(checkpoint, /\.ai\/config\/agent-models\.toml/);
-  assert.match(checkpoint, /Resolve each\s+role's `tier`/);
-  assert.doesNotMatch(checkpoint, /gpt-5\.6-(sol|terra)/);
+  for (const phrase of [
+    "Process tasks serially. Never combine two planned tasks in one commit",
+    "Run the task's exact declared validation successfully",
+    "Review the task diff for regressions, out-of-scope files",
+    "Stage only files owned by that task",
+    "Create exactly one local, conventional, task-specific Git commit",
+    "Confirm no remaining change owned by the completed task is left uncommitted",
+  ]) {
+    assert.match(
+      checkpoint,
+      new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+    );
+  }
   assert.match(
     checkpoint,
-    /required model is\s+unavailable, STOP the task as `Blocked`/,
+    /If a required role\s+cannot run or lacks its result, STOP the task as `Blocked`/,
   );
-  assert.match(template, /Agent runtime/);
-  assert.match(template, /bounded-context policy/);
-  assert.match(readme, /update-agent-models\.mjs/);
-  assert.doesNotMatch(readme, /gpt-5\.6-(sol|terra)/);
-  assert.match(registry, /\[roles\.parent\][\s\S]*tier = "frontier"/);
-  assert.match(registry, /\[roles\.investigator\][\s\S]*tier = "balanced"/);
-  assert.match(registry, /\[roles\.builder\][\s\S]*tier = "balanced"/);
-  assert.match(registry, /\[roles\.reviewer\][\s\S]*tier = "frontier"/);
+  assert.match(createPlan, /unchanged HIGH\s+commit protocol/);
+  assert.match(review, /unchanged task commit\s+protocol/);
 });
 
-test("HIGH planning creates a required initial handoff without authorizing execution", async () => {
-  const [workflow, plan, template, checkpoint] = await Promise.all([
-    readSource("instructions/ai-workflow.md"),
-    readSource("prompts/create-plan.md"),
-    readSource("templates/plan.template.md"),
-    readSource("prompts/goal-checkpoint.md"),
-  ]);
-  assert.match(plan, /HIGH planning must create the initial goal handoff/);
-  assert.match(plan, /\.ai\/artifacts\/<plan-name>\/goal-handoff\.md/);
-  assert.match(plan, /not its standalone final-output instruction/);
-  assert.match(template, /HIGH plans: `\.ai\/artifacts\/<plan-name>\/goal-handoff\.md`/);
-  assert.match(checkpoint, /initial HIGH planning/);
-  assert.match(workflow, /initial goal handoff alongside the plan/);
-  assert.match(workflow, /`\/goal <description> <plan-file>` remains the only execution authorization/);
-});
+test("wrappers remain thin input adapters", async () => {
+  const wrapperFiles = (
+    await collectFiles("wrappers", (file) => file.endsWith(".md"))
+  ).filter((file) => file !== "wrappers/README.md");
 
-test("HIGH delegation keeps terminal activity understandable without durable logs", async () => {
-  const [workflow, checkpoint, template, readme] = await Promise.all([
-    readSource("instructions/ai-workflow.md"),
-    readSource("prompts/goal-checkpoint.md"),
-    readSource("templates/plan.template.md"),
-    readSource("README.md"),
-  ]);
-  for (const source of [workflow, checkpoint, template, readme]) {
-    assert.match(source, /bounded scope/i);
+  for (const wrapperFile of wrapperFiles) {
+    const source = await readSource(wrapperFile);
+    const nonEmptyLines = source
+      .split("\n")
+      .filter((line) => line.trim()).length;
+    assert.match(source, /Use `.ai\/prompts\//, wrapperFile);
+    assert.ok(
+      nonEmptyLines <= 10,
+      `${wrapperFile} duplicates more than input adaptation`,
+    );
+    assert.doesNotMatch(
+      source,
+      /## (Rules|Validation|Final Response|Document Format)/,
+      wrapperFile,
+    );
+    assert.doesNotMatch(source, /Return only|STOP|Do not /, wrapperFile);
   }
-  assert.match(workflow, /terminal transcript/i);
-  assert.match(checkpoint, /root terminal/i);
-  assert.match(template, /Terminal visibility/);
-  assert.match(readme, /Delegation terminal visibility/);
-  assert.match(checkpoint, /before\s+waiting again/i);
-  assert.match(checkpoint, /never substitute `Interacted with` or `Waiting for agents`/);
-  assert.match(workflow, /must not\s+create a workflow artifact, runner state, event log/i);
-  assert.match(readme, /transport events/i);
+});
+
+test("active workflow source loads .ai/AGENTS.md directly", async () => {
+  const promptFiles = [
+    "prompts/select-workflow.md",
+    "prompts/generate-spec.md",
+    "prompts/generate-flow-artifacts.md",
+    "prompts/create-plan.md",
+    "prompts/execute-plan.md",
+    "prompts/review-changes.md",
+    "prompts/plan-progress.md",
+    "prompts/goal-checkpoint.md",
+    "prompts/resume-goal.md",
+  ];
+
+  for (const promptFile of promptFiles) {
+    assert.match(await readSource(promptFile), /\.ai\/AGENTS\.md/, promptFile);
+  }
+
+  const activeFiles = [
+    "AGENTS.md",
+    "README.md",
+    ...(await collectFiles("instructions", (file) => file.endsWith(".md"))),
+    ...(await collectFiles("prompts", (file) => file.endsWith(".md"))),
+    ...(await collectFiles("templates", (file) => file.endsWith(".md"))),
+    ...(await collectFiles("wrappers", (file) => file.endsWith(".md"))),
+  ];
+  const activeSource = (
+    await Promise.all(activeFiles.map((file) => readSource(file)))
+  ).join("\n");
+  assert.doesNotMatch(activeSource, /\.codex\/(\.?)AGENTS\.md/);
+  assert.match(await readSource("README.md"), /repository root/);
+});
+
+test("shared workflow source is project-neutral and free of retired state concepts", async () => {
+  const sharedFiles = await collectFiles("instructions/shared", (file) =>
+    file.endsWith(".md"),
+  );
+  const workflowFiles = [
+    "AGENTS.md",
+    "README.md",
+    "instructions/ai-workflow.md",
+    ...sharedFiles,
+    ...(await collectFiles("prompts", (file) => file.endsWith(".md"))),
+    ...(await collectFiles("templates", (file) => file.endsWith(".md"))),
+    ...(await collectFiles("wrappers", (file) => file.endsWith(".md"))),
+  ];
+  const source = (
+    await Promise.all(workflowFiles.map((file) => readSource(file)))
+  ).join("\n");
+  const sharedSource = (
+    await Promise.all(sharedFiles.map((file) => readSource(file)))
+  ).join("\n");
+
+  assert.doesNotMatch(
+    sharedSource,
+    /Gondoor|Mobii|Meteor|shadcn|Next\.js|route\.ts/i,
+  );
+  assert.doesNotMatch(
+    source,
+    /runner-managed|thin-plan(?:-v2)?|workflowState|sync-plan-artifacts/,
+  );
+  assert.doesNotMatch(source, /approved (spec|plan|objective|state)/i);
+  assert.doesNotMatch(source, /\.ai\/changelogs|\.changelog\.md/);
+});
+
+test("retired runner, validator, preview, and changelog paths are absent", async () => {
+  for (const retiredPath of [
+    "changelogs",
+    "instructions/shared/ai-workflow.md",
+    "prompts/manual-preview.md",
+    "prompts/plan-validator.md",
+    "scripts/workflow/runner",
+    "scripts/workflow/runner.spec.md",
+  ]) {
+    assert.equal(await pathExists(retiredPath), false, retiredPath);
+  }
+});
+
+test("local instruction index routes debugging, maintainability, and runbooks", async () => {
+  const [index, architecture] = await Promise.all([
+    readSource("instructions/index.md"),
+    readSource("instructions/architecture.md"),
+  ]);
+  for (const instruction of [
+    "shared/debugging.md",
+    "shared/maintainability.md",
+    "shared/documentation-runbooks.md",
+  ]) {
+    assert.match(index, new RegExp(instruction.replace(".", "\\.")));
+  }
+  assert.match(index, /`ai-workflow\.md`/);
+  assert.doesNotMatch(index, /`shared\/ai-workflow\.md`/);
+  assert.doesNotMatch(architecture, /Meteor/i);
+});
+
+test("private package pins the self-contained toolchain", async () => {
+  const packageJson = JSON.parse(await readSource("package.json"));
+  assert.equal(packageJson.private, true);
+  assert.equal(packageJson.engines.node, ">=20.20.2");
+  assert.equal(packageJson.packageManager, "pnpm@10.34.4");
+  assert.equal(packageJson.devDependencies.prettier, "3.9.6");
+  assert.equal(packageJson.devDependencies.tsx, "4.23.12");
+  assert.equal(await pathExists("pnpm-lock.yaml"), true);
 });

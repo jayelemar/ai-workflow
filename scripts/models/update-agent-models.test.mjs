@@ -62,7 +62,10 @@ test("latest model guidance resolves frontier and balanced tiers", () => {
     balanced: "gpt-5.7-terra",
   });
   assert.throws(
-    () => resolveLatestTiers(latestModelMarkdown.replaceAll("gpt-5.7-terra", "balanced-model")),
+    () =>
+      resolveLatestTiers(
+        latestModelMarkdown.replaceAll("gpt-5.7-terra", "balanced-model"),
+      ),
     /balanced model/,
   );
 });

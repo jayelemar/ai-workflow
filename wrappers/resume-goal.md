@@ -1,9 +1,5 @@
-# Resume Goal Wrapper
+# Resume Goal
 
-Use: `.ai/prompts/resume-goal.md`
+Use `.ai/prompts/resume-goal.md`.
 
-Goal name:
-`<stable-kebab-case-goal-name>`
-
-For Codex, restore the saved objective with `/goal` after reading the handoff.
-Other providers use the same artifact as their starting context.
+Goal name: `<stable-kebab-case-name>`
