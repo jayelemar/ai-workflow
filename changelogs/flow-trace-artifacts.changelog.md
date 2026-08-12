@@ -1,5 +1,10 @@
 # Flow-Trace Artifact Instruction Changelog
 
+## v1.3 — 2026-08-12
+
+* Updated the atomic-task contract reference to the shared AI workflow
+  instruction path.
+
 ## v1.2 — 2026-07-19
 
 * Replaced duplicated atomic-task checks with a reference to the canonical AI

@@ -1,5 +1,5 @@
-Version: 1.2
-Last Updated: 2026-07-19
+Version: 1.3
+Last Updated: 2026-08-12
 
 # Flow-Trace Artifact Instructions
 
@@ -101,7 +101,7 @@ creation:
 4. if flow-trace artifacts are not required:
    - write the required `N/A: <concrete reason>` values
 5. before returning a draft plan, apply the complete atomic task and commit
-   contract in `.ai/instructions/ai-workflow.md`; verify each
+   contract in `.ai/instructions/shared/ai-workflow.md`; verify each
    implementation-map row has implementation and validation coverage.
 6. auto-correct missing action rows, task-contract defects, and under-scoped behavior
    ownership with one bounded repair pass when possible

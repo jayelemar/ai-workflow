@@ -45,7 +45,7 @@ Static files inspected:
 - `.codex/AGENTS.md`
 - `.ai/AGENTS.md`
 - `.ai/instructions/index.md`
-- `.ai/instructions/ai-workflow.md`
+- `.ai/instructions/shared/ai-workflow.md`
 - `.ai/scripts/workflow/runner.ts`
 - `.ai/scripts/workflow/**/*.ts`
 - `.ai/prompts/*.md`

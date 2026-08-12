@@ -23,7 +23,7 @@ Ensure the plan is:
 Read:
 
 * `.codex/AGENTS.md`
-* `.ai/instructions/ai-workflow.md`
+* `.ai/instructions/shared/ai-workflow.md`
 * `.ai/instructions/shared/workflow-state.md`
 * `.ai/instructions/shared/flow-trace-artifacts.md`
 * runner-owned context snapshot `.ai/artifacts/<plan-name>/state/context.md` as the primary current-state source

@@ -32,7 +32,7 @@ Detached `HEAD` and branches not listed above may continue.
 Read:
 
 - `.codex/AGENTS.md`
-- `.ai/instructions/ai-workflow.md`
+- `.ai/instructions/shared/ai-workflow.md`
 - `.ai/instructions/shared/reasoning-quality.md`
 - `.ai/instructions/shared/flow-trace-artifacts.md`
 - relevant `.ai/instructions/**/*.md`

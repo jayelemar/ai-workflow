@@ -13,6 +13,7 @@ Tracked workflow source:
 - `instructions/shared/security.md`
 - `instructions/shared/testing.md`
 - `instructions/shared/workflow-state.md`
+- `instructions/shared/ai-workflow.md`
 - `instructions/shared/flow-trace-artifacts.md`
 - `changelogs/security.changelog.md`
 - `changelogs/testing.changelog.md`
@@ -355,19 +356,20 @@ Runner expectations:
 
 ### How The Runner Works
 
-The runner reads the plan state machine and selects the next prompt from the
-plan `Status` and `Next Action`.
+The runner reads the canonical `workflowState` from the plan manifest and its
+`workflow.json` sidecar, verifies that both values match, and selects the stage
+prompt from that state.
 
 Common stages:
 
-- `draft + sync-plan-artifacts`
-- `draft + plan-validator`
-- `approved + execute-plan`
-- `active + execute-plan`
-- `review + review-plan`
-- `blocked + unblock-plan`
-- `reopening + reopen-plan`
-- `completed + commit-summary`
+- `draft-artifact-sync` → `sync-plan-artifacts`
+- `draft-validation` → `plan-validator`
+- `approved` → `execute-plan`
+- `active` → `execute-plan`
+- `review` → `review-changes`
+- `blocked` → `unblock-plan`
+- `reopening` → `reopen-plan`
+- `completed` → `commit-summary`
 
 Default stage routing:
 
@@ -384,8 +386,8 @@ Default stage routing:
 
 Notes:
 
-- `review + review-plan` remains the public review entrypoint.
-- The runner runs one combined harness review through `review-changes`.
+- The `review` state runs one combined harness review through
+  `review-changes`.
 - Harness prompts use native `.ai/instructions/shared/*` guidance for reasoning,
   debugging, testing, and workflow state. Additional review, when desired, is a
   separate manual decision outside the default runner review path.

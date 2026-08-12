@@ -10,6 +10,7 @@ const REQUIRED_SOURCE_PATHS = [
   ".ai/AGENTS.md",
   ".ai/.gitignore",
   ".ai/instructions",
+  ".ai/instructions/shared/ai-workflow.md",
   ".ai/changelogs",
   ".ai/wrappers",
   ".ai/prompts",

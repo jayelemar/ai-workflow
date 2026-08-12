@@ -351,7 +351,7 @@ test("plan creation and validation define atomic runner task savepoints", async 
   const prompt = await readWorkflowPrompt("create-plan.md");
   const template = await readPlanTemplate();
   const validator = await readWorkflowPrompt("plan-validator.md");
-  const workflowInstructions = await readInstruction("ai-workflow.md");
+  const workflowInstructions = await readInstruction("shared/ai-workflow.md");
   const flowInstructions = await readInstruction(
     "shared/flow-trace-artifacts.md",
   );
@@ -581,7 +581,7 @@ test("workflow docs expose spec to user-journey artifact to plan to runner flow"
 
 test("workflow-state docs include the sync-plan-artifacts draft loop", async () => {
   const workflowState = await readInstruction("shared/workflow-state.md");
-  const aiWorkflow = await readInstruction("ai-workflow.md");
+  const aiWorkflow = await readInstruction("shared/ai-workflow.md");
 
   assert.match(workflowState, /sync-plan-artifacts/);
   assert.match(workflowState, /draft-artifact-sync/i);

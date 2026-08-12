@@ -57,7 +57,7 @@ canonical state machine.
 - `.ai/prompts/manual-preview.md`
 - `.ai/scripts/workflow/runner.ts`
 - `.ai/scripts/workflow/runner/__tests__/integration/runner.test.ts`
-- `.ai/instructions/ai-workflow.md`
+- `.ai/instructions/shared/ai-workflow.md`
 - `.ai/templates/plan.template.md`
 - `.ai/wrappers/README.md`
 - `.ai/README.md`
