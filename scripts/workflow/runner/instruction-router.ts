@@ -1,7 +1,8 @@
-const instruction = (...segments: string[]) => [".ai", "instructions", ...segments].join("/");
+const instruction = (...segments: string[]) =>
+  [".ai", "instructions", ...segments].join("/");
 
 const orderedInstructionPaths = [
-  instruction("ai-workflow.md"),
+  instruction("shared", "ai-workflow.md"),
   instruction("shared", "workflow-state.md"),
   instruction("shared", "security.md"),
   instruction("shared", "security-observability.md"),
@@ -11,14 +12,9 @@ const orderedInstructionPaths = [
   instruction("shared", "performance-observability.md"),
   instruction("shared", "documentation-runbooks.md"),
   instruction("shared", "delivery-hygiene.md"),
+  instruction("shared", "wcag.md"),
   instruction("architecture.md"),
   instruction("ui.md"),
-  instruction("auth.md"),
-  instruction("react-query.md"),
-  instruction("data-services.md"),
-  instruction("supabase.md"),
-  instruction("gondoor.md"),
-  instruction("maps.md"),
 ] as const;
 
 const isTestPath = (filePath: string) =>
@@ -32,35 +28,23 @@ const isAuthPath = (filePath: string) =>
     filePath,
   );
 
-const isMapPath = (filePath: string) =>
-  filePath.startsWith("src/components/shared/maps/") ||
-  /(^|\/)(geofence|location-map|attendance-map|map-preview)(\/|\.|-)/i.test(
-    filePath,
-  );
-
-const isGondoorPath = (filePath: string) =>
-  filePath.startsWith("src/lib/gondoor/") ||
-  filePath.startsWith("src/features/gondoor/") ||
-  filePath.startsWith("src/app/api/gondoor/");
-
-const isDataServicePath = (filePath: string) =>
-  filePath.startsWith("src/services/") ||
-  /^src\/features\/[^/]+\/service\.ts$/i.test(filePath) ||
-  filePath.startsWith("src/types/") ||
-  filePath === "src/lib/supabaseClient.ts";
-
 const isUiPath = (filePath: string) =>
-  filePath.startsWith("src/app/") ||
+  (filePath.startsWith("src/app/") &&
+    !filePath.startsWith("src/app/api/")) ||
   filePath.startsWith("src/components/") ||
-  /^src\/features\/[^/]+\/components\//.test(filePath);
+  /^src\/features\/[^/]+\/components\//.test(filePath) ||
+  filePath === "components.json";
+
+const isMigrationPath = (filePath: string) =>
+  /(^|\/)(migration|migrations|schema)(\/|\.|-)/i.test(filePath);
 
 const isProductionSourcePath = (filePath: string) =>
   filePath.startsWith("src/") && !isTestPath(filePath);
 
 /**
  * Mirrors .ai/instructions/index.md for the current single-app repository.
- * Callers pass concrete plan-owned paths, so no obsolete monorepo heuristics
- * can silently enter an Active Context Packet.
+ * Callers pass concrete plan-owned paths, so obsolete project heuristics
+ * cannot silently enter an Active Context Packet.
  */
 export const selectInstructionPaths = ({
   planOwnedPaths,
@@ -73,7 +57,7 @@ export const selectInstructionPaths = ({
 
   for (const filePath of planOwnedPaths) {
     if (filePath.startsWith(".ai/")) {
-      selected.add(instruction("ai-workflow.md"));
+      selected.add(instruction("shared", "ai-workflow.md"));
       selected.add(instruction("shared", "workflow-state.md"));
     }
     if (isTestPath(filePath)) {
@@ -86,36 +70,23 @@ export const selectInstructionPaths = ({
     }
     if (filePath.startsWith("src/app/api/")) {
       selected.add(instruction("shared", "security.md"));
-      selected.add(instruction("shared", "performance-observability.md"));
+      selected.add(
+        instruction("shared", "performance-observability.md"),
+      );
     }
     if (isUiPath(filePath)) {
+      selected.add(instruction("shared", "wcag.md"));
       selected.add(instruction("ui.md"));
     }
-    if (isDataServicePath(filePath)) {
-      selected.add(instruction("data-services.md"));
-    }
-    if (
-      filePath === "src/providers/query-provider.tsx" ||
-      filePath.startsWith("src/hooks/") ||
-      filePath === "src/hooks/query-keys.ts"
-    ) {
-      selected.add(instruction("react-query.md"));
-    }
     if (isAuthPath(filePath)) {
-      selected.add(instruction("auth.md"));
       selected.add(instruction("shared", "security-observability.md"));
     }
-    if (isMapPath(filePath)) {
-      selected.add(instruction("maps.md"));
-    }
-    if (isGondoorPath(filePath)) {
-      selected.add(instruction("gondoor.md"));
-    }
-    if (filePath.startsWith("supabase/")) {
-      selected.add(instruction("supabase.md"));
+    if (isMigrationPath(filePath)) {
       selected.add(instruction("shared", "security.md"));
       selected.add(instruction("shared", "migrations.md"));
-      selected.add(instruction("shared", "performance-observability.md"));
+      selected.add(
+        instruction("shared", "performance-observability.md"),
+      );
       selected.add(instruction("shared", "documentation-runbooks.md"));
       selected.add(instruction("architecture.md"));
     }
@@ -126,10 +97,11 @@ export const selectInstructionPaths = ({
   }
 
   if (/\bshadcn\b/i.test(planContent)) {
+    selected.add(instruction("shared", "wcag.md"));
     selected.add(instruction("ui.md"));
   }
 
-  // Repository paths without a narrower area still need the index baseline.
+  // Repository paths without a narrower area still need architecture context.
   if (planOwnedPaths.some((filePath) => !filePath.startsWith(".ai/"))) {
     selected.add(instruction("architecture.md"));
   }

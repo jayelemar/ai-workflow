@@ -1,5 +1,11 @@
 # Architecture Instruction Changelog
 
+## v2.0 — 2026-08-12
+
+* Recreated the missing architecture instructions for Mobii's current
+  single-app Next.js structure and nested `.ai` repository, replacing the
+  previous Gondoor-specific ownership map.
+
 ## v1.4 — 2026-07-19
 
 * Delegated row-mapper behavior to `data-services.md`; retained only the

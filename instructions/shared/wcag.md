@@ -1,5 +1,5 @@
-Version: 1.0
-Last Updated: 2026-07-02
+Version: 1.1
+Last Updated: 2026-08-12
 
 # WCAG Frontend Instructions
 
@@ -76,8 +76,8 @@ application components.
 ## Placement
 
 - Keep reusable WCAG baseline guidance in this file.
-- Keep Gondoor-specific UI component ownership and shadcn styling rules in
-  `.ai/instructions/ui.md`.
+- Keep repository-specific UI component ownership and shadcn styling rules in
+  the project-local UI instruction routed by `.ai/instructions/index.md`.
 - Keep product-specific acceptance criteria in the relevant spec or plan.
 - Keep accessibility fixes close to the component, route, form, or workflow
   that owns the inaccessible behavior.

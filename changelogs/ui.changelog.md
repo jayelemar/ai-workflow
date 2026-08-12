@@ -1,5 +1,16 @@
 # UI Instruction Changelog
 
+## v2.1 — 2026-08-12
+
+* Required conditional visual states to use Tailwind branches through `cn`,
+  while reserving inline styles for runtime-calculated values such as Motion
+  CSS custom properties.
+
+## v2.0 — 2026-08-12
+
+* Recreated the missing UI instructions from Mobii's current shadcn/Base UI,
+  Tailwind, feature-component, responsive, font, and client-boundary patterns.
+
 ## v1.5 — 2026-07-19
 
 * Removed duplicate feature and support-ticket placement rules; UI placement

@@ -1,5 +1,15 @@
 # Index Instruction Changelog
 
+## v2.1 — 2026-08-12
+
+* Updated AI workflow routing to the shared instruction path.
+
+## v2.0 — 2026-08-12
+
+* Recreated the missing routing entrypoint for the current Mobii application
+  and repository-local AI workflow, replacing unsupported legacy area routes
+  with narrow path- and task-based routes.
+
 ## v1.2 — 2026-07-19
 
 * Routed repository testing, debugging, workflow planning, reasoning, and
