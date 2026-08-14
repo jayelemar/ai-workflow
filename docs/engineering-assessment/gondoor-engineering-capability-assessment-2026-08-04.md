@@ -9,7 +9,9 @@ Scope: reachable Git history and current `HEAD` implementation through `b5af1a75
 - Scores use repository evidence only. Commit counts and line volume were used to locate evidence and establish ownership; they do not increase a score.
 - This is not an HR performance review, personality evaluation, or inference about experience outside this repository.
 - The full test suite, production telemetry, independent SAST scan, and external-provider dashboards were not run or available. Test scores assess visible, authored regression coverage—not current suite health. Performance scores do not treat an unmeasured optimization as a verified performance result.
-- The requested maxima add to 110 despite specifying a 100-point total. To remain comparable with the 2026-07-17 assessment, this report sums the supplied category scores and reports that result as `/ 100`; Engineering Consistency remains included exactly as it was in the prior report.
+- The first ten rubric categories form the 100-point overall score. Engineering
+  Consistency is reported separately as a 10-point diagnostic. The 2026-07-17
+  comparison below uses the same corrected interpretation.
 
 ## Contributor identity resolution
 
@@ -23,7 +25,8 @@ No `.mailmap` exists. The Jericho grouping is probable rather than proven by rep
 
 ## 1. Jericho Bermas
 
-**Score: 89 / 100 — Strong Senior**  
+**Overall: 82 / 100 — Strong Senior**  
+**Consistency diagnostic: 7 / 10**  
 **Confidence: medium**; the identity grouping is not repository-verified.
 
 ### Executive Summary
@@ -113,20 +116,24 @@ Earlier evidence emphasizes workspace structure and domain decomposition. Later 
 | Debugging | 5 | 4 | Recovery, redirect, migration, and provider-boundary fixes |
 | Repository Hygiene | 5 | 4 | Focused recent subjects and CI work; large chains/duplicate history remain |
 | Documentation | 5 | 4 | Plans, validation records, and provider/operational guidance |
-| Consistency | 10 | 7 | Strong sustained quality; large integration batches add variance |
+| Consistency (diagnostic only) | 10 | 7 | Strong sustained quality; large integration batches add variance |
 
-**Total: 89 / 100**
+**Overall total: 82 / 100**
 
 ## 2. Elemar / Jay Termulo
 
-**Score: 85 / 100 — Strong Senior**  
+**Overall: 78 / 100 — Senior-**  
+**Consistency diagnostic: 7 / 10**  
 **Confidence: high** for the identity grouping.
 
 ### Executive Summary
 
 Elemar/Jay has the strongest current repository evidence for security-conscious billing, workspace, entitlement, onboarding, and deployment delivery. The assessment finds server and database enforcement for business/seat outcomes and verified webhook processing, with detailed regression coverage around race and recovery paths. Recent staging/deploy work also demonstrates safe environment-boundary handling rather than treating deployment as a client-only concern.
 
-The score is held below Exceptional by concentrated rule surfaces, especially the shared entitlement and webhook code; wide cross-layer changes; limited direct performance measurement; and documentation evidence that is narrower than the importance of the billing and entitlement boundaries.
+The score is held below Strong Senior by concentrated rule surfaces,
+especially the shared entitlement and webhook code; wide cross-layer changes;
+limited direct performance measurement; and documentation evidence that is
+narrower than the importance of the billing and entitlement boundaries.
 
 ### Primary Modules
 
@@ -209,18 +216,20 @@ Early evidence focused on setup and targeted implementation. Later history shows
 | Debugging | 5 | 4 | Checkout, subscription, readiness, and activation regression fixes |
 | Repository Hygiene | 5 | 4 | Deployment/CI and traceable recent commits; large changes remain |
 | Documentation | 5 | 3 | Selected deployment/runbook evidence; limited durable architecture docs |
-| Consistency | 10 | 7 | Strong current evidence; concentrated cross-layer surfaces add risk |
+| Consistency (diagnostic only) | 10 | 7 | Strong current evidence; concentrated cross-layer surfaces add risk |
 
-**Total: 85 / 100**
+**Overall total: 78 / 100**
 
 ## Final Comparison and Ranking
 
 | Rank | Developer | Score | Level | Architecture | Security | Testing | Maintainability | Performance | Refactoring | Consistency | Biggest Strength | Biggest Weakness | Technical Risk |
 |---:|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---|---|---|
-| 1 | Jericho Bermas* | 89 | Strong Senior | 13 | 12 | 9 | 8 | 7 | 9 | 7 | Broad modular architecture and test-backed provider/delivery work | Very broad integration batches | Cross-package/provider regression and operational complexity |
-| 2 | Elemar / Jay Termulo | 85 | Strong Senior | 12 | 13 | 9 | 8 | 6 | 8 | 7 | Database-backed security and recovery-oriented billing/workspace delivery | Centralized entitlement and shared webhook policy surface | Billing/entitlement change concentration and under-measured operations |
+| 1 | Jericho Bermas* | 82 | Strong Senior | 13 | 12 | 9 | 8 | 7 | 9 | 7 | Broad modular architecture and test-backed provider/delivery work | Very broad integration batches | Cross-package/provider regression and operational complexity |
+| 2 | Elemar / Jay Termulo | 78 | Senior- | 12 | 13 | 9 | 8 | 6 | 8 | 7 | Database-backed security and recovery-oriented billing/workspace delivery | Centralized entitlement and shared webhook policy surface | Billing/entitlement change concentration and under-measured operations |
 
 \*Jericho's alias grouping is probable rather than confirmed by `.mailmap`.
+
+Consistency is diagnostic only and excluded from each overall score.
 
 ### Ranking Rationale
 

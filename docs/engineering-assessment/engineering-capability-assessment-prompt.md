@@ -32,13 +32,18 @@ Every conclusion must be backed by:
 
 Never speculate.
 
-If evidence is insufficient, reduce confidence instead of guessing.
+If evidence is limited but still supports a defensible score, reduce confidence
+instead of guessing. If it cannot support a defensible score, apply the
+evidence-sufficiency rule below and do not score the contributor.
 
 =========================================================
 ENGINEERING SCORING RUBRIC
 =========================================================
 
-Score every contributor in the following categories.
+Score every contributor with sufficient attributable evidence in the following
+categories. The first ten categories form the 100-point overall score.
+Engineering Consistency is a separate diagnostic and is not added to the
+overall score.
 
 Architecture ................. 15 pts
 
@@ -60,7 +65,7 @@ Repository Hygiene ........... 5 pts
 
 Documentation ................ 5 pts
 
-Engineering Consistency ...... 10 pts
+Engineering Consistency ...... 10 pts diagnostic
 
 TOTAL = 100
 
@@ -139,6 +144,21 @@ Generally consistent.
 
 Consistently high-quality work.
 
+Consistency is diagnostic only. Do not add it to the 100-point total.
+
+=========================================================
+EVIDENCE SUFFICIENCY
+=========================================================
+
+Distinguish absent evidence from negative evidence.
+
+If repository evidence cannot support a defensible overall score, report the
+contributor as Not enough evidence. Do not convert missing evidence into zero,
+a low maturity score, or a ranking position.
+
+Still summarize the attributable evidence and identify what evidence would be
+needed for a scored assessment.
+
 =========================================================
 FOR EACH DEVELOPER
 =========================================================
@@ -189,9 +209,9 @@ Produce this table.
 | Debugging |5| | |
 | Repository Hygiene |5| | |
 | Documentation |5| | |
-| Consistency |10| | |
+| Consistency (diagnostic only) |10| | |
 
-TOTAL
+OVERALL TOTAL (EXCLUDES CONSISTENCY)
 
 XX / 100
 
@@ -243,7 +263,8 @@ Insufficient engineering maturity demonstrated in this repository.
 COMPARISON
 =========================================================
 
-Create a final comparison.
+Create a final comparison for scored contributors. List contributors with
+insufficient evidence separately as Not enough evidence.
 
 Developer
 
@@ -275,11 +296,14 @@ Technical Risk
 RANKING
 =========================================================
 
-Rank contributors from highest to lowest score.
+Rank scored contributors from highest to lowest overall score.
 
 Explain WHY.
 
 If two developers have similar scores, explain the tradeoffs.
+
+Do not rank contributors whose evidence is insufficient for a defensible
+score.
 
 =========================================================
 IMPORTANT
@@ -295,4 +319,5 @@ Do not infer experience outside this repository.
 
 All scores must be justified with repository evidence.
 
-If evidence is weak, reduce confidence and explain why.
+If evidence is weak but sufficient to score, reduce confidence and explain
+why. If it is insufficient to score, use Not enough evidence.

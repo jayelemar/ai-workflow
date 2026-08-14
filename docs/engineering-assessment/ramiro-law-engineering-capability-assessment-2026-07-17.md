@@ -52,7 +52,11 @@ Commit and line volume were used only to locate ownership and evidence. They did
 
 ## Scoring interpretation
 
-The supplied category maxima total 110 even though the required total is 100. Per the user's decision, the first ten categories form the 100-point total. Engineering Consistency is reported separately as a 10-point diagnostic and is not added to the overall score.
+The supplied category maxima total 110 even though the required total is 100.
+Per the user's decision, the first ten categories form the 100-point total.
+Engineering Consistency is reported separately as a 10-point diagnostic and is
+not added to the overall score. The canonical assessment prompt now states this
+interpretation explicitly.
 
 ## Evidence limitations
 
@@ -408,13 +412,13 @@ The only observable progression is bootstrap, a README formatting fix, and one t
 
 ---
 
-## 4. Fjorkuu
+## Fjorkuu — Not Scored
 
-**Overall: 1 / 100 — Insufficient engineering maturity demonstrated in this repository**  
-**Consistency diagnostic: 0 / 10**  
+**Overall: Not enough evidence**  
+**Consistency diagnostic: Not enough evidence**  
 **Confidence: very low**
 
-This is an evidence-floor score, not evidence of poor engineering. The repository has no attributable implementation sample for Fjorkuu.
+This is an evidence-insufficiency result, not evidence of poor engineering. The repository has no attributable implementation sample for Fjorkuu.
 
 ### Executive Summary
 
@@ -472,19 +476,19 @@ The primary risk is assessment error from confusing merge authorship with implem
 
 | Category | Max | Score | Evidence |
 |---|---:|---:|---|
-| Architecture | 15 | 0 | No attributable evidence |
-| Code Quality | 15 | 0 | No attributable evidence |
-| Maintainability | 10 | 0 | No attributable evidence |
-| Security | 15 | 0 | No attributable evidence |
-| Testing | 10 | 0 | No attributable evidence |
-| Performance | 10 | 0 | No attributable evidence |
-| Refactoring | 10 | 0 | No attributable evidence |
-| Debugging | 5 | 0 | No attributable evidence |
-| Repository Hygiene | 5 | 1 | One PR merge integration action |
-| Documentation | 5 | 0 | No attributable evidence |
-| Consistency (diagnostic only) | 10 | 0 | No repeated sample |
+| Architecture | 15 | N/E | No attributable evidence |
+| Code Quality | 15 | N/E | No attributable evidence |
+| Maintainability | 10 | N/E | No attributable evidence |
+| Security | 15 | N/E | No attributable evidence |
+| Testing | 10 | N/E | No attributable evidence |
+| Performance | 10 | N/E | No attributable evidence |
+| Refactoring | 10 | N/E | No attributable evidence |
+| Debugging | 5 | N/E | No attributable evidence |
+| Repository Hygiene | 5 | N/E | One merge action is insufficient for a capability score |
+| Documentation | 5 | N/E | No attributable evidence |
+| Consistency (diagnostic only) | 10 | N/E | No repeated sample |
 
-**Total: 1 / 100**
+**Total: Not scored**
 
 ---
 
@@ -499,9 +503,10 @@ The primary risk is assessment error from confusing merge authorship with implem
 | 1 | Jericho Bermas | 78 | Senior- | 13 | 12 | 9 | 8 | 7 | 8 | 7 | Modular subsystem architecture | Very large integration/migration changes | Review/rollback complexity and under-measured AI operations |
 | 2 | Elemar/Jay Termulo | 74 | Senior- | 12 | 13 | 9 | 7 | 5 | 8 | Security-centered, regression-tested delivery | Large pages/migrations and uneven history hygiene | Concentrated cross-layer regression surface |
 | 3 | Aerold | 33 | Insufficient maturity demonstrated | 7 | 6 | 4 | 4 | 1 | 1 | Foundational layered snapshot | Too little focused attributable history | Bulk-import provenance and monolithic surviving code |
-| 4 | Fjorkuu | 1 | Insufficient maturity demonstrated | 0 | 0 | 0 | 0 | 0 | 0 | One integration action | No attributable implementation evidence | Misattribution of merged code |
 
 \* Consistency is diagnostic only and excluded from the overall score.
+
+Fjorkuu is not ranked because the repository has no attributable implementation sample.
 
 ## 2026-07-17 Ranking Rationale
 
@@ -517,9 +522,9 @@ Elemar/Jay ranks four points behind. This contributor leads in security engineer
 
 Aerold ranks third because the repository at least attributes a layered foundational snapshot and one meaningful tested correction. The score is deliberately low-confidence and conservative: a single bulk import cannot prove sustained design quality, and there is almost no focused follow-up history across the rubric.
 
-### 4. Fjorkuu
+### Not scored: Fjorkuu
 
-Fjorkuu ranks last only because the mandatory repository-evidence rubric has no implementation evidence to score. The sole merge commit does not transfer ownership of Elemar's implementation. This ranking must not be interpreted as a negative capability finding outside the repository.
+Fjorkuu is not ranked because the repository-evidence rubric has no implementation evidence to score. The sole merge commit does not transfer ownership of Elemar's implementation. This result must not be interpreted as a negative capability finding outside the repository.
 
 ## Overall Repository-Level Findings
 

@@ -7,6 +7,8 @@ Scope: reachable Git history, current implementation, selected diffs, test sourc
 
 - 7,613 reachable commits were inspected at history-summary level; contributor-specific non-merge history, current ownership, and representative feature/security/performance/refactoring changes were reviewed in detail.
 - Scores use repository evidence only. Commit volume is context, not a positive signal.
+- The first ten rubric categories form the 100-point overall score. Engineering
+  Consistency is reported separately as a 10-point diagnostic.
 - The full test suite and an independent SAST scan were not run for this assessment. Test scores reflect authored test coverage and test-backed changes, not a claim that all tests are currently green.
 - No `.mailmap` exists. Identity grouping is explicitly qualified below.
 
@@ -24,7 +26,8 @@ Scoring raw aliases separately would fragment the evidence for a likely single p
 
 ## 1. Jericho Bermas
 
-**Score: 86 / 100 — Strong Senior**  
+**Overall: 79 / 100 — Senior-**  
+**Consistency diagnostic: 7 / 10**  
 **Confidence: medium-high**; the Jericho alias grouping itself is medium confidence.
 
 ### Executive summary
@@ -89,13 +92,14 @@ Continue provider-contract testing and add measurable production observability a
 | Debugging | 5 | 4 | Reconciliation, recovery, and failure-path fixes |
 | Repository Hygiene | 5 | 4 | Workspace scripts, hooks, formatting, cleanup |
 | Documentation | 5 | 4 | Plans, provider guidance, capability manifests |
-| Consistency | 10 | 7 | Sustained broad work; history signal partly noisy |
+| Consistency (diagnostic only) | 10 | 7 | Sustained broad work; history signal partly noisy |
 
-**Total: 86 / 100**
+**Overall total: 79 / 100**
 
 ## 2. Elemar Termulo / Jay Elemar Termulo
 
-**Score: 78 / 100 — Senior-**  
+**Overall: 72 / 100 — Senior-**  
+**Consistency diagnostic: 6 / 10**  
 **Confidence: high** for alias grouping.
 
 ### Executive summary
@@ -159,20 +163,21 @@ Decompose entitlement policy into smaller domain/policy units while retaining th
 | Debugging | 5 | 4 | Crash and validation regressions addressed |
 | Repository Hygiene | 5 | 3 | Typecheck/format work; high-churn history |
 | Documentation | 5 | 2 | Limited direct design documentation found |
-| Consistency | 10 | 6 | Strong recent quality; broad changes increase review risk |
+| Consistency (diagnostic only) | 10 | 6 | Strong recent quality; broad changes increase review risk |
 
-**Total: 78 / 100**
+**Overall total: 72 / 100**
 
 ## Final comparison and ranking
 
 | Rank | Developer | Score | Level | Architecture | Security | Testing | Maintainability | Performance | Refactoring | Consistency | Biggest Strength | Biggest Weakness | Technical Risk |
 |---:|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---|---|---|
-| 1 | Jericho Bermas* | 86 | Strong Senior | 13 | 11 | 8 | 8 | 7 | 9 | 7 | Repository architecture and decomposition | Measured performance evidence is absent | Provider-contract completeness and operational complexity |
-| 2 | Elemar Termulo / Jay Elemar Termulo | 78 | Senior- | 12 | 12 | 8 | 7 | 6 | 8 | 6 | Security-conscious workspace/entitlement delivery | Large centralized entitlement service | Cross-domain policy regression surface |
+| 1 | Jericho Bermas* | 79 | Senior- | 13 | 11 | 8 | 8 | 7 | 9 | 7 | Repository architecture and decomposition | Measured performance evidence is absent | Provider-contract completeness and operational complexity |
+| 2 | Elemar Termulo / Jay Elemar Termulo | 72 | Senior- | 12 | 12 | 8 | 7 | 6 | 8 | 6 | Security-conscious workspace/entitlement delivery | Large centralized entitlement service | Cross-domain policy regression surface |
 
 \* Alias grouping is probable, not confirmed by `.mailmap`.
+
+Consistency is diagnostic only and excluded from each overall score.
 
 ### Ranking rationale
 
 Jericho ranks first because the repository contains direct evidence of monorepo architecture, shared package design, sustained domain decomposition, and stronger documentation evidence. Elemar has especially strong security-conscious, test-backed cross-cutting implementation, but the large centralized entitlement service, lower documentation evidence, and lack of measured performance outcomes lower maintainability confidence.
-
