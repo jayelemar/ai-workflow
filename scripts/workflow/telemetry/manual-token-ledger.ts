@@ -223,7 +223,12 @@ export const appendManualTokenUsageCheckpoint = async ({
   sessionId,
   codexHome = defaultCodexHome(),
 }: AppendManualTokenUsageOptions): Promise<AppendManualTokenUsageResult> => {
-  const ledgerPath = path.join(rootDir, tokenUsageLedgerRelativePath(planName));
+  let ledgerPath: string;
+  try {
+    ledgerPath = path.join(rootDir, tokenUsageLedgerRelativePath(planName));
+  } catch (error) {
+    return { ok: false, reason: String(error) };
+  }
   const sessionSnapshot = await detectLatestSessionSnapshot({
     codexHome,
     cwd: rootDir,

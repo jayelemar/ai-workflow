@@ -41,13 +41,13 @@ const collectSessionFiles = async (directory: string): Promise<string[]> => {
   return files;
 };
 
-const findSessionFileById = async (
+const findSessionFilesById = async (
   sessionsDir: string,
   sessionId: string,
-): Promise<string | null> =>
-  (await collectSessionFiles(sessionsDir)).find((filePath) =>
-    filePath.includes(sessionId),
-  ) ?? null;
+): Promise<string[]> =>
+  (await collectSessionFiles(sessionsDir))
+    .filter((filePath) => filePath.includes(sessionId))
+    .sort((left, right) => right.localeCompare(left));
 
 export const detectLatestSessionSnapshot = async ({
   codexHome,
@@ -61,8 +61,7 @@ export const detectLatestSessionSnapshot = async ({
   const sessionsDir = path.join(codexHome, "sessions");
   let candidateFiles: string[];
   if (sessionId) {
-    const sessionFile = await findSessionFileById(sessionsDir, sessionId);
-    candidateFiles = sessionFile ? [sessionFile] : [];
+    candidateFiles = await findSessionFilesById(sessionsDir, sessionId);
   } else {
     candidateFiles = await collectSessionFiles(sessionsDir);
     candidateFiles.sort((left, right) => right.localeCompare(left));

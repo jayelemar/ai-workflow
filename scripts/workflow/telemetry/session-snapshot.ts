@@ -131,7 +131,11 @@ export const parseSessionTokenSnapshot = (
       if (cwd === targetCwd) {
         sawTargetCwd = true;
       }
-      if (typeof payload.model === "string" && payload.model.length > 0) {
+      if (
+        cwd === targetCwd &&
+        typeof payload.model === "string" &&
+        payload.model.length > 0
+      ) {
         latestTurnContextModel = payload.model;
       }
       continue;

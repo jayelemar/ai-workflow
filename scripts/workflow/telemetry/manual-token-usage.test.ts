@@ -127,6 +127,35 @@ test("parseSessionTokenSnapshot reads session totals and context usage", () => {
   });
 });
 
+test("parseSessionTokenSnapshot ignores models from another cwd", () => {
+  const content = [
+    sessionContent({
+      sessionId: "session-1",
+      cwd: "/repo",
+      model: "gpt-target",
+      inputTokens: 1200,
+      cachedInputTokens: 900,
+      outputTokens: 180,
+      reasoningOutputTokens: 20,
+      totalTokens: 1380,
+      lastTotalTokens: 230,
+    }),
+    JSON.stringify({
+      timestamp: "2026-07-09T00:00:03.000Z",
+      type: "turn_context",
+      payload: { cwd: "/another-repo", model: "gpt-unrelated" },
+    }),
+  ].join("\n");
+
+  const snapshot = parseSessionTokenSnapshot(
+    content,
+    "sessions/2026/07/09/session-1.jsonl",
+    "/repo",
+  );
+
+  assert.equal(snapshot?.model, "gpt-target");
+});
+
 test("detectLatestSessionSnapshot prefers the newest matching cwd", async () => {
   const workspace = await createWorkspace();
   try {
@@ -172,6 +201,53 @@ test("detectLatestSessionSnapshot prefers the newest matching cwd", async () => 
       snapshot?.sessionFilePath,
       "sessions/2026/07/09/rollout-2026-07-09T01-00-00-new.jsonl",
     );
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("session lookup verifies an exact requested session ID", async () => {
+  const workspace = await createWorkspace();
+  try {
+    const codexHome = path.join(workspace.root, ".codex");
+    const sessionsDir = path.join(codexHome, "sessions", "2026", "07", "09");
+    await mkdir(sessionsDir, { recursive: true });
+    await writeFile(
+      path.join(sessionsDir, "rollout-z-session-1-copy.jsonl"),
+      sessionContent({
+        sessionId: "session-1-copy",
+        cwd: "/repo",
+        inputTokens: 100,
+        cachedInputTokens: 80,
+        outputTokens: 10,
+        reasoningOutputTokens: 0,
+        totalTokens: 110,
+        lastTotalTokens: 50,
+      }),
+      "utf8",
+    );
+    await writeFile(
+      path.join(sessionsDir, "rollout-a-session-1.jsonl"),
+      sessionContent({
+        sessionId: "session-1",
+        cwd: "/repo",
+        inputTokens: 500,
+        cachedInputTokens: 400,
+        outputTokens: 60,
+        reasoningOutputTokens: 5,
+        totalTokens: 560,
+        lastTotalTokens: 90,
+      }),
+      "utf8",
+    );
+
+    const snapshot = await detectLatestSessionSnapshot({
+      codexHome,
+      cwd: "/repo",
+      sessionId: "session-1",
+    });
+
+    assert.equal(snapshot?.sessionId, "session-1");
   } finally {
     await workspace.cleanup();
   }
@@ -277,6 +353,18 @@ test("appendManualTokenUsageCheckpoint appends stage deltas and skips duplicates
   } finally {
     await workspace.cleanup();
   }
+});
+
+test("manual token checkpoints reject unsafe plan names", async () => {
+  const result = await appendManualTokenUsageCheckpoint({
+    rootDir: "/repo",
+    planName: "../outside-artifacts",
+    stage: "plan",
+    codexHome: "/missing-codex-home",
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.match(result.reason, /kebab-case/);
 });
 
 test("runManualTokenUsageCli prefers CODEX_HOME when --codex-home is omitted", async () => {

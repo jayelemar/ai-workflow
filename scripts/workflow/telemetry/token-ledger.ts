@@ -30,8 +30,15 @@ export type TokenUsageLedgerAnalysis = {
   };
 };
 
-export const tokenUsageLedgerRelativePath = (planName: string): string =>
-  rel(".ai", "artifacts", planName, "logs", "token-usage.jsonl");
+export const isValidPlanName = (planName: string): boolean =>
+  /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(planName);
+
+export const tokenUsageLedgerRelativePath = (planName: string): string => {
+  if (!isValidPlanName(planName)) {
+    throw new Error("plan name must be a kebab-case identifier");
+  }
+  return rel(".ai", "artifacts", planName, "logs", "token-usage.jsonl");
+};
 
 export const analyzeTokenUsageLedger = async (
   rootDir: string,
