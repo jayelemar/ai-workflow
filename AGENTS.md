@@ -32,8 +32,11 @@ repository conventions.
 
 - Intake is read-only. MEDIUM and HIGH specs are created only when the spec
   prompt is explicitly invoked. Planning occurs in Plan mode and always saves a
-  plan file, including for LOW. Implementation begins only from the explicit
-  execution command that names that saved plan.
+  plan file, including for LOW. When tracing is required, plan creation reuses
+  a complete flow-artifact pair or creates the missing pair through the
+  canonical flow-artifact prompt before saving the plan; a separate
+  flow-artifact invocation is supported but not required. Implementation begins
+  only from the explicit execution command that names that saved plan.
 - A finalized spec is authoritative during planning, execution, and review.
   Plans and artifacts must not add behavior that the spec does not define.
 - If a material requirement, dependency, risk, or repository boundary changes,

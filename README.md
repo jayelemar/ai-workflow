@@ -30,11 +30,12 @@ No tool-specific indirection file is required. Active prompts load
    conversational plan is not enough.
 3. For MEDIUM/HIGH, explicitly invoke `.ai/prompts/generate-spec.md` to finalize
    `feature-spec@1` or `bugfix-spec@1`.
-4. When end-to-end tracing is required, explicitly invoke
-   `.ai/prompts/generate-flow-artifacts.md` to save `user-journey@1` and
-   `implementation-map@1` together.
-5. Explicitly invoke `.ai/prompts/create-plan.md` in Plan mode to save
+4. Explicitly invoke `.ai/prompts/create-plan.md` in Plan mode. It determines
+   whether end-to-end tracing is required, reuses a complete pair or creates
+   missing `user-journey@1` and `implementation-map@1` artifacts, then saves
    `plan-manifest@2`.
+5. Optionally invoke `.ai/prompts/generate-flow-artifacts.md` directly before
+   planning when the pair is useful as a standalone deliverable.
 6. Explicitly execute LOW/MEDIUM with `execute <plan-file>` or HIGH with
    `/goal <description> <plan-file>`.
 
@@ -47,7 +48,8 @@ preview, plan approval, validator, or persisted progress gate.
 - `.ai/instructions/shared/workflow-state.md` owns the explicit stage sequence.
 - `.ai/prompts/generate-spec.md` owns both typed spec schemas and the mandatory
   evidence-backed bug RCA gate.
-- `.ai/prompts/generate-flow-artifacts.md` owns both flow artifact schemas.
+- `.ai/prompts/generate-flow-artifacts.md` owns both flow artifact schemas;
+  create-plan applies it when required artifacts are missing.
 - `.ai/templates/plan.template.md` owns `plan-manifest@2`, including explicit
   Git repository roots and integration-base refs.
 - `.ai/prompts/plan-progress.md` reads only plan-declared repositories and

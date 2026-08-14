@@ -1,12 +1,12 @@
-Version: 3.0
-Last Updated: 2026-08-13
+Version: 3.1
+Last Updated: 2026-08-14
 
 # Flow Artifact Instructions
 
 ## Purpose
 
-Define when a finalized MEDIUM or HIGH spec needs one explicitly invoked stage
-that saves both the user journey and implementation map.
+Define when a finalized MEDIUM or HIGH spec needs a user journey and
+implementation map, and how planning reuses or creates that pair.
 
 ## Classification
 
@@ -20,7 +20,8 @@ that saves both the user journey and implementation map.
 
 ## Saved Artifacts
 
-When required, `.ai/prompts/generate-flow-artifacts.md` creates both:
+When required, create-plan applies
+`.ai/prompts/generate-flow-artifacts.md` to reuse or create both:
 
 - `.ai/artifacts/<plan-name>/user-journey.md` using `user-journey@1`;
 - `.ai/artifacts/<plan-name>/implementation-map.md` using
@@ -49,8 +50,17 @@ Every journey action and acceptance scenario must map to ownership and
 validation. The implementation map must not introduce actions absent from the
 user journey.
 
+The flow-artifact prompt may also be invoked directly before planning. A
+separate invocation is optional because an explicit create-plan invocation owns
+creation of any missing required pair. Existing valid artifacts must be
+preserved; malformed or spec-conflicting artifacts stop planning instead of
+being silently replaced.
+
 ## Planning and Review
 
+- Create-plan determines whether tracing is required, verifies an existing pair
+  when present, and creates or completes a missing required pair before saving
+  the plan.
 - A plan records both artifact paths or records `N/A: <concrete reason>` for
   both when tracing is unnecessary.
 - Plan tasks cover every mapped action, contract/data boundary, service, and
@@ -62,5 +72,7 @@ user journey.
 ## Anti-Patterns
 
 - Creating only one of the two required artifacts.
+- Requiring a separate flow-artifact invocation after plan creation has already
+  been explicitly invoked.
 - Inventing desired behavior from current code.
 - Using flow artifacts as workflow transition state.

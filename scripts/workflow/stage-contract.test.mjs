@@ -95,7 +95,7 @@ test("one typed prompt owns feature and evidence-backed bugfix specs", async () 
   assert.doesNotMatch(spec, /create a plan|begin implementation/i);
 });
 
-test("one flow stage creates user-journey@1 and implementation-map@1", async () => {
+test("one flow contract creates user-journey@1 and implementation-map@1", async () => {
   const [prompt, instruction] = await Promise.all([
     readSource("prompts/generate-flow-artifacts.md"),
     readSource("instructions/shared/flow-trace-artifacts.md"),
@@ -123,6 +123,31 @@ test("one flow stage creates user-journey@1 and implementation-map@1", async () 
   );
   assert.equal(await pathExists("prompts/generate-user-flow.md"), false);
   assert.equal(await pathExists("wrappers/generate-user-flow.md"), false);
+});
+
+test("create-plan creates missing required flow artifacts in one invocation", async () => {
+  const [createPlan, flowPrompt, workflow, flowInstruction] = await Promise.all(
+    [
+      readSource("prompts/create-plan.md"),
+      readSource("prompts/generate-flow-artifacts.md"),
+      readSource("instructions/shared/workflow-state.md"),
+      readSource("instructions/shared/flow-trace-artifacts.md"),
+    ],
+  );
+
+  assert.match(createPlan, /Treat an omitted `Flow artifacts` value as `AUTO`/);
+  assert.match(
+    createPlan,
+    /IF either required artifact is missing, THEN create or complete\s+the pair/,
+  );
+  assert.match(createPlan, /before saving the\s+plan/);
+  assert.match(
+    flowPrompt,
+    /when an explicit\s+`.ai\/prompts\/create-plan\.md` invocation/,
+  );
+  assert.match(flowPrompt, /return control to create-plan/);
+  assert.match(workflow, /is not\s+required/);
+  assert.match(flowInstruction, /separate invocation is optional/);
 });
 
 test("plan-manifest@2 declares repositories, bases, and HIGH ownership", async () => {

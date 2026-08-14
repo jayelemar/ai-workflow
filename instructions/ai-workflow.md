@@ -1,5 +1,5 @@
-Version: 5.0
-Last Updated: 2026-08-13
+Version: 5.1
+Last Updated: 2026-08-14
 
 # AI Workflow Instructions
 
@@ -14,7 +14,9 @@ persisted transition authority.
   instruction set relevant to the stage.
 - Apply `.ai/instructions/shared/workflow-state.md` as the canonical stage
   sequence: read-only intake, explicitly invoked MEDIUM/HIGH spec, explicitly
-  invoked flow artifacts when required, Plan mode, then explicit execution.
+  invoked Plan mode that reuses or creates required flow artifacts, then
+  explicit execution. Direct flow-artifact generation remains available but is
+  not a required separate stage.
 - Apply `.ai/instructions/shared/flow-trace-artifacts.md` to classify and review
   `user-journey@1` plus `implementation-map@1`.
 - Prompts own stage behavior, schemas, and final responses. Wrappers only adapt

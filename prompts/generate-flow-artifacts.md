@@ -1,8 +1,9 @@
 # Generate Flow Artifacts
 
-Create both canonical flow artifacts for a finalized MEDIUM or HIGH spec. Run
-only when the user explicitly invokes this prompt. This stage does not plan or
-implement.
+Create both canonical flow artifacts for a finalized MEDIUM or HIGH spec. Apply
+this contract when the user invokes it directly or when an explicit
+`.ai/prompts/create-plan.md` invocation needs missing required flow artifacts.
+It does not implement application behavior.
 
 ## Input
 
@@ -113,3 +114,6 @@ end with no open decisions.
 Return exactly:
 
 `Flow artifacts saved to .ai/artifacts/<name>/ [user-journey@1, implementation-map@1]`
+
+When create-plan applies this prompt, return control to create-plan after both
+artifacts pass validation instead of emitting the standalone final response.
