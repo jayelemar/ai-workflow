@@ -10,7 +10,11 @@ import {
   defaultCodexHome,
   detectLatestSessionSnapshot,
 } from "./manual-token-sessions.ts";
-import { addTotals, subtractTotals, zeroTotals } from "./manual-token-totals.ts";
+import {
+  addTotals,
+  subtractTotals,
+  zeroTotals,
+} from "./manual-token-totals.ts";
 
 export { parseSessionTokenSnapshot } from "./session-snapshot.ts";
 export {
@@ -86,7 +90,7 @@ const manualPromptPath = (stage: ManualTokenUsageStage): string => {
     case "plan":
       return ".ai/prompts/create-plan.md";
     case "execute":
-      return ".ai/manual/execute.md";
+      return ".ai/prompts/execute-plan.md";
   }
 };
 
@@ -219,7 +223,12 @@ export const appendManualTokenUsageCheckpoint = async ({
   sessionId,
   codexHome = defaultCodexHome(),
 }: AppendManualTokenUsageOptions): Promise<AppendManualTokenUsageResult> => {
-  const ledgerPath = path.join(rootDir, tokenUsageLedgerRelativePath(planName));
+  let ledgerPath: string;
+  try {
+    ledgerPath = path.join(rootDir, tokenUsageLedgerRelativePath(planName));
+  } catch (error) {
+    return { ok: false, reason: String(error) };
+  }
   const sessionSnapshot = await detectLatestSessionSnapshot({
     codexHome,
     cwd: rootDir,
@@ -245,7 +254,8 @@ export const appendManualTokenUsageCheckpoint = async ({
   if (
     latestManualCheckpoint &&
     latestManualCheckpoint.manualStage === stage &&
-    latestManualCheckpoint.sessionTotalTokens === sessionSnapshot.totals.totalTokens
+    latestManualCheckpoint.sessionTotalTokens ===
+      sessionSnapshot.totals.totalTokens
   ) {
     return {
       ok: true,

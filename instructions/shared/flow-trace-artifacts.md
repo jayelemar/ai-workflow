@@ -1,159 +1,78 @@
-Version: 1.3
-Last Updated: 2026-08-12
+Version: 3.1
+Last Updated: 2026-08-14
 
-# Flow-Trace Artifact Instructions
+# Flow Artifact Instructions
 
 ## Purpose
 
-Centralize the scope-classification, artifact-contract, and bounded preflight
-rules for `.ai/artifacts/<plan-name>/user-journey.md` and
-`.ai/artifacts/<plan-name>/implementation-map.md`.
+Define when a finalized MEDIUM or HIGH spec needs a user journey and
+implementation map, and how planning reuses or creates that pair.
 
-## Applies To
+## Classification
 
-- `.ai/prompts/create-plan.md`
-- `.ai/prompts/sync-plan-artifacts.md`
-- `.ai/prompts/plan-validator.md`
-- `.ai/prompts/review-changes.md`
-- any prompt or instruction that classifies whether a scope needs end-to-end
-  flow mapping or validates mapped user-action coverage
+- End-to-end flow artifacts are required for multi-step workflows, multi-route
+  handoffs, multiple visible states or failure branches, or user-triggered API
+  behavior whose ownership is not obvious from one component or service.
+- They are not required for narrow copy, styling, single-component,
+  single-state, or isolated validation-message changes with obvious ownership.
+- A LOW request that needs end-to-end mapping must be reclassified before
+  planning continues.
 
-## Rules
+## Saved Artifacts
 
-- User-facing work means a feature, bugfix, or change that affects a customer,
-  admin, or operator screen, route, workflow, visible state, or user-triggered
-  API behavior.
-- Flow-trace artifacts are required only when the scope needs end-to-end flow
-  mapping, such as:
-  - multi-step workflows
-  - multi-route handoffs or navigation changes
-  - multiple visible states or failure branches that must be traced end-to-end
-  - user-triggered API behavior whose ownership is not obvious from a single
-    file or single state
-- Flow-trace artifacts are not required when the scope is narrow even if it is
-  user-facing, such as:
-  - copy-only or content-only changes
-  - styling or layout-only changes
-  - single-component visual fixes
-  - single-screen, single-state fixes with obvious ownership
-  - isolated validation-message or affordance tweaks that do not change an
-    end-to-end workflow
-- Once a plan is written, the plan `## Artifacts` entries are the source of
-  truth for whether flow-trace artifacts are required.
+When required, create-plan applies
+`.ai/prompts/generate-flow-artifacts.md` to reuse or create both:
 
-### Required Artifact Contract
+- `.ai/artifacts/<plan-name>/user-journey.md` using `user-journey@1`;
+- `.ai/artifacts/<plan-name>/implementation-map.md` using
+  `implementation-map@1`.
 
-When flow-trace artifacts are required:
+The finalized spec owns desired behavior. Repository inspection supplies only
+current entry points, ownership, contracts, data effects, services, and tests.
 
-- `user-journey.md` path:
-  `.ai/artifacts/<plan-name>/user-journey.md`
-- `implementation-map.md` path:
-  `.ai/artifacts/<plan-name>/implementation-map.md`
-- `user-journey.md` must be derived from the approved spec plus codebase
-  inspection only and must not invent desired behavior beyond the spec
-- `user-journey.md` must contain:
-  - `## Goal`
-  - `## Actors`
-  - `## Entry Points`
-  - `## User Flows`
-  - `## Mermaid Diagram`
-  - `## States`
-  - `## Failures`
-  - `## Acceptance Scenarios`
-  - `## Open Decisions`
-- `implementation-map.md` must include one `### User Action:` entry per action
-  from the user journey's User Flows and Acceptance Scenarios
-- each mapped user action must include applicable coverage for:
-  - UI route/component
-  - API route
-  - backend service/module
-  - database/storage effect
-  - tests or explicit validation evidence
-- when a category genuinely does not apply to an action, use
-  `None: <concrete reason>`
-- `implementation-map.md` must not contain actions that do not appear in the
-  user journey
+The user journey must contain `Goal`, `Actors`, `Entry Points`, `User Flows`,
+`Mermaid Diagram`, `States`, `Failures`, `Acceptance Scenarios`, and
+`Open Decisions`.
 
-### Not-Required Artifact Contract
+The implementation map must contain:
 
-When flow-trace artifacts are not required:
+- `Canonical Ownership`: one entry per journey action naming repository root
+  and owned paths;
+- `Contract and Data`: public/API contracts, state, persistence, migrations, or
+  `None: <reason>`;
+- `Services`: UI, application, backend, integration, and external-service
+  boundaries, or `None: <reason>`;
+- `Validation`: exact automated or manual evidence for each action and failure
+  branch;
+- `Open Decisions`: unresolved decisions, or exactly `None`.
 
-- the plan `## Artifacts` entry for `User journey` must be exactly
-  `N/A: <concrete reason>`
-- `.ai/artifacts/<plan-name>/implementation-map.md` must be exactly
-  `N/A: <concrete reason>`
-- the concrete reason must explain why end-to-end flow mapping is unnecessary
-  for the actual scope
+Every journey action and acceptance scenario must map to ownership and
+validation. The implementation map must not introduce actions absent from the
+user journey.
 
-### Create-Plan And Preview Preflight
+The flow-artifact prompt may also be invoked directly before planning. A
+separate invocation is optional because an explicit create-plan invocation owns
+creation of any missing required pair. Existing valid artifacts must be
+preserved; malformed or spec-conflicting artifacts stop planning instead of
+being silently replaced.
 
-During plan creation, and during any draft preflight that mirrors plan
-creation:
+## Planning and Review
 
-1. derive the plan name from the spec path
-2. classify the scope using this instruction
-3. if flow-trace artifacts are required:
-   - create or regenerate `user-journey.md` by applying
-     `.ai/prompts/generate-user-flow.md` when the artifact is missing, stale,
-     incomplete, or inconsistent with the spec
-   - read the validated user journey before phase planning
-   - derive or repair `implementation-map.md`
-4. if flow-trace artifacts are not required:
-   - write the required `N/A: <concrete reason>` values
-5. before returning a draft plan, apply the complete atomic task and commit
-   contract in `.ai/instructions/shared/ai-workflow.md`; verify each
-   implementation-map row has implementation and validation coverage.
-6. auto-correct missing action rows, task-contract defects, and under-scoped behavior
-   ownership with one bounded repair pass when possible
-7. when a valid split remains uncertain after that pass, keep the task
-   executable, set a concrete `Atomization warning` and `Coupling rationale`,
-   and continue to normal operator approval
-8. stop only when the preflight still cannot satisfy these rules without
-   inventing behavior beyond the spec
-
-Manual plans and runner-managed plans already in `active`, `review`, `blocked`,
-or `completed` status are not rewrite targets for this task-savepoint
-preflight.
-
-### Sync Contract
-
-During `sync-plan-artifacts`:
-
-- edit only plan-owned `.ai/plans/<plan-name>.md` and
-  `.ai/artifacts/<plan-name>/...` files
-- if the plan requires flow-trace artifacts:
-  - ensure `user-journey.md` exists and still reflects only the spec plus
-    observed codebase entry points
-  - ensure `implementation-map.md` covers every user action and remove rows
-    that do not correspond to the user journey
-- if the plan records `N/A: <concrete reason>`:
-  - ensure `implementation-map.md` is exactly `N/A: <concrete reason>`
-  - ensure the reason remains credible for the scope
-
-### Validator And Review Contract
-
-During validation and review:
-
-- if the plan requires flow-trace artifacts, compare the user journey and
-  implementation map against the plan, staged diff, and validation evidence
-- each mapped user action, visible state, failure branch, and acceptance
-  scenario must have implementation coverage, validation coverage, or an
-  explicit spec-approved unchanged path
-- if the plan records `N/A: <concrete reason>`, do not require flow-artifact
-  review; instead verify that the reason still matches the actual scope
-- the spec remains authoritative if it conflicts with the user journey
-
-## Validation
-
-- Prompts that depend on these rules must explicitly load
-  `.ai/instructions/shared/flow-trace-artifacts.md`.
-- Keep stage prompts focused on stage-specific behavior instead of duplicating
-  the full rule set above.
+- Create-plan determines whether tracing is required, verifies an existing pair
+  when present, and creates or completes a missing required pair before saving
+  the plan.
+- A plan records both artifact paths or records `N/A: <concrete reason>` for
+  both when tracing is unnecessary.
+- Plan tasks cover every mapped action, contract/data boundary, service, and
+  validation responsibility.
+- Review compares required artifacts with the finalized spec, actual diff, and
+  validation evidence. When artifacts are `N/A`, review verifies the reason
+  still fits the actual scope.
 
 ## Anti-Patterns
 
-- Requiring flow-trace artifacts for every user-facing change.
-- Recording `N/A` when the work clearly needs end-to-end flow mapping.
-- Mapping user actions that do not appear in the user-journey artifact.
-- Treating the user-journey artifact as more authoritative than the spec.
-- Repeating the same flow-trace policy block across multiple prompt files.
+- Creating only one of the two required artifacts.
+- Requiring a separate flow-artifact invocation after plan creation has already
+  been explicitly invoked.
+- Inventing desired behavior from current code.
+- Using flow artifacts as workflow transition state.

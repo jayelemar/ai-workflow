@@ -19,7 +19,7 @@ Keep production changes understandable, reviewable, and safe to evolve.
 - Split a route, page, service, or component when it combines independent responsibilities, has separate reasons to change, or prevents focused testing and review.
 - Set and record a concrete review-scope boundary before introducing a broad feature. Separate independently deployable or reversible outcomes.
 - Treat a large changed file or a task spanning more than one ownership boundary as a review warning. Explain why it remains coupled or split it before merge.
-- Preserve public contracts while extracting modules unless the approved change explicitly modifies the contract.
+- Preserve public contracts while extracting modules unless the finalized spec or user request explicitly modifies the contract.
 - Prefer small, cohesive modules over large catch-all helpers, coordinators, or shared files.
 
 ## Placement

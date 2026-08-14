@@ -1,113 +1,61 @@
-Version: 1.1
-Last Updated: 2026-08-12
+Version: 2.0
+Last Updated: 2026-08-13
 
 # WCAG Frontend Instructions
 
 ## Purpose
 
-Set a shared frontend accessibility baseline using WCAG 2.2 and clarify how
-that baseline relates to shadcn/ui, Radix UI, Base UI, Tailwind, and custom
-application components.
-
-## Applies To
-
-- User-facing web and admin UI.
-- shadcn/ui components and locally copied component code.
-- Radix UI and Base UI primitive composition.
-- Tailwind theme, token, color, spacing, focus, and motion changes.
-- Forms, navigation, dialogs, sheets, popovers, menus, tables, charts,
-  notifications, media, and icon-only controls.
+Set a framework-agnostic WCAG 2.2 AA baseline for user-facing interfaces.
 
 ## Rules
 
-- Treat WCAG 2.2 AA as the default target for frontend work unless a stricter
-  product, legal, or customer requirement applies.
-- Treat shadcn/ui as an accessibility-friendly starting point, not a guarantee
-  of WCAG conformance for the finished application.
-- Preserve the accessibility behavior provided by shadcn primitives, Radix UI,
-  and Base UI: roles, ARIA attributes, focus management, keyboard interaction,
-  escape handling, portal behavior, and accessible labels.
-- Prefer semantic HTML and native controls before ARIA. Use ARIA to add missing
-  semantics, not to cover avoidable non-semantic markup.
-- Use app-local shadcn components from `@/components/ui` when they fit the UI
-  need, then configure them through supported props, variants, and composition
-  patterns before replacing their underlying primitive behavior.
-- When using `asChild`, slots, custom triggers, or custom close controls, ensure
-  the rendered element still has the correct native semantics, accessible name,
-  keyboard behavior, disabled behavior, and focus visibility.
-- Give every interactive control an accessible name. Icon-only buttons, menu
-  items, toggles, combobox triggers, close buttons, and toolbar actions must
-  have visible text, `aria-label`, or equivalent screen-reader-only text.
-- Pair every form control with a programmatic label. Provide instructions,
-  required state, validation errors, and recovery guidance in text that is
-  associated with the control.
-- Do not rely on color alone to communicate state, validation, selection,
-  priority, progress, or destructive intent.
-- Maintain sufficient contrast for text, icons, borders that define controls,
-  focus indicators, disabled alternatives, charts, and state indicators after
-  theme or token changes.
-- Keep visible focus states clear for every keyboard-focusable element. Do not
-  suppress outlines unless replacing them with an equally visible focus style.
-- Ensure complete keyboard support for interactive UI: Tab and Shift+Tab move
-  predictably, Enter and Space activate controls where expected, Arrow keys
-  work for composite widgets where expected, and Escape closes dismissible
-  overlays.
-- Provide useful alt text for meaningful images and empty alt text for purely
-  decorative images.
-- Use real headings, landmarks, lists, tables, and captions where they express
-  page structure or data relationships. Do not recreate these structures with
-  generic `div` markup.
-- For dialogs, sheets, popovers, dropdown menus, command palettes, selects, and
-  tooltips, keep focus order, initial focus, return focus, outside interaction,
-  labels, descriptions, and dismissal behavior intentional.
-- Do not use tooltips as the only place where required instructions, labels,
-  errors, or critical information are available.
-- For async changes, loading states, errors, success messages, and background
-  updates, expose important status changes in a way assistive technology can
-  perceive.
-- Respect user preferences for reduced motion. Avoid motion that blocks task
+- Prefer semantic HTML and native controls. Use ARIA only to supply semantics
+  that native elements cannot express.
+- Give every interactive control an accessible name and every form control a
+  programmatic label. Associate instructions, required state, errors, and
+  recovery guidance with the relevant control.
+- Preserve correct roles, states, focus management, keyboard interaction,
+  dismissal behavior, and focus return when composing or customizing UI
+  primitives.
+- Do not rely on color alone for meaning. Maintain sufficient contrast for
+  text, meaningful icons, control boundaries, state indicators, and focus.
+- Keep visible focus indicators and complete keyboard operation, including
+  predictable Tab order and expected activation, arrow, and Escape behavior.
+- Use meaningful alternative text for informative images and empty alternative
+  text for decorative images.
+- Use headings, landmarks, lists, tables, and captions when they represent the
+  content structure. Do not recreate them with generic elements.
+- Make important loading, error, success, and asynchronous status changes
+  perceivable by assistive technology.
+- Respect reduced-motion preferences and avoid motion that blocks task
   completion or creates unnecessary vestibular risk.
-- Make responsive layouts work at mobile widths, high zoom, large text, and
-  browser text scaling without clipping, overlap, hidden controls, or
-  horizontal scrolling except where the content type truly requires it.
-- For charts and visual data, provide text equivalents, labels, summaries, or
-  adjacent data tables when the visual alone carries meaning.
+- Support mobile widths, zoom, large text, and browser text scaling without
+  clipping, overlap, hidden controls, or avoidable horizontal scrolling.
+- Provide text equivalents or adjacent data for charts and visual information
+  that otherwise carries meaning only visually.
 
 ## Placement
 
-- Keep reusable WCAG baseline guidance in this file.
-- Keep repository-specific UI component ownership and shadcn styling rules in
-  the project-local UI instruction routed by `.ai/instructions/index.md`.
-- Keep product-specific acceptance criteria in the relevant spec or plan.
-- Keep accessibility fixes close to the component, route, form, or workflow
-  that owns the inaccessible behavior.
+- Keep framework, component-library, path, alias, styling, and product-specific
+  rules in the project-local UI instruction routed by
+  `.ai/instructions/index.md`.
+- Keep product acceptance criteria in the finalized spec and plan.
 
 ## Validation
 
-- Manually verify keyboard-only interaction for changed UI, including focus
-  order, activation keys, overlay dismissal, and focus return.
-- Check accessible names, labels, roles, descriptions, status messages, and
-  landmark structure with browser accessibility tooling or a screen reader when
-  the change affects semantics or assistive-technology output.
-- Run automated accessibility checks such as axe, Playwright accessibility
-  checks, Lighthouse, or equivalent when available, but do not treat automated
-  checks as complete WCAG coverage.
-- Verify color contrast after theme, token, variant, chart, or state-color
-  changes.
-- Run focused component, integration, or E2E tests when accessibility behavior
-  is part of a critical workflow or has previously regressed.
-- When full accessibility validation is not possible, state the unverified
-  WCAG risk and the smallest follow-up check needed.
+- Manually verify keyboard order, activation, dismissal, and focus return for
+  changed interaction.
+- Inspect accessible names, labels, roles, descriptions, status messages, and
+  landmarks with accessibility tooling when semantics change.
+- Run available automated accessibility and focused regression checks, while
+  recognizing that automation does not establish full WCAG conformance.
+- Verify contrast after visual-token or state-color changes.
+- When optional accessibility validation depends on unavailable tooling or a
+  device, disclose the unverified behavior, risk, and smallest follow-up check.
 
 ## Anti-Patterns
 
-- Claiming WCAG compliance solely because a page uses shadcn/ui.
-- Replacing accessible shadcn, Radix UI, or Base UI primitives with custom
-  markup without reproducing the required semantics and keyboard behavior.
-- Using clickable `div` or `span` elements for button or link behavior.
-- Removing visible focus styles for visual polish.
-- Shipping icon-only controls without accessible names.
-- Encoding validation, status, or selection using only color.
-- Hiding labels and instructions from assistive technology.
-- Creating custom dialogs, dropdowns, selects, tabs, menus, or comboboxes when
-  existing app primitives already provide the expected accessibility behavior.
+- Claiming conformance from a framework or component library alone.
+- Replacing accessible primitives without preserving semantics and interaction.
+- Clickable generic elements, hidden focus, unlabeled icon controls, color-only
+  state, or inaccessible custom composite widgets.

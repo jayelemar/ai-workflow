@@ -1,16 +1,20 @@
-# Source-only nested repo: ignore everything by default.
+# Source-only nested repository: ignore everything by default.
 *
 
-# Repo metadata
+# Canonical source files
 !/.gitignore
-!/README.md
 !/AGENTS.md
-# Allowlisted source directories
-!/changelogs/
-!/changelogs/**
+!/README.md
+!/package.json
+!/pnpm-lock.yaml
+
+# Canonical source directories
+!/config/
+!/config/**
 !/docs/
 !/docs/**
 !/instructions/
+!/instructions/ai-workflow.md
 !/instructions/shared/
 !/instructions/shared/**
 !/prompts/
@@ -22,9 +26,13 @@
 !/wrappers/
 !/wrappers/**
 
-# Dynamic/local-only workflow data
+# Project-local and generated workflow data
+/instructions/index.md
+/instructions/*.md
+!/instructions/ai-workflow.md
 /artifacts/
 /logs/
 /plans/
 /specs/
 /state/
+/node_modules/

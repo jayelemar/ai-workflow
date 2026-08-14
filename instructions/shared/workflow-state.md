@@ -1,66 +1,53 @@
-Version: 2.0
-Last Updated: 2026-07-20
+Version: 3.1
+Last Updated: 2026-08-14
 
-# Workflow State Instructions
+# Workflow Stage Instructions
 
-## Purpose
+## Authority
 
-`workflowState` is sole persisted workflow-routing value. Runner-managed plan
-manifests contain only `## Workflow State`; `workflow.json` contains only
-`workflowState` for routing. Do not persist or require secondary state labels.
+The explicit user invocation controls each stage. Finalized specs, saved plans,
+flow artifacts, Git state, validation evidence, and review/checkpoint artifacts
+provide durable context only; none authorizes a transition by itself. There is
+no workflow runner, transition state, event journal, or sidecar authority.
 
-## Canonical State Matrix
+## Stage Matrix
 
-`.ai/scripts/workflow/contracts/stage.ts` is executable source. This table is
-machine-checked by `stage.test.ts`.
+| Class    | Read-only intake result                | Next explicitly invoked stage                                           | Planning                                                                        | Explicit execution               |
+| -------- | -------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------- | -------------------------------- |
+| `LOW`    | classification and repository evidence | explicitly invoke plan creation in Plan mode                            | save a compact `.ai/plans/<plan-name>.md` reference                             | `execute <plan-file>`            |
+| `MEDIUM` | classification and missing decisions   | invoke the spec prompt and finalize `feature-spec@1` or `bugfix-spec@1` | reuse or create required flow artifacts, then save `plan-manifest@2`            | `execute <plan-file>`            |
+| `HIGH`   | classification and missing decisions   | invoke the spec prompt and finalize `feature-spec@1` or `bugfix-spec@1` | reuse or create required flow artifacts, then save the plan and initial handoff | `/goal <exact-goal> <plan-file>` |
 
-| Workflow State | Routed Stage |
-| --- | --- |
-| `draft-artifact-sync` | `sync-plan-artifacts` |
-| `draft-validation` | `plan-validator` |
-| `approved` | `execute-plan` |
-| `active` | `execute-plan` |
-| `blocked` | `unblock-plan` |
-| `review` | `review-changes` |
-| `reopening` | `reopen-plan` |
-| `completed` | `commit-summary` |
+After finalizing a MEDIUM/HIGH spec, explicitly invoke plan creation. When the
+spec requires end-to-end tracing, create-plan applies the canonical
+flow-artifact prompt and saves both `user-journey@1` and
+`implementation-map@1` before the plan if a complete pair is not already
+available. A direct flow-artifact invocation may pre-create the pair but is not
+required.
 
-## Persistence Rules
+## Rules
 
-* Update manifest and `workflow.json` together before stage output.
-* Reread both locations after every transition. Stop with exact mismatch if
-  either cannot be written or states differ.
-* `files.json`, file-ownership artifacts, event history, and logs do not own
-  routing state.
-* Manual plans remain outside runner state and do not need `workflowState`.
-* Plans without a valid canonical `workflowState` stop before prompt launch.
+- Intake is read-only and stops for unresolved classification or behavior
+  decisions. It must not save the next artifact in the same invocation.
+- LOW cannot execute from a conversational plan. Plan mode must save the plan
+  file named by the later `execute <plan-file>` invocation.
+- A saved or finalized artifact never starts the next stage. The user must
+  explicitly invoke the spec, planning, or execution stage. A standalone
+  flow-artifact invocation does not start planning.
+- A material discovery returns work to the appropriate explicit stage.
+  Classification escalates when newly established risk requires it.
+- `Ready to complete`, `Fix required`, and `Blocked` are the only MEDIUM review
+  statuses. An in-scope fix reruns required validation and review.
+- HIGH execution reads each saved task and delegation decision before work.
+  Required delegation, validation, actual-diff review, and one task-scoped
+  commit remain mandatory under the HIGH commit protocol.
+- HIGH planning creates `.ai/artifacts/<plan-name>/goal-handoff.md` as portable
+  context. It does not authorize implementation or replace `/goal`.
 
-## Allowed Transitions
+## Anti-Patterns
 
-* `draft-artifact-sync` → `draft-validation` or itself.
-* `draft-validation` → `approved` or itself.
-* `approved` → `active`, `review`, or `blocked` only through execution output.
-* `active` → `active`, `review`, or `blocked`.
-* `blocked` → `active` or itself.
-* `review` → `active` or `completed`.
-* `completed` → `reopening` when operator reopens plan.
-* `reopening` → `active`.
-* `completed` remains terminal after successful one-final-commit summary.
-
-Task-savepoint `completed` summaries return to `active` while tasks remain;
-after final aggregate summary they terminate at `completed` without another
-aggregate commit.
-
-## Recovery
-
-Partial execute/review, failed-review, and blocked-validation recoveries repair
-both persisted locations to one canonical state. On write error, stop and name
-failed path. Recovery preserves event history, ownership safeguards, and task
-savepoint behavior.
-
-## Validation
-
-* Every state resolves exactly one stage prompt, model, and reasoning level in
-  `stage.ts`.
-* State-machine prompts explicitly load this instruction.
-* Prompts must never persist secondary workflow-routing fields.
+- Creating a spec during read-only intake.
+- Treating `saved`, `finalized`, or conversational agreement as execution
+  authorization.
+- Introducing runner selection, persisted transition state, event history,
+  sidecars, or a pre-execution approval gate.

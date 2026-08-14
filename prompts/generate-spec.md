@@ -1,196 +1,128 @@
-# Generate Feature Spec (Deterministic, Interactive)
-
-Goal: create a complete, unambiguous, implementation-ready feature spec.
-
----
-
-## Rules
-
-- Do NOT assume behavior
-- Do NOT invent business logic
-- Ask questions when unclear
-- Prefer explicit decisions over defaults
-- All behavior MUST be deterministic
-- No vague or subjective language allowed
-
----
-
-## Step 1 — Feature Understanding
-
-Ask:
-
-- What is the feature?
-- What is the goal/outcome?
-- Who uses it?
-
----
-
-## Step 2 — Inputs / Outputs
-
-Ask:
-
-- What inputs are required?
-- What outputs are expected?
-
-Rules:
-
-- Define data shape if applicable
-- Define required vs optional inputs
-
-If unclear:
-→ STOP and ask clarification
-
----
-
-## Step 3 — Core Behavior (MANDATORY)
-
-Ask in rule format:
-
-- What should happen when X occurs?
-- What should happen if input is invalid?
-- What are the main logic rules?
-
-Convert into STRICT rules:
-
-- IF <condition> THEN <exact outcome>
-- ELSE IF <condition> THEN <exact outcome>
-
-Rules:
-
-- MUST cover all possible paths
-- MUST NOT leave undefined branches
-
----
-
-## Step 4 — Edge Cases (MANDATORY)
-
-Ask:
-
-- What happens if input is missing?
-- What happens if values exceed limits?
-- What are failure scenarios?
-- What happens on retries / partial state?
-
-Rules:
-
-- MUST define exact behavior
-- MUST NOT leave edge cases undefined
-
-If user is unsure:
-
-→ propose options  
-→ REQUIRE explicit selection  
-
----
-
-## Step 5 — Decision Clarification (NEW, CRITICAL)
-
-Identify:
-
-- ambiguous terms (e.g. "weak", "valid", "fast")
-- undefined states (e.g. "failed", "pending")
-- unclear flows (e.g. retry vs restart)
-
-For each:
-
-→ ask:
-
-- define exact criteria
-- define exact behavior
-
-Examples:
-
-BAD:
-- "weak evidence"
-
-GOOD:
-- "evidence is weak if:
-  - fewer than 2 sources
-  - OR no primary source"
-
----
-
-## Step 6 — Constraints
-
-Ask:
-
-- performance constraints?
-- API / DB limitations?
-- business rules?
-
-Rules:
-
-- MUST define measurable constraints where applicable
-
----
-
-## Step 7 — Acceptance Criteria
-
-Ask:
-
-- How do we know this is working?
-- What scenarios must pass?
-
-Rules:
-
-- MUST map to behavior rules
-- MUST include edge case validation
-
----
-
-## Step 8 — Output Spec
-
-Generate:
-
-.ai/specs/<feature>.spec.md
-
-After saving the spec, append the manual token checkpoint:
-
-`pnpm exec tsx .ai/scripts/workflow/telemetry/manual-token-usage.ts --plan <feature> --stage spec`
-
-When the spec is completed successfully, end the final response with exactly:
-
-`Spec saved to .ai/specs/<feature>.spec.md`
-
----
-
-## Spec Format
-
+# Generate Spec
+
+Create one finalized, deterministic behavior specification for work already
+classified MEDIUM or HIGH. Run only when the user explicitly invokes this
+prompt with a spec type and input. Do not plan or implement.
+
+## Input Contract
+
+```text
+Spec type: feature-spec@1 | bugfix-spec@1
+Name: <kebab-case name>
+Classification: MEDIUM | HIGH
+Request and decisions: <desired behavior, constraints, and acceptance evidence>
+Bug evidence: <required for bugfix-spec@1; N/A for feature-spec@1>
+```
+
+If the type, class, desired behavior, or a material decision is missing, stop
+and request only the missing input. Inspect the codebase to establish current
+facts and constraints, never to invent desired behavior.
+
+## Shared Rules
+
+- Read `.ai/AGENTS.md`, `.ai/instructions/index.md`, and relevant routed
+  instructions.
+- Resolve roles, inputs, outputs, permissions, success paths, failures, edge
+  cases, non-goals, compatibility constraints, and pass/fail acceptance
+  criteria.
+- Express behavior deterministically with exact IF/THEN rules where branching
+  exists. Define every material branch.
+- Keep implementation file scope and execution commands out of the spec unless
+  the user provided them as non-negotiable constraints.
+- Ask for explicit decisions when alternatives materially change behavior.
+- Finalizing and saving the spec does not invoke flow artifacts or planning.
+
+## Feature Contract
+
+For `feature-spec@1`, save `.ai/specs/<name>.spec.md` with exactly these
+top-level sections:
+
+```md
 # Feature: <name>
+
+## Document Format
+
+feature-spec@1
 
 ## Goal
 
-## Inputs / Outputs
+## Actors and Permissions
+
+## Inputs and Outputs
 
 ## Behavior
 
-(STRICT IF/THEN rules only)
+## Edge Cases and Failures
 
-## Edge Cases
-
-(ALL must have defined outcomes)
-
-## Constraints
+## Constraints and Non-Goals
 
 ## Acceptance Criteria
 
----
+## Open Decisions
+```
 
-## Validation (MANDATORY)
+`Open Decisions` must be exactly `None` before the spec is finalized.
 
-Before finalizing:
+## Bugfix Contract and RCA Gate
 
-- verify ALL behaviors are deterministic
-- verify NO ambiguous terms exist
-- verify ALL edge cases are defined
-- verify ALL decision paths are covered
+For `bugfix-spec@1`, a root-cause analysis is mandatory. Evidence must establish
+the observed failure, affected boundary, causal mechanism, and why the proposed
+fix addresses that mechanism. Record rejected hypotheses when they materially
+distinguish the root cause. A symptom, guess, temporal correlation, or desired
+patch is not an RCA.
 
-If ANY of these exist:
+If evidence is insufficient, stop without saving the spec and return the exact
+reproduction, log, state, diff, or environment evidence needed. Do not label an
+operator assertion or an unverified production claim as evidence.
 
-- vague terms
-- undefined behavior
-- missing edge cases
+Save `.ai/specs/<name>.spec.md` with exactly these top-level sections:
 
-→ STOP  
-→ ask follow-up questions  
-→ DO NOT generate spec
+```md
+# Bugfix: <name>
+
+## Document Format
+
+bugfix-spec@1
+
+## Goal
+
+## Evidence
+
+## Root Cause Analysis
+
+## Rejected Hypotheses
+
+## Current and Expected Behavior
+
+## Actors and Permissions
+
+## Inputs and Outputs
+
+## Fix Behavior
+
+## Edge Cases and Failures
+
+## Constraints and Non-Goals
+
+## Acceptance Criteria
+
+## Open Decisions
+```
+
+`Evidence` and `Root Cause Analysis` must cite concrete inspected or supplied
+evidence. `Open Decisions` must be exactly `None` before finalization.
+
+## Validation
+
+Before saving, verify the selected schema is exact, every acceptance criterion
+maps to defined behavior, all material branches and failures are deterministic,
+and no desired behavior was inferred from code. For `bugfix-spec@1`, also
+verify every RCA conclusion is evidence-backed.
+
+Manual token telemetry is optional and does not affect finalization.
+
+## Final Response
+
+Return exactly:
+
+`Spec finalized at .ai/specs/<name>.spec.md [<spec-type>]`
