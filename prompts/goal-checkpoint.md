@@ -8,8 +8,10 @@ Read `.ai/AGENTS.md` before inspecting or writing checkpoint context.
 
 ## Input
 
-- Goal name: a stable kebab-case identifier chosen when the goal starts
-- Exact goal: the current saved objective
+- Goal name: the plan name during initial HIGH planning; afterward, the stable
+  kebab-case identifier already recorded in the handoff
+- Exact goal: the finalized spec's `## Goal` text during initial HIGH planning;
+  afterward, the current saved objective
 
 If the goal name is missing or not kebab-case, STOP and request a stable
 identifier before writing a checkpoint.
@@ -20,7 +22,7 @@ identifier before writing a checkpoint.
 - During initial HIGH planning, create the handoff before saving the plan's
   final output. Record that implementation has not started, the current
   repository state, `Awaiting explicit /goal invocation` as the blocker, and
-  the exact `/goal <description> <plan-file>` next action.
+  the exact `/goal <exact-goal> <plan-file>` next action.
 - Do not create workflow state, event logs, sidecars, or a MEDIUM review
   artifact. The linked finalized spec and saved HIGH plan are required inputs, not
   artifacts to recreate here.

@@ -7,20 +7,9 @@ runner, transition state, or sidecar authority.
 
 ## Installation
 
-Codex discovers project instructions from `AGENTS.md` at the repository root
-and then walks toward the working directory. A project may optionally install
-this root template:
-
-```md
-# Repository AI Instructions
-
-Read and follow `.ai/AGENTS.md` before work.
-Use `.ai/instructions/index.md` to load project instructions relevant to the
-request.
-```
-
-No tool-specific indirection file is required. Active prompts load
-`.ai/AGENTS.md` directly.
+For automatic discovery, install the optional repository-root `AGENTS.md`
+template documented in `.ai/docs/codex-agent.md`. Active prompts also load
+`.ai/AGENTS.md` directly, so no tool-specific indirection file is required.
 
 ## Explicit Workflow
 
@@ -37,7 +26,7 @@ No tool-specific indirection file is required. Active prompts load
 5. Optionally invoke `.ai/prompts/generate-flow-artifacts.md` directly before
    planning when the pair is useful as a standalone deliverable.
 6. Explicitly execute LOW/MEDIUM with `execute <plan-file>` or HIGH with
-   `/goal <description> <plan-file>`.
+   `/goal <exact-goal> <plan-file>`.
 
 Saving or finalizing an artifact does not invoke the next stage. There is no
 preview, plan approval, validator, or persisted progress gate.
@@ -96,6 +85,6 @@ node /absolute/path/to/.ai/scripts/maintenance/health-check.mjs --full
 ```
 
 The checks resolve the nested repository from the script location, validate
-canonical paths and references, enforce ignore/untracked boundaries, format
-Markdown and scripts, and run focused or full tests without shell command
-substitution.
+canonical paths and references, enforce ignore/untracked boundaries, check
+active workflow Markdown and script formatting, and run focused or full tests
+without shell command substitution.

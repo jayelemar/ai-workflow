@@ -82,18 +82,19 @@ Use `.ai/templates/plan.template.md` exactly and save:
 
 For HIGH only, create `.ai/artifacts/<plan-name>/goal-handoff.md` using
 `.ai/prompts/goal-checkpoint.md`. Link the finalized spec and saved plan, record
-the current repository state and `No implementation started`, use `Awaiting
-explicit /goal invocation` as the only blocker, and name `/goal <description>
-<plan-file>` as the next action. Use the checkpoint content and unchanged HIGH
-commit protocol, then return to this prompt. Do not create a handoff for LOW or
-MEDIUM.
+the current repository state and `No implementation started`. Use the plan name
+as `Goal name` and copy the finalized spec's `## Goal` text verbatim as `Exact
+goal`. Use `Awaiting explicit /goal invocation` as the only blocker, and name
+`/goal <exact-goal> <plan-file>` as the next action. Use the checkpoint content
+and unchanged HIGH commit protocol, then return to this prompt. Do not create a
+handoff for LOW or MEDIUM.
 
 ## Stage Boundary
 
 Saving a plan does not implement it. The next stage must be explicitly invoked:
 
 - LOW/MEDIUM: `execute .ai/plans/<plan-name>.md`
-- HIGH: `/goal <description> .ai/plans/<plan-name>.md`
+- HIGH: `/goal <exact-goal> .ai/plans/<plan-name>.md`
 
 Do not add a preview, approval, or plan-validation gate. Manual token telemetry
 is optional and never affects the saved plan or next stage.

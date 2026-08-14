@@ -12,7 +12,8 @@ Read `.ai/AGENTS.md` before loading the handoff.
    Treat `## Exact Goal` as the saved objective and `## Next Action` as the
    immediate starting point. Re-check current Git state before acting because
    the handoff is a checkpoint, not the authority for repository state.
-3. In Codex, restore the saved objective with `/goal <exact goal>`.
+3. In Codex, invoke the handoff's exact `## Next Action`; it must use
+   `/goal <exact-goal> <linked-plan-path>`.
 4. In another provider, use the same handoff as the starting context.
 
 ## Strict Constraints

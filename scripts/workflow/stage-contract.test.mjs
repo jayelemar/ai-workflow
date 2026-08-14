@@ -71,7 +71,7 @@ test("workflow uses explicit stages and LOW saves a reference plan", async () =>
 
   for (const command of [
     "execute .ai/plans/<plan-name>.md",
-    "/goal <description> .ai/plans/<plan-name>.md",
+    "/goal <exact-goal> .ai/plans/<plan-name>.md",
   ]) {
     assert.match(createPlan, new RegExp(command.replace(/[./<>]/g, "\\$&")));
   }
@@ -195,9 +195,10 @@ test("plan progress supports multiple declared repositories without fallback bas
 });
 
 test("HIGH keeps its reusable task commit protocol", async () => {
-  const [checkpoint, createPlan, review] = await Promise.all([
+  const [checkpoint, createPlan, resume, review] = await Promise.all([
     readSource("prompts/goal-checkpoint.md"),
     readSource("prompts/create-plan.md"),
+    readSource("prompts/resume-goal.md"),
     readSource("prompts/review-changes.md"),
   ]);
 
@@ -219,6 +220,8 @@ test("HIGH keeps its reusable task commit protocol", async () => {
     /If a required role\s+cannot run or lacks its result, STOP the task as `Blocked`/,
   );
   assert.match(createPlan, /unchanged HIGH\s+commit protocol/);
+  assert.match(createPlan, /copy the finalized spec's `## Goal` text verbatim/);
+  assert.match(resume, /\/goal <exact-goal> <linked-plan-path>/);
   assert.match(review, /unchanged task commit\s+protocol/);
 });
 

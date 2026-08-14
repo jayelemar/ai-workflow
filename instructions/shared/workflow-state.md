@@ -12,11 +12,11 @@ no workflow runner, transition state, event journal, or sidecar authority.
 
 ## Stage Matrix
 
-| Class    | Read-only intake result                | Next explicitly invoked stage                                           | Planning                                                                        | Explicit execution                |
-| -------- | -------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------- | --------------------------------- |
-| `LOW`    | classification and repository evidence | explicitly invoke plan creation in Plan mode                            | save a compact `.ai/plans/<plan-name>.md` reference                             | `execute <plan-file>`             |
-| `MEDIUM` | classification and missing decisions   | invoke the spec prompt and finalize `feature-spec@1` or `bugfix-spec@1` | reuse or create required flow artifacts, then save `plan-manifest@2`            | `execute <plan-file>`             |
-| `HIGH`   | classification and missing decisions   | invoke the spec prompt and finalize `feature-spec@1` or `bugfix-spec@1` | reuse or create required flow artifacts, then save the plan and initial handoff | `/goal <description> <plan-file>` |
+| Class    | Read-only intake result                | Next explicitly invoked stage                                           | Planning                                                                        | Explicit execution               |
+| -------- | -------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------- | -------------------------------- |
+| `LOW`    | classification and repository evidence | explicitly invoke plan creation in Plan mode                            | save a compact `.ai/plans/<plan-name>.md` reference                             | `execute <plan-file>`            |
+| `MEDIUM` | classification and missing decisions   | invoke the spec prompt and finalize `feature-spec@1` or `bugfix-spec@1` | reuse or create required flow artifacts, then save `plan-manifest@2`            | `execute <plan-file>`            |
+| `HIGH`   | classification and missing decisions   | invoke the spec prompt and finalize `feature-spec@1` or `bugfix-spec@1` | reuse or create required flow artifacts, then save the plan and initial handoff | `/goal <exact-goal> <plan-file>` |
 
 After finalizing a MEDIUM/HIGH spec, explicitly invoke plan creation. When the
 spec requires end-to-end tracing, create-plan applies the canonical
