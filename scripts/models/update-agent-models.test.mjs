@@ -1,13 +1,20 @@
 import assert from "node:assert/strict";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import {
+  inspectAndUpdateModels,
   parseArgs,
   resolveLatestTiers,
   updateCodexConfig,
   updateRegistryModels,
   validateOptions,
 } from "./update-agent-models.mjs";
+
+const workflowRoot = fileURLToPath(new URL("../../", import.meta.url));
 
 const latestModelMarkdown = `---
 latestModelInfo:
@@ -89,4 +96,31 @@ test("Codex config update preserves unrelated settings", () => {
   assert.match(updated, /^model_reasoning_effort = "high"$/m);
   assert.match(updated, /^approval_policy = "never"$/m);
   assert.match(updated, /^sandbox_mode = "danger-full-access"$/m);
+});
+
+test("read-only model checks do not require a Codex config", async () => {
+  const temporaryRoot = await mkdtemp(
+    path.join(os.tmpdir(), "agent-model-check-"),
+  );
+  try {
+    const sourcePath = path.join(temporaryRoot, "latest-model.md");
+    const missingConfigPath = path.join(temporaryRoot, ".codex", "config.toml");
+    await writeFile(sourcePath, latestModelMarkdown, "utf8");
+
+    const result = await inspectAndUpdateModels(
+      parseArgs([
+        "--source",
+        sourcePath,
+        "--registry",
+        path.join(workflowRoot, "config", "agent-models.toml"),
+        "--codex-config",
+        missingConfigPath,
+      ]),
+    );
+
+    assert.equal(result.status, "update-available");
+    await assert.rejects(readFile(missingConfigPath, "utf8"), /ENOENT/);
+  } finally {
+    await rm(temporaryRoot, { recursive: true, force: true });
+  }
 });

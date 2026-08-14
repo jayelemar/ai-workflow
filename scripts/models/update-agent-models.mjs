@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -283,6 +283,7 @@ export const updateCodexConfig = (config, { model, reasoningEffort }) => {
 const writeAtomically = async (filePath, contents) => {
   const temporaryPath = `${filePath}.${process.pid}.tmp`;
   try {
+    await mkdir(path.dirname(filePath), { recursive: true });
     await writeFile(temporaryPath, contents, "utf8");
     await rename(temporaryPath, filePath);
   } catch (error) {
@@ -307,20 +308,12 @@ Options:
 `);
 };
 
-const main = async () => {
-  const options = parseArgs(process.argv.slice(2));
-  if (options.help) {
-    printHelp();
-    return;
-  }
-  validateOptions(options);
-
+export const inspectAndUpdateModels = async (options) => {
   const registryPath = path.resolve(options.registry);
   const codexConfigPath = path.resolve(options.codexConfig);
-  const [markdown, registry, codexConfig] = await Promise.all([
+  const [markdown, registry] = await Promise.all([
     readSource(options.source),
     readFile(registryPath, "utf8"),
-    readFile(codexConfigPath, "utf8"),
   ]);
   const candidate = resolveLatestTiers(markdown);
   const currentRuntime = readRuntimeRegistry(registry);
@@ -337,6 +330,12 @@ const main = async () => {
   };
 
   if (options.apply) {
+    const codexConfig = await readFile(codexConfigPath, "utf8").catch(
+      (error) => {
+        if (error?.code === "ENOENT") return "";
+        throw error;
+      },
+    );
     const updatedRegistry = updateRegistryModels(registry, candidate);
     const updatedRuntime = readRuntimeRegistry(updatedRegistry);
     const parent = updatedRuntime.roles.parent;
@@ -361,6 +360,18 @@ const main = async () => {
       "Run role evals, then rerun with --apply --eval-approved; do not switch silently.";
   }
 
+  return result;
+};
+
+const main = async () => {
+  const options = parseArgs(process.argv.slice(2));
+  if (options.help) {
+    printHelp();
+    return;
+  }
+  validateOptions(options);
+
+  const result = await inspectAndUpdateModels(options);
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 };
 
