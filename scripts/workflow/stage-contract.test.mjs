@@ -225,6 +225,74 @@ test("HIGH keeps its reusable task commit protocol", async () => {
   assert.match(review, /unchanged task commit\s+protocol/);
 });
 
+test("MEDIUM and HIGH require an independent final review loop", async () => {
+  const [agents, workflow, execute, review, checkpoint, registry] =
+    await Promise.all([
+      readSource("AGENTS.md"),
+      readSource("instructions/shared/workflow-state.md"),
+      readSource("prompts/execute-plan.md"),
+      readSource("prompts/review-changes.md"),
+      readSource("prompts/goal-checkpoint.md"),
+      readSource("config/agent-models.toml"),
+    ]);
+
+  assert.match(
+    agents,
+    /After all MEDIUM or HIGH implementation, require an independent reviewer/,
+  );
+  assert.match(
+    execute,
+    /independent whole-plan review[\s\S]*configured\s+`reviewer` subagent/,
+  );
+  assert.match(
+    review,
+    /Spawn a fresh reviewer subagent for every review round/,
+  );
+  assert.match(review, /committed HIGH task changes/);
+  assert.match(review, /`P0`, `P1`, and `P2` are blocking/);
+  assert.match(review, /`P3` is advisory/);
+  assert.match(
+    review,
+    /active P0\/P1\/P2 finding when Fix required[\s\S]*external or missing-input blocker when Blocked/,
+  );
+  assert.match(
+    review,
+    /Repeat until a\s+fresh round is clear[\s\S]*true external or\s+missing-input blocker/,
+  );
+
+  assert.match(
+    checkpoint,
+    /After every planned task has completed the task commit protocol/,
+  );
+  assert.match(
+    checkpoint,
+    /mandatory regardless of the tasks' saved delegation decisions/,
+  );
+  assert.match(
+    checkpoint,
+    /exactly one local commit per changed repository for the round/,
+  );
+  assert.match(checkpoint, /fix\(review\): resolve round <number> findings/);
+  assert.match(
+    checkpoint,
+    /Repeat remediation, validation, review-round commits, and fresh review until\s+clear/,
+  );
+  assert.match(
+    workflow,
+    /After all task\s+commits, a mandatory independent reviewer checks the cumulative whole-plan\s+diff/,
+  );
+
+  const frontierModel = registry.match(
+    /\[tiers\.frontier\]\s+model = "([a-z0-9._-]+)"/,
+  )?.[1];
+  assert.ok(frontierModel, "frontier reviewer model must be locked");
+  assert.match(
+    registry,
+    /\[roles\.reviewer\][\s\S]*tier = "frontier"[\s\S]*reasoning_effort = "xhigh"/,
+  );
+  assert.match(registry, /\[spawn\][\s\S]*fork_turns = 4/);
+});
+
 test("wrappers remain thin input adapters", async () => {
   const wrapperFiles = (
     await collectFiles("wrappers", (file) => file.endsWith(".md"))

@@ -27,8 +27,12 @@ persisted transition authority.
   `.ai/scripts/workflow/telemetry/manual-token-usage.ts` is optional. It may be
   invoked explicitly for measurement but never gates, authorizes, or advances a
   workflow stage.
-- HIGH task delegation, validation, actual-diff review, and task-scoped commit
-  sequencing remain governed by `.ai/prompts/goal-checkpoint.md`.
+- MEDIUM and HIGH completion use the independent whole-plan review contract in
+  `.ai/prompts/review-changes.md` and the locked `reviewer` runtime in
+  `.ai/config/agent-models.toml`.
+- HIGH task delegation, validation, per-task actual-diff review, task-scoped
+  commit sequencing, and final-review remediation commits remain governed by
+  `.ai/prompts/goal-checkpoint.md`.
 
 ## Plan Ownership
 

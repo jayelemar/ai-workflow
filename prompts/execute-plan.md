@@ -32,10 +32,15 @@ only the project instructions routed for the implementation scope.
 For LOW, self-check the actual diff, scope, required validation, declared
 repositories, and preserved unrelated work.
 
-For MEDIUM, automatically run `.ai/prompts/review-changes.md` after validation
-and save `.ai/artifacts/<plan-name>/review.md` with exactly one status:
-`Ready to complete`, `Fix required`, or `Blocked`. Fix in-scope defects and
-repeat required validation/review; stop on a true blocker.
+For MEDIUM, automatically run the independent whole-plan review in
+`.ai/prompts/review-changes.md` after all implementation and required
+validation. Save `.ai/artifacts/<plan-name>/review.md` with exactly one status:
+`Ready to complete`, `Fix required`, or `Blocked`. Use the configured
+`reviewer` subagent for every round. Fix blocking `P0`, `P1`, and `P2`
+findings, rerun every required plan validation, and repeat with a fresh
+reviewer until clear; record `P3` findings without blocking completion. Stop
+only on a true blocker or a material discovery that requires a new explicit
+spec or planning stage.
 
 ## Final Response
 

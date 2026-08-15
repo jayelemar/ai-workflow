@@ -37,10 +37,18 @@ required.
 - A material discovery returns work to the appropriate explicit stage.
   Classification escalates when newly established risk requires it.
 - `Ready to complete`, `Fix required`, and `Blocked` are the only MEDIUM review
-  statuses. An in-scope fix reruns required validation and review.
+  statuses. After all MEDIUM implementation, a mandatory independent reviewer
+  checks the cumulative plan-owned diff. An in-scope blocking fix reruns
+  affected required validation and a fresh review until clear.
 - HIGH execution reads each saved task and delegation decision before work.
   Required delegation, validation, actual-diff review, and one task-scoped
-  commit remain mandatory under the HIGH commit protocol.
+  commit remain mandatory under the HIGH commit protocol. After all task
+  commits, a mandatory independent reviewer checks the cumulative whole-plan
+  diff; blocking remediation repeats validation, a review-round commit per
+  changed repository, and fresh review until clear.
+- Final MEDIUM and HIGH review uses the locked `reviewer` role from
+  `.ai/config/agent-models.toml`. `P0`, `P1`, and `P2` block completion; `P3`
+  is advisory and remains recorded.
 - HIGH planning creates `.ai/artifacts/<plan-name>/goal-handoff.md` as portable
   context. It does not authorize implementation or replace `/goal`.
 

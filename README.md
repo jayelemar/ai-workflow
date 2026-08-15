@@ -43,8 +43,13 @@ preview, plan approval, validator, or persisted progress gate.
   Git repository roots and integration-base refs.
 - `.ai/prompts/plan-progress.md` reads only plan-declared repositories and
   bases.
+- `.ai/prompts/review-changes.md` owns the mandatory independent MEDIUM/HIGH
+  whole-plan review, priority gate, and fresh-review remediation loop.
 - `.ai/prompts/goal-checkpoint.md` owns the reusable HIGH task delegation,
-  review, validation, and commit protocol.
+  per-task review, validation, commit protocol, and final-review remediation
+  commits.
+- `.ai/config/agent-models.toml` locks the reviewer model and reasoning effort
+  used by every final review round.
 - Wrappers under `.ai/wrappers/` are input adapters only.
 
 ## Repository Boundaries

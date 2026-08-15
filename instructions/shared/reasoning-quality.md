@@ -28,7 +28,10 @@ Define the shared reasoning baseline for explicit workflow stages.
 - Keep scope within the saved plan and spec. A material discovery pauses work
   and returns to the correct explicit stage instead of being absorbed silently.
 - Use actual implementation evidence for review. MEDIUM writes a complete
-  status artifact; HIGH reviews every task before its commit.
+  status artifact; HIGH reviews every task before its commit. After all
+  implementation, both classes require a fresh independent reviewer on the
+  cumulative plan-owned diff and must clear blocking findings before
+  completion.
 - For HIGH tasks, apply the saved delegation decision exactly. Do not invent
   an ad-hoc delegation during execution; a material discovery updates the
   plan, and a missing required delegation result blocks the task.

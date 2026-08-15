@@ -124,6 +124,41 @@ commit would include unrelated user changes. Stop and request operator
 direction in those cases. Do not push, open a pull request, amend, squash, or
 force-push unless the operator explicitly requests it.
 
+## Final Review Protocol
+
+After every planned task has completed the task commit protocol, run the
+independent whole-plan review in `.ai/prompts/review-changes.md`. This final
+review is mandatory regardless of the tasks' saved delegation decisions.
+
+1. Run all plan-level required validation, then spawn a fresh configured
+   `reviewer` subagent to inspect the cumulative plan-owned diff from every
+   declared integration base through current `HEAD` and any remediation work.
+2. If the review is clear of `P0`, `P1`, and `P2`, record the reviewer runtime,
+   round result, validation, and any advisory `P3` findings in
+   `## Verified Progress`, then complete the goal.
+3. If the reviewer reports a blocking finding, implement only the in-scope
+   remediation. A material behavior, dependency, risk, or repository-boundary
+   discovery stops the goal and returns to the appropriate explicit spec or
+   planning stage.
+4. Rerun every task validation affected by the remediation and all applicable
+   plan-level required validation. Review the remediation diff for unrelated
+   files and preserved user work. Never commit failed or ambiguous
+   remediation.
+5. For each declared repository changed in that review round, stage only its
+   remediation paths, never `.ai/` artifacts. Immediately before committing,
+   run `git branch --show-current`; on `main`, `dev`, `development`, or
+   `staging`, stop and obtain explicit operator permission for that commit.
+6. Create exactly one local commit per changed repository for the round using
+   `fix(review): resolve round <number> findings`. Do not amend, squash,
+   combine repositories, or include unrelated or previously completed task
+   changes.
+7. Record the round's resolved findings, validation results, repository commit
+   SHAs and subjects, and remaining advisory findings in
+   `## Verified Progress`.
+8. Start a fresh independent final review round over the cumulative result.
+   Repeat remediation, validation, review-round commits, and fresh review until
+   clear. Stop as `Blocked` only for a true external or missing-input blocker.
+
 ## Blockers
 
 <current blockers or None>
