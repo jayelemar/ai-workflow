@@ -14,7 +14,7 @@ no workflow runner, transition state, event journal, or sidecar authority.
 
 | Class    | Read-only intake result                | Next explicitly invoked stage                                           | Planning                                                                        | Explicit execution               |
 | -------- | -------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------- | -------------------------------- |
-| `LOW`    | classification and repository evidence | explicitly invoke plan creation in Plan mode                            | save a compact `.ai/plans/<plan-name>.md` reference                             | `execute <plan-file>`            |
+| `LOW`    | classification and repository evidence | explicitly invoke plan creation                                         | save a compact `.ai/plans/<plan-name>.md` reference                             | `execute <plan-file>`            |
 | `MEDIUM` | classification and missing decisions   | invoke the spec prompt and finalize `feature-spec@1` or `bugfix-spec@1` | reuse or create required flow artifacts, then save `plan-manifest@2`            | `execute <plan-file>`            |
 | `HIGH`   | classification and missing decisions   | invoke the spec prompt and finalize `feature-spec@1` or `bugfix-spec@1` | reuse or create required flow artifacts, then save the plan and initial handoff | `/goal <exact-goal> <plan-file>` |
 
@@ -29,8 +29,8 @@ required.
 
 - Intake is read-only and stops for unresolved classification or behavior
   decisions. It must not save the next artifact in the same invocation.
-- LOW cannot execute from a conversational plan. Plan mode must save the plan
-  file named by the later `execute <plan-file>` invocation.
+- LOW cannot execute from a conversational plan. Plan creation must save the
+  plan file named by the later `execute <plan-file>` invocation.
 - A saved or finalized artifact never starts the next stage. The user must
   explicitly invoke the spec, planning, or execution stage. A standalone
   flow-artifact invocation does not start planning.

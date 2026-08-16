@@ -15,18 +15,18 @@ implementation file. This invocation is read-only.
 
 Choose exactly one:
 
-| Class    | Evidence                                                                               | Next stage                                                                                    |
-| -------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `LOW`    | Narrow, understood, low-risk work with bounded ownership and validation.               | Enter Plan mode and explicitly invoke plan creation; it must save `.ai/plans/<plan-name>.md`. |
-| `MEDIUM` | Work needs a durable behavior contract, integration tracing, or safeguards beyond LOW. | Explicitly invoke `.ai/prompts/generate-spec.md` with a spec type.                            |
-| `HIGH`   | Long-running, exploratory, high-risk, cross-system, or task-commit work.               | Explicitly invoke `.ai/prompts/generate-spec.md` with a spec type.                            |
+| Class    | Evidence                                                                               | Next stage                                                                |
+| -------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `LOW`    | Narrow, understood, low-risk work with bounded ownership and validation.               | Explicitly invoke plan creation; it must save `.ai/plans/<plan-name>.md`. |
+| `MEDIUM` | Work needs a durable behavior contract, integration tracing, or safeguards beyond LOW. | Explicitly invoke `.ai/prompts/generate-spec.md` with a spec type.        |
+| `HIGH`   | Long-running, exploratory, high-risk, cross-system, or task-commit work.               | Explicitly invoke `.ai/prompts/generate-spec.md` with a spec type.        |
 
 Classify as at least MEDIUM when end-to-end flow artifacts are needed. Escalate
 when new evidence supports a higher class; do not silently downgrade.
 
-For LOW, entering Plan mode or describing a plan in conversation is not enough.
-The Plan-mode invocation must create the saved plan file used by the later
-`execute <plan-file>` command.
+For LOW, describing a plan in conversation is not enough. The plan-creation
+invocation must create the saved plan file used by the later `execute
+<plan-file>` command.
 
 ## Final Response
 

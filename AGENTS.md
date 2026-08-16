@@ -31,8 +31,8 @@ repository conventions.
 ## Workflow and Scope
 
 - Intake is read-only. MEDIUM and HIGH specs are created only when the spec
-  prompt is explicitly invoked. Planning occurs in Plan mode and always saves a
-  plan file, including for LOW. When tracing is required, plan creation reuses
+  prompt is explicitly invoked. Planning always saves a plan file, including
+  for LOW. When tracing is required, plan creation reuses
   a complete flow-artifact pair or creates the missing pair through the
   canonical flow-artifact prompt before saving the plan; a separate
   flow-artifact invocation is supported but not required. Implementation begins

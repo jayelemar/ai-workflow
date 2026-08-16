@@ -12,7 +12,7 @@ only the project instructions routed for the implementation scope.
 ## Preconditions
 
 - Every declared repository root and integration-base ref must resolve.
-- LOW requires its saved compact plan file; a conversational Plan-mode result
+- LOW requires its saved compact plan file; a conversational plan result
   is not an execution input. MEDIUM requires a finalized typed spec.
 - Declared flow artifacts must be present and complete.
 - Preserve unrelated changes in every repository.
@@ -22,7 +22,7 @@ only the project instructions routed for the implementation scope.
 - Follow the requested behavior, finalized spec, repository ownership, and plan
   order strictly.
 - If a material new requirement, dependency, risk, or repository boundary
-  appears, stop. Return to the appropriate explicit spec or Plan-mode stage and
+  appears, stop. Return to the appropriate explicit spec or planning stage and
   wait for a new execution command.
 - Run every required plan validation command. Optional external validation may
   be deferred only under `.ai/AGENTS.md` disclosure rules.

@@ -51,22 +51,19 @@ test("workflow uses explicit stages and LOW saves a reference plan", async () =>
     /explicitly invoke `\.ai\/prompts\/generate-spec\.md`/i,
   );
   assert.match(selection, /must save `\.ai\/plans\/<plan-name>\.md`/);
-  assert.match(
-    selection,
-    /entering Plan mode or describing a plan in conversation is not enough/i,
-  );
+  assert.match(selection, /describing a plan in conversation is not enough/i);
   assert.match(workflow, /read-only intake/i);
   assert.match(workflow, /explicitly invoked stage/i);
   assert.match(workflow, /LOW cannot execute from a conversational plan/);
-  assert.match(createPlan, /in Plan mode/);
+  assert.doesNotMatch(createPlan, /in Plan mode/);
   assert.match(createPlan, /save:\s*\n\n`\.ai\/plans\/<plan-name>\.md`/);
   assert.match(
     execute,
-    /conversation(?:al)? Plan-mode result\s+is not an execution input/i,
+    /conversation(?:al)? plan result\s+is not an execution input/i,
   );
   assert.match(
     agents,
-    /Planning occurs in Plan mode and always saves a\s+plan file, including for LOW/,
+    /Planning always saves a plan file, including\s+for LOW/,
   );
 
   for (const command of [

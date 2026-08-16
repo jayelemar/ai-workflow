@@ -1,6 +1,6 @@
 # Create Plan
 
-Create one saved `plan-manifest@2` in Plan mode. This stage runs only when the
+Create one saved `plan-manifest@2`. This stage runs only when the
 user explicitly invokes plan creation after read-only intake and, for MEDIUM or
 HIGH, after the required spec is finalized. The same invocation determines
 whether flow tracing is required, reuses a complete flow-artifact pair when

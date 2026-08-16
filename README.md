@@ -14,12 +14,11 @@ template documented in `.ai/docs/codex-agent.md`. Active prompts also load
 ## Explicit Workflow
 
 1. Run `.ai/prompts/select-workflow.md` for read-only LOW/MEDIUM/HIGH intake.
-2. For LOW, explicitly invoke `.ai/prompts/create-plan.md` in Plan mode and
-   save `.ai/plans/<plan-name>.md`. Entering Plan mode or keeping a
-   conversational plan is not enough.
+2. For LOW, explicitly invoke `.ai/prompts/create-plan.md` and save
+   `.ai/plans/<plan-name>.md`. Keeping a conversational plan is not enough.
 3. For MEDIUM/HIGH, explicitly invoke `.ai/prompts/generate-spec.md` to finalize
    `feature-spec@1` or `bugfix-spec@1`.
-4. Explicitly invoke `.ai/prompts/create-plan.md` in Plan mode. It determines
+4. Explicitly invoke `.ai/prompts/create-plan.md`. It determines
    whether end-to-end tracing is required, reuses a complete pair or creates
    missing `user-journey@1` and `implementation-map@1` artifacts, then saves
    `plan-manifest@2`.
