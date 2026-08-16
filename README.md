@@ -40,8 +40,6 @@ preview, plan approval, validator, or persisted progress gate.
   create-plan applies it when required artifacts are missing.
 - `.ai/templates/plan.template.md` owns `plan-manifest@2`, including explicit
   Git repository roots and integration-base refs.
-- `.ai/prompts/plan-progress.md` reads only plan-declared repositories and
-  bases.
 - `.ai/prompts/review-changes.md` owns the mandatory independent MEDIUM/HIGH
   whole-plan review, priority gate, and fresh-review remediation loop.
 - `.ai/prompts/goal-checkpoint.md` owns the reusable HIGH task delegation,
