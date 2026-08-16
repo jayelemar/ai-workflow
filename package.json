@@ -11,7 +11,7 @@
     "health": "node scripts/maintenance/health-check.mjs",
     "health:full": "node scripts/maintenance/health-check.mjs --full",
     "test:focused": "node --import tsx --test scripts/maintenance/health-check.test.mjs scripts/workflow/stage-contract.test.mjs",
-    "test:all": "node --import tsx --test scripts/maintenance/health-check.test.mjs scripts/models/update-agent-models.test.mjs scripts/workflow/stage-contract.test.mjs scripts/workflow/telemetry/manual-token-usage.test.ts"
+    "test:all": "pnpm health:full"
   },
   "devDependencies": {
     "prettier": "3.9.6",
