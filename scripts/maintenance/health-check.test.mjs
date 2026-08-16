@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readFile, rm, unlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, symlink, unlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -73,6 +73,8 @@ const createFixture = async () => {
 const createCommandExecutor = ({
   root,
   sourcePaths,
+  nestedGitInAncestor = false,
+  nestedGitError,
   parentGit = true,
   parentGitError,
   parentTrackedPaths = [],
@@ -103,6 +105,10 @@ const createCommandExecutor = ({
 
     const [operation] = command.args;
     if (operation === 'rev-parse') {
+      if (command.cwd === root) {
+        if (nestedGitError) return result(128, '', nestedGitError);
+        return result(0, `${nestedGitInAncestor ? path.dirname(root) : root}\n`);
+      }
       if (parentGitError) return result(128, '', parentGitError);
       return parentGit
         ? result(0, `${path.dirname(root)}\n`)
@@ -222,6 +228,36 @@ test('health fails when a canonical source is not tracked', async () => {
   }
 });
 
+test('health fails when a canonical source is replaced by a directory', async () => {
+  await withFixture(async (fixture) => {
+    const sourcePath = path.join(fixture.root, 'README.md');
+    await unlink(sourcePath);
+    await mkdir(sourcePath);
+    const output = [];
+    const result = await runHealthCheck({
+      commandExecutor: createCommandExecutor(fixture),
+      stderr: (message) => output.push(message),
+      stdout: (message) => output.push(message),
+      workflowDirectory: fixture.root,
+    });
+
+    assert.equal(result.ok, false);
+    assert.match(output.join('\n'), /required source is missing or not a file/);
+    assert.match(output.join('\n'), /README\.md/);
+  });
+});
+
+test('health fails when source tracking comes from an ancestor repository', async () => {
+  const fixture = await runFixture({ nestedGitInAncestor: true });
+  try {
+    assert.equal(fixture.result.ok, false);
+    assert.match(fixture.output.join('\n'), /nested Git repository/);
+    assert.match(fixture.output.join('\n'), /unexpected top-level path/);
+  } finally {
+    await rm(fixture.temporaryRoot, { force: true, recursive: true });
+  }
+});
+
 test('health fails when a tracked source no longer exists on disk', async () => {
   await withFixture(async (fixture) => {
     const removedPath = 'prompts/removed.md';
@@ -243,6 +279,28 @@ test('health fails when a tracked source no longer exists on disk', async () => 
   });
 });
 
+test('health fails when a tracked source is a directory', async () => {
+  await withFixture(async (fixture) => {
+    const trackedPath = 'prompts/removed.md';
+    await mkdir(path.join(fixture.root, trackedPath));
+    const commandExecutor = createCommandExecutor({
+      ...fixture,
+      sourcePaths: [...fixture.sourcePaths, trackedPath],
+    });
+    const output = [];
+    const result = await runHealthCheck({
+      commandExecutor,
+      stderr: (message) => output.push(message),
+      stdout: (message) => output.push(message),
+      workflowDirectory: fixture.root,
+    });
+
+    assert.equal(result.ok, false);
+    assert.match(output.join('\n'), /tracked source is missing or not a file/);
+    assert.match(output.join('\n'), /prompts\/removed\.md/);
+  });
+});
+
 test('health fails when an expected wrapper is absent', async () => {
   await withFixture(async (fixture) => {
     await unlink(path.join(fixture.root, 'wrappers/resume-goal.md'));
@@ -256,6 +314,25 @@ test('health fails when an expected wrapper is absent', async () => {
 
     assert.equal(result.ok, false);
     assert.match(output.join('\n'), /missing expected wrapper/);
+  });
+});
+
+test('health fails when an expected wrapper is replaced by a directory', async () => {
+  await withFixture(async (fixture) => {
+    const wrapperPath = path.join(fixture.root, 'wrappers/bug-intake-rca.md');
+    await unlink(wrapperPath);
+    await mkdir(wrapperPath);
+    const output = [];
+    const result = await runHealthCheck({
+      commandExecutor: createCommandExecutor(fixture),
+      stderr: (message) => output.push(message),
+      stdout: (message) => output.push(message),
+      workflowDirectory: fixture.root,
+    });
+
+    assert.equal(result.ok, false);
+    assert.match(output.join('\n'), /expected wrapper is not a file/);
+    assert.match(output.join('\n'), /wrappers\/bug-intake-rca\.md/);
   });
 });
 
@@ -283,6 +360,25 @@ test('health fails for a missing relative instruction route', async () => {
 test('health validates direct instruction routes from the local index', async () => {
   await withFixture(async (fixture) => {
     await unlink(path.join(fixture.root, 'instructions/architecture.md'));
+    const output = [];
+    const result = await runHealthCheck({
+      commandExecutor: createCommandExecutor(fixture),
+      stderr: (message) => output.push(message),
+      stdout: (message) => output.push(message),
+      workflowDirectory: fixture.root,
+    });
+
+    assert.equal(result.ok, false);
+    assert.match(output.join('\n'), /missing relative instruction routes/);
+    assert.match(output.join('\n'), /architecture\.md/);
+  });
+});
+
+test('health fails when an instruction route is a directory', async () => {
+  await withFixture(async (fixture) => {
+    const routePath = path.join(fixture.root, 'instructions/architecture.md');
+    await unlink(routePath);
+    await mkdir(routePath);
     const output = [];
     const result = await runHealthCheck({
       commandExecutor: createCommandExecutor(fixture),
@@ -420,6 +516,28 @@ test('health fails closed when the direct parent has corrupt Git metadata', asyn
   } finally {
     await rm(fixture.temporaryRoot, { force: true, recursive: true });
   }
+});
+
+test('health fails closed for a dangling direct-parent .git symlink', async () => {
+  await withFixture(async (fixture) => {
+    const gitEntry = path.join(fixture.temporaryRoot, '.git');
+    await rm(gitEntry, { force: true, recursive: true });
+    await symlink('missing-git-metadata', gitEntry);
+    const output = [];
+    const result = await runHealthCheck({
+      commandExecutor: createCommandExecutor({
+        ...fixture,
+        parentGitError: 'fatal: not a git repository',
+      }),
+      stderr: (message) => output.push(message),
+      stdout: (message) => output.push(message),
+      workflowDirectory: fixture.root,
+    });
+
+    assert.equal(result.ok, false);
+    assert.match(output.join('\n'), /inspect parent Git repository/);
+    assert.doesNotMatch(output.join('\n'), /not applicable/);
+  });
 });
 
 test('test:all delegates to full health while focused tests remain fast', async () => {

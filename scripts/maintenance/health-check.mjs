@@ -2,7 +2,7 @@
 
 import { spawn } from 'node:child_process';
 import { constants } from 'node:fs';
-import { access, readdir, readFile, stat } from 'node:fs/promises';
+import { access, lstat, readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -103,6 +103,14 @@ const pathIsDirectory = async (targetPath) => {
   }
 };
 
+const pathIsFile = async (targetPath) => {
+  try {
+    return (await stat(targetPath)).isFile();
+  } catch {
+    return false;
+  }
+};
+
 const collectFiles = async (root, targetPath, predicate) => {
   const absolutePath = path.join(root, targetPath);
   if (!(await pathExists(absolutePath))) return [];
@@ -192,6 +200,32 @@ const listTrackedPaths = async ({ commandExecutor, cwd, pathspecs }) => {
   };
 };
 
+const validateNestedRepository = async ({ commandExecutor, root, stderr }) => {
+  const nestedGit = await commandExecutor({
+    command: 'git',
+    args: ['rev-parse', '--show-toplevel'],
+    cwd: root,
+  });
+  if (nestedGit.exitCode !== 0) {
+    stderr('FAIL inspect nested Git repository');
+    if (nestedGit.stdout?.trim()) stderr(nestedGit.stdout.trim());
+    if (nestedGit.stderr?.trim()) stderr(nestedGit.stderr.trim());
+    return false;
+  }
+
+  const detectedRoot = nestedGit.stdout.trim();
+  if (!detectedRoot) {
+    stderr('FAIL inspect nested Git repository: empty top-level path');
+    return false;
+  }
+  if (path.resolve(detectedRoot) !== root) {
+    stderr(`FAIL inspect nested Git repository: unexpected top-level path ${detectedRoot}`);
+    return false;
+  }
+
+  return true;
+};
+
 const validateCanonicalSource = async ({ commandExecutor, root, stderr }) => {
   const discovered = [
     ...BOOTSTRAP_SOURCE_PATHS,
@@ -199,15 +233,20 @@ const validateCanonicalSource = async ({ commandExecutor, root, stderr }) => {
   ].sort();
 
   for (const relativePath of discovered) {
-    if (!(await pathExists(path.join(root, relativePath)))) {
-      stderr(`FAIL missing required source: ${relativePath}`);
+    if (!(await pathIsFile(path.join(root, relativePath)))) {
+      stderr(`FAIL required source is missing or not a file: ${relativePath}`);
       return false;
     }
   }
 
   for (const relativePath of EXPECTED_WRAPPER_PATHS) {
-    if (!(await pathExists(path.join(root, relativePath)))) {
+    const wrapperPath = path.join(root, relativePath);
+    if (!(await pathExists(wrapperPath))) {
       stderr(`FAIL missing expected wrapper: ${relativePath}`);
+      return false;
+    }
+    if (!(await pathIsFile(wrapperPath))) {
+      stderr(`FAIL expected wrapper is not a file: ${relativePath}`);
       return false;
     }
   }
@@ -247,12 +286,12 @@ const validateCanonicalSource = async ({ commandExecutor, root, stderr }) => {
 
   const missing = [];
   for (const relativePath of tracked.paths) {
-    if (!(await pathExists(path.join(root, relativePath)))) {
+    if (!(await pathIsFile(path.join(root, relativePath)))) {
       missing.push(relativePath);
     }
   }
   if (missing.length > 0) {
-    stderr(`FAIL tracked source is missing:\n${missing.join('\n')}`);
+    stderr(`FAIL tracked source is missing or not a file:\n${missing.join('\n')}`);
     return false;
   }
 
@@ -384,7 +423,7 @@ const readInstructionRoutes = async ({ root, stderr }) => {
 const validateInstructionRoutes = async ({ instructionRoutes, root, stderr }) => {
   const missing = new Set();
   for (const route of instructionRoutes) {
-    if (!(await pathExists(path.join(root, 'instructions', route)))) {
+    if (!(await pathIsFile(path.join(root, 'instructions', route)))) {
       missing.add(route);
     }
   }
@@ -396,9 +435,17 @@ const validateInstructionRoutes = async ({ instructionRoutes, root, stderr }) =>
 
 const validateParentIndex = async ({ commandExecutor, root, stdout, stderr }) => {
   const parentRoot = path.dirname(root);
-  if (!(await pathExists(path.join(parentRoot, '.git')))) {
-    stdout('SKIP parent .ai index isolation: not applicable');
-    return true;
+  const parentGitEntry = path.join(parentRoot, '.git');
+  try {
+    await lstat(parentGitEntry);
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      stdout('SKIP parent .ai index isolation: not applicable');
+      return true;
+    }
+    stderr('FAIL inspect parent Git repository entry');
+    stderr(error instanceof Error ? error.message : String(error));
+    return false;
   }
 
   const parentGit = await commandExecutor({
@@ -454,6 +501,10 @@ export const runHealthCheck = async ({
   }
   if (options.error) {
     stderr(`FAIL parse arguments: ${options.error}`);
+    return { ok: false, root };
+  }
+
+  if (!(await validateNestedRepository({ commandExecutor, root, stderr }))) {
     return { ok: false, root };
   }
 
