@@ -43,7 +43,9 @@ const writeFixtureFile = async (root, relativePath, content = '# fixture\n') => 
 };
 
 const createFixture = async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'ai-health-check-'));
+  const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), 'ai-health-check-'));
+  const root = path.join(temporaryRoot, '.ai');
+  await mkdir(path.join(temporaryRoot, '.git'), { recursive: true });
   const sourcePaths = [
     ...bootstrapPaths,
     'config/agent-models.toml',
@@ -65,7 +67,7 @@ const createFixture = async () => {
     'instructions/index.md',
     '# Index Instructions\n\n## Rules\n\n- Load `ai-workflow.md`, `shared/testing.md`, and `architecture.md` for workflow checks.\n',
   );
-  return { root, sourcePaths };
+  return { root, sourcePaths, temporaryRoot };
 };
 
 const createCommandExecutor = ({
@@ -127,6 +129,9 @@ const createCommandExecutor = ({
 
 const runFixture = async (options = {}) => {
   const fixture = await createFixture();
+  if (options.parentGit === false) {
+    await rm(path.join(fixture.temporaryRoot, '.git'), { force: true, recursive: true });
+  }
   const output = [];
   const commands = [];
   const commandExecutor = createCommandExecutor({
@@ -149,7 +154,7 @@ const withFixture = async (callback) => {
   try {
     return await callback(fixture);
   } finally {
-    await rm(fixture.root, { force: true, recursive: true });
+    await rm(fixture.temporaryRoot, { force: true, recursive: true });
   }
 };
 
@@ -200,7 +205,7 @@ test('full health performs formatting and every discovered script test', async (
       ),
     );
   } finally {
-    await rm(fixture.root, { force: true, recursive: true });
+    await rm(fixture.temporaryRoot, { force: true, recursive: true });
   }
 });
 
@@ -213,7 +218,7 @@ test('health fails when a canonical source is not tracked', async () => {
     assert.match(fixture.output.join('\n'), /canonical source is untracked/);
     assert.match(fixture.output.join('\n'), /config\/agent-models\.toml/);
   } finally {
-    await rm(fixture.root, { force: true, recursive: true });
+    await rm(fixture.temporaryRoot, { force: true, recursive: true });
   }
 });
 
@@ -298,7 +303,7 @@ test('health fails when a local-only path is not ignored', async () => {
     assert.equal(fixture.result.ok, false);
     assert.match(fixture.output.join('\n'), /local path remains ignored/);
   } finally {
-    await rm(fixture.root, { force: true, recursive: true });
+    await rm(fixture.temporaryRoot, { force: true, recursive: true });
   }
 });
 
@@ -375,7 +380,7 @@ test('health reports every parent-tracked .ai path', async () => {
     assert.match(fixture.output.join('\n'), /\.ai\/artifacts\/review\.md/);
     assert.match(fixture.output.join('\n'), /\.ai\/state\/workflow\.json/);
   } finally {
-    await rm(fixture.root, { force: true, recursive: true });
+    await rm(fixture.temporaryRoot, { force: true, recursive: true });
   }
 });
 
@@ -385,7 +390,7 @@ test('a standalone checkout reports parent isolation as not applicable', async (
     assert.equal(fixture.result.ok, true, fixture.output.join('\n'));
     assert.match(fixture.output.join('\n'), /not applicable/);
   } finally {
-    await rm(fixture.root, { force: true, recursive: true });
+    await rm(fixture.temporaryRoot, { force: true, recursive: true });
   }
 });
 
@@ -399,7 +404,21 @@ test('health fails closed when parent Git inspection errors', async () => {
     assert.match(fixture.output.join('\n'), /dubious ownership/);
     assert.doesNotMatch(fixture.output.join('\n'), /not applicable/);
   } finally {
-    await rm(fixture.root, { force: true, recursive: true });
+    await rm(fixture.temporaryRoot, { force: true, recursive: true });
+  }
+});
+
+test('health fails closed when the direct parent has corrupt Git metadata', async () => {
+  const fixture = await runFixture({
+    parentGitError: 'fatal: not a git repository (or any of the parent directories): .git',
+  });
+  try {
+    assert.equal(fixture.result.ok, false);
+    assert.match(fixture.output.join('\n'), /inspect parent Git repository/);
+    assert.match(fixture.output.join('\n'), /not a git repository/);
+    assert.doesNotMatch(fixture.output.join('\n'), /not applicable/);
+  } finally {
+    await rm(fixture.temporaryRoot, { force: true, recursive: true });
   }
 });
 

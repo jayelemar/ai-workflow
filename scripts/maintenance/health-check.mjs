@@ -394,20 +394,18 @@ const validateInstructionRoutes = async ({ instructionRoutes, root, stderr }) =>
   return false;
 };
 
-const parentIsConfirmedAbsent = (result) =>
-  result.exitCode !== 0 && /not a git repository/i.test(`${result.stdout}\n${result.stderr}`);
-
 const validateParentIndex = async ({ commandExecutor, root, stdout, stderr }) => {
   const parentRoot = path.dirname(root);
+  if (!(await pathExists(path.join(parentRoot, '.git')))) {
+    stdout('SKIP parent .ai index isolation: not applicable');
+    return true;
+  }
+
   const parentGit = await commandExecutor({
     command: 'git',
     args: ['rev-parse', '--show-toplevel'],
     cwd: parentRoot,
   });
-  if (parentIsConfirmedAbsent(parentGit)) {
-    stdout('SKIP parent .ai index isolation: not applicable');
-    return true;
-  }
   if (parentGit.exitCode !== 0) {
     stderr('FAIL inspect parent Git repository');
     if (parentGit.stdout?.trim()) stderr(parentGit.stdout.trim());
@@ -421,8 +419,8 @@ const validateParentIndex = async ({ commandExecutor, root, stdout, stderr }) =>
     return false;
   }
   if (path.resolve(detectedRoot) !== parentRoot) {
-    stdout('SKIP parent .ai index isolation: not applicable');
-    return true;
+    stderr(`FAIL inspect parent Git repository: unexpected top-level path ${detectedRoot}`);
+    return false;
   }
 
   const tracked = await listTrackedPaths({
