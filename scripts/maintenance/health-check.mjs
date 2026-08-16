@@ -41,10 +41,10 @@ const EXPECTED_WRAPPER_PATHS = [
   'wrappers/select-workflow.md',
 ];
 
-const LOCAL_ONLY_PROBES = [
-  'instructions/index.md',
-  'instructions/architecture.md',
-  'instructions/ui.md',
+const LOCAL_ONLY_ROOTS = ['artifacts', 'logs', 'plans', 'specs', 'state'];
+
+const LOCAL_IGNORE_PROBES = [
+  'instructions/.health-check-probe.md',
   'plans/.health-check-probe',
   'specs/.health-check-probe',
   'artifacts/.health-check-probe',
@@ -112,9 +112,7 @@ const collectFiles = async (root, targetPath, predicate) => {
 
   const collected = [];
   for (const entry of await readdir(absolutePath, { withFileTypes: true })) {
-    if (
-      ['.git', 'node_modules', 'artifacts', 'logs', 'plans', 'specs', 'state'].includes(entry.name)
-    ) {
+    if (['.git', 'node_modules'].includes(entry.name)) {
       continue;
     }
     const relativePath = path.posix.join(targetPath, entry.name);
@@ -261,8 +259,27 @@ const validateCanonicalSource = async ({ commandExecutor, root, stderr }) => {
   return true;
 };
 
-const validateLocalPaths = async ({ commandExecutor, root, stderr }) => {
-  for (const relativePath of LOCAL_ONLY_PROBES) {
+const isLocalInstructionPath = (relativePath) =>
+  relativePath.startsWith('instructions/') &&
+  relativePath !== 'instructions/ai-workflow.md' &&
+  !relativePath.startsWith('instructions/shared/');
+
+const validateLocalPaths = async ({ commandExecutor, instructionRoutes, root, stderr }) => {
+  const localFiles = await collectFromRoots(root, LOCAL_ONLY_ROOTS, () => true);
+  const localInstructionFiles = await collectFiles(root, 'instructions', isLocalInstructionPath);
+  const routedLocalInstructions = instructionRoutes
+    .filter((route) => route !== 'ai-workflow.md' && !route.startsWith('shared/'))
+    .map((route) => path.posix.join('instructions', route));
+  const ignorePaths = [
+    ...new Set([
+      ...LOCAL_IGNORE_PROBES,
+      ...localFiles,
+      ...localInstructionFiles,
+      ...routedLocalInstructions,
+    ]),
+  ].sort();
+
+  for (const relativePath of ignorePaths) {
     if (
       !(await gitCheck({
         label: `local path remains ignored: ${relativePath}`,
@@ -275,15 +292,28 @@ const validateLocalPaths = async ({ commandExecutor, root, stderr }) => {
     ) {
       return false;
     }
-    const tracked = await listTrackedPaths({
-      commandExecutor,
-      cwd: root,
-      pathspecs: [relativePath],
-    });
-    if (tracked.exitCode !== 0 || tracked.paths.length > 0) {
-      stderr(`FAIL local path is tracked: ${relativePath}`);
-      return false;
-    }
+  }
+
+  const tracked = await listTrackedPaths({
+    commandExecutor,
+    cwd: root,
+    pathspecs: ['instructions', ...LOCAL_ONLY_ROOTS],
+  });
+  if (tracked.exitCode !== 0) {
+    stderr('FAIL list tracked local workflow paths');
+    if (tracked.stderr?.trim()) stderr(tracked.stderr.trim());
+    return false;
+  }
+  const trackedLocalPaths = tracked.paths.filter(
+    (relativePath) =>
+      isLocalInstructionPath(relativePath) ||
+      LOCAL_ONLY_ROOTS.some(
+        (localRoot) => relativePath === localRoot || relativePath.startsWith(`${localRoot}/`),
+      ),
+  );
+  if (trackedLocalPaths.length > 0) {
+    stderr(`FAIL local path is tracked:\n${trackedLocalPaths.join('\n')}`);
+    return false;
   }
   return true;
 };
@@ -314,22 +344,48 @@ const validateLiteralReferences = async ({ root, stderr }) => {
   return false;
 };
 
-const validateInstructionRoutes = async ({ root, stderr }) => {
+const readInstructionRoutes = async ({ root, stderr }) => {
   const indexPath = path.join(root, 'instructions/index.md');
   if (!(await pathExists(indexPath))) {
     stderr('FAIL missing local instruction index: instructions/index.md');
-    return false;
+    return null;
   }
 
-  const missing = new Set();
   const indexSource = await readFile(indexPath, 'utf8');
-  for (const line of indexSource.split('\n')) {
-    if (!line.includes('Load ')) continue;
-    for (const match of line.matchAll(/`((?:shared\/)?[a-z0-9-]+\.md)`/g)) {
-      const route = match[1];
-      if (!(await pathExists(path.join(root, 'instructions', route)))) {
-        missing.add(route);
-      }
+  const rulesHeading = /^## Rules\s*$/m.exec(indexSource);
+  if (!rulesHeading) {
+    stderr('FAIL instruction index is missing its Rules section');
+    return null;
+  }
+  const afterHeading = indexSource.slice(rulesHeading.index + rulesHeading[0].length);
+  const nextSection = afterHeading.search(/^## /m);
+  const rulesSource = nextSection < 0 ? afterHeading : afterHeading.slice(0, nextSection);
+  const loadBullets = [];
+  let currentBullet;
+  for (const line of rulesSource.split('\n')) {
+    if (line.startsWith('- ')) {
+      if (currentBullet?.includes('Load ')) loadBullets.push(currentBullet);
+      currentBullet = line;
+    } else if (currentBullet !== undefined) {
+      currentBullet += `\n${line}`;
+    }
+  }
+  if (currentBullet?.includes('Load ')) loadBullets.push(currentBullet);
+
+  const routes = new Set();
+  for (const bullet of loadBullets) {
+    for (const match of bullet.matchAll(/`((?:shared\/)?[a-z0-9-]+\.md)`/g)) {
+      routes.add(match[1]);
+    }
+  }
+  return [...routes].sort();
+};
+
+const validateInstructionRoutes = async ({ instructionRoutes, root, stderr }) => {
+  const missing = new Set();
+  for (const route of instructionRoutes) {
+    if (!(await pathExists(path.join(root, 'instructions', route)))) {
+      missing.add(route);
     }
   }
 
@@ -338,14 +394,33 @@ const validateInstructionRoutes = async ({ root, stderr }) => {
   return false;
 };
 
+const parentIsConfirmedAbsent = (result) =>
+  result.exitCode !== 0 && /not a git repository/i.test(`${result.stdout}\n${result.stderr}`);
+
 const validateParentIndex = async ({ commandExecutor, root, stdout, stderr }) => {
   const parentRoot = path.dirname(root);
   const parentGit = await commandExecutor({
     command: 'git',
-    args: ['rev-parse', '--is-inside-work-tree'],
+    args: ['rev-parse', '--show-toplevel'],
     cwd: parentRoot,
   });
-  if (parentGit.exitCode !== 0 || parentGit.stdout.trim() !== 'true') {
+  if (parentIsConfirmedAbsent(parentGit)) {
+    stdout('SKIP parent .ai index isolation: not applicable');
+    return true;
+  }
+  if (parentGit.exitCode !== 0) {
+    stderr('FAIL inspect parent Git repository');
+    if (parentGit.stdout?.trim()) stderr(parentGit.stdout.trim());
+    if (parentGit.stderr?.trim()) stderr(parentGit.stderr.trim());
+    return false;
+  }
+
+  const detectedRoot = parentGit.stdout.trim();
+  if (!detectedRoot) {
+    stderr('FAIL inspect parent Git repository: empty top-level path');
+    return false;
+  }
+  if (path.resolve(detectedRoot) !== parentRoot) {
     stdout('SKIP parent .ai index isolation: not applicable');
     return true;
   }
@@ -388,6 +463,9 @@ export const runHealthCheck = async ({
     return { ok: false, root };
   }
 
+  const instructionRoutes = await readInstructionRoutes({ root, stderr });
+  if (!instructionRoutes) return { ok: false, root };
+
   for (const relativePath of FORBIDDEN_PATHS) {
     if (await pathExists(path.join(root, relativePath))) {
       stderr(`FAIL retired workflow path still exists: ${relativePath}`);
@@ -395,13 +473,13 @@ export const runHealthCheck = async ({
     }
   }
 
-  if (!(await validateLocalPaths({ commandExecutor, root, stderr }))) {
+  if (!(await validateLocalPaths({ commandExecutor, instructionRoutes, root, stderr }))) {
     return { ok: false, root };
   }
   if (!(await validateLiteralReferences({ root, stderr }))) {
     return { ok: false, root };
   }
-  if (!(await validateInstructionRoutes({ root, stderr }))) {
+  if (!(await validateInstructionRoutes({ instructionRoutes, root, stderr }))) {
     return { ok: false, root };
   }
   if (!(await validateParentIndex({ commandExecutor, root, stdout, stderr }))) {

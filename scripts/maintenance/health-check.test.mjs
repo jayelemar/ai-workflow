@@ -63,7 +63,7 @@ const createFixture = async () => {
   await writeFixtureFile(
     root,
     'instructions/index.md',
-    '- Load `ai-workflow.md`, `shared/testing.md`, and `architecture.md` for workflow checks.\n',
+    '# Index Instructions\n\n## Rules\n\n- Load `ai-workflow.md`, `shared/testing.md`, and `architecture.md` for workflow checks.\n',
   );
   return { root, sourcePaths };
 };
@@ -72,22 +72,23 @@ const createCommandExecutor = ({
   root,
   sourcePaths,
   parentGit = true,
+  parentGitError,
   parentTrackedPaths = [],
+  localTrackedPaths = [],
   ignoredPaths = [],
   commands = [],
 }) => {
-  const localPaths = new Set([
+  const localInstructionPathsWithIndex = new Set([
     'instructions/index.md',
-    'instructions/architecture.md',
-    'instructions/ui.md',
-    'plans/.health-check-probe',
-    'specs/.health-check-probe',
-    'artifacts/.health-check-probe',
-    'logs/.health-check-probe',
-    'state/.health-check-probe',
+    ...localInstructionPaths,
   ]);
+  const localOnlyRoots = ['artifacts', 'logs', 'plans', 'specs', 'state'];
   const isInPathspec = (candidate, pathspec) =>
     candidate === pathspec || candidate.startsWith(`${pathspec}/`);
+  const isLocalPath = (candidate) =>
+    candidate === 'instructions/.health-check-probe.md' ||
+    localInstructionPathsWithIndex.has(candidate) ||
+    localOnlyRoots.some((localRoot) => isInPathspec(candidate, localRoot));
   const result = (exitCode, stdout = '', stderr = '') => ({
     exitCode,
     stdout,
@@ -99,18 +100,23 @@ const createCommandExecutor = ({
     if (command.command !== 'git') return result(0);
 
     const [operation] = command.args;
-    if (operation === 'rev-parse') return result(parentGit ? 0 : 1, parentGit ? 'true\n' : '');
+    if (operation === 'rev-parse') {
+      if (parentGitError) return result(128, '', parentGitError);
+      return parentGit
+        ? result(0, `${path.dirname(root)}\n`)
+        : result(128, '', 'fatal: not a git repository');
+    }
     if (operation === 'check-ignore') {
       const target = command.args.at(-1);
       if (ignoredPaths.includes(target)) return result(1);
-      return result(localPaths.has(target) ? 0 : 1);
+      return result(isLocalPath(target) ? 0 : 1);
     }
     if (operation === 'ls-files') {
       const pathspecs = command.args.slice(command.args.indexOf('--') + 1);
       const paths =
         command.cwd === path.dirname(root)
           ? parentTrackedPaths
-          : sourcePaths.filter((sourcePath) =>
+          : [...sourcePaths, ...localTrackedPaths].filter((sourcePath) =>
               pathspecs.some((pathspec) => isInPathspec(sourcePath, pathspec)),
             );
       return result(0, paths.join('\0') + (paths.length > 0 ? '\0' : ''));
@@ -253,7 +259,7 @@ test('health fails for a missing relative instruction route', async () => {
     await writeFixtureFile(
       fixture.root,
       'instructions/index.md',
-      '- Load `shared/missing.md` and `architecture.md` for this fixture.\n',
+      '# Index Instructions\n\n## Rules\n\n- Load `shared/missing.md` and `architecture.md` for this fixture.\n',
     );
     const output = [];
     const result = await runHealthCheck({
@@ -296,6 +302,69 @@ test('health fails when a local-only path is not ignored', async () => {
   }
 });
 
+test('health fails when actual local workflow data is tracked', async () => {
+  await withFixture(async (fixture) => {
+    const trackedPath = 'plans/tracked-plan.md';
+    await writeFixtureFile(fixture.root, trackedPath);
+    const output = [];
+    const result = await runHealthCheck({
+      commandExecutor: createCommandExecutor({
+        ...fixture,
+        localTrackedPaths: [trackedPath],
+      }),
+      stderr: (message) => output.push(message),
+      stdout: (message) => output.push(message),
+      workflowDirectory: fixture.root,
+    });
+
+    assert.equal(result.ok, false);
+    assert.match(output.join('\n'), /local path is tracked/);
+    assert.match(output.join('\n'), /plans\/tracked-plan\.md/);
+  });
+});
+
+test('health fails when actual local workflow data is specifically unignored', async () => {
+  await withFixture(async (fixture) => {
+    const unignoredPath = 'plans/unignored-plan.md';
+    await writeFixtureFile(fixture.root, unignoredPath);
+    const output = [];
+    const result = await runHealthCheck({
+      commandExecutor: createCommandExecutor({
+        ...fixture,
+        ignoredPaths: [unignoredPath],
+      }),
+      stderr: (message) => output.push(message),
+      stdout: (message) => output.push(message),
+      workflowDirectory: fixture.root,
+    });
+
+    assert.equal(result.ok, false);
+    assert.match(output.join('\n'), /local path remains ignored/);
+    assert.match(output.join('\n'), /plans\/unignored-plan\.md/);
+  });
+});
+
+test('health validates instruction routes wrapped across a Load bullet', async () => {
+  await withFixture(async (fixture) => {
+    await writeFixtureFile(
+      fixture.root,
+      'instructions/index.md',
+      '# Index Instructions\n\n## Rules\n\n- Load `architecture.md` for local work and\n  `shared/missing.md` for wrapped workflow checks.\n',
+    );
+    const output = [];
+    const result = await runHealthCheck({
+      commandExecutor: createCommandExecutor(fixture),
+      stderr: (message) => output.push(message),
+      stdout: (message) => output.push(message),
+      workflowDirectory: fixture.root,
+    });
+
+    assert.equal(result.ok, false);
+    assert.match(output.join('\n'), /missing relative instruction routes/);
+    assert.match(output.join('\n'), /shared\/missing\.md/);
+  });
+});
+
 test('health reports every parent-tracked .ai path', async () => {
   const fixture = await runFixture({
     parentTrackedPaths: ['.ai/artifacts/review.md', '.ai/state/workflow.json'],
@@ -315,6 +384,20 @@ test('a standalone checkout reports parent isolation as not applicable', async (
   try {
     assert.equal(fixture.result.ok, true, fixture.output.join('\n'));
     assert.match(fixture.output.join('\n'), /not applicable/);
+  } finally {
+    await rm(fixture.root, { force: true, recursive: true });
+  }
+});
+
+test('health fails closed when parent Git inspection errors', async () => {
+  const fixture = await runFixture({
+    parentGitError: 'fatal: detected dubious ownership in repository',
+  });
+  try {
+    assert.equal(fixture.result.ok, false);
+    assert.match(fixture.output.join('\n'), /inspect parent Git repository/);
+    assert.match(fixture.output.join('\n'), /dubious ownership/);
+    assert.doesNotMatch(fixture.output.join('\n'), /not applicable/);
   } finally {
     await rm(fixture.root, { force: true, recursive: true });
   }
