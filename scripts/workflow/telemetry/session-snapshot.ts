@@ -8,8 +8,8 @@ export type TokenUsageTotals = {
 };
 
 export type ContextUsage = {
-  contextWindowTokens: number | "unavailable";
-  contextWindowUsedTokens: number | "unavailable";
+  contextWindowTokens: number | 'unavailable';
+  contextWindowUsedTokens: number | 'unavailable';
   contextWindowUsedPercent: string;
 };
 
@@ -23,24 +23,20 @@ export type SessionTokenSnapshot = {
 };
 
 const unavailableContextUsage = (): ContextUsage => ({
-  contextWindowTokens: "unavailable",
-  contextWindowUsedTokens: "unavailable",
-  contextWindowUsedPercent: "unavailable",
+  contextWindowTokens: 'unavailable',
+  contextWindowUsedTokens: 'unavailable',
+  contextWindowUsedPercent: 'unavailable',
 });
 
 const asRecord = (value: unknown): Record<string, unknown> | null =>
-  typeof value === "object" && value !== null
-    ? (value as Record<string, unknown>)
-    : null;
+  typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : null;
 
 const isFiniteNumber = (value: unknown): value is number =>
-  typeof value === "number" && Number.isFinite(value);
+  typeof value === 'number' && Number.isFinite(value);
 
 const clampNonNegative = (value: number): number => Math.max(0, value);
 
-const toSessionTotals = (
-  usage: Record<string, unknown>,
-): TokenUsageTotals | null => {
+const toSessionTotals = (usage: Record<string, unknown>): TokenUsageTotals | null => {
   const inputTokens = usage.input_tokens;
   const cachedInputTokens = usage.cached_input_tokens;
   const outputTokens = usage.output_tokens;
@@ -96,20 +92,19 @@ export const parseSessionTokenSnapshot = (
       continue;
     }
 
-    if (event.type === "session_meta") {
+    if (event.type === 'session_meta') {
       const payload = asRecord(event.payload);
       const payloadSessionId =
-        typeof payload?.session_id === "string"
+        typeof payload?.session_id === 'string'
           ? payload.session_id
-          : typeof payload?.id === "string"
+          : typeof payload?.id === 'string'
             ? payload.id
             : undefined;
-      const payloadCwd =
-        typeof payload?.cwd === "string" ? payload.cwd : undefined;
+      const payloadCwd = typeof payload?.cwd === 'string' ? payload.cwd : undefined;
       const payloadTimestamp =
-        typeof payload?.timestamp === "string"
+        typeof payload?.timestamp === 'string'
           ? payload.timestamp
-          : typeof event.timestamp === "string"
+          : typeof event.timestamp === 'string'
             ? event.timestamp
             : undefined;
 
@@ -126,22 +121,18 @@ export const parseSessionTokenSnapshot = (
       continue;
     }
 
-    if (event.type === "turn_context") {
-      const cwd = typeof payload.cwd === "string" ? payload.cwd : undefined;
+    if (event.type === 'turn_context') {
+      const cwd = typeof payload.cwd === 'string' ? payload.cwd : undefined;
       if (cwd === targetCwd) {
         sawTargetCwd = true;
       }
-      if (
-        cwd === targetCwd &&
-        typeof payload.model === "string" &&
-        payload.model.length > 0
-      ) {
+      if (cwd === targetCwd && typeof payload.model === 'string' && payload.model.length > 0) {
         latestTurnContextModel = payload.model;
       }
       continue;
     }
 
-    if (event.type !== "event_msg" || payload.type !== "token_count") {
+    if (event.type !== 'event_msg' || payload.type !== 'token_count') {
       continue;
     }
 
@@ -156,8 +147,7 @@ export const parseSessionTokenSnapshot = (
     const lastTotalTokens = lastTokenUsage?.total_tokens;
     const contextWindowTokens = info?.model_context_window;
     latestTokenTotals = totals;
-    latestTimestamp =
-      typeof event.timestamp === "string" ? event.timestamp : latestTimestamp;
+    latestTimestamp = typeof event.timestamp === 'string' ? event.timestamp : latestTimestamp;
     if (
       isFiniteNumber(lastTotalTokens) &&
       isFiniteNumber(contextWindowTokens) &&
@@ -184,7 +174,7 @@ export const parseSessionTokenSnapshot = (
     sessionId,
     sessionFilePath,
     timestamp: latestTimestamp,
-    model: latestTurnContextModel ?? "unknown",
+    model: latestTurnContextModel ?? 'unknown',
     totals: latestTokenTotals,
     contextUsage: latestContextUsage ?? unavailableContextUsage(),
   };

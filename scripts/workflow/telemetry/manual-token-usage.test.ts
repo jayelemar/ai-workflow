@@ -1,15 +1,15 @@
-import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
-import test from "node:test";
+import assert from 'node:assert/strict';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import test from 'node:test';
 
 import {
   appendManualTokenUsageCheckpoint,
   detectLatestSessionSnapshot,
   parseSessionTokenSnapshot,
   runManualTokenUsageCli,
-} from "./manual-token-usage.ts";
+} from './manual-token-usage.ts';
 
 type Workspace = {
   root: string;
@@ -17,7 +17,7 @@ type Workspace = {
 };
 
 const createWorkspace = async (): Promise<Workspace> => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "manual-token-usage-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), 'manual-token-usage-'));
   return {
     root,
     cleanup: () => rm(root, { recursive: true, force: true }),
@@ -27,7 +27,7 @@ const createWorkspace = async (): Promise<Workspace> => {
 const sessionContent = ({
   sessionId,
   cwd,
-  model = "gpt-5-codex",
+  model = 'gpt-5-codex',
   inputTokens,
   cachedInputTokens,
   outputTokens,
@@ -47,28 +47,28 @@ const sessionContent = ({
 }) =>
   [
     JSON.stringify({
-      timestamp: "2026-07-09T00:00:00.000Z",
-      type: "session_meta",
+      timestamp: '2026-07-09T00:00:00.000Z',
+      type: 'session_meta',
       payload: {
         id: sessionId,
         session_id: sessionId,
-        timestamp: "2026-07-09T00:00:00.000Z",
+        timestamp: '2026-07-09T00:00:00.000Z',
         cwd,
       },
     }),
     JSON.stringify({
-      timestamp: "2026-07-09T00:00:01.000Z",
-      type: "turn_context",
+      timestamp: '2026-07-09T00:00:01.000Z',
+      type: 'turn_context',
       payload: {
         cwd,
         model,
       },
     }),
     JSON.stringify({
-      timestamp: "2026-07-09T00:00:02.000Z",
-      type: "event_msg",
+      timestamp: '2026-07-09T00:00:02.000Z',
+      type: 'event_msg',
       payload: {
-        type: "token_count",
+        type: 'token_count',
         info: {
           total_token_usage: {
             input_tokens: inputTokens,
@@ -88,13 +88,13 @@ const sessionContent = ({
         },
       },
     }),
-  ].join("\n");
+  ].join('\n');
 
-test("parseSessionTokenSnapshot reads session totals and context usage", () => {
+test('parseSessionTokenSnapshot reads session totals and context usage', () => {
   const snapshot = parseSessionTokenSnapshot(
     sessionContent({
-      sessionId: "session-1",
-      cwd: "/repo",
+      sessionId: 'session-1',
+      cwd: '/repo',
       inputTokens: 1200,
       cachedInputTokens: 900,
       outputTokens: 180,
@@ -102,15 +102,15 @@ test("parseSessionTokenSnapshot reads session totals and context usage", () => {
       totalTokens: 1380,
       lastTotalTokens: 230,
     }),
-    "sessions/2026/07/09/session-1.jsonl",
-    "/repo",
+    'sessions/2026/07/09/session-1.jsonl',
+    '/repo',
   );
 
   assert.deepEqual(snapshot, {
-    sessionId: "session-1",
-    sessionFilePath: "sessions/2026/07/09/session-1.jsonl",
-    timestamp: "2026-07-09T00:00:02.000Z",
-    model: "gpt-5-codex",
+    sessionId: 'session-1',
+    sessionFilePath: 'sessions/2026/07/09/session-1.jsonl',
+    timestamp: '2026-07-09T00:00:02.000Z',
+    model: 'gpt-5-codex',
     totals: {
       inputTokens: 1200,
       cachedInputTokens: 900,
@@ -122,17 +122,17 @@ test("parseSessionTokenSnapshot reads session totals and context usage", () => {
     contextUsage: {
       contextWindowTokens: 200000,
       contextWindowUsedTokens: 230,
-      contextWindowUsedPercent: "0.11",
+      contextWindowUsedPercent: '0.11',
     },
   });
 });
 
-test("parseSessionTokenSnapshot ignores models from another cwd", () => {
+test('parseSessionTokenSnapshot ignores models from another cwd', () => {
   const content = [
     sessionContent({
-      sessionId: "session-1",
-      cwd: "/repo",
-      model: "gpt-target",
+      sessionId: 'session-1',
+      cwd: '/repo',
+      model: 'gpt-target',
       inputTokens: 1200,
       cachedInputTokens: 900,
       outputTokens: 180,
@@ -141,32 +141,32 @@ test("parseSessionTokenSnapshot ignores models from another cwd", () => {
       lastTotalTokens: 230,
     }),
     JSON.stringify({
-      timestamp: "2026-07-09T00:00:03.000Z",
-      type: "turn_context",
-      payload: { cwd: "/another-repo", model: "gpt-unrelated" },
+      timestamp: '2026-07-09T00:00:03.000Z',
+      type: 'turn_context',
+      payload: { cwd: '/another-repo', model: 'gpt-unrelated' },
     }),
-  ].join("\n");
+  ].join('\n');
 
   const snapshot = parseSessionTokenSnapshot(
     content,
-    "sessions/2026/07/09/session-1.jsonl",
-    "/repo",
+    'sessions/2026/07/09/session-1.jsonl',
+    '/repo',
   );
 
-  assert.equal(snapshot?.model, "gpt-target");
+  assert.equal(snapshot?.model, 'gpt-target');
 });
 
-test("detectLatestSessionSnapshot prefers the newest matching cwd", async () => {
+test('detectLatestSessionSnapshot prefers the newest matching cwd', async () => {
   const workspace = await createWorkspace();
   try {
-    const codexHome = path.join(workspace.root, ".codex");
-    const sessionsDir = path.join(codexHome, "sessions", "2026", "07", "09");
+    const codexHome = path.join(workspace.root, '.codex');
+    const sessionsDir = path.join(codexHome, 'sessions', '2026', '07', '09');
     await mkdir(sessionsDir, { recursive: true });
     await writeFile(
-      path.join(sessionsDir, "rollout-2026-07-09T00-00-00-old.jsonl"),
+      path.join(sessionsDir, 'rollout-2026-07-09T00-00-00-old.jsonl'),
       sessionContent({
-        sessionId: "old",
-        cwd: "/repo",
+        sessionId: 'old',
+        cwd: '/repo',
         inputTokens: 100,
         cachedInputTokens: 80,
         outputTokens: 10,
@@ -174,13 +174,13 @@ test("detectLatestSessionSnapshot prefers the newest matching cwd", async () => 
         totalTokens: 110,
         lastTotalTokens: 50,
       }),
-      "utf8",
+      'utf8',
     );
     await writeFile(
-      path.join(sessionsDir, "rollout-2026-07-09T01-00-00-new.jsonl"),
+      path.join(sessionsDir, 'rollout-2026-07-09T01-00-00-new.jsonl'),
       sessionContent({
-        sessionId: "new",
-        cwd: "/repo",
+        sessionId: 'new',
+        cwd: '/repo',
         inputTokens: 500,
         cachedInputTokens: 400,
         outputTokens: 60,
@@ -188,35 +188,35 @@ test("detectLatestSessionSnapshot prefers the newest matching cwd", async () => 
         totalTokens: 560,
         lastTotalTokens: 90,
       }),
-      "utf8",
+      'utf8',
     );
 
     const snapshot = await detectLatestSessionSnapshot({
       codexHome,
-      cwd: "/repo",
+      cwd: '/repo',
     });
 
-    assert.equal(snapshot?.sessionId, "new");
+    assert.equal(snapshot?.sessionId, 'new');
     assert.equal(
       snapshot?.sessionFilePath,
-      "sessions/2026/07/09/rollout-2026-07-09T01-00-00-new.jsonl",
+      'sessions/2026/07/09/rollout-2026-07-09T01-00-00-new.jsonl',
     );
   } finally {
     await workspace.cleanup();
   }
 });
 
-test("session lookup verifies an exact requested session ID", async () => {
+test('session lookup verifies an exact requested session ID', async () => {
   const workspace = await createWorkspace();
   try {
-    const codexHome = path.join(workspace.root, ".codex");
-    const sessionsDir = path.join(codexHome, "sessions", "2026", "07", "09");
+    const codexHome = path.join(workspace.root, '.codex');
+    const sessionsDir = path.join(codexHome, 'sessions', '2026', '07', '09');
     await mkdir(sessionsDir, { recursive: true });
     await writeFile(
-      path.join(sessionsDir, "rollout-z-session-1-copy.jsonl"),
+      path.join(sessionsDir, 'rollout-z-session-1-copy.jsonl'),
       sessionContent({
-        sessionId: "session-1-copy",
-        cwd: "/repo",
+        sessionId: 'session-1-copy',
+        cwd: '/repo',
         inputTokens: 100,
         cachedInputTokens: 80,
         outputTokens: 10,
@@ -224,13 +224,13 @@ test("session lookup verifies an exact requested session ID", async () => {
         totalTokens: 110,
         lastTotalTokens: 50,
       }),
-      "utf8",
+      'utf8',
     );
     await writeFile(
-      path.join(sessionsDir, "rollout-a-session-1.jsonl"),
+      path.join(sessionsDir, 'rollout-a-session-1.jsonl'),
       sessionContent({
-        sessionId: "session-1",
-        cwd: "/repo",
+        sessionId: 'session-1',
+        cwd: '/repo',
         inputTokens: 500,
         cachedInputTokens: 400,
         outputTokens: 60,
@@ -238,39 +238,36 @@ test("session lookup verifies an exact requested session ID", async () => {
         totalTokens: 560,
         lastTotalTokens: 90,
       }),
-      "utf8",
+      'utf8',
     );
 
     const snapshot = await detectLatestSessionSnapshot({
       codexHome,
-      cwd: "/repo",
-      sessionId: "session-1",
+      cwd: '/repo',
+      sessionId: 'session-1',
     });
 
-    assert.equal(snapshot?.sessionId, "session-1");
+    assert.equal(snapshot?.sessionId, 'session-1');
   } finally {
     await workspace.cleanup();
   }
 });
 
-test("appendManualTokenUsageCheckpoint appends stage deltas and skips duplicates", async () => {
+test('appendManualTokenUsageCheckpoint appends stage deltas and skips duplicates', async () => {
   const workspace = await createWorkspace();
   try {
-    const rootDir = path.join(workspace.root, "repo");
-    const codexHome = path.join(workspace.root, ".codex");
-    const sessionDir = path.join(codexHome, "sessions", "2026", "07", "09");
+    const rootDir = path.join(workspace.root, 'repo');
+    const codexHome = path.join(workspace.root, '.codex');
+    const sessionDir = path.join(codexHome, 'sessions', '2026', '07', '09');
     await mkdir(rootDir, { recursive: true });
     await mkdir(sessionDir, { recursive: true });
 
-    const sessionPath = path.join(
-      sessionDir,
-      "rollout-2026-07-09T02-00-00-session-1.jsonl",
-    );
+    const sessionPath = path.join(sessionDir, 'rollout-2026-07-09T02-00-00-session-1.jsonl');
 
     await writeFile(
       sessionPath,
       sessionContent({
-        sessionId: "session-1",
+        sessionId: 'session-1',
         cwd: rootDir,
         inputTokens: 1000,
         cachedInputTokens: 700,
@@ -279,18 +276,18 @@ test("appendManualTokenUsageCheckpoint appends stage deltas and skips duplicates
         totalTokens: 1120,
         lastTotalTokens: 250,
       }),
-      "utf8",
+      'utf8',
     );
 
     const first = await appendManualTokenUsageCheckpoint({
       rootDir,
-      planName: "manual-mode",
-      stage: "spec",
+      planName: 'manual-mode',
+      stage: 'spec',
       codexHome,
     });
     assert.equal(first.ok, true);
-    assert.equal(first.status, "appended");
-    if (first.ok && first.status === "appended") {
+    assert.equal(first.status, 'appended');
+    if (first.ok && first.status === 'appended') {
       assert.equal(first.entry.stageTotalTokens, 1120);
       assert.equal(first.entry.totalTokens, 1120);
     }
@@ -298,7 +295,7 @@ test("appendManualTokenUsageCheckpoint appends stage deltas and skips duplicates
     await writeFile(
       sessionPath,
       sessionContent({
-        sessionId: "session-1",
+        sessionId: 'session-1',
         cwd: rootDir,
         inputTokens: 1600,
         cachedInputTokens: 1100,
@@ -307,18 +304,18 @@ test("appendManualTokenUsageCheckpoint appends stage deltas and skips duplicates
         totalTokens: 1780,
         lastTotalTokens: 300,
       }),
-      "utf8",
+      'utf8',
     );
 
     const second = await appendManualTokenUsageCheckpoint({
       rootDir,
-      planName: "manual-mode",
-      stage: "plan",
+      planName: 'manual-mode',
+      stage: 'plan',
       codexHome,
     });
     assert.equal(second.ok, true);
-    assert.equal(second.status, "appended");
-    if (second.ok && second.status === "appended") {
+    assert.equal(second.status, 'appended');
+    if (second.ok && second.status === 'appended') {
       assert.equal(second.entry.stageInputTokens, 600);
       assert.equal(second.entry.stageCachedInputTokens, 400);
       assert.equal(second.entry.stageUncachedInputTokens, 200);
@@ -330,58 +327,55 @@ test("appendManualTokenUsageCheckpoint appends stage deltas and skips duplicates
 
     const duplicate = await appendManualTokenUsageCheckpoint({
       rootDir,
-      planName: "manual-mode",
-      stage: "plan",
+      planName: 'manual-mode',
+      stage: 'plan',
       codexHome,
     });
     assert.equal(duplicate.ok, true);
-    assert.equal(duplicate.status, "skipped");
+    assert.equal(duplicate.status, 'skipped');
 
     const ledgerPath = path.join(
       rootDir,
-      ".ai",
-      "artifacts",
-      "manual-mode",
-      "logs",
-      "token-usage.jsonl",
+      '.ai',
+      'artifacts',
+      'manual-mode',
+      'logs',
+      'token-usage.jsonl',
     );
-    const ledgerLines = (await readFile(ledgerPath, "utf8"))
-      .trim()
-      .split(/\r?\n/)
-      .filter(Boolean);
+    const ledgerLines = (await readFile(ledgerPath, 'utf8')).trim().split(/\r?\n/).filter(Boolean);
     assert.equal(ledgerLines.length, 2);
   } finally {
     await workspace.cleanup();
   }
 });
 
-test("manual token checkpoints reject unsafe plan names", async () => {
+test('manual token checkpoints reject unsafe plan names', async () => {
   const result = await appendManualTokenUsageCheckpoint({
-    rootDir: "/repo",
-    planName: "../outside-artifacts",
-    stage: "plan",
-    codexHome: "/missing-codex-home",
+    rootDir: '/repo',
+    planName: '../outside-artifacts',
+    stage: 'plan',
+    codexHome: '/missing-codex-home',
   });
 
   assert.equal(result.ok, false);
   if (!result.ok) assert.match(result.reason, /kebab-case/);
 });
 
-test("runManualTokenUsageCli prefers CODEX_HOME when --codex-home is omitted", async () => {
+test('runManualTokenUsageCli prefers CODEX_HOME when --codex-home is omitted', async () => {
   const workspace = await createWorkspace();
   const originalCodexHome = process.env.CODEX_HOME;
 
   try {
-    const rootDir = path.join(workspace.root, "repo");
-    const codexHome = path.join(workspace.root, ".codex-adam");
-    const sessionDir = path.join(codexHome, "sessions", "2026", "07", "09");
+    const rootDir = path.join(workspace.root, 'repo');
+    const codexHome = path.join(workspace.root, '.codex-adam');
+    const sessionDir = path.join(codexHome, 'sessions', '2026', '07', '09');
     await mkdir(rootDir, { recursive: true });
     await mkdir(sessionDir, { recursive: true });
 
     await writeFile(
-      path.join(sessionDir, "rollout-2026-07-09T03-00-00-session-2.jsonl"),
+      path.join(sessionDir, 'rollout-2026-07-09T03-00-00-session-2.jsonl'),
       sessionContent({
-        sessionId: "session-2",
+        sessionId: 'session-2',
         cwd: rootDir,
         inputTokens: 900,
         cachedInputTokens: 600,
@@ -390,43 +384,40 @@ test("runManualTokenUsageCli prefers CODEX_HOME when --codex-home is omitted", a
         totalTokens: 1000,
         lastTotalTokens: 180,
       }),
-      "utf8",
+      'utf8',
     );
 
     process.env.CODEX_HOME = codexHome;
 
-    let stdout = "";
-    let stderr = "";
+    let stdout = '';
+    let stderr = '';
     const exitCode = await runManualTokenUsageCli(
-      ["--plan", "manual-mode-env", "--stage", "spec", "--root-dir", rootDir],
+      ['--plan', 'manual-mode-env', '--stage', 'spec', '--root-dir', rootDir],
       { write: (chunk: string) => void (stdout += chunk) },
       { write: (chunk: string) => void (stderr += chunk) },
     );
 
     assert.equal(exitCode, 0);
-    assert.equal(stderr, "");
+    assert.equal(stderr, '');
     assert.match(stdout, /Appended manual spec token checkpoint/);
 
     const ledgerPath = path.join(
       rootDir,
-      ".ai",
-      "artifacts",
-      "manual-mode-env",
-      "logs",
-      "token-usage.jsonl",
+      '.ai',
+      'artifacts',
+      'manual-mode-env',
+      'logs',
+      'token-usage.jsonl',
     );
-    const [line] = (await readFile(ledgerPath, "utf8"))
-      .trim()
-      .split(/\r?\n/)
-      .filter(Boolean);
+    const [line] = (await readFile(ledgerPath, 'utf8')).trim().split(/\r?\n/).filter(Boolean);
     const record = JSON.parse(line) as {
       sessionId: string;
       sessionFilePath: string;
     };
-    assert.equal(record.sessionId, "session-2");
+    assert.equal(record.sessionId, 'session-2');
     assert.equal(
       record.sessionFilePath,
-      "sessions/2026/07/09/rollout-2026-07-09T03-00-00-session-2.jsonl",
+      'sessions/2026/07/09/rollout-2026-07-09T03-00-00-session-2.jsonl',
     );
   } finally {
     if (originalCodexHome === undefined) {

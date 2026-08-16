@@ -1,37 +1,24 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import path from "node:path";
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 
-import { tokenUsageLedgerRelativePath } from "./token-ledger.ts";
-import {
-  type ContextUsage,
-  type TokenUsageTotals,
-} from "./session-snapshot.ts";
-import {
-  defaultCodexHome,
-  detectLatestSessionSnapshot,
-} from "./manual-token-sessions.ts";
-import {
-  addTotals,
-  subtractTotals,
-  zeroTotals,
-} from "./manual-token-totals.ts";
+import { tokenUsageLedgerRelativePath } from './token-ledger.ts';
+import { type ContextUsage, type TokenUsageTotals } from './session-snapshot.ts';
+import { defaultCodexHome, detectLatestSessionSnapshot } from './manual-token-sessions.ts';
+import { addTotals, subtractTotals, zeroTotals } from './manual-token-totals.ts';
 
-export { parseSessionTokenSnapshot } from "./session-snapshot.ts";
-export {
-  defaultCodexHome,
-  detectLatestSessionSnapshot,
-} from "./manual-token-sessions.ts";
+export { parseSessionTokenSnapshot } from './session-snapshot.ts';
+export { defaultCodexHome, detectLatestSessionSnapshot } from './manual-token-sessions.ts';
 
-export type ManualTokenUsageStage = "spec" | "plan" | "execute";
+export type ManualTokenUsageStage = 'spec' | 'plan' | 'execute';
 
 type ManualTokenLedgerRecord = TokenUsageTotals &
   ContextUsage & {
     timestamp: string;
-    mode: "manual";
+    mode: 'manual';
     manualStage: ManualTokenUsageStage;
     promptPath: string;
     model: string;
-    reasoning: "session-log";
+    reasoning: 'session-log';
     stageInputTokens: number;
     stageCachedInputTokens: number;
     stageUncachedInputTokens: number;
@@ -59,13 +46,13 @@ type AppendManualTokenUsageOptions = {
 export type AppendManualTokenUsageResult =
   | {
       ok: true;
-      status: "appended";
+      status: 'appended';
       ledgerPath: string;
       entry: ManualTokenLedgerRecord;
     }
   | {
       ok: true;
-      status: "skipped";
+      status: 'skipped';
       ledgerPath: string;
       reason: string;
     }
@@ -76,30 +63,26 @@ export type AppendManualTokenUsageResult =
     };
 
 const asRecord = (value: unknown): Record<string, unknown> | null =>
-  typeof value === "object" && value !== null
-    ? (value as Record<string, unknown>)
-    : null;
+  typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : null;
 
 const isFiniteNumber = (value: unknown): value is number =>
-  typeof value === "number" && Number.isFinite(value);
+  typeof value === 'number' && Number.isFinite(value);
 
 const manualPromptPath = (stage: ManualTokenUsageStage): string => {
   switch (stage) {
-    case "spec":
-      return ".ai/prompts/generate-spec.md";
-    case "plan":
-      return ".ai/prompts/create-plan.md";
-    case "execute":
-      return ".ai/prompts/execute-plan.md";
+    case 'spec':
+      return '.ai/prompts/generate-spec.md';
+    case 'plan':
+      return '.ai/prompts/create-plan.md';
+    case 'execute':
+      return '.ai/prompts/execute-plan.md';
   }
 };
 
-const readJsonlRecords = async (
-  filePath: string,
-): Promise<Record<string, unknown>[]> => {
+const readJsonlRecords = async (filePath: string): Promise<Record<string, unknown>[]> => {
   let content: string;
   try {
-    content = await readFile(filePath, "utf8");
+    content = await readFile(filePath, 'utf8');
   } catch {
     return [];
   }
@@ -118,9 +101,7 @@ const readJsonlRecords = async (
     .filter((record): record is Record<string, unknown> => record !== null);
 };
 
-const sessionTotalsFromRecord = (
-  record: Record<string, unknown>,
-): TokenUsageTotals | null => {
+const sessionTotalsFromRecord = (record: Record<string, unknown>): TokenUsageTotals | null => {
   const inputTokens = record.sessionTotalInputTokens;
   const cachedInputTokens = record.sessionTotalCachedInputTokens;
   const uncachedInputTokens = record.sessionTotalUncachedInputTokens;
@@ -148,9 +129,7 @@ const sessionTotalsFromRecord = (
   };
 };
 
-const cumulativeTotalsFromRecord = (
-  record: Record<string, unknown>,
-): TokenUsageTotals | null => {
+const cumulativeTotalsFromRecord = (record: Record<string, unknown>): TokenUsageTotals | null => {
   const inputTokens = record.inputTokens;
   const cachedInputTokens = record.cachedInputTokens;
   const uncachedInputTokens = record.uncachedInputTokens;
@@ -185,7 +164,7 @@ const readLatestManualCheckpointForSession = async (
   const records = await readJsonlRecords(ledgerPath);
   for (let index = records.length - 1; index >= 0; index -= 1) {
     const record = records[index];
-    if (record.mode !== "manual" || record.sessionId !== sessionId) {
+    if (record.mode !== 'manual' || record.sessionId !== sessionId) {
       continue;
     }
     if (sessionTotalsFromRecord(record)) {
@@ -195,9 +174,7 @@ const readLatestManualCheckpointForSession = async (
   return null;
 };
 
-const readLatestCumulativeTotals = async (
-  ledgerPath: string,
-): Promise<TokenUsageTotals> => {
+const readLatestCumulativeTotals = async (ledgerPath: string): Promise<TokenUsageTotals> => {
   const records = await readJsonlRecords(ledgerPath);
   for (let index = records.length - 1; index >= 0; index -= 1) {
     const totals = cumulativeTotalsFromRecord(records[index]);
@@ -213,7 +190,7 @@ const appendLedgerRecord = async (
   entry: ManualTokenLedgerRecord,
 ): Promise<void> => {
   await mkdir(path.dirname(ledgerPath), { recursive: true });
-  await writeFile(ledgerPath, `${JSON.stringify(entry)}\n`, { flag: "a" });
+  await writeFile(ledgerPath, `${JSON.stringify(entry)}\n`, { flag: 'a' });
 };
 
 export const appendManualTokenUsageCheckpoint = async ({
@@ -254,21 +231,17 @@ export const appendManualTokenUsageCheckpoint = async ({
   if (
     latestManualCheckpoint &&
     latestManualCheckpoint.manualStage === stage &&
-    latestManualCheckpoint.sessionTotalTokens ===
-      sessionSnapshot.totals.totalTokens
+    latestManualCheckpoint.sessionTotalTokens === sessionSnapshot.totals.totalTokens
   ) {
     return {
       ok: true,
-      status: "skipped",
+      status: 'skipped',
       ledgerPath,
       reason: `manual ${stage} checkpoint already recorded for session ${sessionSnapshot.sessionId}`,
     };
   }
 
-  const stageTotals = subtractTotals(
-    sessionSnapshot.totals,
-    previousSessionTotals,
-  );
+  const stageTotals = subtractTotals(sessionSnapshot.totals, previousSessionTotals);
   if (!stageTotals) {
     return {
       ok: false,
@@ -280,7 +253,7 @@ export const appendManualTokenUsageCheckpoint = async ({
   if (stageTotals.totalTokens === 0) {
     return {
       ok: true,
-      status: "skipped",
+      status: 'skipped',
       ledgerPath,
       reason: `no new token usage was recorded since the previous manual checkpoint`,
     };
@@ -289,11 +262,11 @@ export const appendManualTokenUsageCheckpoint = async ({
   const cumulativeTotals = addTotals(previousCumulativeTotals, stageTotals);
   const entry: ManualTokenLedgerRecord = {
     timestamp: new Date().toISOString(),
-    mode: "manual",
+    mode: 'manual',
     manualStage: stage,
     promptPath: manualPromptPath(stage),
     model: sessionSnapshot.model,
-    reasoning: "session-log",
+    reasoning: 'session-log',
     stageInputTokens: stageTotals.inputTokens,
     stageCachedInputTokens: stageTotals.cachedInputTokens,
     stageUncachedInputTokens: stageTotals.uncachedInputTokens,
@@ -308,8 +281,7 @@ export const appendManualTokenUsageCheckpoint = async ({
     sessionTotalCachedInputTokens: sessionSnapshot.totals.cachedInputTokens,
     sessionTotalUncachedInputTokens: sessionSnapshot.totals.uncachedInputTokens,
     sessionTotalOutputTokens: sessionSnapshot.totals.outputTokens,
-    sessionTotalReasoningOutputTokens:
-      sessionSnapshot.totals.reasoningOutputTokens,
+    sessionTotalReasoningOutputTokens: sessionSnapshot.totals.reasoningOutputTokens,
     sessionTotalTokens: sessionSnapshot.totals.totalTokens,
   };
 
@@ -325,7 +297,7 @@ export const appendManualTokenUsageCheckpoint = async ({
 
   return {
     ok: true,
-    status: "appended",
+    status: 'appended',
     ledgerPath,
     entry,
   };

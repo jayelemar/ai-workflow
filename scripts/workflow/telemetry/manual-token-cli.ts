@@ -1,9 +1,9 @@
-import path from "node:path";
+import path from 'node:path';
 import {
   appendManualTokenUsageCheckpoint,
   defaultCodexHome,
   type ManualTokenUsageStage,
-} from "./manual-token-ledger.ts";
+} from './manual-token-ledger.ts';
 
 const parseArgs = (
   argv: string[],
@@ -26,25 +26,25 @@ const parseArgs = (
     const arg = argv[index];
     const next = argv[index + 1];
     switch (arg) {
-      case "--plan":
+      case '--plan':
         parsed.planName = next;
         index += 1;
         break;
-      case "--stage":
-        if (next === "spec" || next === "plan" || next === "execute") {
+      case '--stage':
+        if (next === 'spec' || next === 'plan' || next === 'execute') {
           parsed.stage = next;
         }
         index += 1;
         break;
-      case "--session":
+      case '--session':
         parsed.sessionId = next;
         index += 1;
         break;
-      case "--codex-home":
+      case '--codex-home':
         parsed.codexHome = next;
         index += 1;
         break;
-      case "--root-dir":
+      case '--root-dir':
         parsed.rootDir = next;
         index += 1;
         break;
@@ -58,13 +58,13 @@ const parseArgs = (
 
 export const runManualTokenUsageCli = async (
   argv: string[],
-  stdout: Pick<typeof process.stdout, "write"> = process.stdout,
-  stderr: Pick<typeof process.stderr, "write"> = process.stderr,
+  stdout: Pick<typeof process.stdout, 'write'> = process.stdout,
+  stderr: Pick<typeof process.stderr, 'write'> = process.stderr,
 ): Promise<number> => {
   const args = parseArgs(argv);
   if (!args.planName || !args.stage) {
     stderr.write(
-      "Usage: pnpm exec tsx .ai/scripts/workflow/telemetry/manual-token-usage.ts --plan <plan-name> --stage <spec|plan|execute> [--session <session-id>] [--codex-home <path>] [--root-dir <path>]\n",
+      'Usage: pnpm exec tsx .ai/scripts/workflow/telemetry/manual-token-usage.ts --plan <plan-name> --stage <spec|plan|execute> [--session <session-id>] [--codex-home <path>] [--root-dir <path>]\n',
     );
     return 1;
   }
@@ -74,9 +74,7 @@ export const runManualTokenUsageCli = async (
     planName: args.planName,
     stage: args.stage,
     sessionId: args.sessionId,
-    codexHome: args.codexHome
-      ? path.resolve(args.codexHome)
-      : defaultCodexHome(),
+    codexHome: args.codexHome ? path.resolve(args.codexHome) : defaultCodexHome(),
   });
 
   if (!result.ok) {
@@ -84,7 +82,7 @@ export const runManualTokenUsageCli = async (
     return 1;
   }
 
-  if (result.status === "skipped") {
+  if (result.status === 'skipped') {
     stdout.write(`Skipped: ${result.reason}\n`);
     return 0;
   }

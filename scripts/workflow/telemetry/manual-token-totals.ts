@@ -1,4 +1,4 @@
-import type { TokenUsageTotals } from "./session-snapshot.ts";
+import type { TokenUsageTotals } from './session-snapshot.ts';
 
 export const zeroTotals = (): TokenUsageTotals => ({
   inputTokens: 0,
@@ -9,16 +9,12 @@ export const zeroTotals = (): TokenUsageTotals => ({
   totalTokens: 0,
 });
 
-export const addTotals = (
-  left: TokenUsageTotals,
-  right: TokenUsageTotals,
-): TokenUsageTotals => ({
+export const addTotals = (left: TokenUsageTotals, right: TokenUsageTotals): TokenUsageTotals => ({
   inputTokens: left.inputTokens + right.inputTokens,
   cachedInputTokens: left.cachedInputTokens + right.cachedInputTokens,
   uncachedInputTokens: left.uncachedInputTokens + right.uncachedInputTokens,
   outputTokens: left.outputTokens + right.outputTokens,
-  reasoningOutputTokens:
-    left.reasoningOutputTokens + right.reasoningOutputTokens,
+  reasoningOutputTokens: left.reasoningOutputTokens + right.reasoningOutputTokens,
   totalTokens: left.totalTokens + right.totalTokens,
 });
 
@@ -29,11 +25,9 @@ export const subtractTotals = (
   const diff = {
     inputTokens: current.inputTokens - previous.inputTokens,
     cachedInputTokens: current.cachedInputTokens - previous.cachedInputTokens,
-    uncachedInputTokens:
-      current.uncachedInputTokens - previous.uncachedInputTokens,
+    uncachedInputTokens: current.uncachedInputTokens - previous.uncachedInputTokens,
     outputTokens: current.outputTokens - previous.outputTokens,
-    reasoningOutputTokens:
-      current.reasoningOutputTokens - previous.reasoningOutputTokens,
+    reasoningOutputTokens: current.reasoningOutputTokens - previous.reasoningOutputTokens,
     totalTokens: current.totalTokens - previous.totalTokens,
   };
   return Object.values(diff).every((value) => value >= 0) ? diff : null;
