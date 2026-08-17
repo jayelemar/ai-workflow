@@ -48,6 +48,7 @@ const createFixture = async () => {
   await mkdir(path.join(temporaryRoot, '.git'), { recursive: true });
   const sourcePaths = [
     ...bootstrapPaths,
+    '.github/workflows/health.yml',
     'config/agent-models.toml',
     'instructions/ai-workflow.md',
     'instructions/shared/testing.md',

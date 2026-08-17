@@ -7,6 +7,8 @@
 !/README.md
 !/package.json
 !/pnpm-lock.yaml
+!/.github/
+!/.github/**
 
 # Canonical source directories
 !/config/

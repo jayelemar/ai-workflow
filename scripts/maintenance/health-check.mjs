@@ -17,6 +17,7 @@ const BOOTSTRAP_SOURCE_PATHS = [
 ];
 
 const CANONICAL_SOURCE_ROOTS = [
+  '.github',
   'config',
   'docs',
   'instructions/ai-workflow.md',
@@ -67,6 +68,7 @@ const FORBIDDEN_PATHS = [
 ];
 
 const FORMAT_ROOTS = [
+  '.github',
   'AGENTS.md',
   'README.md',
   'docs/codex-agent.md',
