@@ -100,6 +100,29 @@ Do not add a preview, approval, or plan-validation gate.
 
 ## Final Response
 
-Return exactly:
+For LOW or MEDIUM, return exactly:
 
 `Plan saved to .ai/plans/<plan-name>.md [<classification>]`
+
+For HIGH, return exactly:
+
+```text
+[HIGH]
+
+<goal-handoff>
+
+- Goal: <concise outcome from the finalized spec>
+- Scope: <affected users, roles, routes, services, data, or repositories>
+- Required behavior: <behavior the implementation must establish>
+- Constraints: <material boundaries and behavior that must not change>
+- Verification: <observable evidence that will prove the goal>
+
+<plan>
+
+.ai/plans/<plan-name>.md
+```
+
+Keep each handoff bullet concise and derive it only from the finalized spec,
+saved plan, and validated flow artifacts. Omit an inapplicable bullet instead
+of inventing content. The summary is portable context for the explicit
+`/goal` invocation; it does not authorize implementation.
