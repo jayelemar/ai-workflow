@@ -54,6 +54,9 @@ continue to load `.ai/AGENTS.md` directly.
 6. Explicitly execute LOW/MEDIUM with `execute <plan-file>` or HIGH with
    `/goal <exact-goal> <plan-file>`.
 
+See [Workflow Usage](docs/workflow-usage.md) for Codex mode selection and
+copy-ready invocations for every workflow class.
+
 Saving or finalizing an artifact does not invoke the next stage. There is no
 preview, plan approval, validator, or persisted progress gate.
 
