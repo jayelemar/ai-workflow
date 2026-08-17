@@ -274,16 +274,17 @@ test('active workflow source loads .ai/AGENTS.md directly', async () => {
     assert.match(await readSource(promptFile), /\.ai\/AGENTS\.md/, promptFile);
   }
 
-  const activeFiles = [
+  const activeInstructionFiles = [
     'AGENTS.md',
-    'README.md',
     ...(await collectFiles('instructions', (file) => file.endsWith('.md'))),
     ...(await collectFiles('prompts', (file) => file.endsWith('.md'))),
     ...(await collectFiles('templates', (file) => file.endsWith('.md'))),
     ...(await collectFiles('wrappers', (file) => file.endsWith('.md'))),
   ];
-  const activeSource = (await Promise.all(activeFiles.map((file) => readSource(file)))).join('\n');
-  assert.doesNotMatch(activeSource, /\.codex\/(\.?)AGENTS\.md/);
+  const activeInstructionSource = (
+    await Promise.all(activeInstructionFiles.map((file) => readSource(file)))
+  ).join('\n');
+  assert.doesNotMatch(activeInstructionSource, /\.codex\/(\.?)AGENTS\.md/);
   assert.match(await readSource('README.md'), /repository root/);
 });
 
@@ -335,6 +336,52 @@ test('local instruction index routes debugging, maintainability, and runbooks', 
   assert.match(index, /`ai-workflow\.md`/);
   assert.doesNotMatch(index, /`shared\/ai-workflow\.md`/);
   assert.doesNotMatch(architecture, /Meteor/i);
+});
+
+test('local AGENTS override setup delegates to one deterministic utility', async () => {
+  const [packageSource, prompt, readme, codexAgent, utility] = await Promise.all([
+    readSource('package.json'),
+    readSource('prompts/setup-agents-override.md'),
+    readSource('README.md'),
+    readSource('docs/codex-agent.md'),
+    readSource('scripts/setup/agents-override.mjs'),
+  ]);
+  const packageJson = JSON.parse(packageSource);
+  const expectedOverride = `# Local Project AI Instructions
+
+Read and follow \`.ai/AGENTS.md\` before starting work.
+Use \`.ai/instructions/index.md\` to load only instructions relevant to the request.`;
+
+  assert.equal(
+    packageJson.scripts['setup:agents-override'],
+    'node scripts/setup/agents-override.mjs',
+  );
+  assert.match(prompt, /pnpm --dir \.ai setup:agents-override/);
+  assert.match(prompt, /delegate[s]? all mutation and validation to the package utility/i);
+  assert.match(prompt, /actual command output and exit status/i);
+  assert.ok(
+    prompt.split('\n').filter((line) => line.trim()).length <= 12,
+    'setup prompt must remain a thin command adapter',
+  );
+  assert.doesNotMatch(
+    prompt,
+    /# Local Project AI Instructions|\/AGENTS\.override\.md|info\/exclude|rev-parse|check-ignore|writeFile|appendFile/,
+  );
+
+  for (const documentation of [readme, codexAgent]) {
+    assert.match(documentation, /pnpm setup:agents-override/);
+    assert.match(documentation, /pnpm --dir \.ai setup:agents-override/);
+    assert.ok(documentation.includes(expectedOverride));
+    assert.match(documentation, /repository-local Git exclude/i);
+    assert.match(documentation, /AGENTS\.md.*\.codex\/AGENTS\.md.*fallback/is);
+    assert.match(documentation, /refuses|conflicts/i);
+  }
+
+  assert.match(utility, /fileURLToPath\(import\.meta\.url\)/);
+  assert.match(utility, /'--git-path',\s*'info\/exclude'/);
+  assert.match(utility, /'check-ignore'/);
+  assert.match(utility, /flag: 'wx'/);
+  assert.doesNotMatch(utility, /process\.cwd\(\)/);
 });
 
 test('private package pins the self-contained toolchain', async () => {

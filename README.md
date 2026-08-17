@@ -7,9 +7,36 @@ runner, transition state, or sidecar authority.
 
 ## Installation
 
-For automatic discovery, install the optional repository-root `AGENTS.md`
-template documented in `.ai/docs/codex-agent.md`. Active prompts also load
-`.ai/AGENTS.md` directly, so no tool-specific indirection file is required.
+Use the local `AGENTS.override.md` bootstrap for automatic Codex discovery.
+Run either supported command:
+
+From `.ai`:
+
+```bash
+pnpm setup:agents-override
+```
+
+From the project root:
+
+```bash
+pnpm --dir .ai setup:agents-override
+```
+
+The command creates this exact ignored project-root file:
+
+```md
+# Local Project AI Instructions
+
+Read and follow `.ai/AGENTS.md` before starting work.
+Use `.ai/instructions/index.md` to load only instructions relevant to the request.
+```
+
+It also adds `/AGENTS.override.md` to the repository-local Git exclude. Before
+either managed target changes, setup refuses any parent-root `AGENTS.md` entry,
+legacy `.codex/AGENTS.md`, its matching fallback, or manual-token hook conflict.
+Resolve those local conflicts explicitly, then rerun the utility. See
+`.ai/docs/codex-agent.md` for setup and compatibility details. Active prompts
+continue to load `.ai/AGENTS.md` directly.
 
 ## Explicit Workflow
 
