@@ -86,7 +86,7 @@ const createCommandExecutor = ({
     'instructions/index.md',
     ...localInstructionPaths,
   ]);
-  const localOnlyRoots = ['artifacts', 'logs', 'plans', 'specs', 'state'];
+  const localOnlyRoots = ['artifacts', 'logs', 'plans', 'specs', 'state', 'tmp'];
   const isInPathspec = (candidate, pathspec) =>
     candidate === pathspec || candidate.startsWith(`${pathspec}/`);
   const isLocalPath = (candidate) =>
@@ -442,6 +442,55 @@ test('health fails when actual local workflow data is specifically unignored', a
     assert.equal(result.ok, false);
     assert.match(output.join('\n'), /local path remains ignored/);
     assert.match(output.join('\n'), /plans\/unignored-plan\.md/);
+  });
+});
+
+test('health treats tmp as ignored local data and rejects retired telemetry paths', async () => {
+  await withFixture(async (fixture) => {
+    await writeFixtureFile(fixture.root, 'tmp/local-record.txt');
+    const output = [];
+    const result = await runHealthCheck({
+      commandExecutor: createCommandExecutor(fixture),
+      stderr: (message) => output.push(message),
+      stdout: (message) => output.push(message),
+      workflowDirectory: fixture.root,
+    });
+
+    assert.equal(result.ok, true, output.join('\n'));
+    await writeFixtureFile(fixture.root, 'scripts/workflow/telemetry/manual-token-usage.ts');
+    const retiredOutput = [];
+    const retired = await runHealthCheck({
+      commandExecutor: createCommandExecutor(fixture),
+      stderr: (message) => retiredOutput.push(message),
+      stdout: (message) => retiredOutput.push(message),
+      workflowDirectory: fixture.root,
+    });
+    assert.equal(retired.ok, false);
+    assert.match(
+      retiredOutput.join('\n'),
+      /retired workflow path still exists: scripts\/workflow\/telemetry/,
+    );
+  });
+});
+
+test('health rejects a dangling retired runner-log link', async () => {
+  await withFixture(async (fixture) => {
+    const retiredPath = path.join(fixture.root, 'tmp/workflow-runner-test.log');
+    await mkdir(path.dirname(retiredPath), { recursive: true });
+    await symlink('missing-runner-log', retiredPath);
+    const output = [];
+    const result = await runHealthCheck({
+      commandExecutor: createCommandExecutor(fixture),
+      stderr: (message) => output.push(message),
+      stdout: (message) => output.push(message),
+      workflowDirectory: fixture.root,
+    });
+
+    assert.equal(result.ok, false);
+    assert.match(
+      output.join('\n'),
+      /retired workflow path still exists: tmp\/workflow-runner-test\.log/,
+    );
   });
 });
 

@@ -61,11 +61,18 @@ Project-local instruction routing begins at ignored
 `.ai/instructions/index.md`. Shared baselines remain under
 `.ai/instructions/shared/`.
 
-## Optional Token Telemetry
+## Local Record Cleanup
 
-Manual token telemetry remains available at
-`.ai/scripts/workflow/telemetry/manual-token-usage.ts`. It is an optional
-measurement utility, never a required workflow stage or transition.
+Use the explicit preview-first cleanup utility for ignored workflow records:
+
+```bash
+pnpm cleanup:local
+pnpm cleanup:local --apply
+```
+
+Preview lists the exact targets and makes no changes. Apply removes every entry
+under `artifacts/`, `logs/`, `plans/`, `specs/`, `state/`, and `tmp/`, including
+active records; invoke it only when that deletion is intended.
 
 ## Self-Contained Checks
 

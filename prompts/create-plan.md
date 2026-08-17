@@ -96,8 +96,7 @@ Saving a plan does not implement it. The next stage must be explicitly invoked:
 - LOW/MEDIUM: `execute .ai/plans/<plan-name>.md`
 - HIGH: `/goal <exact-goal> .ai/plans/<plan-name>.md`
 
-Do not add a preview, approval, or plan-validation gate. Manual token telemetry
-is optional and never affects the saved plan or next stage.
+Do not add a preview, approval, or plan-validation gate.
 
 ## Final Response
 

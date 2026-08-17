@@ -10,7 +10,8 @@
   "scripts": {
     "health": "node scripts/maintenance/health-check.mjs",
     "health:full": "node scripts/maintenance/health-check.mjs --full",
-    "test:focused": "node --import tsx --test scripts/maintenance/health-check.test.mjs scripts/workflow/stage-contract.test.mjs",
+    "cleanup:local": "node scripts/maintenance/cleanup-local.mjs",
+    "test:focused": "node --import tsx --test scripts/maintenance/cleanup-local.test.mjs scripts/maintenance/health-check.test.mjs scripts/workflow/stage-contract.test.mjs",
     "test:all": "pnpm health:full"
   },
   "devDependencies": {

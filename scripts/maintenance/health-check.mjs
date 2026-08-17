@@ -41,7 +41,7 @@ const EXPECTED_WRAPPER_PATHS = [
   'wrappers/select-workflow.md',
 ];
 
-const LOCAL_ONLY_ROOTS = ['artifacts', 'logs', 'plans', 'specs', 'state'];
+const LOCAL_ONLY_ROOTS = ['artifacts', 'logs', 'plans', 'specs', 'state', 'tmp'];
 
 const LOCAL_IGNORE_PROBES = [
   'instructions/.health-check-probe.md',
@@ -50,6 +50,7 @@ const LOCAL_IGNORE_PROBES = [
   'artifacts/.health-check-probe',
   'logs/.health-check-probe',
   'state/.health-check-probe',
+  'tmp/.health-check-probe',
 ];
 
 const FORBIDDEN_PATHS = [
@@ -61,6 +62,8 @@ const FORBIDDEN_PATHS = [
   'wrappers/generate-user-flow.md',
   'scripts/workflow/runner',
   'scripts/workflow/runner.spec.md',
+  'scripts/workflow/telemetry',
+  'tmp/workflow-runner-test.log',
 ];
 
 const FORMAT_ROOTS = [
@@ -89,6 +92,15 @@ const REFERENCE_ROOTS = [
 const pathExists = async (targetPath) => {
   try {
     await access(targetPath, constants.F_OK);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const pathEntryExists = async (targetPath) => {
+  try {
+    await lstat(targetPath);
     return true;
   } catch {
     return false;
@@ -508,19 +520,19 @@ export const runHealthCheck = async ({
     return { ok: false, root };
   }
 
+  for (const relativePath of FORBIDDEN_PATHS) {
+    if (await pathEntryExists(path.join(root, relativePath))) {
+      stderr(`FAIL retired workflow path still exists: ${relativePath}`);
+      return { ok: false, root };
+    }
+  }
+
   if (!(await validateCanonicalSource({ commandExecutor, root, stderr }))) {
     return { ok: false, root };
   }
 
   const instructionRoutes = await readInstructionRoutes({ root, stderr });
   if (!instructionRoutes) return { ok: false, root };
-
-  for (const relativePath of FORBIDDEN_PATHS) {
-    if (await pathExists(path.join(root, relativePath))) {
-      stderr(`FAIL retired workflow path still exists: ${relativePath}`);
-      return { ok: false, root };
-    }
-  }
 
   if (!(await validateLocalPaths({ commandExecutor, instructionRoutes, root, stderr }))) {
     return { ok: false, root };

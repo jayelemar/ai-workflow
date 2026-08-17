@@ -23,10 +23,6 @@ persisted transition authority.
   user inputs and must not restate those contracts.
 - No prompt may introduce runner selection, workflow state, event history,
   sidecars, a preview gate, or pre-execution plan approval.
-- Manual token telemetry at
-  `.ai/scripts/workflow/telemetry/manual-token-usage.ts` is optional. It may be
-  invoked explicitly for measurement but never gates, authorizes, or advances a
-  workflow stage.
 - MEDIUM and HIGH completion use the independent whole-plan review contract in
   `.ai/prompts/review-changes.md` and the locked `reviewer` runtime in
   `.ai/config/agent-models.toml`.
@@ -57,4 +53,3 @@ persisted transition authority.
 - Duplicating a prompt schema in a wrapper or instruction.
 - Calling a finalized spec or saved plan `approved` when no operator approval
   occurred.
-- Using optional telemetry as a transition or completion condition.
