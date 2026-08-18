@@ -148,10 +148,16 @@ review is mandatory regardless of the tasks' saved delegation decisions.
    remediation paths, never `.ai/` artifacts. Immediately before committing,
    run `git branch --show-current`; on `main`, `dev`, `development`, or
    `staging`, stop and obtain explicit operator permission for that commit.
-6. Create exactly one local commit per changed repository for the round using
-   `fix(review): resolve round <number> findings`. Do not amend, squash,
-   combine repositories, or include unrelated or previously completed task
-   changes.
+6. Create exactly one local conventional commit per changed repository for the
+   round. Its subject must name the resolved behavior or risk—not merely the
+   review round—and use the owning conventional-commit scope:
+   `fix(<affected component>): <imperative summary of the resolved finding>`.
+   When no stable component scope exists, use
+   `fix: <imperative summary of the resolved finding>`. Never use
+   `fix(review)` as a scope. Its body must state the review round, concise
+   summaries of every resolved `P0`/`P1`/`P2` finding, and the validation
+   commands/results. Do not amend, squash, combine repositories, or include
+   unrelated or previously completed task changes.
 7. Record the round's resolved findings, validation results, repository commit
    SHAs and subjects, and remaining advisory findings in
    `## Verified Progress`.

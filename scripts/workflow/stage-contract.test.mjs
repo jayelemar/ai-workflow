@@ -219,8 +219,19 @@ test('MEDIUM and HIGH require an independent final review loop', async () => {
 
   assert.match(checkpoint, /After every planned task has completed the task commit protocol/);
   assert.match(checkpoint, /mandatory regardless of the tasks' saved delegation decisions/);
-  assert.match(checkpoint, /exactly one local commit per changed repository for the round/);
-  assert.match(checkpoint, /fix\(review\): resolve round <number> findings/);
+  assert.match(
+    checkpoint,
+    /exactly one local conventional commit per changed repository for the\s+round/,
+  );
+  assert.match(
+    checkpoint,
+    /subject must name the resolved behavior or risk[\s\S]*fix\(<affected component>\): <imperative summary/,
+  );
+  assert.match(checkpoint, /When no stable component scope exists[\s\S]*fix: <imperative summary/);
+  assert.match(checkpoint, /Its body must state the review round/);
+  assert.match(checkpoint, /summaries of every resolved `P0`\/`P1`\/`P2` finding/);
+  assert.match(checkpoint, /validation\s+commands\/results/);
+  assert.doesNotMatch(checkpoint, /use\s+`fix\(review\):/);
   assert.match(
     checkpoint,
     /Repeat remediation, validation, review-round commits, and fresh review until\s+clear/,
