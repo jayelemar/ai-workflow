@@ -150,10 +150,10 @@ For a new task root:
 
 1. Materialize the resolved Git topology. Only for a plan with exactly one
    repository whose primary checkout is the plan workspace, use `git worktree
-   add -b <branch> <task-root> <base-commit>` so Git creates the task root. For
+add -b <branch> <task-root> <base-commit>` so Git creates the task root. For
    every multi-repository plan, create only the unversioned task root, then
    create each child with `git worktree add -b <branch> <target>
-   <base-commit>`. Do not use `-B`, `--force`, or a command that replaces an
+<base-commit>`. Do not use `-B`, `--force`, or a command that replaces an
    existing relationship.
 2. Mirror the complete source `.ai/` tree into `<task-root>/.ai/`. Include
    ignored, hidden, generated, artifact, log, wrapper, plan, spec, instruction,
