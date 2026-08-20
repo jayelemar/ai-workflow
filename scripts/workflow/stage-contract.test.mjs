@@ -55,7 +55,8 @@ test('workflow uses explicit stages and LOW saves a reference plan', async () =>
 
   for (const command of [
     'execute .ai/plans/<plan-name>.md',
-    '/goal <exact-goal> .ai/plans/<plan-name>.md',
+    '/goal <exact-goal>',
+    'plan: .ai/plans/<plan-name>.md',
   ]) {
     assert.match(createPlan, new RegExp(command.replace(/[./<>]/g, '\\$&')));
   }
@@ -145,6 +146,21 @@ test('plan-manifest@2 declares repositories, bases, and HIGH ownership', async (
   assert.match(template, /Split cross-repository outcomes into dependent tasks/);
 });
 
+test('HIGH plan response returns only the exact goal command', async () => {
+  const createPlan = await readSource('prompts/create-plan.md');
+  const highResponse = createPlan.split('For HIGH, return exactly:')[1];
+
+  assert.match(
+    highResponse,
+    /```text\n\/goal <finalized spec `## Goal` text verbatim>\n\nplan: \.ai\/plans\/<plan-name>\.md\n```/,
+  );
+  assert.match(highResponse, /path after the lowercase `plan:` label/);
+  assert.doesNotMatch(
+    highResponse,
+    /\[HIGH\]|<goal-handoff>|<plan>|Goal Command:|Scope:|Required Behavior:|Constraints:|Verifications:|Plan Reference:/,
+  );
+});
+
 test('resume reports the handoff command and retired progress aliases are absent', async () => {
   const resume = await readSource('prompts/resume-goal.md');
   const activeFiles = [
@@ -157,7 +173,7 @@ test('resume reports the handoff command and retired progress aliases are absent
   const activeSource = (await Promise.all(activeFiles.map((file) => readSource(file)))).join('\n');
 
   assert.match(resume, /Return the handoff's exact `## Next Action`/);
-  assert.match(resume, /\/goal <exact-goal> <linked-plan-path>/);
+  assert.match(resume, /\/goal <exact-goal>\s+plan: <linked-plan-path>/);
   assert.match(resume, /Do not invoke the command/);
   assert.match(resume, /Stop\. The user must explicitly invoke/);
   assert.equal(await pathExists('prompts/plan-progress.md'), false);
@@ -188,7 +204,7 @@ test('HIGH keeps its reusable task commit protocol', async () => {
   );
   assert.match(createPlan, /unchanged HIGH\s+commit protocol/);
   assert.match(createPlan, /copy the finalized spec's `## Goal` text verbatim/);
-  assert.match(resume, /\/goal <exact-goal> <linked-plan-path>/);
+  assert.match(resume, /\/goal <exact-goal>\s+plan: <linked-plan-path>/);
   assert.match(review, /unchanged task commit\s+protocol/);
 });
 

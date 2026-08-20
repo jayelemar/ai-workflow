@@ -51,8 +51,8 @@ continue to load `.ai/AGENTS.md` directly.
    `plan-manifest@2`.
 5. Optionally invoke `.ai/prompts/generate-flow-artifacts.md` directly before
    planning when the pair is useful as a standalone deliverable.
-6. Explicitly execute LOW/MEDIUM with `execute <plan-file>` or HIGH with
-   `/goal <exact-goal> <plan-file>`.
+6. Explicitly execute LOW/MEDIUM with `execute <plan-file>` or HIGH with the
+   returned two-line `/goal <exact-goal>` plus `plan: <plan-file>` invocation.
 
 See [Workflow Usage](docs/workflow-usage.md) for Codex mode selection and
 copy-ready invocations for every workflow class.

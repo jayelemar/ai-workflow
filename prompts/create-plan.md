@@ -93,16 +93,29 @@ For HIGH only, create `.ai/artifacts/<plan-name>/goal-handoff.md` using
 the current repository state and `No implementation started`. Use the plan name
 as `Goal name` and copy the finalized spec's `## Goal` text verbatim as `Exact
 goal`. Use `Awaiting explicit /goal invocation` as the only blocker, and name
-`/goal <exact-goal> <plan-file>` as the next action. Use the checkpoint content
-and unchanged HIGH commit protocol, then return to this prompt. Do not create a
-handoff for LOW or MEDIUM.
+the following two-line invocation as the next action:
+
+```text
+/goal <exact-goal>
+
+plan: <plan-file>
+```
+
+Use the checkpoint content and unchanged HIGH commit protocol, then return to
+this prompt. Do not create a handoff for LOW or MEDIUM.
 
 ## Stage Boundary
 
 Saving a plan does not implement it. The next stage must be explicitly invoked:
 
 - LOW/MEDIUM: `execute .ai/plans/<plan-name>.md`
-- HIGH: `/goal <exact-goal> .ai/plans/<plan-name>.md`
+- HIGH:
+
+  ```text
+  /goal <exact-goal>
+
+  plan: .ai/plans/<plan-name>.md
+  ```
 
 Do not add a preview, approval, or plan-validation gate.
 
@@ -115,22 +128,12 @@ For LOW or MEDIUM, return exactly:
 For HIGH, return exactly:
 
 ```text
-[HIGH]
+/goal <finalized spec `## Goal` text verbatim>
 
-<goal-handoff>
-
-- Goal: <concise outcome from the finalized spec>
-- Scope: <affected users, roles, routes, services, data, or repositories>
-- Required behavior: <behavior the implementation must establish>
-- Constraints: <material boundaries and behavior that must not change>
-- Verification: <observable evidence that will prove the goal>
-
-<plan>
-
-.ai/plans/<plan-name>.md
+plan: .ai/plans/<plan-name>.md
 ```
 
-Keep each handoff bullet concise and derive it only from the finalized spec,
-saved plan, and validated flow artifacts. Omit an inapplicable bullet instead
-of inventing content. The summary is portable context for the explicit
-`/goal` invocation; it does not authorize implementation.
+Copy the finalized spec's `## Goal` text verbatim and use the saved plan's exact
+path after the lowercase `plan:` label. Do not add a classification, summary,
+explanation, Markdown fence, or any other content. Returning the invocation does
+not authorize implementation.

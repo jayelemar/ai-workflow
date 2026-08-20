@@ -11,8 +11,16 @@ Read `.ai/AGENTS.md` before loading the handoff.
 2. Validate `goal-handoff@1`, then read the linked `## Spec` and `## Plan`.
    Treat `## Exact Goal` as the saved objective. Re-check current Git state
    because the handoff is a checkpoint, not the authority for repository state.
-3. Return the handoff's exact `## Next Action`; it must use
-   `/goal <exact-goal> <linked-plan-path>`. Do not invoke the command.
+3. Return the handoff's exact `## Next Action`; it must use:
+
+   ```text
+   /goal <exact-goal>
+
+   plan: <linked-plan-path>
+   ```
+
+   Do not invoke the command.
+
 4. Stop. The user must explicitly invoke the returned command to start the
    goal in any provider.
 

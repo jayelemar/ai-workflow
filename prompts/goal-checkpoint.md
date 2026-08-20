@@ -22,7 +22,14 @@ identifier before writing a checkpoint.
 - During initial HIGH planning, create the handoff before saving the plan's
   final output. Record that implementation has not started, the current
   repository state, `Awaiting explicit /goal invocation` as the blocker, and
-  the exact `/goal <exact-goal> <plan-file>` next action.
+  this exact two-line next action:
+
+  ```text
+  /goal <exact-goal>
+
+  plan: <plan-file>
+  ```
+
 - Do not create workflow state, event logs, sidecars, or a MEDIUM review
   artifact. The linked finalized spec and saved HIGH plan are required inputs, not
   artifacts to recreate here.

@@ -174,7 +174,18 @@ every repository the plan owns. The task commit protocol pauses before a commit
 on `main`, `dev`, `development`, or `staging`, so those branches interrupt an
 otherwise autonomous goal.
 
-Retrieve the exact goal command from the portable handoff:
+Immediately after plan creation, copy the HIGH response. It contains only the
+exact two-line `/goal` invocation with the finalized spec's goal text verbatim
+and the saved plan reference:
+
+```text
+/goal <exact-goal>
+
+plan: <plan-file>
+```
+
+When resuming later, retrieve the same exact goal command from the portable
+handoff:
 
 ```text
 Use `.ai/wrappers/resume-goal.md`.
@@ -182,10 +193,10 @@ Use `.ai/wrappers/resume-goal.md`.
 Goal name: <plan-name>
 ```
 
-Run the returned `/goal <exact-goal> <plan-file>` command verbatim. Do not
-replace it with a second handwritten execution protocol. The handoff already
-owns task delegation, task-scoped validation and review, one local commit per
-task, progress evidence, and the independent final-review loop.
+Run the returned two-line invocation verbatim. Do not replace it with a second
+handwritten execution protocol. The handoff already owns task delegation,
+task-scoped validation and review, one local commit per task, progress evidence,
+and the independent final-review loop.
 
 ## Checkpoint and Resume HIGH Work
 
