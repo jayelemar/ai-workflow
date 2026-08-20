@@ -16,7 +16,6 @@
 !/docs/
 !/docs/**
 !/instructions/
-!/instructions/ai-workflow.md
 !/instructions/shared/
 !/instructions/shared/**
 !/prompts/
@@ -31,7 +30,6 @@
 # Project-local and generated workflow data
 /instructions/index.md
 /instructions/*.md
-!/instructions/ai-workflow.md
 /artifacts/
 /logs/
 /plans/

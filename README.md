@@ -88,8 +88,9 @@ untracked. Git history is the authority for tracked instruction history; this
 repository does not maintain instruction changelogs.
 
 Project-local instruction routing begins at ignored
-`.ai/instructions/index.md`. Shared baselines remain under
-`.ai/instructions/shared/`.
+`.ai/instructions/index.md`. All reusable instructions, including canonical
+workflow guidance, remain under `.ai/instructions/shared/`; other immediate
+Markdown files under `.ai/instructions/` are project-local and ignored.
 
 ## Local Record Cleanup
 

@@ -71,7 +71,7 @@ repository conventions.
 ## `.ai` Repository Boundary
 
 - `.ai/` is a nested Git repository ignored by the parent application.
-- Keep shared workflow source tracked in `.ai`; keep project-local
-  instructions, specs, plans, artifacts, logs, and workflow-local state ignored
-  and untracked.
+- Keep reusable instructions tracked under `.ai/instructions/shared/`; keep the
+  project-local instruction index and area instructions, specs, plans,
+  artifacts, logs, and workflow-local state ignored and untracked.
 - Do not stage `.ai` files in the parent repository.

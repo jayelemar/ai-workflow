@@ -21,15 +21,16 @@ Requested outcome: <create | update | route | retire>
 
 ## Ownership
 
-- Keep portable policy under `.ai/instructions/shared/`.
+- Keep all reusable instructions, including canonical workflow-source guidance,
+  under `.ai/instructions/shared/`.
 - Keep project paths, commands, framework choices, and area ownership in
-  ignored project-local instructions under `.ai/instructions/`.
+  ignored project-local instructions directly under `.ai/instructions/`.
 - Keep `.ai/instructions/index.md` limited to routing. Route every maintained
   local instruction, including applicable debugging, maintainability, and
   documentation/runbook baselines.
 - Keep canonical workflow-source guidance in
-  `.ai/instructions/ai-workflow.md`. Do not recreate the retired shared
-  workflow-instruction variant.
+  `.ai/instructions/shared/ai-workflow.md`. Do not recreate a root-level
+  workflow-instruction exception.
 - Git history is the instruction history. Do not create or update instruction
   changelogs.
 

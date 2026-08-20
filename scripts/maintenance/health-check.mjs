@@ -20,7 +20,6 @@ const CANONICAL_SOURCE_ROOTS = [
   '.github',
   'config',
   'docs',
-  'instructions/ai-workflow.md',
   'instructions/shared',
   'prompts',
   'scripts',
@@ -56,7 +55,7 @@ const LOCAL_IGNORE_PROBES = [
 
 const FORBIDDEN_PATHS = [
   'changelogs',
-  'instructions/shared/ai-workflow.md',
+  'instructions/ai-workflow.md',
   'prompts/generate-user-flow.md',
   'prompts/manual-preview.md',
   'prompts/plan-validator.md',
@@ -313,15 +312,13 @@ const validateCanonicalSource = async ({ commandExecutor, root, stderr }) => {
 };
 
 const isLocalInstructionPath = (relativePath) =>
-  relativePath.startsWith('instructions/') &&
-  relativePath !== 'instructions/ai-workflow.md' &&
-  !relativePath.startsWith('instructions/shared/');
+  relativePath.startsWith('instructions/') && !relativePath.startsWith('instructions/shared/');
 
 const validateLocalPaths = async ({ commandExecutor, instructionRoutes, root, stderr }) => {
   const localFiles = await collectFromRoots(root, LOCAL_ONLY_ROOTS, () => true);
   const localInstructionFiles = await collectFiles(root, 'instructions', isLocalInstructionPath);
   const routedLocalInstructions = instructionRoutes
-    .filter((route) => route !== 'ai-workflow.md' && !route.startsWith('shared/'))
+    .filter((route) => !route.startsWith('shared/'))
     .map((route) => path.posix.join('instructions', route));
   const ignorePaths = [
     ...new Set([

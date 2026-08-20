@@ -50,7 +50,7 @@ const createFixture = async () => {
     ...bootstrapPaths,
     '.github/workflows/health.yml',
     'config/agent-models.toml',
-    'instructions/ai-workflow.md',
+    'instructions/shared/ai-workflow.md',
     'instructions/shared/testing.md',
     'prompts/select-workflow.md',
     'scripts/check.test.mjs',
@@ -66,7 +66,7 @@ const createFixture = async () => {
   await writeFixtureFile(
     root,
     'instructions/index.md',
-    '# Index Instructions\n\n## Rules\n\n- Load `ai-workflow.md`, `shared/testing.md`, and `architecture.md` for workflow checks.\n',
+    '# Index Instructions\n\n## Rules\n\n- Load `shared/ai-workflow.md`, `shared/testing.md`, and `architecture.md` for workflow checks.\n',
   );
   return { root, sourcePaths, temporaryRoot };
 };

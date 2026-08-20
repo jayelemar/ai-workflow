@@ -127,7 +127,7 @@ test('plan-manifest@2 declares repositories, bases, and HIGH ownership', async (
   const [createPlan, template, workflow] = await Promise.all([
     readSource('prompts/create-plan.md'),
     readSource('templates/plan.template.md'),
-    readSource('instructions/ai-workflow.md'),
+    readSource('instructions/shared/ai-workflow.md'),
   ]);
 
   for (const source of [createPlan, template, workflow]) {
@@ -304,7 +304,6 @@ test('shared workflow source is project-neutral and free of retired state concep
   const workflowFiles = [
     'AGENTS.md',
     'README.md',
-    'instructions/ai-workflow.md',
     ...sharedFiles,
     ...(await collectFiles('prompts', (file) => file.endsWith('.md'))),
     ...(await collectFiles('templates', (file) => file.endsWith('.md'))),
@@ -322,7 +321,7 @@ test('shared workflow source is project-neutral and free of retired state concep
 test('retired runner, validator, preview, and changelog paths are absent', async () => {
   for (const retiredPath of [
     'changelogs',
-    'instructions/shared/ai-workflow.md',
+    'instructions/ai-workflow.md',
     'prompts/manual-preview.md',
     'prompts/plan-validator.md',
     'scripts/workflow/runner',
@@ -344,8 +343,8 @@ test('local instruction index routes debugging, maintainability, and runbooks', 
   ]) {
     assert.match(index, new RegExp(instruction.replace('.', '\\.')));
   }
-  assert.match(index, /`ai-workflow\.md`/);
-  assert.doesNotMatch(index, /`shared\/ai-workflow\.md`/);
+  assert.match(index, /`shared\/ai-workflow\.md`/);
+  assert.doesNotMatch(index, /`ai-workflow\.md`/);
   assert.doesNotMatch(architecture, /Meteor/i);
 });
 
