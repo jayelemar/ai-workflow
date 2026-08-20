@@ -29,6 +29,9 @@ persisted transition authority.
 - HIGH task delegation, validation, per-task actual-diff review, task-scoped
   commit sequencing, and final-review remediation commits remain governed by
   `.ai/prompts/goal-checkpoint.md`.
+- Pull request publication is an optional, explicitly invoked delivery action
+  governed by `.ai/prompts/create-pull-request.md`; completion of an execution
+  stage never invokes it automatically.
 
 ## Plan Ownership
 

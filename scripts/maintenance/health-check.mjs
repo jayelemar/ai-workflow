@@ -31,6 +31,7 @@ const EXPECTED_WRAPPER_PATHS = [
   'wrappers/README.md',
   'wrappers/bug-intake-rca.md',
   'wrappers/create-plan.md',
+  'wrappers/create-pull-request.md',
   'wrappers/execute-plan.md',
   'wrappers/feature-intake.md',
   'wrappers/generate-bugfix-spec.md',

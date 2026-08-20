@@ -53,6 +53,8 @@ continue to load `.ai/AGENTS.md` directly.
    planning when the pair is useful as a standalone deliverable.
 6. Explicitly execute LOW/MEDIUM with `execute <plan-file>` or HIGH with the
    returned two-line `/goal <exact-goal>` plus `plan: <plan-file>` invocation.
+7. Optionally invoke `.ai/prompts/create-pull-request.md` after the branch's
+   local commits are complete.
 
 See [Workflow Usage](docs/workflow-usage.md) for Codex mode selection and
 copy-ready invocations for every workflow class.
@@ -75,6 +77,8 @@ preview, plan approval, validator, or persisted progress gate.
 - `.ai/prompts/goal-checkpoint.md` owns the reusable HIGH task delegation,
   per-task review, validation, commit protocol, and final-review remediation
   commits.
+- `.ai/prompts/create-pull-request.md` owns optional GitHub pull request
+  inspection, title and summary generation, publication approval, and creation.
 - `.ai/config/agent-models.toml` locks the reviewer model and reasoning effort
   used by every final review round.
 - Wrappers under `.ai/wrappers/` are input adapters only.

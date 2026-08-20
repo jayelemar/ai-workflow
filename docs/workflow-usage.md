@@ -214,6 +214,23 @@ After the checkpoint is saved, pause the active goal. In a new session, invoke
 `resume-goal.md` with the same goal name, re-check the reported repository
 state, and run its returned command exactly.
 
+## Create a Pull Request
+
+After the branch's commits and required reviews are complete, optionally invoke
+the pull request workflow in Agent mode:
+
+```text
+Use `.ai/wrappers/create-pull-request.md`.
+
+Base: AUTO
+```
+
+The prompt inspects the complete branch diff and proposes a conventional title
+plus a description containing only `## Summary`, with a dynamic number of
+outcome-focused bullets based on the complete diff. It waits for explicit
+approval before pushing the branch or creating the pull request and never
+changes the existing commits.
+
 ## Keep Prompt Authority Singular
 
 - Use the wrapper inputs to provide request-specific evidence and decisions.

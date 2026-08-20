@@ -7,3 +7,5 @@ and the final response.
 Sequence: read-only intake → explicitly invoked MEDIUM/HIGH spec → planning
 that reuses or creates required flow artifacts → explicit execution. Direct
 flow-artifact generation remains available as an optional standalone stage.
+Pull request creation is an optional, explicitly invoked delivery action after
+the branch's commits and reviews are complete.

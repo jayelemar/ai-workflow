@@ -208,6 +208,28 @@ test('HIGH keeps its reusable task commit protocol', async () => {
   assert.match(review, /unchanged task commit\s+protocol/);
 });
 
+test('pull request creation is explicit and summary-only', async () => {
+  const [prompt, workflow, wrapper] = await Promise.all([
+    readSource('prompts/create-pull-request.md'),
+    readSource('instructions/shared/ai-workflow.md'),
+    readSource('wrappers/create-pull-request.md'),
+  ]);
+
+  assert.match(prompt, /Use conventional-commit format/);
+  assert.match(prompt, /For multiple commits, synthesize one title/);
+  assert.match(prompt, /Generate exactly this structure/);
+  assert.match(prompt, /## Summary/);
+  assert.match(prompt, /as many concise bullets as needed/);
+  assert.match(prompt, /do not impose a fixed bullet count/);
+  assert.doesNotMatch(prompt, /one to three|1(?:–|-)3/i);
+  assert.match(prompt, /Wait for explicit approval before pushing or creating/);
+  assert.match(prompt, /already has an open pull request/);
+  assert.match(prompt, /Never commit, amend, rebase, squash, force-push, merge, close/);
+  assert.doesNotMatch(prompt, /^## (Validation|Risk|Migrations|Deferred Checks)$/m);
+  assert.match(workflow, /optional, explicitly invoked delivery action/);
+  assert.match(wrapper, /Use `.ai\/prompts\/create-pull-request\.md`/);
+});
+
 test('MEDIUM and HIGH require an independent final review loop', async () => {
   const [agents, workflow, execute, review, checkpoint, registry] = await Promise.all([
     readSource('AGENTS.md'),
@@ -295,6 +317,7 @@ test('active workflow source loads .ai/AGENTS.md directly', async () => {
     'prompts/review-changes.md',
     'prompts/goal-checkpoint.md',
     'prompts/resume-goal.md',
+    'prompts/create-pull-request.md',
   ];
 
   for (const promptFile of promptFiles) {
