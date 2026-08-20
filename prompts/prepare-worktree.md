@@ -9,8 +9,9 @@ This prompt supports all of these layouts without a project-specific branch:
 
 - one Git repository whose checkout is also the plan workspace;
 - a monorepo with one declared Git root; and
-- an unversioned coordination root containing multiple independent Git
-  repositories.
+- an unversioned coordination root containing worktrees sourced from multiple
+  independent Git repositories, including explicitly declared sibling
+  repositories that share the plan workspace's parent directory.
 
 ## Invocation and Input
 
@@ -35,7 +36,16 @@ Read the complete plan. It must declare `plan-manifest@2`, exactly one
 that matches the filename, and one or more valid `## Repositories` entries.
 Each entry must provide a unique safe repository ID, a root relative to the
 plan workspace, and an explicit integration-base ref. Resolve each root to a
-Git checkout; reject duplicate roots and roots outside the workspace.
+Git checkout. A resolved root may be inside the plan workspace. For a plan
+that declares two or more repositories, it may instead be an immediate sibling
+of the plan workspace when both directories have the same real parent.
+
+Treat repository roots as plan-owned path declarations, not general filesystem
+access. Reject absolute roots, symlink escapes, duplicate or overlapping Git
+roots, traversal to an ancestor, and every outside root other than the explicit
+immediate-sibling case above. An outside sibling is a source checkout only;
+every generated target and all control context must remain inside the task
+root.
 
 Validate the classification inputs before any mutation:
 
@@ -71,9 +81,12 @@ Use these paths:
 task root: <plan-workspace>/.worktrees/<plan-name>
 ```
 
-When exactly one declared repository has its primary checkout at the plan
-workspace, its worktree is the task root itself. Otherwise each repository
-uses this immediate child of the task root:
+Use the task root itself as a Git worktree only when the plan declares exactly
+one repository in total and that repository's primary checkout is the plan
+workspace. Every multi-repository plan uses the coordination-root layout,
+including plans whose sources are the plan workspace plus one or more sibling
+repositories. In that layout, each repository uses this immediate child of the
+task root:
 
 ```text
 <task-root>/<repository-id>
@@ -82,7 +95,8 @@ uses this immediate child of the task root:
 Do not create a second nested task root, use a singular `.worktree/`
 directory, or place a worktree outside the task root. In the latter layout,
 the task root is an unversioned coordination directory and its children are
-the Git worktrees.
+the Git worktrees. Never copy or move a sibling source checkout into the task
+root; create its linked Git worktree at the declared target child.
 
 Derive one branch for each repository as `<branch-type>/<plan-name>`. Map a
 validated `bugfix-spec@1` to `fix` and `feature-spec@1` to `feat`; use a
@@ -134,10 +148,11 @@ or conflict; never repair it destructively.
 
 For a new task root:
 
-1. Materialize the resolved Git topology. For a one-repository workspace, use
-   `git worktree add -b <branch> <task-root> <base-commit>` so Git creates the
-   task root. For a coordination-root layout, create only the unversioned task
-   root, then create each child with `git worktree add -b <branch> <target>
+1. Materialize the resolved Git topology. Only for a plan with exactly one
+   repository whose primary checkout is the plan workspace, use `git worktree
+   add -b <branch> <task-root> <base-commit>` so Git creates the task root. For
+   every multi-repository plan, create only the unversioned task root, then
+   create each child with `git worktree add -b <branch> <target>
    <base-commit>`. Do not use `-B`, `--force`, or a command that replaces an
    existing relationship.
 2. Mirror the complete source `.ai/` tree into `<task-root>/.ai/`. Include
@@ -166,6 +181,13 @@ For a new task root:
 
 In a coordination-root layout, the copied control context must remain outside
 every application worktree.
+
+Keep the copied plan byte-for-byte unchanged. Its declared repository roots
+record source provenance and may not resolve to the generated targets from the
+task root. The task-local `worktree-setup.md` report supplies the only allowed
+filesystem overlay: it maps every repository ID to one verified target path
+relative to the task root. The overlay changes no integration base, ownership,
+task order, validation requirement, or desired behavior.
 
 Verify the task-root override is byte-for-byte identical to the source root
 without printing its contents and that its `.ai/AGENTS.md` reference resolves
@@ -245,18 +267,24 @@ Verify without revealing secrets:
    `.ai/config/agent-models.toml` are readable in the task root when present in
    the source workflow. Verify every instruction reference from the root
    override and applicable repository-owned `AGENTS.md` files is readable.
+9. The repository mapping recorded for the task-local report is complete and
+   unique. Each target is relative to and contained by the task root, maps to
+   the same repository ID and recorded base as the saved plan, and matches the
+   verified Git worktree registration and branch.
 
-Create or update only this non-secret task-local report:
+Create or update only this non-secret task-local report using document format
+`worktree-setup@1` and exactly one status of `Ready`, `Partial`, or `Blocked`:
 
 ```text
 .ai/artifacts/<plan-name>/worktree-setup.md
 ```
 
 Record the source plan, classification, topology, repository IDs, primary and
-target paths, bases and commits, branches, control-context mirror result,
-environment destination names and permission status, documented runtime
-assignments, dependency results, user decisions, validation results, and any
-partial failure. Never record environment values or credential-derived data.
+target paths, task-root-relative repository mapping, bases and commits,
+branches, control-context mirror result, environment destination names and
+permission status, documented runtime assignments, dependency results, user
+decisions, validation results, and any partial failure. Never record
+environment values or credential-derived data.
 
 If a failure occurs after mutation, leave every created root, worktree, branch,
 environment file, dependency directory, and report intact. State the exact
@@ -294,5 +322,5 @@ Finally print the exact resolved handoff in a separate text block:
 State that setup did not run the handoff and that the user must invoke it in
 the new Codex session to authorize implementation.
 
-Version: 6.0
-Last Updated: 2026-08-19
+Version: 6.2
+Last Updated: 2026-08-21

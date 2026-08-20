@@ -12,6 +12,10 @@ only the project instructions routed for the implementation scope.
 ## Preconditions
 
 - Every declared repository root and integration-base ref must resolve.
+- If a task-local `worktree-setup@1` report exists with `Ready` status, validate
+  its repository mappings and use each mapped target in place of the plan's
+  source root for filesystem resolution only. Stop on any report, Git registry,
+  branch, base, or repository-ID mismatch.
 - LOW requires its saved compact plan file; a conversational plan result
   is not an execution input. MEDIUM requires a finalized typed spec.
 - Declared flow artifacts must be present and complete.

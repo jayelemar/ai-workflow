@@ -39,6 +39,13 @@ repository conventions.
   only from the explicit execution command that names that saved plan.
 - A finalized spec is authoritative during planning, execution, and review.
   Plans and artifacts must not add behavior that the spec does not define.
+- When executing from a prepared task root, read the task-local
+  `.ai/artifacts/<plan-name>/worktree-setup.md` when it exists. Apply a
+  validated `worktree-setup@1` report with `Ready` status as a filesystem-only
+  repository-ID-to-target overlay; the saved plan's repository roots remain
+  source provenance. Require every mapped target, branch, base commit, and Git
+  worktree registration to match the report before implementation or review,
+  and stop on a missing, stale, or conflicting mapping.
 - If a material requirement, dependency, risk, or repository boundary changes,
   stop the current stage, disclose it, and return to the appropriate explicit
   spec or planning stage.

@@ -34,6 +34,10 @@ persisted transition authority.
 
 - New plans use `plan-manifest@2` and declare every Git repository root plus its
   integration-base ref.
+- A prepared task root keeps those declared source roots unchanged. Its
+  validated `worktree-setup@1` report may overlay only the filesystem target
+  for each repository ID; it never changes ownership, integration bases, task
+  order, or desired behavior.
 - Each HIGH task belongs to exactly one declared Git repository. Split a
   cross-repository outcome into dependent tasks rather than committing across
   repositories as one task.

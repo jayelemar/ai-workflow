@@ -81,6 +81,12 @@ the current work matches `elevate_when`. If the current parent does not match
 an allowed registry runtime, STOP and request a new session with the registry
 setting.
 
+When a task-local `worktree-setup@1` report exists with `Ready` status,
+validate its repository-ID mappings against the Git worktree registries,
+branches, and base commits before starting the first task. Use each mapped
+target instead of the saved plan's source root for filesystem resolution only;
+stop on any missing, stale, or conflicting mapping.
+
 For every required subagent, pass `[spawn].fork_turns` as a decimal string and
 provide a self-contained assignment naming the applicable `AGENTS.md`, saved
 spec, saved plan, owned files, and expected result. Never use full-history

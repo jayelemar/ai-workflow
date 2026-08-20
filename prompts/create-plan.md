@@ -56,7 +56,15 @@ Use `.ai/templates/plan.template.md` exactly and save:
   `## Artifacts`. Do not create application changes, workflow state, or
   execution output while producing these planning artifacts.
 - Declare every Git repository by stable ID, explicit root, and explicit
-  integration-base ref. A repository root must resolve to a Git worktree.
+  integration-base ref. A repository root must be relative to the plan
+  workspace and resolve to a primary Git worktree. Roots inside the plan
+  workspace are valid. An outside root is valid only for a plan with two or
+  more repositories, only when it is an explicitly declared immediate sibling
+  of the plan workspace with the same real parent, and only as a source for the
+  coordination-root layout used by `prepare-worktree.md`. Reject absolute
+  roots, symlink escapes, ancestor traversal, duplicate or overlapping Git
+  roots, and all other outside paths while planning rather than deferring the
+  incompatibility to worktree preparation.
 - Do not use a hard-coded base candidate order. Save the base established by
   repository evidence or supplied by the user.
 - Reconcile desired behavior with current ownership, public/internal contracts,
