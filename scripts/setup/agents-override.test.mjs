@@ -7,6 +7,7 @@ import {
   mkdtemp,
   readFile,
   readlink,
+  realpath,
   rename,
   rm,
   stat,
@@ -541,7 +542,8 @@ test('linked worktrees use Git-resolved exclude metadata and remain idempotent',
     const workflow = await installWorkflow(projectRoot);
     const fixture = { ...workflow, projectRoot, temporaryRoot };
     const excludePath = await excludePathFor(projectRoot);
-    assert.equal(excludePath.startsWith(path.join(mainRoot, '.git')), true);
+    const canonicalMainRoot = await realpath(mainRoot);
+    assert.equal(excludePath.startsWith(path.join(canonicalMainRoot, '.git')), true);
 
     const first = await invokeNode(fixture);
     assert.equal(first.exitCode, 0, first.stderr);
