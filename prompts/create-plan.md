@@ -72,6 +72,24 @@ Use `.ai/templates/plan.template.md` exactly and save:
 - Do not add behavior beyond the finalized spec or LOW request.
 - LOW plans stay compact. MEDIUM/HIGH plans include sufficient ownership and
   validation to execute without new behavior decisions.
+- Populate `## Review Strategy` as `review-strategy@1` for every newly saved
+  plan. Use concrete security-sensitive surfaces, failed-invariant root-cause
+  classes, applicable adversarial variants, mutation/property coverage, an
+  architectural fallback, and separately identified external evidence. When a
+  field is inapplicable, use the template's concrete `N/A` form rather than
+  deleting the field or inventing risk.
+- For authentication, authorization, payments, secrets, migrations,
+  destructive behavior, generated-code validators, workflow execution, or
+  external security boundaries, the adversarial matrix must explicitly select
+  all applicable direct, alias, later-assignment, transitive, computed,
+  destructured, invocation-wrapper, reflection/mutation, container/member,
+  encoding/normalization, and environment/process-control variants. Prefer a
+  closed-form or allowlist architectural fallback when enumerated denylist
+  enforcement could grow by individual bypass spelling.
+- The repeated-class threshold is an architecture-escalation trigger, not a
+  review limit: a root-cause class that remains blocking in two fresh review
+  rounds returns to planning for the saved fallback and is never automatically
+  cleared, ignored, or downgraded.
 - A cross-repository outcome must be represented by dependent steps. For HIGH,
   each task declares exactly one repository ID; split any cross-repository task
   into dependent tasks before saving.

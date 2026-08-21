@@ -288,6 +288,48 @@ test('MEDIUM and HIGH require an independent final review loop', async () => {
   assert.match(registry, /\[spawn\][\s\S]*fork_turns = 4/);
 });
 
+test('future plans consolidate adversarial review by root cause', async () => {
+  const [createPlan, template, review, checkpoint] = await Promise.all([
+    readSource('prompts/create-plan.md'),
+    readSource('templates/plan.template.md'),
+    readSource('prompts/review-changes.md'),
+    readSource('prompts/goal-checkpoint.md'),
+  ]);
+
+  assert.match(template, /## Review Strategy/);
+  assert.match(template, /Format: `review-strategy@1`/);
+  assert.match(template, /Root-cause classes/);
+  assert.match(template, /Adversarial matrix/);
+  assert.match(template, /Architectural fallback/);
+  assert.match(template, /External evidence/);
+
+  assert.match(createPlan, /Populate `## Review Strategy` as `review-strategy@1`/);
+  assert.match(createPlan, /later-assignment[\s\S]*invocation-wrapper[\s\S]*container\/member/);
+  assert.match(createPlan, /architecture-escalation trigger, not a\s+review limit/);
+  assert.match(createPlan, /never automatically\s+cleared, ignored, or downgraded/);
+
+  assert.match(
+    review,
+    /Plans without that versioned section retain the\s+independent review loop above unchanged/,
+  );
+  assert.match(review, /Complete the entire cumulative review before returning/);
+  assert.match(review, /even after the\s+first blocking finding is confirmed/);
+  assert.match(review, /Group confirmed variants by the failed invariant/);
+  assert.match(review, /stable root-cause identifier/);
+  assert.match(review, /report all confirmed `P0`, `P1`, and `P2` families together/);
+  assert.match(review, /same class remains blocking in two fresh rounds/);
+  assert.match(review, /external\/operator evidence as separate results/);
+
+  assert.match(checkpoint, /close every applicable variant in the\s+saved adversarial matrix/);
+  assert.match(checkpoint, /Do not patch only the reviewer's example spelling/);
+  assert.match(checkpoint, /stop incremental remediation and return to planning/);
+  assert.match(checkpoint, /threshold never automatically clears/);
+  assert.match(
+    checkpoint,
+    /finish the complete\s+saved matrix and report all grouped root-cause families/,
+  );
+});
+
 test('wrappers remain thin input adapters', async () => {
   const wrapperFiles = (await collectFiles('wrappers', (file) => file.endsWith('.md'))).filter(
     (file) => file !== 'wrappers/README.md',

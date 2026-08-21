@@ -153,6 +153,14 @@ review is mandatory regardless of the tasks' saved delegation decisions.
    remediation. A material behavior, dependency, risk, or repository-boundary
    discovery stops the goal and returns to the appropriate explicit spec or
    planning stage.
+   When the linked plan uses `review-strategy@1`, group the round's findings by
+   their stable root-cause identifiers, close every applicable variant in the
+   saved adversarial matrix, and add mutation/property regressions at the
+   cheapest valid layer. Do not patch only the reviewer's example spelling.
+   If the same root-cause class remains blocking in two fresh review rounds,
+   stop incremental remediation and return to planning for the saved
+   architectural fallback. This threshold never automatically clears,
+   ignores, or downgrades a `P0`, `P1`, or `P2` finding.
 4. Rerun every task validation affected by the remediation and all applicable
    plan-level required validation. Review the remediation diff for unrelated
    files and preserved user work. Never commit failed or ambiguous
@@ -177,6 +185,9 @@ review is mandatory regardless of the tasks' saved delegation decisions.
 8. Start a fresh independent final review round over the cumulative result.
    Repeat remediation, validation, review-round commits, and fresh review until
    clear. Stop as `Blocked` only for a true external or missing-input blocker.
+   For `review-strategy@1`, require the fresh reviewer to finish the complete
+   saved matrix and report all grouped root-cause families before the next
+   remediation begins.
 
 ## Blockers
 
