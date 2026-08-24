@@ -1,25 +1,40 @@
 #!/usr/bin/env node
 
-import { lstat, mkdir, readdir, rmdir, unlink } from 'node:fs/promises';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { lstat, mkdir, readdir, rmdir, unlink } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-export const workflowRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-export const LOCAL_RECORD_ROOTS = ['artifacts', 'logs', 'plans', 'specs', 'state', 'tmp'];
+export const workflowRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../..",
+);
+export const LOCAL_RECORD_ROOTS = [
+  "artifacts",
+  "logs",
+  "plans",
+  "specs",
+  "state",
+  "tmp",
+];
 
 const isContained = (root, targetPath) => {
   const relativePath = path.relative(root, targetPath);
-  return relativePath !== '' && !relativePath.startsWith(`..${path.sep}`) && relativePath !== '..';
+  return (
+    relativePath !== "" &&
+    !relativePath.startsWith(`..${path.sep}`) &&
+    relativePath !== ".."
+  );
 };
 
 const relativeToWorkflow = (root, targetPath) =>
-  path.relative(root, targetPath).split(path.sep).join('/');
+  path.relative(root, targetPath).split(path.sep).join("/");
 
 export const parseCleanupArgs = (args) => {
   if (args.length === 0) return { apply: false };
-  if (args.length === 1 && args[0] === '--apply') return { apply: true };
-  if (args.length === 1 && ['-h', '--help'].includes(args[0])) return { apply: false, help: true };
-  return { apply: false, error: `Unknown option: ${args.join(' ')}` };
+  if (args.length === 1 && args[0] === "--apply") return { apply: true };
+  if (args.length === 1 && ["-h", "--help"].includes(args[0]))
+    return { apply: false, help: true };
+  return { apply: false, error: `Unknown option: ${args.join(" ")}` };
 };
 
 const collectRootEntries = async ({ root, rootPath }) => {
@@ -27,7 +42,7 @@ const collectRootEntries = async ({ root, rootPath }) => {
   try {
     metadata = await lstat(rootPath);
   } catch (error) {
-    if (error.code === 'ENOENT') return [];
+    if (error.code === "ENOENT") return [];
     throw error;
   }
   if (metadata.isSymbolicLink()) {
@@ -41,7 +56,9 @@ const collectRootEntries = async ({ root, rootPath }) => {
     );
   }
   if (!isContained(root, rootPath)) {
-    throw new Error(`unsafe managed root escapes the workflow directory: ${rootPath}`);
+    throw new Error(
+      `unsafe managed root escapes the workflow directory: ${rootPath}`,
+    );
   }
 
   const entries = [];
@@ -50,7 +67,9 @@ const collectRootEntries = async ({ root, rootPath }) => {
     for (const child of children) {
       const childPath = path.join(directoryPath, child.name);
       if (!isContained(root, childPath)) {
-        throw new Error(`unsafe cleanup target escapes the workflow directory: ${childPath}`);
+        throw new Error(
+          `unsafe cleanup target escapes the workflow directory: ${childPath}`,
+        );
       }
       entries.push({
         directory: child.isDirectory() && !child.isSymbolicLink(),
@@ -67,16 +86,22 @@ const collectRootEntries = async ({ root, rootPath }) => {
   return entries;
 };
 
-export const preflightCleanup = async ({ workflowDirectory = workflowRoot } = {}) => {
+export const preflightCleanup = async ({
+  workflowDirectory = workflowRoot,
+} = {}) => {
   const root = path.resolve(workflowDirectory);
   const rootMetadata = await lstat(root);
   if (!rootMetadata.isDirectory() || rootMetadata.isSymbolicLink()) {
     throw new Error(`workflow directory is not a safe directory: ${root}`);
   }
 
-  const roots = LOCAL_RECORD_ROOTS.map((relativePath) => path.join(root, relativePath));
+  const roots = LOCAL_RECORD_ROOTS.map((relativePath) =>
+    path.join(root, relativePath),
+  );
   const entries = (
-    await Promise.all(roots.map((rootPath) => collectRootEntries({ root, rootPath })))
+    await Promise.all(
+      roots.map((rootPath) => collectRootEntries({ root, rootPath })),
+    )
   )
     .flat()
     .sort((left, right) => left.relativePath.localeCompare(right.relativePath));
@@ -116,10 +141,10 @@ export const runCleanup = async ({
 } = {}) => {
   const options = parseCleanupArgs(args);
   if (options.help) {
-    output('Usage: pnpm cleanup:local [--apply]');
-    output('Without --apply, inspect local workflow records without mutation.');
+    output("Usage: pnpm cleanup:local [--apply]");
+    output("Without --apply, inspect local workflow records without mutation.");
     output(
-      '--apply removes every entry under artifacts/, logs/, plans/, specs/, state/, and tmp/.',
+      "--apply removes every entry under artifacts/, logs/, plans/, specs/, state/, and tmp/.",
     );
     return { ok: true };
   }
@@ -137,22 +162,25 @@ export const runCleanup = async ({
   }
 
   if (!options.apply) {
-    printTargets({ entries: preflight.entries, output, verb: 'Would remove' });
+    printTargets({ entries: preflight.entries, output, verb: "Would remove" });
     output(`Cleanup preview target count: ${preflight.entries.length}`);
-    output('No mutation occurred.');
+    output("No mutation occurred.");
     output(
-      'WARNING: --apply removes active specs, plans, and artifacts as well as completed records.',
+      "WARNING: --apply removes active specs, plans, and artifacts as well as completed records.",
     );
     return { entries: preflight.entries, ok: true };
   }
 
   output(
-    'WARNING: --apply removes active specs, plans, and artifacts as well as completed records.',
+    "WARNING: --apply removes active specs, plans, and artifacts as well as completed records.",
   );
   const deletionOrder = [...preflight.entries].sort((left, right) => {
     const depthDifference =
-      right.relativePath.split('/').length - left.relativePath.split('/').length;
-    return depthDifference || left.relativePath.localeCompare(right.relativePath);
+      right.relativePath.split("/").length -
+      left.relativePath.split("/").length;
+    return (
+      depthDifference || left.relativePath.localeCompare(right.relativePath)
+    );
   });
   const removed = [];
   for (const entry of deletionOrder) {
@@ -160,23 +188,27 @@ export const runCleanup = async ({
       await remove(entry);
       removed.push(entry);
     } catch (error) {
-      output(`FAIL cleanup:local deletion: ${entry.relativePath}: ${error.message}`);
+      output(
+        `FAIL cleanup:local deletion: ${entry.relativePath}: ${error.message}`,
+      );
       output(`Cleanup removed count before failure: ${removed.length}`);
       return { entries: preflight.entries, ok: false, removed };
     }
   }
 
   try {
-    await Promise.all(preflight.roots.map((rootPath) => mkdir(rootPath, { recursive: true })));
+    await Promise.all(
+      preflight.roots.map((rootPath) => mkdir(rootPath, { recursive: true })),
+    );
     await verifyManagedRoots(preflight.roots);
   } catch (error) {
     output(`FAIL cleanup:local root postcondition: ${error.message}`);
     return { entries: preflight.entries, ok: false, removed };
   }
 
-  printTargets({ entries: preflight.entries, output, verb: 'Removed' });
+  printTargets({ entries: preflight.entries, output, verb: "Removed" });
   output(`Cleanup removed count: ${removed.length}`);
-  output('All managed local-record roots are present and empty.');
+  output("All managed local-record roots are present and empty.");
   return { entries: preflight.entries, ok: true, removed };
 };
 

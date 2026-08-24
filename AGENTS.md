@@ -65,8 +65,15 @@ repository conventions.
 - After all MEDIUM or HIGH implementation, require an independent reviewer on
   the cumulative plan-owned diff. Resolve the locked reviewer runtime from
   `.ai/config/agent-models.toml`; do not substitute another model. Fix and
-  revalidate `P0`, `P1`, and `P2` findings, then repeat with a fresh reviewer
-  until clear. Record advisory `P3` findings without blocking completion.
+  revalidate `P0`, `P1`, and `P2` findings. Automatically start fresh review
+  rounds after remediated rounds 1 and 2. After remediated round 3, pause at the
+  continuation checkpoint defined by `.ai/prompts/review-changes.md`; only
+  exact `END_REVIEW`, `REVIEW_NEXT_ROUND`, or `REVIEW_UNTIL_CLEAR` input has
+  authority there. One-round authorization returns to a checkpoint after a
+  later remediated blocking result. Until-clear authorization persists and
+  repeats only while remediation, validation, reviewer, evidence, blocker, and
+  scope safeguards allow it. Record advisory `P3` findings without blocking
+  completion or creating a checkpoint.
 - Apply production-readiness checks only at relevant changed boundaries. For
   example, assess authentication and authorization only when identity or access
   is affected; assess migration safety only when data or schema changes; assess

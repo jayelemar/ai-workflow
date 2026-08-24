@@ -1,5 +1,5 @@
-import assert from 'node:assert/strict';
-import { execFile } from 'node:child_process';
+import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import {
   chmod,
   lstat,
@@ -13,27 +13,33 @@ import {
   stat,
   symlink,
   writeFile,
-} from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
-import test from 'node:test';
-import { promisify } from 'node:util';
-import { fileURLToPath } from 'node:url';
+} from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import test from "node:test";
+import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
 
 const execFileAsync = promisify(execFile);
-const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const utilitySourcePath = path.join(repositoryRoot, 'scripts/setup/agents-override.mjs');
+const repositoryRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../..",
+);
+const utilitySourcePath = path.join(
+  repositoryRoot,
+  "scripts/setup/agents-override.mjs",
+);
 const overrideContent = `# Local Project AI Instructions
 
 Read and follow \`.ai/AGENTS.md\` before starting work.
 Use \`.ai/instructions/index.md\` to load only instructions relevant to the request.
 `;
-const excludeRule = '/AGENTS.override.md';
+const excludeRule = "/AGENTS.override.md";
 
 const run = async (command, args, options = {}) => {
   try {
     const result = await execFileAsync(command, args, {
-      encoding: 'utf8',
+      encoding: "utf8",
       maxBuffer: 1024 * 1024,
       ...options,
     });
@@ -42,35 +48,44 @@ const run = async (command, args, options = {}) => {
     return {
       exitCode: error.code ?? 1,
       stderr: error.stderr ?? error.message,
-      stdout: error.stdout ?? '',
+      stdout: error.stdout ?? "",
     };
   }
 };
 
 const git = async (cwd, ...args) => {
-  const result = await run('git', args, { cwd });
+  const result = await run("git", args, { cwd });
   assert.equal(result.exitCode, 0, result.stderr);
   return result.stdout.trim();
 };
 
 const installWorkflow = async (projectRoot, { nestedGit = true } = {}) => {
-  const workflowRoot = path.join(projectRoot, '.ai');
-  const utilityPath = path.join(workflowRoot, 'scripts/setup/agents-override.mjs');
+  const workflowRoot = path.join(projectRoot, ".ai");
+  const utilityPath = path.join(
+    workflowRoot,
+    "scripts/setup/agents-override.mjs",
+  );
   await mkdir(path.dirname(utilityPath), { recursive: true });
-  await mkdir(path.join(workflowRoot, 'instructions'), { recursive: true });
-  await writeFile(path.join(workflowRoot, 'AGENTS.md'), '# Fixture workflow instructions\n');
-  await writeFile(path.join(workflowRoot, 'instructions/index.md'), '# Fixture routes\n');
-  await writeFile(utilityPath, await readFile(utilitySourcePath, 'utf8'));
+  await mkdir(path.join(workflowRoot, "instructions"), { recursive: true });
   await writeFile(
-    path.join(workflowRoot, 'package.json'),
+    path.join(workflowRoot, "AGENTS.md"),
+    "# Fixture workflow instructions\n",
+  );
+  await writeFile(
+    path.join(workflowRoot, "instructions/index.md"),
+    "# Fixture routes\n",
+  );
+  await writeFile(utilityPath, await readFile(utilitySourcePath, "utf8"));
+  await writeFile(
+    path.join(workflowRoot, "package.json"),
     `${JSON.stringify(
       {
-        name: '@fixture/ai-workflow',
-        packageManager: 'pnpm@10.34.4',
+        name: "@fixture/ai-workflow",
+        packageManager: "pnpm@10.34.4",
         private: true,
-        type: 'module',
+        type: "module",
         scripts: {
-          'setup:agents-override': 'node scripts/setup/agents-override.mjs',
+          "setup:agents-override": "node scripts/setup/agents-override.mjs",
         },
       },
       null,
@@ -78,28 +93,36 @@ const installWorkflow = async (projectRoot, { nestedGit = true } = {}) => {
     )}\n`,
   );
   if (nestedGit) {
-    await git(workflowRoot, 'init', '-q');
+    await git(workflowRoot, "init", "-q");
   }
   return { utilityPath, workflowRoot };
 };
 
 const createFixture = async ({ initializeParent = true } = {}) => {
-  const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), 'agents-override-'));
-  const projectRoot = path.join(temporaryRoot, 'project');
+  const temporaryRoot = await mkdtemp(
+    path.join(os.tmpdir(), "agents-override-"),
+  );
+  const projectRoot = path.join(temporaryRoot, "project");
   await mkdir(projectRoot);
   await writeFile(
-    path.join(projectRoot, 'package.json'),
+    path.join(projectRoot, "package.json"),
     '{"private":true,"packageManager":"pnpm@10.34.4"}\n',
   );
   if (initializeParent) {
-    await git(projectRoot, 'init', '-q');
+    await git(projectRoot, "init", "-q");
   }
   const workflow = await installWorkflow(projectRoot);
   return { ...workflow, projectRoot, temporaryRoot };
 };
 
 const excludePathFor = async (projectRoot) =>
-  git(projectRoot, 'rev-parse', '--path-format=absolute', '--git-path', 'info/exclude');
+  git(
+    projectRoot,
+    "rev-parse",
+    "--path-format=absolute",
+    "--git-path",
+    "info/exclude",
+  );
 
 const invokeNode = (fixture, options = {}) =>
   run(process.execPath, [fixture.utilityPath], {
@@ -108,29 +131,39 @@ const invokeNode = (fixture, options = {}) =>
   });
 
 const invokePnpm = (fixture, args, cwd) =>
-  run('pnpm', args, {
+  run("pnpm", args, {
     cwd,
     env: process.env,
   });
 
 const readManagedState = async (fixture) => {
-  const overridePath = path.join(fixture.projectRoot, 'AGENTS.override.md');
+  const overridePath = path.join(fixture.projectRoot, "AGENTS.override.md");
   const excludePath = await excludePathFor(fixture.projectRoot);
   return {
-    exclude: await readFile(excludePath, 'utf8'),
+    exclude: await readFile(excludePath, "utf8"),
     excludePath,
-    override: await readFile(overridePath, 'utf8'),
+    override: await readFile(overridePath, "utf8"),
     overridePath,
   };
 };
 
 const assertIgnored = async (projectRoot) => {
-  const ignored = await run('git', ['check-ignore', '-q', '--', 'AGENTS.override.md'], {
-    cwd: projectRoot,
-  });
+  const ignored = await run(
+    "git",
+    ["check-ignore", "-q", "--", "AGENTS.override.md"],
+    {
+      cwd: projectRoot,
+    },
+  );
   assert.equal(ignored.exitCode, 0, ignored.stderr);
-  assert.equal(await git(projectRoot, 'ls-files', '--', 'AGENTS.override.md'), '');
-  assert.equal(await git(projectRoot, 'status', '--short', '--', 'AGENTS.override.md'), '');
+  assert.equal(
+    await git(projectRoot, "ls-files", "--", "AGENTS.override.md"),
+    "",
+  );
+  assert.equal(
+    await git(projectRoot, "status", "--short", "--", "AGENTS.override.md"),
+    "",
+  );
 };
 
 const withFixture = async (callback, options) => {
@@ -142,9 +175,13 @@ const withFixture = async (callback, options) => {
   }
 };
 
-test('nested package command creates the exact regular override and local exclude rule', async () => {
+test("nested package command creates the exact regular override and local exclude rule", async () => {
   await withFixture(async (fixture) => {
-    const result = await invokePnpm(fixture, ['setup:agents-override'], fixture.workflowRoot);
+    const result = await invokePnpm(
+      fixture,
+      ["setup:agents-override"],
+      fixture.workflowRoot,
+    );
     assert.equal(result.exitCode, 0, result.stderr);
     assert.match(result.stdout, /AGENTS\.override\.md: created/);
     assert.match(result.stdout, /exclude rule: added/);
@@ -154,16 +191,19 @@ test('nested package command creates the exact regular override and local exclud
     assert.equal(state.override, overrideContent);
     assert.equal((await lstat(state.overridePath)).isFile(), true);
     assert.equal((await lstat(state.overridePath)).isSymbolicLink(), false);
-    assert.equal(state.exclude.split('\n').filter((line) => line === excludeRule).length, 1);
+    assert.equal(
+      state.exclude.split("\n").filter((line) => line === excludeRule).length,
+      1,
+    );
     await assertIgnored(fixture.projectRoot);
   });
 });
 
-test('project-root package command produces the same result', async () => {
+test("project-root package command produces the same result", async () => {
   await withFixture(async (fixture) => {
     const result = await invokePnpm(
       fixture,
-      ['--dir', '.ai', 'setup:agents-override'],
+      ["--dir", ".ai", "setup:agents-override"],
       fixture.projectRoot,
     );
     assert.equal(result.exitCode, 0, result.stderr);
@@ -172,16 +212,23 @@ test('project-root package command produces the same result', async () => {
   });
 });
 
-test('utility location, not caller directory, selects the target project', async () => {
+test("utility location, not caller directory, selects the target project", async () => {
   await withFixture(async (fixture) => {
-    const unrelatedDirectory = await mkdtemp(path.join(os.tmpdir(), 'agents-override-caller-'));
+    const unrelatedDirectory = await mkdtemp(
+      path.join(os.tmpdir(), "agents-override-caller-"),
+    );
     try {
       const result = await invokeNode(fixture, { cwd: unrelatedDirectory });
       assert.equal(result.exitCode, 0, result.stderr);
       assert.equal((await readManagedState(fixture)).override, overrideContent);
-      await assert.rejects(readFile(path.join(unrelatedDirectory, 'AGENTS.override.md'), 'utf8'));
+      await assert.rejects(
+        readFile(path.join(unrelatedDirectory, "AGENTS.override.md"), "utf8"),
+      );
 
-      const projectSubdirectory = path.join(fixture.projectRoot, 'packages/example');
+      const projectSubdirectory = path.join(
+        fixture.projectRoot,
+        "packages/example",
+      );
       await mkdir(projectSubdirectory, { recursive: true });
       const repeated = await invokeNode(fixture, { cwd: projectSubdirectory });
       assert.equal(repeated.exitCode, 0, repeated.stderr);
@@ -192,10 +239,10 @@ test('utility location, not caller directory, selects the target project', async
   });
 });
 
-test('repeated setup is byte-idempotent and preserves an unterminated exclude line', async () => {
+test("repeated setup is byte-idempotent and preserves an unterminated exclude line", async () => {
   await withFixture(async (fixture) => {
     const excludePath = await excludePathFor(fixture.projectRoot);
-    const originalExclude = '# repository-local excludes\n/custom-cache';
+    const originalExclude = "# repository-local excludes\n/custom-cache";
     await writeFile(excludePath, originalExclude);
 
     const first = await invokeNode(fixture);
@@ -211,14 +258,20 @@ test('repeated setup is byte-idempotent and preserves an unterminated exclude li
     assert.match(second.stdout, /exclude rule: already present/);
     const secondState = await readManagedState(fixture);
     assert.deepEqual(secondState, firstState);
-    assert.equal((await stat(secondState.overridePath)).mtimeMs, overrideStat.mtimeMs);
-    assert.equal((await stat(secondState.excludePath)).mtimeMs, excludeStat.mtimeMs);
+    assert.equal(
+      (await stat(secondState.overridePath)).mtimeMs,
+      overrideStat.mtimeMs,
+    );
+    assert.equal(
+      (await stat(secondState.excludePath)).mtimeMs,
+      excludeStat.mtimeMs,
+    );
   });
 });
 
-test('one or more existing exact exclude rules are preserved without another duplicate', async () => {
+test("one or more existing exact exclude rules are preserved without another duplicate", async () => {
   await withFixture(async (fixture) => {
-    const overridePath = path.join(fixture.projectRoot, 'AGENTS.override.md');
+    const overridePath = path.join(fixture.projectRoot, "AGENTS.override.md");
     const excludePath = await excludePathFor(fixture.projectRoot);
     const duplicateExclude = `/first\n${excludeRule}\n/middle\n${excludeRule}\n/last`;
     await writeFile(overridePath, overrideContent);
@@ -226,14 +279,14 @@ test('one or more existing exact exclude rules are preserved without another dup
 
     const result = await invokeNode(fixture);
     assert.equal(result.exitCode, 0, result.stderr);
-    assert.equal(await readFile(excludePath, 'utf8'), duplicateExclude);
-    assert.equal(await readFile(overridePath, 'utf8'), overrideContent);
+    assert.equal(await readFile(excludePath, "utf8"), duplicateExclude);
+    assert.equal(await readFile(overridePath, "utf8"), overrideContent);
   });
 });
 
-test('a CRLF-terminated exact exclude rule is preserved byte-for-byte', async () => {
+test("a CRLF-terminated exact exclude rule is preserved byte-for-byte", async () => {
   await withFixture(async (fixture) => {
-    const overridePath = path.join(fixture.projectRoot, 'AGENTS.override.md');
+    const overridePath = path.join(fixture.projectRoot, "AGENTS.override.md");
     const excludePath = await excludePathFor(fixture.projectRoot);
     const crlfExclude = `/first\r\n${excludeRule}\r\n/last\r\n`;
     await writeFile(overridePath, overrideContent);
@@ -242,53 +295,56 @@ test('a CRLF-terminated exact exclude rule is preserved byte-for-byte', async ()
     const result = await invokeNode(fixture);
     assert.equal(result.exitCode, 0, result.stderr);
     assert.match(result.stdout, /exclude rule: already present/);
-    assert.equal(await readFile(excludePath, 'utf8'), crlfExclude);
+    assert.equal(await readFile(excludePath, "utf8"), crlfExclude);
   });
 });
 
-test('Git environment overrides cannot redirect repository metadata', async () => {
+test("Git environment overrides cannot redirect repository metadata", async () => {
   await withFixture(async (fixture) => {
-    const foreignRoot = path.join(fixture.temporaryRoot, 'foreign');
+    const foreignRoot = path.join(fixture.temporaryRoot, "foreign");
     await mkdir(foreignRoot);
-    await git(foreignRoot, 'init', '-q');
+    await git(foreignRoot, "init", "-q");
     const foreignExcludePath = await excludePathFor(foreignRoot);
-    const foreignExcludeBefore = await readFile(foreignExcludePath, 'utf8');
+    const foreignExcludeBefore = await readFile(foreignExcludePath, "utf8");
 
     const result = await invokeNode(fixture, {
       env: {
-        GIT_DIR: path.join(foreignRoot, '.git'),
-        GIT_INDEX_FILE: path.join(foreignRoot, '.git/index'),
+        GIT_DIR: path.join(foreignRoot, ".git"),
+        GIT_INDEX_FILE: path.join(foreignRoot, ".git/index"),
         GIT_WORK_TREE: fixture.projectRoot,
       },
     });
 
     assert.equal(result.exitCode, 0, result.stderr);
     assert.equal((await readManagedState(fixture)).override, overrideContent);
-    assert.equal(await readFile(foreignExcludePath, 'utf8'), foreignExcludeBefore);
+    assert.equal(
+      await readFile(foreignExcludePath, "utf8"),
+      foreignExcludeBefore,
+    );
     await assertIgnored(fixture.projectRoot);
   });
 });
 
-test('a missing resolved exclude file is created at the Git-provided path', async () => {
+test("a missing resolved exclude file is created at the Git-provided path", async () => {
   await withFixture(async (fixture) => {
     const excludePath = await excludePathFor(fixture.projectRoot);
     await rm(excludePath);
 
     const result = await invokeNode(fixture);
     assert.equal(result.exitCode, 0, result.stderr);
-    assert.equal(await readFile(excludePath, 'utf8'), `${excludeRule}\n`);
+    assert.equal(await readFile(excludePath, "utf8"), `${excludeRule}\n`);
     await assertIgnored(fixture.projectRoot);
   });
 });
 
-test('workflow prerequisite failures happen before either managed target changes', async (t) => {
+test("workflow prerequisite failures happen before either managed target changes", async (t) => {
   const cases = [
-    ['missing AGENTS.md', 'AGENTS.md', null],
-    ['empty AGENTS.md', 'AGENTS.md', ''],
-    ['non-file AGENTS.md', 'AGENTS.md', 'directory'],
-    ['missing instruction index', 'instructions/index.md', null],
-    ['empty instruction index', 'instructions/index.md', ''],
-    ['non-file instruction index', 'instructions/index.md', 'directory'],
+    ["missing AGENTS.md", "AGENTS.md", null],
+    ["empty AGENTS.md", "AGENTS.md", ""],
+    ["non-file AGENTS.md", "AGENTS.md", "directory"],
+    ["missing instruction index", "instructions/index.md", null],
+    ["empty instruction index", "instructions/index.md", ""],
+    ["non-file instruction index", "instructions/index.md", "directory"],
   ];
 
   for (const [name, relativePath, replacement] of cases) {
@@ -297,46 +353,53 @@ test('workflow prerequisite failures happen before either managed target changes
         const target = path.join(fixture.workflowRoot, relativePath);
         if (replacement === null) {
           await rm(target);
-        } else if (replacement === 'directory') {
+        } else if (replacement === "directory") {
           await rm(target);
           await mkdir(target);
         } else {
           await writeFile(target, replacement);
         }
         const excludePath = await excludePathFor(fixture.projectRoot);
-        const excludeBefore = await readFile(excludePath, 'utf8');
+        const excludeBefore = await readFile(excludePath, "utf8");
 
         const result = await invokeNode(fixture);
         assert.notEqual(result.exitCode, 0);
         assert.match(result.stderr, /required workflow file/i);
-        assert.equal(await readFile(excludePath, 'utf8'), excludeBefore);
-        await assert.rejects(readFile(path.join(fixture.projectRoot, 'AGENTS.override.md')));
+        assert.equal(await readFile(excludePath, "utf8"), excludeBefore);
+        await assert.rejects(
+          readFile(path.join(fixture.projectRoot, "AGENTS.override.md")),
+        );
       });
     });
   }
 });
 
-test('a utility installed outside a direct .ai directory is rejected', async () => {
+test("a utility installed outside a direct .ai directory is rejected", async () => {
   await withFixture(async (fixture) => {
-    const misplacedRoot = path.join(fixture.projectRoot, 'workflow');
+    const misplacedRoot = path.join(fixture.projectRoot, "workflow");
     await rename(fixture.workflowRoot, misplacedRoot);
     const misplacedFixture = {
       ...fixture,
-      utilityPath: path.join(misplacedRoot, 'scripts/setup/agents-override.mjs'),
+      utilityPath: path.join(
+        misplacedRoot,
+        "scripts/setup/agents-override.mjs",
+      ),
       workflowRoot: misplacedRoot,
     };
     const excludePath = await excludePathFor(fixture.projectRoot);
-    const excludeBefore = await readFile(excludePath, 'utf8');
+    const excludeBefore = await readFile(excludePath, "utf8");
 
     const result = await invokeNode(misplacedFixture);
     assert.notEqual(result.exitCode, 0);
     assert.match(result.stderr, /not installed under a direct \.ai directory/i);
-    assert.equal(await readFile(excludePath, 'utf8'), excludeBefore);
-    await assert.rejects(readFile(path.join(fixture.projectRoot, 'AGENTS.override.md')));
+    assert.equal(await readFile(excludePath, "utf8"), excludeBefore);
+    await assert.rejects(
+      readFile(path.join(fixture.projectRoot, "AGENTS.override.md")),
+    );
   });
 });
 
-test('an unreadable resolved exclude target fails before creating the override', async () => {
+test("an unreadable resolved exclude target fails before creating the override", async () => {
   await withFixture(async (fixture) => {
     const excludePath = await excludePathFor(fixture.projectRoot);
     await rm(excludePath);
@@ -345,83 +408,94 @@ test('an unreadable resolved exclude target fails before creating the override',
     const result = await invokeNode(fixture);
     assert.notEqual(result.exitCode, 0);
     assert.match(result.stderr, /could not read repository-local Git exclude/i);
-    await assert.rejects(readFile(path.join(fixture.projectRoot, 'AGENTS.override.md')));
+    await assert.rejects(
+      readFile(path.join(fixture.projectRoot, "AGENTS.override.md")),
+    );
   });
 });
 
-test('a direct parent below the Git root is rejected without mutation', async () => {
-  const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), 'agents-override-parent-'));
+test("a direct parent below the Git root is rejected without mutation", async () => {
+  const temporaryRoot = await mkdtemp(
+    path.join(os.tmpdir(), "agents-override-parent-"),
+  );
   try {
-    const repository = path.join(temporaryRoot, 'repository');
-    const projectRoot = path.join(repository, 'nested-project');
+    const repository = path.join(temporaryRoot, "repository");
+    const projectRoot = path.join(repository, "nested-project");
     await mkdir(projectRoot, { recursive: true });
-    await git(repository, 'init', '-q');
+    await git(repository, "init", "-q");
     const workflow = await installWorkflow(projectRoot);
     const fixture = { ...workflow, projectRoot, temporaryRoot };
     const excludePath = await excludePathFor(projectRoot);
-    const excludeBefore = await readFile(excludePath, 'utf8');
+    const excludeBefore = await readFile(excludePath, "utf8");
 
     const result = await invokeNode(fixture);
     assert.notEqual(result.exitCode, 0);
     assert.match(result.stderr, /direct parent is not the Git worktree root/i);
-    assert.equal(await readFile(excludePath, 'utf8'), excludeBefore);
-    await assert.rejects(readFile(path.join(projectRoot, 'AGENTS.override.md')));
+    assert.equal(await readFile(excludePath, "utf8"), excludeBefore);
+    await assert.rejects(
+      readFile(path.join(projectRoot, "AGENTS.override.md")),
+    );
   } finally {
     await rm(temporaryRoot, { force: true, recursive: true });
   }
 });
 
-test('a non-repository direct parent is rejected before mutation', async () => {
+test("a non-repository direct parent is rejected before mutation", async () => {
   await withFixture(
     async (fixture) => {
       const result = await invokeNode(fixture);
       assert.notEqual(result.exitCode, 0);
       assert.match(result.stderr, /Git worktree root/i);
-      await assert.rejects(readFile(path.join(fixture.projectRoot, 'AGENTS.override.md')));
+      await assert.rejects(
+        readFile(path.join(fixture.projectRoot, "AGENTS.override.md")),
+      );
     },
     { initializeParent: false },
   );
 });
 
-test('tracked, different, symbolic-link, and non-regular targets are preserved', async (t) => {
+test("tracked, different, symbolic-link, and non-regular targets are preserved", async (t) => {
   const cases = [
     {
-      name: 'tracked file',
+      name: "tracked file",
       prepare: async (fixture) => {
-        const target = path.join(fixture.projectRoot, 'AGENTS.override.md');
+        const target = path.join(fixture.projectRoot, "AGENTS.override.md");
         await writeFile(target, overrideContent);
-        await git(fixture.projectRoot, 'add', 'AGENTS.override.md');
-        return { kind: 'file', target, value: overrideContent };
+        await git(fixture.projectRoot, "add", "AGENTS.override.md");
+        return { kind: "file", target, value: overrideContent };
       },
       message: /tracked by Git/i,
     },
     {
-      name: 'different regular file',
+      name: "different regular file",
       prepare: async (fixture) => {
-        const target = path.join(fixture.projectRoot, 'AGENTS.override.md');
-        const value = '# Personal instructions\n';
+        const target = path.join(fixture.projectRoot, "AGENTS.override.md");
+        const value = "# Personal instructions\n";
         await writeFile(target, value);
-        return { kind: 'file', target, value };
+        return { kind: "file", target, value };
       },
       message: /different content/i,
     },
     {
-      name: 'symbolic link',
+      name: "symbolic link",
       prepare: async (fixture) => {
-        const target = path.join(fixture.projectRoot, 'AGENTS.override.md');
-        const linkTarget = 'personal-agents.md';
-        await writeFile(path.join(fixture.projectRoot, linkTarget), '# Personal instructions\n');
+        const target = path.join(fixture.projectRoot, "AGENTS.override.md");
+        const linkTarget = "personal-agents.md";
+        await writeFile(
+          path.join(fixture.projectRoot, linkTarget),
+          "# Personal instructions\n",
+        );
         await symlink(linkTarget, target);
-        return { kind: 'symlink', target, value: linkTarget };
+        return { kind: "symlink", target, value: linkTarget };
       },
       message: /symbolic link/i,
     },
     {
-      name: 'directory',
+      name: "directory",
       prepare: async (fixture) => {
-        const target = path.join(fixture.projectRoot, 'AGENTS.override.md');
+        const target = path.join(fixture.projectRoot, "AGENTS.override.md");
         await mkdir(target);
-        return { kind: 'directory', target };
+        return { kind: "directory", target };
       },
       message: /not a regular file/i,
     },
@@ -432,15 +506,18 @@ test('tracked, different, symbolic-link, and non-regular targets are preserved',
       await withFixture(async (fixture) => {
         const targetState = await targetCase.prepare(fixture);
         const excludePath = await excludePathFor(fixture.projectRoot);
-        const excludeBefore = await readFile(excludePath, 'utf8');
+        const excludeBefore = await readFile(excludePath, "utf8");
         const result = await invokeNode(fixture);
 
         assert.notEqual(result.exitCode, 0);
         assert.match(result.stderr, targetCase.message);
-        assert.equal(await readFile(excludePath, 'utf8'), excludeBefore);
-        if (targetState.kind === 'file') {
-          assert.equal(await readFile(targetState.target, 'utf8'), targetState.value);
-        } else if (targetState.kind === 'symlink') {
+        assert.equal(await readFile(excludePath, "utf8"), excludeBefore);
+        if (targetState.kind === "file") {
+          assert.equal(
+            await readFile(targetState.target, "utf8"),
+            targetState.value,
+          );
+        } else if (targetState.kind === "symlink") {
           assert.equal(await readlink(targetState.target), targetState.value);
         } else {
           assert.equal((await lstat(targetState.target)).isDirectory(), true);
@@ -450,36 +527,39 @@ test('tracked, different, symbolic-link, and non-regular targets are preserved',
   }
 });
 
-test('override write failure returns non-zero without a false success report', async () => {
+test("override write failure returns non-zero without a false success report", async () => {
   await withFixture(async (fixture) => {
     const excludePath = await excludePathFor(fixture.projectRoot);
-    const excludeBefore = await readFile(excludePath, 'utf8');
+    const excludeBefore = await readFile(excludePath, "utf8");
     await chmod(fixture.projectRoot, 0o555);
     try {
       const result = await invokeNode(fixture);
       assert.notEqual(result.exitCode, 0);
       assert.match(result.stderr, /create AGENTS\.override\.md/i);
       assert.doesNotMatch(result.stdout, /setup verified/i);
-      assert.equal(await readFile(excludePath, 'utf8'), excludeBefore);
+      assert.equal(await readFile(excludePath, "utf8"), excludeBefore);
     } finally {
       await chmod(fixture.projectRoot, 0o755);
     }
   });
 });
 
-test('exclude write failure is recoverable on a later invocation', async () => {
+test("exclude write failure is recoverable on a later invocation", async () => {
   await withFixture(async (fixture) => {
     const excludePath = await excludePathFor(fixture.projectRoot);
-    const excludeBefore = await readFile(excludePath, 'utf8');
+    const excludeBefore = await readFile(excludePath, "utf8");
     await chmod(excludePath, 0o444);
     try {
       const failed = await invokeNode(fixture);
       assert.notEqual(failed.exitCode, 0);
       assert.match(failed.stderr, /append Git exclude rule/i);
       assert.doesNotMatch(failed.stdout, /setup verified/i);
-      assert.equal(await readFile(excludePath, 'utf8'), excludeBefore);
+      assert.equal(await readFile(excludePath, "utf8"), excludeBefore);
       assert.equal(
-        await readFile(path.join(fixture.projectRoot, 'AGENTS.override.md'), 'utf8'),
+        await readFile(
+          path.join(fixture.projectRoot, "AGENTS.override.md"),
+          "utf8",
+        ),
         overrideContent,
       );
     } finally {
@@ -493,10 +573,10 @@ test('exclude write failure is recoverable on a later invocation', async () => {
   });
 });
 
-test('failed ignored-status verification is reported after writes without false success', async () => {
+test("failed ignored-status verification is reported after writes without false success", async () => {
   await withFixture(async (fixture) => {
-    const wrapperDirectory = path.join(fixture.temporaryRoot, 'bin');
-    const wrapperPath = path.join(wrapperDirectory, 'git');
+    const wrapperDirectory = path.join(fixture.temporaryRoot, "bin");
+    const wrapperPath = path.join(wrapperDirectory, "git");
     await mkdir(wrapperDirectory);
     await writeFile(
       wrapperPath,
@@ -526,24 +606,37 @@ process.exit(result.status ?? 1);
   });
 });
 
-test('linked worktrees use Git-resolved exclude metadata and remain idempotent', async () => {
-  const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), 'agents-override-worktree-'));
+test("linked worktrees use Git-resolved exclude metadata and remain idempotent", async () => {
+  const temporaryRoot = await mkdtemp(
+    path.join(os.tmpdir(), "agents-override-worktree-"),
+  );
   try {
-    const mainRoot = path.join(temporaryRoot, 'main');
-    const projectRoot = path.join(temporaryRoot, 'linked');
+    const mainRoot = path.join(temporaryRoot, "main");
+    const projectRoot = path.join(temporaryRoot, "linked");
     await mkdir(mainRoot);
-    await git(mainRoot, 'init', '-q');
-    await git(mainRoot, 'config', 'user.email', 'fixture@example.com');
-    await git(mainRoot, 'config', 'user.name', 'Fixture');
-    await writeFile(path.join(mainRoot, 'seed.txt'), 'seed\n');
-    await git(mainRoot, 'add', 'seed.txt');
-    await git(mainRoot, 'commit', '-qm', 'fixture seed');
-    await git(mainRoot, 'worktree', 'add', '-q', '--detach', projectRoot, 'HEAD');
+    await git(mainRoot, "init", "-q");
+    await git(mainRoot, "config", "user.email", "fixture@example.com");
+    await git(mainRoot, "config", "user.name", "Fixture");
+    await writeFile(path.join(mainRoot, "seed.txt"), "seed\n");
+    await git(mainRoot, "add", "seed.txt");
+    await git(mainRoot, "commit", "-qm", "fixture seed");
+    await git(
+      mainRoot,
+      "worktree",
+      "add",
+      "-q",
+      "--detach",
+      projectRoot,
+      "HEAD",
+    );
     const workflow = await installWorkflow(projectRoot);
     const fixture = { ...workflow, projectRoot, temporaryRoot };
     const excludePath = await excludePathFor(projectRoot);
     const canonicalMainRoot = await realpath(mainRoot);
-    assert.equal(excludePath.startsWith(path.join(canonicalMainRoot, '.git')), true);
+    assert.equal(
+      excludePath.startsWith(path.join(canonicalMainRoot, ".git")),
+      true,
+    );
 
     const first = await invokeNode(fixture);
     assert.equal(first.exitCode, 0, first.stderr);
@@ -557,16 +650,19 @@ test('linked worktrees use Git-resolved exclude metadata and remain idempotent',
   }
 });
 
-test('all root and legacy Codex conflicts are reported before managed targets change', async () => {
+test("all root and legacy Codex conflicts are reported before managed targets change", async () => {
   await withFixture(async (fixture) => {
     const preservedFiles = new Map([
-      ['AGENTS.md', '# Shared root instructions\n'],
-      ['.codex/AGENTS.md', '# Legacy Codex instructions\n'],
-      ['.codex/config.toml', 'project_doc_fallback_filenames = [".codex/AGENTS.md", "TEAM.md"]\n'],
-      ['.codex/hooks.json', '{"hooks":{"Stop":["manual_token_stop.py"]}}\n'],
-      ['.codex/hooks/manual_token_stop.py', '# legacy hook\n'],
-      ['.codex/hooks/__pycache__/manual_token_stop.pyc', 'cache\n'],
-      ['.codex/state/manual-token-hook.json', '{}\n'],
+      ["AGENTS.md", "# Shared root instructions\n"],
+      [".codex/AGENTS.md", "# Legacy Codex instructions\n"],
+      [
+        ".codex/config.toml",
+        'project_doc_fallback_filenames = [".codex/AGENTS.md", "TEAM.md"]\n',
+      ],
+      [".codex/hooks.json", '{"hooks":{"Stop":["manual_token_stop.py"]}}\n'],
+      [".codex/hooks/manual_token_stop.py", "# legacy hook\n"],
+      [".codex/hooks/__pycache__/manual_token_stop.pyc", "cache\n"],
+      [".codex/state/manual-token-hook.json", "{}\n"],
     ]);
     for (const [relativePath, content] of preservedFiles) {
       const target = path.join(fixture.projectRoot, relativePath);
@@ -574,7 +670,7 @@ test('all root and legacy Codex conflicts are reported before managed targets ch
       await writeFile(target, content);
     }
     const excludePath = await excludePathFor(fixture.projectRoot);
-    const excludeBefore = await readFile(excludePath, 'utf8');
+    const excludeBefore = await readFile(excludePath, "utf8");
 
     const result = await invokeNode(fixture);
     assert.notEqual(result.exitCode, 0);
@@ -586,42 +682,53 @@ test('all root and legacy Codex conflicts are reported before managed targets ch
     assert.match(result.stderr, /__pycache__\/manual_token_stop\.pyc/);
     assert.match(result.stderr, /state\/manual-token-hook\.json/);
     for (const [relativePath, content] of preservedFiles) {
-      assert.equal(await readFile(path.join(fixture.projectRoot, relativePath), 'utf8'), content);
+      assert.equal(
+        await readFile(path.join(fixture.projectRoot, relativePath), "utf8"),
+        content,
+      );
     }
-    assert.equal(await readFile(excludePath, 'utf8'), excludeBefore);
-    await assert.rejects(readFile(path.join(fixture.projectRoot, 'AGENTS.override.md')));
+    assert.equal(await readFile(excludePath, "utf8"), excludeBefore);
+    await assert.rejects(
+      readFile(path.join(fixture.projectRoot, "AGENTS.override.md")),
+    );
   });
 });
 
-test('a later-added root instruction blocks an otherwise idempotent override setup', async () => {
+test("a later-added root instruction blocks an otherwise idempotent override setup", async () => {
   await withFixture(async (fixture) => {
     const first = await invokeNode(fixture);
     assert.equal(first.exitCode, 0, first.stderr);
     const excludePath = await excludePathFor(fixture.projectRoot);
-    const excludeBefore = await readFile(excludePath, 'utf8');
-    await writeFile(path.join(fixture.projectRoot, 'AGENTS.md'), '# Later root instructions\n');
+    const excludeBefore = await readFile(excludePath, "utf8");
+    await writeFile(
+      path.join(fixture.projectRoot, "AGENTS.md"),
+      "# Later root instructions\n",
+    );
 
     const second = await invokeNode(fixture);
 
     assert.notEqual(second.exitCode, 0);
     assert.match(second.stderr, /parent-root AGENTS\.md exists/);
-    assert.equal(await readFile(excludePath, 'utf8'), excludeBefore);
+    assert.equal(await readFile(excludePath, "utf8"), excludeBefore);
     assert.equal(
-      await readFile(path.join(fixture.projectRoot, 'AGENTS.override.md'), 'utf8'),
+      await readFile(
+        path.join(fixture.projectRoot, "AGENTS.override.md"),
+        "utf8",
+      ),
       overrideContent,
     );
   });
 });
 
-test('unrelated fallback and hook configuration do not block clean setup', async () => {
+test("unrelated fallback and hook configuration do not block clean setup", async () => {
   await withFixture(async (fixture) => {
-    await mkdir(path.join(fixture.projectRoot, '.codex'), { recursive: true });
+    await mkdir(path.join(fixture.projectRoot, ".codex"), { recursive: true });
     await writeFile(
-      path.join(fixture.projectRoot, '.codex/config.toml'),
+      path.join(fixture.projectRoot, ".codex/config.toml"),
       'project_doc_fallback_filenames = ["TEAM.md"]\n',
     );
     await writeFile(
-      path.join(fixture.projectRoot, '.codex/hooks.json'),
+      path.join(fixture.projectRoot, ".codex/hooks.json"),
       '{"hooks":{"Stop":["unrelated.py"]}}\n',
     );
 
@@ -629,23 +736,26 @@ test('unrelated fallback and hook configuration do not block clean setup', async
 
     assert.equal(result.exitCode, 0, result.stderr);
     assert.equal(
-      await readFile(path.join(fixture.projectRoot, '.codex/config.toml'), 'utf8'),
+      await readFile(
+        path.join(fixture.projectRoot, ".codex/config.toml"),
+        "utf8",
+      ),
       'project_doc_fallback_filenames = ["TEAM.md"]\n',
     );
   });
 });
 
-test('commented and unrelated later fallback arrays do not block clean setup', async () => {
+test("commented and unrelated later fallback arrays do not block clean setup", async () => {
   await withFixture(async (fixture) => {
-    await mkdir(path.join(fixture.projectRoot, '.codex'), { recursive: true });
+    await mkdir(path.join(fixture.projectRoot, ".codex"), { recursive: true });
     await writeFile(
-      path.join(fixture.projectRoot, '.codex/config.toml'),
+      path.join(fixture.projectRoot, ".codex/config.toml"),
       [
         '# project_doc_fallback_filenames = [".codex/AGENTS.md"]',
         'project_doc_fallback_filenames = ["TEAM.md"]',
         'unrelated_paths = [".codex/AGENTS.md"]',
-        '',
-      ].join('\n'),
+        "",
+      ].join("\n"),
     );
 
     const result = await invokeNode(fixture);
@@ -654,10 +764,10 @@ test('commented and unrelated later fallback arrays do not block clean setup', a
   });
 });
 
-test('comments inside a fallback array are ignored while quoted brackets preserve legacy detection', async () => {
+test("comments inside a fallback array are ignored while quoted brackets preserve legacy detection", async () => {
   await withFixture(async (fixture) => {
-    await mkdir(path.join(fixture.projectRoot, '.codex'), { recursive: true });
-    const configPath = path.join(fixture.projectRoot, '.codex/config.toml');
+    await mkdir(path.join(fixture.projectRoot, ".codex"), { recursive: true });
+    const configPath = path.join(fixture.projectRoot, ".codex/config.toml");
     await writeFile(
       configPath,
       'project_doc_fallback_filenames = ["TEAM.md", # ".codex/AGENTS.md"\n"OTHER.md"]\n',

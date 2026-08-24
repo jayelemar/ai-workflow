@@ -1,19 +1,27 @@
 #!/usr/bin/env node
 
-import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-export const DEFAULT_SOURCE = 'https://developers.openai.com/api/docs/guides/latest-model.md';
-const workflowRoot = fileURLToPath(new URL('../../', import.meta.url));
+export const DEFAULT_SOURCE =
+  "https://developers.openai.com/api/docs/guides/latest-model.md";
+const workflowRoot = fileURLToPath(new URL("../../", import.meta.url));
 const projectRoot = path.dirname(workflowRoot);
-const DEFAULT_REGISTRY = path.join(workflowRoot, 'config', 'agent-models.toml');
-const DEFAULT_CODEX_CONFIG = path.join(projectRoot, '.codex', 'config.toml');
-const ALLOWED_REASONING_EFFORTS = new Set(['low', 'medium', 'high', 'xhigh', 'max', 'ultra']);
+const DEFAULT_REGISTRY = path.join(workflowRoot, "config", "agent-models.toml");
+const DEFAULT_CODEX_CONFIG = path.join(projectRoot, ".codex", "config.toml");
+const ALLOWED_REASONING_EFFORTS = new Set([
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+  "ultra",
+]);
 
 const requireValue = (args, index, flag) => {
   const value = args[index + 1];
-  if (!value || value.startsWith('--')) {
+  if (!value || value.startsWith("--")) {
     throw new Error(`${flag} requires a value`);
   }
   return value;
@@ -31,20 +39,20 @@ export const parseArgs = (args) => {
 
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
-    if (argument === '--apply') {
+    if (argument === "--apply") {
       options.apply = true;
-    } else if (argument === '--eval-approved') {
+    } else if (argument === "--eval-approved") {
       options.evalApproved = true;
-    } else if (argument === '--source') {
+    } else if (argument === "--source") {
       options.source = requireValue(args, index, argument);
       index += 1;
-    } else if (argument === '--registry') {
+    } else if (argument === "--registry") {
       options.registry = requireValue(args, index, argument);
       index += 1;
-    } else if (argument === '--codex-config') {
+    } else if (argument === "--codex-config") {
       options.codexConfig = requireValue(args, index, argument);
       index += 1;
-    } else if (argument === '--help' || argument === '-h') {
+    } else if (argument === "--help" || argument === "-h") {
       options.help = true;
     } else {
       throw new Error(`Unknown option: ${argument}`);
@@ -56,32 +64,37 @@ export const parseArgs = (args) => {
 
 export const validateOptions = (options) => {
   if (options.apply && !options.evalApproved) {
-    throw new Error('--apply requires --eval-approved after representative role evals');
+    throw new Error(
+      "--apply requires --eval-approved after representative role evals",
+    );
   }
   if (options.evalApproved && !options.apply) {
-    throw new Error('--eval-approved is valid only with --apply');
+    throw new Error("--eval-approved is valid only with --apply");
   }
   if (/^https?:\/\//.test(options.source)) {
     const sourceUrl = new URL(options.source);
-    if (sourceUrl.protocol !== 'https:' || sourceUrl.hostname !== 'developers.openai.com') {
-      throw new Error('remote source must use https://developers.openai.com');
+    if (
+      sourceUrl.protocol !== "https:" ||
+      sourceUrl.hostname !== "developers.openai.com"
+    ) {
+      throw new Error("remote source must use https://developers.openai.com");
     }
   }
 };
 
 const readSource = async (source) => {
-  if (source.startsWith('file://')) {
-    return readFile(new URL(source), 'utf8');
+  if (source.startsWith("file://")) {
+    return readFile(new URL(source), "utf8");
   }
   if (!/^https?:\/\//.test(source)) {
-    return readFile(path.resolve(source), 'utf8');
+    return readFile(path.resolve(source), "utf8");
   }
 
   let lastError;
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     try {
       const response = await fetch(source, {
-        headers: { accept: 'text/markdown,text/plain,*/*' },
+        headers: { accept: "text/markdown,text/plain,*/*" },
       });
       if (response.ok) return response.text();
       lastError = new Error(`failed to fetch ${source}: ${response.status}`);
@@ -99,21 +112,26 @@ const readSource = async (source) => {
 const parseLatestModelInfo = (markdown) => {
   const lines = markdown.split(/\r?\n/);
   const start = lines.findIndex((line) => /^latestModelInfo:\s*$/.test(line));
-  if (start < 0) throw new Error('latestModelInfo block not found');
+  if (start < 0) throw new Error("latestModelInfo block not found");
 
   const info = {};
   for (let index = start + 1; index < lines.length; index += 1) {
     if (!lines[index].trim()) continue;
-    const match = lines[index].match(/^ {2}([A-Za-z][A-Za-z0-9_-]*):\s*(.+?)\s*$/);
+    const match = lines[index].match(
+      /^ {2}([A-Za-z][A-Za-z0-9_-]*):\s*(.+?)\s*$/,
+    );
     if (!match) break;
-    info[match[1]] = match[2].replace(/^["']|["']$/g, '');
+    info[match[1]] = match[2].replace(/^["']|["']$/g, "");
   }
   return info;
 };
 
 const modelMentioned = (markdown, model) => {
-  const escaped = model.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`(^|[^A-Za-z0-9_.-])${escaped}($|[^A-Za-z0-9_.-])`, 'm').test(markdown);
+  const escaped = model.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(
+    `(^|[^A-Za-z0-9_.-])${escaped}($|[^A-Za-z0-9_.-])`,
+    "m",
+  ).test(markdown);
 };
 
 const validateModelId = (model, label) => {
@@ -125,18 +143,22 @@ const validateModelId = (model, label) => {
 export const resolveLatestTiers = (markdown) => {
   const info = parseLatestModelInfo(markdown);
   const frontier = info.model?.trim();
-  if (!frontier) throw new Error('latestModelInfo.model is required');
+  if (!frontier) throw new Error("latestModelInfo.model is required");
 
   const balanced =
     info.balancedModel?.trim() ||
-    (frontier.endsWith('-sol') ? frontier.replace(/-sol$/, '-terra') : undefined);
+    (frontier.endsWith("-sol")
+      ? frontier.replace(/-sol$/, "-terra")
+      : undefined);
   if (!balanced) {
-    throw new Error('balanced model cannot be derived from official guidance');
+    throw new Error("balanced model cannot be derived from official guidance");
   }
-  validateModelId(frontier, 'frontier');
-  validateModelId(balanced, 'balanced');
+  validateModelId(frontier, "frontier");
+  validateModelId(balanced, "balanced");
   if (!modelMentioned(markdown, balanced)) {
-    throw new Error(`balanced model ${balanced} is not confirmed by official guidance`);
+    throw new Error(
+      `balanced model ${balanced} is not confirmed by official guidance`,
+    );
   }
   return { frontier, balanced };
 };
@@ -156,27 +178,31 @@ const findSectionRange = (lines, section) => {
 };
 
 const getSectionString = (toml, section, key) => {
-  const lines = toml.replaceAll('\r\n', '\n').split('\n');
+  const lines = toml.replaceAll("\r\n", "\n").split("\n");
   const { start, end } = findSectionRange(lines, section);
   for (let index = start + 1; index < end; index += 1) {
-    const match = lines[index].match(new RegExp(`^\\s*${key}\\s*=\\s*"([^"]+)"\\s*$`));
+    const match = lines[index].match(
+      new RegExp(`^\\s*${key}\\s*=\\s*"([^"]+)"\\s*$`),
+    );
     if (match) return match[1];
   }
   throw new Error(`missing ${key} in [${section}]`);
 };
 
 const getSectionInteger = (toml, section, key) => {
-  const lines = toml.replaceAll('\r\n', '\n').split('\n');
+  const lines = toml.replaceAll("\r\n", "\n").split("\n");
   const { start, end } = findSectionRange(lines, section);
   for (let index = start + 1; index < end; index += 1) {
-    const match = lines[index].match(new RegExp(`^\\s*${key}\\s*=\\s*(\\d+)\\s*$`));
+    const match = lines[index].match(
+      new RegExp(`^\\s*${key}\\s*=\\s*(\\d+)\\s*$`),
+    );
     if (match) return Number(match[1]);
   }
   throw new Error(`missing ${key} in [${section}]`);
 };
 
 const setSectionString = (toml, section, key, value) => {
-  const lines = toml.replaceAll('\r\n', '\n').split('\n');
+  const lines = toml.replaceAll("\r\n", "\n").split("\n");
   const { start, end } = findSectionRange(lines, section);
   let found = false;
   for (let index = start + 1; index < end; index += 1) {
@@ -187,63 +213,71 @@ const setSectionString = (toml, section, key, value) => {
     }
   }
   if (!found) throw new Error(`missing ${key} in [${section}]`);
-  return lines.join('\n');
+  return lines.join("\n");
 };
 
 export const updateRegistryModels = (registry, models) => {
-  validateModelId(models.frontier, 'frontier');
-  validateModelId(models.balanced, 'balanced');
+  validateModelId(models.frontier, "frontier");
+  validateModelId(models.balanced, "balanced");
   return setSectionString(
-    setSectionString(registry, 'tiers.frontier', 'model', models.frontier),
-    'tiers.balanced',
-    'model',
+    setSectionString(registry, "tiers.frontier", "model", models.frontier),
+    "tiers.balanced",
+    "model",
     models.balanced,
   );
 };
 
 const readRuntimeRegistry = (registry) => {
   const tiers = {
-    frontier: getSectionString(registry, 'tiers.frontier', 'model'),
-    balanced: getSectionString(registry, 'tiers.balanced', 'model'),
+    frontier: getSectionString(registry, "tiers.frontier", "model"),
+    balanced: getSectionString(registry, "tiers.balanced", "model"),
   };
   const roles = {};
-  for (const role of ['parent', 'investigator', 'builder', 'reviewer']) {
+  for (const role of ["parent", "investigator", "builder", "reviewer"]) {
     const section = `roles.${role}`;
-    const tier = getSectionString(registry, section, 'tier');
-    const reasoningEffort = getSectionString(registry, section, 'reasoning_effort');
+    const tier = getSectionString(registry, section, "tier");
+    const reasoningEffort = getSectionString(
+      registry,
+      section,
+      "reasoning_effort",
+    );
     if (!(tier in tiers)) throw new Error(`unknown tier ${tier} for ${role}`);
     if (!ALLOWED_REASONING_EFFORTS.has(reasoningEffort)) {
-      throw new Error(`unsupported reasoning effort ${reasoningEffort} for ${role}`);
+      throw new Error(
+        `unsupported reasoning effort ${reasoningEffort} for ${role}`,
+      );
     }
     roles[role] = { tier, model: tiers[tier], reasoningEffort };
   }
-  const forkTurns = getSectionInteger(registry, 'spawn', 'fork_turns');
-  if (forkTurns < 1) throw new Error('spawn.fork_turns must be positive');
+  const forkTurns = getSectionInteger(registry, "spawn", "fork_turns");
+  if (forkTurns < 1) throw new Error("spawn.fork_turns must be positive");
   return { tiers, roles, forkTurns };
 };
 
 const upsertTopLevelString = (toml, key, value) => {
-  const lines = toml.replaceAll('\r\n', '\n').split('\n');
-  const firstSection = lines.findIndex((line) => /^\s*\[[^\]]+\]\s*$/.test(line));
+  const lines = toml.replaceAll("\r\n", "\n").split("\n");
+  const firstSection = lines.findIndex((line) =>
+    /^\s*\[[^\]]+\]\s*$/.test(line),
+  );
   const end = firstSection < 0 ? lines.length : firstSection;
   for (let index = 0; index < end; index += 1) {
     if (new RegExp(`^\\s*${key}\\s*=`).test(lines[index])) {
       lines[index] = `${key} = "${value}"`;
-      return lines.join('\n');
+      return lines.join("\n");
     }
   }
   lines.unshift(`${key} = "${value}"`);
-  return lines.join('\n');
+  return lines.join("\n");
 };
 
 export const updateCodexConfig = (config, { model, reasoningEffort }) => {
-  validateModelId(model, 'parent');
+  validateModelId(model, "parent");
   if (!ALLOWED_REASONING_EFFORTS.has(reasoningEffort)) {
     throw new Error(`unsupported parent reasoning effort: ${reasoningEffort}`);
   }
   return upsertTopLevelString(
-    upsertTopLevelString(config, 'model_reasoning_effort', reasoningEffort),
-    'model',
+    upsertTopLevelString(config, "model_reasoning_effort", reasoningEffort),
+    "model",
     model,
   );
 };
@@ -252,7 +286,7 @@ const writeAtomically = async (filePath, contents) => {
   const temporaryPath = `${filePath}.${process.pid}.tmp`;
   try {
     await mkdir(path.dirname(filePath), { recursive: true });
-    await writeFile(temporaryPath, contents, 'utf8');
+    await writeFile(temporaryPath, contents, "utf8");
     await rename(temporaryPath, filePath);
   } catch (error) {
     await unlink(temporaryPath).catch(() => undefined);
@@ -262,9 +296,9 @@ const writeAtomically = async (filePath, contents) => {
 
 const snapshotFile = async (filePath) => {
   try {
-    return { exists: true, contents: await readFile(filePath, 'utf8') };
+    return { exists: true, contents: await readFile(filePath, "utf8") };
   } catch (error) {
-    if (error?.code === 'ENOENT') return { exists: false, contents: '' };
+    if (error?.code === "ENOENT") return { exists: false, contents: "" };
     throw error;
   }
 };
@@ -275,12 +309,13 @@ const restoreFile = async (filePath, snapshot) => {
     return;
   }
   await unlink(filePath).catch((error) => {
-    if (error?.code !== 'ENOENT') throw error;
+    if (error?.code !== "ENOENT") throw error;
   });
 };
 
 const printHelp = () => {
-  process.stdout.write(`Usage: rtk node .ai/scripts/models/update-agent-models.mjs [options]
+  process.stdout
+    .write(`Usage: rtk node .ai/scripts/models/update-agent-models.mjs [options]
 
 Default behavior is read-only and reports model drift.
 
@@ -302,7 +337,7 @@ export const inspectAndUpdateModels = async (
   const codexConfigPath = path.resolve(options.codexConfig);
   const [markdown, registry] = await Promise.all([
     readSource(options.source),
-    readFile(registryPath, 'utf8'),
+    readFile(registryPath, "utf8"),
   ]);
   const candidate = resolveLatestTiers(markdown);
   const currentRuntime = readRuntimeRegistry(registry);
@@ -311,11 +346,11 @@ export const inspectAndUpdateModels = async (
     candidate.balanced !== currentRuntime.tiers.balanced;
 
   const result = {
-    status: updateAvailable ? 'update-available' : 'current',
+    status: updateAvailable ? "update-available" : "current",
     source: options.source,
     current: currentRuntime.tiers,
     candidate,
-    evalGuide: '.ai/config/agent-model-evals.md',
+    evalGuide: ".ai/config/agent-model-evals.md",
   };
 
   if (options.apply) {
@@ -347,12 +382,12 @@ export const inspectAndUpdateModels = async (
       } catch (rollbackError) {
         throw new AggregateError(
           [installationError, rollbackError],
-          'model update failed and rollback could not be completed',
+          "model update failed and rollback could not be completed",
         );
       }
       throw installationError;
     }
-    result.status = updateAvailable ? 'updated' : 'current';
+    result.status = updateAvailable ? "updated" : "current";
     result.parentConfig = {
       model: parent.model,
       reasoningEffort: parent.reasoningEffort,
@@ -360,7 +395,7 @@ export const inspectAndUpdateModels = async (
     };
   } else if (updateAvailable) {
     result.nextAction =
-      'Run role evals, then rerun with --apply --eval-approved; do not switch silently.';
+      "Run role evals, then rerun with --apply --eval-approved; do not switch silently.";
   }
 
   return result;

@@ -164,8 +164,34 @@ Command: execute .ai/plans/<plan-name>.md
 ```
 
 LOW completion includes its required self-check. MEDIUM completion includes
-the configured independent whole-plan review and blocking-finding remediation
-loop.
+the configured independent whole-plan review with three default automatic
+rounds. After remediation and passing validation for blocking round 3,
+execution pauses before round 4.
+
+At that continuation checkpoint, reply with exactly one standalone,
+case-sensitive token:
+
+- `END_REVIEW` completes as `Completed by operator` without independently
+  re-reviewing the latest remediation.
+- `REVIEW_NEXT_ROUND` authorizes exactly one additional fresh review round. A
+  later blocking result is remediated and validated, then returns to a new
+  checkpoint.
+- `REVIEW_UNTIL_CLEAR` persists the selected mode and automatically repeats
+  remediation, required validation, applicable HIGH remediation commits, and
+  fresh review rounds until clear.
+
+Review-until-clear stops without completion or another checkpoint prompt if
+remediation is incomplete, required validation fails, the reviewer or required
+evidence is unavailable, a true blocker occurs, or a material discovery returns
+the work to specification or planning. It is never inferred or enabled by
+default.
+
+A clear review at any round completes as `Ready to complete` without prompting.
+The operator-ended path is not reviewer clearance and its final report records
+the ending round, resolved findings, passing required validation, and the
+missing final re-review. Invalid or stale tokens have no review-control effect.
+This reply resumes the already explicitly invoked execution stage; it does not
+create a new stage or authorize delivery.
 
 ## Execute HIGH
 
@@ -196,7 +222,10 @@ Goal name: <plan-name>
 Run the returned two-line invocation verbatim. Do not replace it with a second
 handwritten execution protocol. The handoff already owns task delegation,
 task-scoped validation and review, one local commit per task, progress evidence,
-and the independent final-review loop.
+and the independent final-review protocol. HIGH uses the same three automatic
+rounds and exact checkpoint tokens as MEDIUM, but creates every required
+remediation commit before exposing a checkpoint or automatically starting an
+until-clear round.
 
 ## Checkpoint and Resume HIGH Work
 

@@ -73,7 +73,11 @@ preview, plan approval, validator, or persisted progress gate.
 - `.ai/templates/plan.template.md` owns `plan-manifest@2`, including explicit
   Git repository roots and integration-base refs.
 - `.ai/prompts/review-changes.md` owns the mandatory independent MEDIUM/HIGH
-  whole-plan review, priority gate, and fresh-review remediation loop.
+  whole-plan review, priority gate, three default automatic rounds, and the
+  continuation checkpoint thereafter. At an active checkpoint, `END_REVIEW`
+  uses the disclosed operator-ended path, `REVIEW_NEXT_ROUND` authorizes one
+  fresh round, and `REVIEW_UNTIL_CLEAR` persists safe review cycles until clear
+  or a defined stop condition.
 - `.ai/prompts/goal-checkpoint.md` owns the reusable HIGH task delegation,
   per-task review, validation, commit protocol, and final-review remediation
   commits.

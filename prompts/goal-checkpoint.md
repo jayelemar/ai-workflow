@@ -147,8 +147,8 @@ review is mandatory regardless of the tasks' saved delegation decisions.
    `reviewer` subagent to inspect the cumulative plan-owned diff from every
    declared integration base through current `HEAD` and any remediation work.
 2. If the review is clear of `P0`, `P1`, and `P2`, record the reviewer runtime,
-   round result, validation, and any advisory `P3` findings in
-   `## Verified Progress`, then complete the goal.
+   round result, validation, any advisory `P3` findings, and `Completion path:
+reviewer-cleared` in `## Verified Progress`, then complete the goal.
 3. If the reviewer reports a blocking finding, implement only the in-scope
    remediation. A material behavior, dependency, risk, or repository-boundary
    discovery stops the goal and returns to the appropriate explicit spec or
@@ -174,9 +174,47 @@ review is mandatory regardless of the tasks' saved delegation decisions.
 7. Record the round's resolved findings, validation results, repository commit
    SHAs and subjects, and remaining advisory findings in
    `## Verified Progress`.
-8. Start a fresh independent final review round over the cumulative result.
-   Repeat remediation, validation, review-round commits, and fresh review until
-   clear. Stop as `Blocked` only for a true external or missing-input blocker.
+8. For blocking rounds 1 and 2, start a fresh independent final-review round
+   over the cumulative result automatically. For blocking round 3, record
+   `Awaiting operator decision` only after every applicable HIGH remediation
+   commit from steps 5 and 6 exists, then pause before another reviewer starts.
+9. At that active checkpoint, accept only the exact standalone, case-sensitive
+   token `END_REVIEW`, `REVIEW_NEXT_ROUND`, or `REVIEW_UNTIL_CLEAR`. Record the
+   token, selected authorization, active state, eligible round, validation, and
+   remediation commits in `## Verified Progress`.
+10. `END_REVIEW` completes as `Completed by operator` without a fresh review of
+    the latest remediation. Record and disclose the ending round, resolved
+    blocking findings, passing required validation, remediation commits,
+    `Completion path: operator-ended`, and that the latest remediation was not
+    independently re-reviewed. Invalid, stale, duplicate, or out-of-context
+    tokens start no review and complete nothing; preserve an active checkpoint
+    and request the three exact tokens again when applicable.
+11. `REVIEW_NEXT_ROUND` records `one-round`, authorizes exactly one fresh
+    final-review round, and is consumed only when that reviewer returns a report.
+    Then record inactive authorization and no authorized next round while
+    retaining the token and mode as history. If the reviewer runtime or required
+    review evidence fails before a report returns, do not increment the round or
+    consume its authorization; record the exact failure and retry that same
+    authorized round after resolution and explicit resume without a new
+    checkpoint or token. A blocking returned result follows steps 3 through 7;
+    after every applicable HIGH remediation commit exists, record `Awaiting
+operator decision` and pause before another reviewer.
+12. `REVIEW_UNTIL_CLEAR` records and persists `until-clear`. A blocking result
+    follows steps 3 through 7; only after every applicable HIGH remediation
+    commit and required validation succeed, automatically start the next fresh
+    final-review round without another checkpoint. Stop without completion or
+    another prompt on incomplete remediation, failed validation, reviewer or
+    evidence failure, a true blocker, or material discovery. Deactivate the
+    authorization, clear the authorized next round, and retain its token, mode,
+    and exact stop evidence. After resolving the stop and explicitly resuming,
+    require a new eligible checkpoint and exact operator token before any further
+    reviewer; never reactivate the stopped authorization.
+13. A clear round completes through the reviewer-cleared path and advisory
+    `P3` findings remain non-blocking. Deactivate any authorization, clear the
+    authorized next round, and retain its token and mode as historical evidence.
+    Failed remediation or validation cannot create a checkpoint. Stop as
+    `Blocked` only for a true external or missing-input blocker, and return
+    material discoveries to the appropriate explicit spec or planning stage.
 
 ## Blockers
 

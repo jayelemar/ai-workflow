@@ -38,15 +38,31 @@ repositories, and preserved unrelated work.
 
 For MEDIUM, automatically run the independent whole-plan review in
 `.ai/prompts/review-changes.md` after all implementation and required
-validation. Save `.ai/artifacts/<plan-name>/review.md` with exactly one status:
-`Ready to complete`, `Fix required`, or `Blocked`. Use the configured
-`reviewer` subagent for every round. Fix blocking `P0`, `P1`, and `P2`
-findings, rerun every required plan validation, and repeat with a fresh
-reviewer until clear; record `P3` findings without blocking completion. Stop
-only on a true blocker or a material discovery that requires a new explicit
-spec or planning stage.
+validation. Save `.ai/artifacts/<plan-name>/review.md` with exactly one of the
+five statuses defined there: `Ready to complete`, `Fix required`, `Awaiting
+operator decision`, `Completed by operator`, or `Blocked`. Use the configured
+`reviewer` subagent for every round, persist the round and checkpoint evidence,
+selected authorization mode, and follow the automatic-round and checkpoint
+rules exactly.
+
+At `Awaiting operator decision`, pause the active execution before spawning
+another reviewer and ask for exactly one standalone, case-sensitive token:
+`END_REVIEW`, `REVIEW_NEXT_ROUND`, or `REVIEW_UNTIL_CLEAR`.
+`REVIEW_NEXT_ROUND` authorizes only the next fresh round and returns a later
+remediated blocking result to a new checkpoint. `REVIEW_UNTIL_CLEAR` persists
+the selected mode and automatically repeats in-scope remediation, every
+required validation, and fresh review until clear. It stops without completion
+or another prompt on incomplete remediation, failed validation, reviewer or
+evidence failure, a true blocker, or material discovery. `END_REVIEW` completes
+as `Completed by operator` only when recorded remediation and every required
+validation have succeeded. Invalid, stale, or out-of-context tokens have no
+review-control effect.
 
 ## Final Response
 
 Report changed scope by repository, required validation results, deferred
 optional checks and risk, and either the LOW self-check or MEDIUM review path.
+For `Completed by operator`, also report the ending round, resolved blocking
+findings, passing validation, and that the latest remediation was not
+independently re-reviewed. For `Awaiting operator decision`, report the active
+round and repeat the three exact allowed tokens without claiming completion.
