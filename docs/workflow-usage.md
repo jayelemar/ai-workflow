@@ -227,6 +227,15 @@ rounds and exact checkpoint tokens as MEDIUM, but creates every required
 remediation commit before exposing a checkpoint or automatically starting an
 until-clear round.
 
+Task path lists are review and staging boundaries, not immutable ownership. If
+a dependent task reveals that an earlier task's internal interface cannot
+satisfy behavior already fixed by the finalized spec, HIGH execution records a
+corrective deviation, reopens only the necessary prior-task files, reruns both
+affected contracts, obtains a fresh review, and creates a focused fix commit.
+This spec-preserving correction does not require an extra operator approval or
+a new planning invocation. New behavior, repositories, integrations,
+migrations, permissions, secrets, or risk classes still return to planning.
+
 ## Checkpoint and Resume HIGH Work
 
 Before pausing a goal, ending the session, or switching provider or account,

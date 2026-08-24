@@ -1,5 +1,5 @@
-Version: 5.1
-Last Updated: 2026-08-14
+Version: 5.2
+Last Updated: 2026-08-24
 
 # AI Workflow Instructions
 
@@ -29,6 +29,12 @@ persisted transition authority.
 - HIGH task delegation, validation, per-task actual-diff review, task-scoped
   commit sequencing, and final-review remediation commits remain governed by
   `.ai/prompts/goal-checkpoint.md`.
+- Execution applies the corrective-deviation contract in `.ai/AGENTS.md`.
+  Planned task paths remain the default ownership boundary, while a narrowly
+  spec-preserving correction may reopen a prior task path with recorded
+  evidence, affected validation, fresh review, and a separate corrective
+  commit. This is remediation within the authorized execution stage, not a new
+  stage or an approval gate.
 - Pull request publication is an optional, explicitly invoked delivery action
   governed by `.ai/prompts/create-pull-request.md`; completion of an execution
   stage never invokes it automatically.
@@ -45,6 +51,9 @@ persisted transition authority.
   cross-repository outcome into dependent tasks rather than committing across
   repositories as one task.
 - Progress reporting uses only the declared repository roots and bases.
+- Cross-task dependencies must identify the callable internal contract needed
+  by the consumer, not only each task's file list. Review verifies that a
+  provider task's implemented interface is usable by its dependent task.
 
 ## Validation
 

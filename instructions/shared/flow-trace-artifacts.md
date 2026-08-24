@@ -1,5 +1,5 @@
-Version: 3.1
-Last Updated: 2026-08-14
+Version: 3.2
+Last Updated: 2026-08-24
 
 # Flow Artifact Instructions
 
@@ -49,6 +49,12 @@ The implementation map must contain:
 Every journey action and acceptance scenario must map to ownership and
 validation. The implementation map must not introduce actions absent from the
 user journey.
+
+When one mapped action or planned task consumes another task's service, the
+implementation map must state the callable internal contract—including the
+inputs the consumer is allowed to supply and the provider-owned data it must
+resolve internally. Validation must exercise that provider-to-consumer handoff,
+not only the provider's isolated domain behavior.
 
 The flow-artifact prompt may also be invoked directly before planning. A
 separate invocation is optional because an explicit create-plan invocation owns

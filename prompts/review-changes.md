@@ -97,6 +97,35 @@ next round: None` while retaining its token and mode as history. If the
     authorization can override it. LOW self-checks and HIGH task reviews remain
     unchanged.
 
+## Consolidated Review Contract
+
+Apply this section only when the saved plan contains `## Review Strategy` with
+format `review-strategy@1`. Plans without that versioned section retain the
+independent review loop above unchanged.
+
+1. Complete the entire cumulative review before returning, even after the
+   first blocking finding is confirmed. Do not stop at the first reproduction
+   or disclose one variant while leaving the same planned matrix unaudited.
+2. Review every saved security-sensitive surface against its applicable
+   adversarial matrix. The matrix considers direct access, aliases, later
+   assignment, transitive flow, computed access, destructuring, `bind`, `call`,
+   `apply`, reflection and mutation APIs, container/member storage,
+   encoding/normalization, and environment/process-control manipulation when
+   relevant to that surface.
+3. Group confirmed variants by the failed invariant and shared remediation,
+   not by syntax spelling. Give each family a stable root-cause identifier and
+   report all confirmed `P0`, `P1`, and `P2` families together. A finding may
+   list multiple reproductions, but must prescribe closure of the complete
+   applicable family rather than only the example payload.
+4. Distinguish a genuinely new root-cause class from another variant of a
+   previously reported class. Use the saved plan's architectural fallback when
+   the same class remains blocking in two fresh rounds; never automatically
+   clear, ignore, or downgrade a finding because a review threshold was met.
+5. Keep code-review clearance, advisory `P3` findings, baseline validation
+   discrepancies, and external/operator evidence as separate results. Missing
+   external evidence does not justify additional unrelated code findings, and
+   code clearance does not fabricate or satisfy that evidence.
+
 ## MEDIUM Review
 
 Save `.ai/artifacts/<plan-name>/review.md` with exactly:

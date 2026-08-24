@@ -243,6 +243,33 @@ test("HIGH keeps its reusable task commit protocol", async () => {
   assert.match(review, /unchanged task commit\s+protocol/);
 });
 
+test("execution permits reviewed spec-preserving corrective deviations", async () => {
+  const [agents, workflow, reasoning, execute, checkpoint, createPlan, flow] =
+    await Promise.all([
+      readSource("AGENTS.md"),
+      readSource("instructions/shared/workflow-state.md"),
+      readSource("instructions/shared/reasoning-quality.md"),
+      readSource("prompts/execute-plan.md"),
+      readSource("prompts/goal-checkpoint.md"),
+      readSource("prompts/create-plan.md"),
+      readSource("instructions/shared/flow-trace-artifacts.md"),
+    ]);
+
+  for (const source of [agents, workflow, reasoning, execute, checkpoint]) {
+    assert.match(source, /corrective[- ]deviation/i);
+  }
+  assert.match(agents, /without operator approval/);
+  assert.match(agents, /stays inside a repository already declared/);
+  assert.match(checkpoint, /Do not ask for operator approval solely because/);
+  assert.match(checkpoint, /separate focused\s+`fix\(<scope>\)/);
+  assert.match(createPlan, /provider-to-consumer internal contract/);
+  assert.match(flow, /callable internal contract/);
+  assert.match(
+    checkpoint,
+    /automatic goal or checkpoint continuation[\s\S]*is not a new failed attempt/,
+  );
+});
+
 test("pull request creation is explicit and summary-only", async () => {
   const [prompt, workflow, wrapper] = await Promise.all([
     readSource("prompts/create-pull-request.md"),
@@ -351,6 +378,72 @@ test("MEDIUM and HIGH require an independent final review loop", async () => {
     /\[roles\.reviewer\][\s\S]*tier = "frontier"[\s\S]*reasoning_effort = "xhigh"/,
   );
   assert.match(registry, /\[spawn\][\s\S]*fork_turns = 4/);
+});
+
+test("future plans consolidate adversarial review by root cause", async () => {
+  const [createPlan, template, review, checkpoint] = await Promise.all([
+    readSource("prompts/create-plan.md"),
+    readSource("templates/plan.template.md"),
+    readSource("prompts/review-changes.md"),
+    readSource("prompts/goal-checkpoint.md"),
+  ]);
+
+  assert.match(template, /## Review Strategy/);
+  assert.match(template, /Format: `review-strategy@1`/);
+  assert.match(template, /Root-cause classes/);
+  assert.match(template, /Adversarial matrix/);
+  assert.match(template, /Architectural fallback/);
+  assert.match(template, /External evidence/);
+
+  assert.match(
+    createPlan,
+    /Populate `## Review Strategy` as `review-strategy@1`/,
+  );
+  assert.match(
+    createPlan,
+    /later-assignment[\s\S]*invocation-wrapper[\s\S]*container\/member/,
+  );
+  assert.match(
+    createPlan,
+    /architecture-escalation trigger, not a\s+review limit/,
+  );
+  assert.match(
+    createPlan,
+    /never automatically\s+cleared, ignored, or downgraded/,
+  );
+
+  assert.match(
+    review,
+    /Plans without that versioned section retain the\s+independent review loop above unchanged/,
+  );
+  assert.match(
+    review,
+    /Complete the entire cumulative review before returning/,
+  );
+  assert.match(review, /even after the\s+first blocking finding is confirmed/);
+  assert.match(review, /Group confirmed variants by the failed invariant/);
+  assert.match(review, /stable root-cause identifier/);
+  assert.match(
+    review,
+    /report all confirmed `P0`, `P1`, and `P2` families together/,
+  );
+  assert.match(review, /same class remains blocking in two fresh rounds/);
+  assert.match(review, /external\/operator evidence as separate results/);
+
+  assert.match(
+    checkpoint,
+    /close every applicable variant in the\s+saved adversarial matrix/,
+  );
+  assert.match(checkpoint, /Do not patch only the reviewer's example spelling/);
+  assert.match(
+    checkpoint,
+    /stop incremental remediation and return to planning/,
+  );
+  assert.match(checkpoint, /threshold never automatically clears/);
+  assert.match(
+    checkpoint,
+    /finish the complete\s+saved matrix and report all grouped root-cause families/,
+  );
 });
 
 test("final review continuation checkpoints bound automatic remediation rounds", async () => {

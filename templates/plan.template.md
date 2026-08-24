@@ -34,6 +34,16 @@ be unique and roots must be explicit paths relative to the plan workspace.
 
 <bounded desired behavior, current constraints, and non-goals>
 
+## Review Strategy
+
+- Format: `review-strategy@1`
+- Security-sensitive surfaces: <boundaries requiring adversarial review | `N/A: <concrete reason>`>
+- Root-cause classes: <failed invariants reviewers must assess as grouped defect families | `N/A: <same concrete reason>`>
+- Adversarial matrix: <applicable direct, alias, reassignment, computed/destructured, invocation-wrapper, reflection/mutation, container/member, encoding/normalization, and environment/process-control variants | `N/A: <same concrete reason>`>
+- Mutation or property testing: <required automated variant coverage and cheapest valid test layer | `N/A: <concrete reason>`>
+- Architectural fallback: <closed-form, allowlist, isolation, or redesign required if a root-cause class survives two fresh review rounds | `N/A: <concrete reason>`>
+- External evidence: <operator, staging, credential, device, or service validation kept separate from code-review clearance | `N/A: no external evidence required`>
+
 ## Implementation
 
 For LOW/MEDIUM, provide ordered steps. Each step names its repository ID,
@@ -62,7 +72,8 @@ exactly one repository. Split cross-repository outcomes into dependent tasks.
 - Agent runtime: <role-specific registry and bounded-context use> | `N/A: no delegated role`
 - Implementation: <task-scoped steps>
 - Validation: `<exact command>` — <expected result>
-- Review evidence: <actual-diff review and required delegation outcome>
+- Review evidence: <actual-diff review, required delegation outcome, and any
+  provider-to-consumer internal contract this task supplies or consumes>
 - Commit purpose: `<type>(<scope>): <summary>`
 
 ## Validation

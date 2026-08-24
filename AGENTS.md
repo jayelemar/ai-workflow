@@ -46,8 +46,19 @@ repository conventions.
   source provenance. Require every mapped target, branch, base commit, and Git
   worktree registration to match the report before implementation or review,
   and stop on a missing, stale, or conflicting mapping.
-- If a material requirement, dependency, risk, or repository boundary changes,
-  stop the current stage, disclose it, and return to the appropriate explicit
+- Treat planned task paths as implementation, review, and commit boundaries,
+  not immutable security boundaries. A qualifying corrective deviation may
+  reopen a prior task's path without operator approval when it restores behavior already
+  required by the finalized spec, stays inside a repository already declared
+  by the plan, introduces no new user-visible behavior or unresolved decision,
+  and does not add a new integration, migration, secret, permission model, or
+  risk class. Record the deviation and reason, run every affected task check,
+  obtain the required fresh review, and use a separate corrective commit when
+  the owning HIGH task was already committed. Do not ask for approval solely
+  because the file appeared under an earlier task.
+- A discovery is material only when the corrective criteria above do not hold.
+  Material requirement, behavior, dependency, risk, or repository-boundary
+  changes still stop the current stage and return to the appropriate explicit
   spec or planning stage.
 - Do not introduce a workflow runner, transition state, sidecar authority,
   preview gate, or pre-execution approval gate.

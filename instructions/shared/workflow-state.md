@@ -34,8 +34,11 @@ required.
 - A saved or finalized artifact never starts the next stage. The user must
   explicitly invoke the spec, planning, or execution stage. A standalone
   flow-artifact invocation does not start planning.
-- A material discovery returns work to the appropriate explicit stage.
-  Classification escalates when newly established risk requires it.
+- First classify an execution discovery using `.ai/AGENTS.md`. A qualifying
+  corrective deviation stays in the current execution stage and requires no
+  additional operator approval. Only a material discovery returns work to the
+  appropriate explicit stage. Classification escalates when newly established
+  risk requires it.
 - The five MEDIUM review statuses are `Ready to complete`, `Fix required`,
   `Awaiting operator decision`, `Completed by operator`, and `Blocked`. After
   all MEDIUM implementation, a mandatory independent reviewer checks the
@@ -57,6 +60,11 @@ required.
   operator direction. Every later blocking result follows the recorded
   one-round or until-clear authorization only after its remediation commits and
   validation succeed.
+- HIGH task paths are the expected staging and review boundary. When a
+  dependent task exposes a spec-conflicting internal interface in a committed
+  earlier task, the qualifying correction protocol may reopen that path,
+  validate both affected task contracts, create one focused `fix` commit, and
+  then resume the dependent task.
 - Final MEDIUM and HIGH review uses the locked `reviewer` role from
   `.ai/config/agent-models.toml`. `P0`, `P1`, and `P2` block completion; `P3`
   is advisory and remains recorded.
