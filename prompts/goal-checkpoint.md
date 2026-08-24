@@ -81,6 +81,18 @@ Process tasks serially. Never combine two planned tasks in one commit, even
 when their changes are technically compatible. Do not start the next task
 until the current task has completed this protocol.
 
+Planned task paths are the default staging and review boundary, not immutable
+ownership. If execution discovers that an already required cross-task contract
+cannot be consumed because an earlier task implemented the wrong internal
+interface, apply the corrective-deviation criteria in `.ai/AGENTS.md`. Record
+the exact mismatch before editing, reopen only the minimum prior-task paths,
+run all affected task validation, and obtain a fresh configured reviewer. If
+the earlier HIGH task is already committed, create one separate focused
+`fix(<scope>): <spec-restoring summary>` commit before resuming the dependent
+task. Do not ask for operator approval solely because the correction reopens an
+earlier task's file. If any corrective criterion fails, stop for a material
+discovery.
+
 Before HIGH work starts, read `.ai/config/agent-models.toml`. Resolve each
 role's `tier` to the locked model under `[tiers]`, then use that role's
 `reasoning_effort`. The parent may use its `elevated_reasoning_effort` only when
@@ -113,7 +125,8 @@ unavailable, STOP the task as `Blocked`; never substitute another model.
    cannot run or lacks its result, STOP the task as `Blocked`; do not continue
    as a single agent. These terminal messages are ephemeral and never create a
    progress artifact or authorization gate.
-3. Implement only the current task's planned scope.
+3. Implement only the current task's planned scope or a qualifying corrective
+   deviation recorded under the protocol above.
 4. Run the task's exact declared validation successfully.
 5. Review the task diff for regressions, out-of-scope files, and every
    required delegation outcome.
@@ -132,10 +145,12 @@ If a task produces no tracked changes, record its validation and no-change
 result in `## Verified Progress` before starting the next task; do not create
 an empty commit to simulate task completion.
 
-Never commit when validation fails, the task boundary is ambiguous, or the
-commit would include unrelated user changes. Stop and request operator
-direction in those cases. Do not push, open a pull request, amend, squash, or
-force-push unless the operator explicitly requests it.
+Never commit when validation fails, the behavioral boundary is ambiguous, or
+the commit would include unrelated user changes. A path mismatch alone is not
+behavioral ambiguity when all corrective-deviation criteria are proven. Stop
+and request operator direction for genuine ambiguity. Do not push, open a pull
+request, amend, squash, or force-push unless the operator explicitly requests
+it.
 
 ## Final Review Protocol
 
@@ -150,9 +165,10 @@ review is mandatory regardless of the tasks' saved delegation decisions.
    round result, validation, and any advisory `P3` findings in
    `## Verified Progress`, then complete the goal.
 3. If the reviewer reports a blocking finding, implement only the in-scope
-   remediation. A material behavior, dependency, risk, or repository-boundary
-   discovery stops the goal and returns to the appropriate explicit spec or
-   planning stage.
+   remediation or a qualifying corrective deviation under `.ai/AGENTS.md`.
+   Only a material behavior, dependency, risk, or repository-boundary discovery
+   that fails those criteria stops the goal and returns to the appropriate
+   explicit spec or planning stage.
    When the linked plan uses `review-strategy@1`, group the round's findings by
    their stable root-cause identifiers, close every applicable variant in the
    saved adversarial matrix, and add mutation/property regressions at the
@@ -192,6 +208,12 @@ review is mandatory regardless of the tasks' saved delegation decisions.
 ## Blockers
 
 <current blockers or None>
+
+Record a pending operator decision as `Awaiting operator input: <decision>`.
+An automatic goal or checkpoint continuation with no new user or external
+evidence is not a new failed attempt and must not, by itself, escalate or
+duplicate that blocker. Exhaust the corrective-deviation protocol before
+requesting input about task-path ownership.
 
 ## Next Action
 

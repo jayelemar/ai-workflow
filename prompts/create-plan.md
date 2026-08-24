@@ -69,6 +69,10 @@ Use `.ai/templates/plan.template.md` exactly and save:
   repository evidence or supplied by the user.
 - Reconcile desired behavior with current ownership, public/internal contracts,
   framework conventions, data and service boundaries, and exact validation.
+- For every dependent task, state the provider-to-consumer internal contract in
+  its implementation or review evidence: callable operation, allowed inputs,
+  provider-owned data resolved internally, output/error shape, and a handoff
+  test. Do not rely on owned path lists as a substitute for interface design.
 - Do not add behavior beyond the finalized spec or LOW request.
 - LOW plans stay compact. MEDIUM/HIGH plans include sufficient ownership and
   validation to execute without new behavior decisions.
@@ -96,6 +100,9 @@ Use `.ai/templates/plan.template.md` exactly and save:
 - Every HIGH task declares owned files, exact validation, commit purpose, and a
   deterministic delegation decision of `REQUIRED` or `NONE`. Never use
   `OPTIONAL` or defer the decision to execution.
+- Describe owned files as the expected staging/review boundary. Execution may
+  apply the narrow corrective-deviation protocol from `.ai/AGENTS.md`; this
+  does not authorize new behavior or undeclared repositories.
 - Use `REQUIRED` for every applicable rule: independent evidence across three
   or more source areas requires an `investigator`; implementation isolated
   from every other task with no shared file ownership requires a `builder`;

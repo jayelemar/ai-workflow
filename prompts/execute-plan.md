@@ -25,9 +25,13 @@ only the project instructions routed for the implementation scope.
 
 - Follow the requested behavior, finalized spec, repository ownership, and plan
   order strictly.
-- If a material new requirement, dependency, risk, or repository boundary
-  appears, stop. Return to the appropriate explicit spec or planning stage and
-  wait for a new execution command.
+- Classify discoveries using the corrective-deviation contract in
+  `.ai/AGENTS.md`. When every corrective criterion holds, record the deviation,
+  make the smallest spec-restoring change even when it reopens an earlier
+  step's path, rerun affected validation, and include it in independent review;
+  no new execution command or operator approval is required. If any criterion
+  fails, treat the change as material, stop, and return to the appropriate
+  explicit spec or planning stage.
 - Run every required plan validation command. Optional external validation may
   be deferred only under `.ai/AGENTS.md` disclosure rules.
 

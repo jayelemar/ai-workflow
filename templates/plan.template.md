@@ -72,7 +72,8 @@ exactly one repository. Split cross-repository outcomes into dependent tasks.
 - Agent runtime: <role-specific registry and bounded-context use> | `N/A: no delegated role`
 - Implementation: <task-scoped steps>
 - Validation: `<exact command>` — <expected result>
-- Review evidence: <actual-diff review and required delegation outcome>
+- Review evidence: <actual-diff review, required delegation outcome, and any
+  provider-to-consumer internal contract this task supplies or consumes>
 - Commit purpose: `<type>(<scope>): <summary>`
 
 ## Validation

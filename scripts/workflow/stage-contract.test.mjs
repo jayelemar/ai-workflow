@@ -208,6 +208,33 @@ test('HIGH keeps its reusable task commit protocol', async () => {
   assert.match(review, /unchanged task commit\s+protocol/);
 });
 
+test('execution permits reviewed spec-preserving corrective deviations', async () => {
+  const [agents, workflow, reasoning, execute, checkpoint, createPlan, flow] =
+    await Promise.all([
+      readSource('AGENTS.md'),
+      readSource('instructions/shared/workflow-state.md'),
+      readSource('instructions/shared/reasoning-quality.md'),
+      readSource('prompts/execute-plan.md'),
+      readSource('prompts/goal-checkpoint.md'),
+      readSource('prompts/create-plan.md'),
+      readSource('instructions/shared/flow-trace-artifacts.md'),
+    ]);
+
+  for (const source of [agents, workflow, reasoning, execute, checkpoint]) {
+    assert.match(source, /corrective[- ]deviation/i);
+  }
+  assert.match(agents, /without operator approval/);
+  assert.match(agents, /stays inside a repository already declared/);
+  assert.match(checkpoint, /Do not ask for operator approval solely because/);
+  assert.match(checkpoint, /separate focused\s+`fix\(<scope>\)/);
+  assert.match(createPlan, /provider-to-consumer internal contract/);
+  assert.match(flow, /callable internal contract/);
+  assert.match(
+    checkpoint,
+    /automatic goal or checkpoint continuation[\s\S]*is not a new failed attempt/,
+  );
+});
+
 test('pull request creation is explicit and summary-only', async () => {
   const [prompt, workflow, wrapper] = await Promise.all([
     readSource('prompts/create-pull-request.md'),
