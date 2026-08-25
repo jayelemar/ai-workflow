@@ -1,5 +1,5 @@
-Version: 1.0
-Last Updated: 2026-06-28
+Version: 1.1
+Last Updated: 2026-08-25
 
 # Security Instructions
 
@@ -20,6 +20,10 @@ Provide a portable security baseline for application code, APIs, authentication 
 - Treat security as a feature, not an afterthought.
 - Never expose secrets, API keys, tokens, credentials, or other sensitive configuration in client code, logs, responses, screenshots, or committed files.
 - Never commit `.env` files.
+- Treat local configuration and remote database mutation as separate authorization boundaries. Broad requests such as "set this up" authorize local configuration only; they do not authorize creating, initializing, migrating, seeding, bootstrapping, or writing to a remote database.
+- Before any remote database mutation, obtain explicit operator approval that identifies the target environment, cluster or redacted host, database name, and intended mutations. Resolve and report the target with a read-only check first, and stop when the target is missing, unknown, or mismatched.
+- Never derive a new database URI by changing the database name in an existing URI, or reuse an existing principal for a new database, unless the operator explicitly authorizes the exact target and the credential's intended access scope.
+- Prefer dry-run or read-only discovery before database deployment commands. Tooling that can initialize remote state must fail closed when the target database does not exist unless database creation was explicitly authorized.
 - Validate all untrusted input on the server before using it in business logic, persistence, or outbound requests.
 - Treat client-side validation as UX only; it never replaces server-side enforcement.
 - Use parameterized queries or equivalent safe database primitives; never concatenate untrusted input into SQL.
@@ -48,6 +52,7 @@ Provide a portable security baseline for application code, APIs, authentication 
 - Review every security-sensitive change for server-side validation, authn/authz enforcement, ownership checks, data minimization, and least-privilege access.
 - Review secret handling in code, logs, config, tests, screenshots, and documentation.
 - Review database access for parameterization, privileged-client boundaries, and row/tenant isolation controls.
+- Verify every remote database mutation has explicit approval for the resolved target, reports commands and expected effects without secrets, and cannot silently create or switch databases.
 - Review HTTP behavior for secure headers, cookie settings, CORS scope, rate limiting, and abuse controls.
 - Review error handling to confirm that user-facing responses stay generic while server-side diagnostics remain actionable.
 
@@ -57,5 +62,6 @@ Provide a portable security baseline for application code, APIs, authentication 
 - Returning full internal error objects, stack traces, tokens, or privileged metadata to callers.
 - Logging secrets, credentials, raw tokens, cookies, or authorization headers.
 - Using broad privileged access when a narrower role or scoped query would work.
+- Treating a general setup request as authorization to mutate remote data, repointing an existing URI to a new database, or relying on an implicit first write to create a database.
 - Shipping public or expensive endpoints without abuse protection.
 - Treating security review as optional because the code path looks internal or low-risk.
