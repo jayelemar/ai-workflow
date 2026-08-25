@@ -7,7 +7,7 @@ creates commits.
 
 This prompt supports all of these layouts without a project-specific branch:
 
-- one Git repository whose checkout is also the plan workspace;
+- a Git parent checkout whose root is also the plan workspace;
 - a monorepo with one declared Git root; and
 - an unversioned coordination root containing worktrees sourced from multiple
   independent Git repositories, including explicitly declared sibling
@@ -31,7 +31,7 @@ directory. The workspace may or may not be a Git repository. Reject absolute
 paths, traversal, symlink escapes, unreadable files, and plans outside the
 source `.ai/plans/` directory.
 
-Read the complete plan. It must declare `plan-manifest@2`, exactly one
+Read the complete plan. It must declare `plan-manifest@3`, exactly one
 `LOW`, `MEDIUM`, or `HIGH` classification, a safe kebab-case `# Plan:` name
 that matches the filename, and one or more valid `## Repositories` entries.
 Each entry must provide a unique safe repository ID, a root relative to the
@@ -39,6 +39,13 @@ plan workspace, and an explicit integration-base ref. Resolve each root to a
 Git checkout. A resolved root may be inside the plan workspace. For a plan
 that declares two or more repositories, it may instead be an immediate sibling
 of the plan workspace when both directories have the same real parent.
+
+If the plan, a required handoff/review, or an existing worktree report belongs
+to an older contract, stop before mutation and return exactly: `Legacy workflow
+artifact: <path> uses <format>; replan using the current contract before
+execution or resume.` Do not migrate, overwrite, or delete it. A
+`worktree-setup@1` report is current only when its recorded source plan is the
+same `plan-manifest@3`; an older or mismatched source makes the report legacy.
 
 Treat repository roots as plan-owned path declarations, not general filesystem
 access. Reject absolute roots, symlink escapes, duplicate or overlapping Git
@@ -52,7 +59,7 @@ Validate the classification inputs before any mutation:
 - LOW: the saved plan.
 - MEDIUM: the saved plan and its readable saved spec.
 - HIGH: the saved plan, spec, and
-  `.ai/artifacts/<plan-name>/goal-handoff.md` using `goal-handoff@1`.
+  `.ai/artifacts/<plan-name>/goal-handoff.md` using `goal-handoff@2`.
 
 For HIGH, require the handoff's single `## Next Action` command to be a
 `/goal` invocation that references this plan. Do not execute it.
@@ -283,7 +290,8 @@ Record the source plan, classification, topology, repository IDs, primary and
 target paths, task-root-relative repository mapping, bases and commits,
 branches, control-context mirror result, environment destination names and
 permission status, documented runtime assignments, dependency results, user
-decisions, validation results, and any partial failure. Never record
+decisions, validation results, the source `plan-manifest@3` format, and any
+partial failure. Never record
 environment values or credential-derived data.
 
 If a failure occurs after mutation, leave every created root, worktree, branch,

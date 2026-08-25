@@ -42,16 +42,14 @@ test("prepared execution uses a verified task-local repository overlay", () => {
     /maps every repository ID to one verified target path/,
   );
   assert.match(preparePrompt, /worktree-setup@1/);
+  assert.match(preparePrompt, /same `plan-manifest@3`/);
 });
 
 test("create-plan rejects repository topology that prepare-worktree cannot use", () => {
+  assert.match(createPlanPrompt, /For multi-repository coordination only/);
+  assert.match(createPlanPrompt, /explicitly\s+declared immediate sibling/);
   assert.match(
     createPlanPrompt,
-    /outside root is valid only for a plan with two or\n  more repositories/,
-  );
-  assert.match(createPlanPrompt, /explicitly declared immediate sibling/);
-  assert.match(
-    createPlanPrompt,
-    /deferring the\n  incompatibility to worktree preparation/,
+    /Reject absolute roots, symlink escapes, ancestor traversal/,
   );
 });

@@ -1,43 +1,22 @@
 # Resume Goal
 
-Resume a HIGH-GOAL work item from its portable companion artifact. This is an
-analysis-only resume step; it does not write files or workflow state.
-
-Read `.ai/AGENTS.md` before loading the handoff.
-
-## Required Behavior
+Resume analysis for a HIGH work item from portable evidence. This prompt is
+read-only. Read `.ai/AGENTS.md` first.
 
 1. Read `.ai/artifacts/<goal-name>/goal-handoff.md`.
-2. Validate `goal-handoff@1`, then read the linked `## Spec` and `## Plan`.
-   Treat `## Exact Goal` as the saved objective. Re-check current Git state
-   because the handoff is a checkpoint, not the authority for repository state.
-3. Return the handoff's exact `## Next Action`; it must use:
+2. Require `goal-handoff@2`, its linked current `plan-manifest@3`, finalized
+   spec, and declared flow artifacts. Validate positive, strictly increasing
+   review round numbers and re-check repository state.
+3. If any handoff, plan, review, or worktree report uses an older contract,
+   return exactly: `Legacy workflow artifact: <path> uses <format>; replan using
+the current contract before execution or resume.` Do not migrate, overwrite,
+   or delete it.
+4. Return the handoff's exact `## Next Action` without invoking it. Stop; the
+   user must explicitly invoke that action.
 
-   ```text
-   /goal <exact-goal>
-
-   plan: <linked-plan-path>
-   ```
-
-   Do not invoke the command.
-
-4. Stop. The user must explicitly invoke the returned command to start the
-   goal in any provider.
-
-## Strict Constraints
-
-- Do not modify the handoff during resume; use `goal-checkpoint` before a
-  later pause or provider/account switch.
-- Do not create a spec, plan, workflow state, event, or MEDIUM review artifact.
-- Never infer progress beyond verified entries in the handoff and current Git
-  state.
-
-If the handoff, linked finalized spec, or linked saved plan is missing or incomplete,
-STOP and request the relevant artifact; do not create workflow state as a
-fallback during resume.
+Do not modify artifacts, infer progress, create workflow state, or reproduce
+review or commit policy.
 
 ## Final Output
 
-Return only:
-
-The handoff's exact `## Next Action` command.
+Return only the handoff's exact `## Next Action`, or the exact legacy response.

@@ -1,71 +1,49 @@
-Version: 5.2
-Last Updated: 2026-08-24
+Version: 6.0
+Last Updated: 2026-08-25
 
 # AI Workflow Instructions
 
 ## Purpose
 
-Define the prompt-driven LOW, MEDIUM, and HIGH workflow without a runner or
-persisted transition authority.
+Define ownership for the prompt-driven LOW, MEDIUM, and HIGH workflow without
+duplicating stage or review protocols.
 
-## Rules
+## Contract Ownership
 
-- Read `.ai/AGENTS.md`, then `.ai/instructions/index.md` and the smallest routed
-  instruction set relevant to the stage.
-- Apply `.ai/instructions/shared/workflow-state.md` as the canonical stage
-  sequence: read-only intake, explicitly invoked MEDIUM/HIGH spec, explicitly
-  invoked planning that reuses or creates required flow artifacts, then explicit
-  execution. Direct flow-artifact generation remains available but is not a
-  required separate stage.
-- Apply `.ai/instructions/shared/flow-trace-artifacts.md` to classify and review
-  `user-journey@1` plus `implementation-map@1`.
-- Prompts own stage behavior, schemas, and final responses. Wrappers only adapt
-  user inputs and must not restate those contracts.
-- No prompt may introduce runner selection, workflow state, event history,
-  sidecars, a preview gate, or pre-execution plan approval.
-- MEDIUM and HIGH completion use the independent whole-plan review contract in
-  `.ai/prompts/review-changes.md` and the locked `reviewer` runtime in
-  `.ai/config/agent-models.toml`.
-- HIGH task delegation, validation, per-task actual-diff review, task-scoped
-  commit sequencing, and final-review remediation commits remain governed by
-  `.ai/prompts/goal-checkpoint.md`.
-- Execution applies the corrective-deviation contract in `.ai/AGENTS.md`.
-  Planned task paths remain the default ownership boundary, while a narrowly
-  spec-preserving correction may reopen a prior task path with recorded
-  evidence, affected validation, fresh review, and a separate corrective
-  commit. This is remediation within the authorized execution stage, not a new
-  stage or an approval gate.
-- Pull request publication is an optional, explicitly invoked delivery action
-  governed by `.ai/prompts/create-pull-request.md`; completion of an execution
-  stage never invokes it automatically.
+- `.ai/AGENTS.md` owns global invariants and the corrective-deviation decision
+  table.
+- `.ai/instructions/shared/workflow-state.md` owns stage transitions only.
+- `.ai/templates/plan.template.md` owns `plan-manifest@3`, plan structure,
+  `review-strategy@2`, and review-budget fields.
+- `.ai/prompts/review-changes.md` solely owns `implementation-review@2`, final
+  review transitions, risk decisions, and review-round accounting.
+- `.ai/prompts/goal-checkpoint.md` owns `goal-handoff@2`, HIGH task progress,
+  commit evidence, and HIGH commit rules. Handoffs store evidence without
+  copying policy text.
+- `.ai/prompts/generate-flow-artifacts.md` owns the unchanged
+  `user-journey@1` and `implementation-map@1` schemas.
+- `.ai/prompts/create-pull-request.md` owns optional, explicitly invoked pull
+  request delivery.
+- Wrappers adapt inputs only.
 
 ## Plan Ownership
 
-- New plans use `plan-manifest@2` and declare every Git repository root plus its
-  integration-base ref.
-- A prepared task root keeps those declared source roots unchanged. Its
-  validated `worktree-setup@1` report may overlay only the filesystem target
-  for each repository ID; it never changes ownership, integration bases, task
-  order, or desired behavior.
-- Each HIGH task belongs to exactly one declared Git repository. Split a
-  cross-repository outcome into dependent tasks rather than committing across
-  repositories as one task.
-- Progress reporting uses only the declared repository roots and bases.
-- Cross-task dependencies must identify the callable internal contract needed
-  by the consumer, not only each task's file list. Review verifies that a
-  provider task's implemented interface is usable by its dependent task.
+- Every new plan declares each Git repository root and integration-base ref.
+- A validated `worktree-setup@1` report may overlay filesystem targets only;
+  it never changes plan ownership, bases, order, or desired behavior.
+- Each HIGH task belongs to exactly one repository. Cross-repository outcomes
+  use dependent tasks with an explicit provider-to-consumer contract.
+- The plan workspace may be a Git parent checkout or an unversioned
+  coordination root for multiple independent repositories.
 
 ## Validation
 
 - Run focused contract and health tests after workflow-source changes.
-- Run the self-contained health check from `.ai` and from another working
-  directory.
-- Verify canonical source references exist, project-local data remains ignored
-  and untracked, wrappers remain thin, and active source contains no retired
-  runner concepts.
+- Run the health check from `.ai` and by absolute path from another directory.
+- Confirm canonical references exist, wrappers remain thin, project-local data
+  remains ignored and untracked, and retired runner concepts remain absent.
 
 ## Anti-Patterns
 
-- Duplicating a prompt schema in a wrapper or instruction.
-- Calling a finalized spec or saved plan `approved` when no operator approval
-  occurred.
+- Duplicating a schema or transition protocol outside its owner.
+- Calling a finalized spec or saved plan `approved` when no approval occurred.

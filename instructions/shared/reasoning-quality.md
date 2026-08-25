@@ -1,5 +1,5 @@
-Version: 2.1
-Last Updated: 2026-08-24
+Version: 3.0
+Last Updated: 2026-08-25
 
 # Reasoning Quality Instructions
 
@@ -25,21 +25,15 @@ Define the shared reasoning baseline for explicit workflow stages.
 - Check implied edge cases: empty inputs, permission boundaries, state
   transitions, failed validation, out-of-scope files, repeated execution, and
   material scope discoveries.
-- Keep behavior within the saved plan and spec. Distinguish a material change
-  from a qualifying corrective deviation under `.ai/AGENTS.md`; record and
-  review the latter instead of converting a file-ownership mismatch into an
-  operator approval gate. A genuinely material discovery still pauses work and
-  returns to the correct explicit stage.
+- Keep behavior within the saved plan and spec. Classify execution discoveries
+  only with the corrective-deviation decision table in `.ai/AGENTS.md`.
 - Use actual implementation evidence for review. MEDIUM writes a complete
   status artifact; HIGH reviews every task before its commit. After all
   implementation, both classes require a fresh independent reviewer on the
   cumulative plan-owned diff and must clear blocking findings before
   completion.
 - For HIGH tasks, apply the saved delegation decision exactly. Do not invent
-  an ad-hoc delegation during execution. A qualifying corrective deviation
-  reuses the applicable validation and reviewer requirements; a material
-  discovery updates the plan, and a missing required delegation result blocks
-  the task.
+  ad-hoc delegation; a missing required result blocks the task.
 
 ## Validation
 

@@ -1,28 +1,24 @@
 # Prompt-Driven AI Workflow
 
-This nested `.ai` repository provides reusable prompts, behavioral guidance,
-project instruction routing, templates, and self-contained checks. Workflow
-authority stays in explicit user invocations and saved artifacts; there is no
-runner, transition state, or sidecar authority.
+This `.ai` Git repository provides reusable prompts, instructions, templates,
+and self-contained checks. The containing workspace may be a Git parent
+checkout that ignores `.ai/` or an unversioned coordination root containing
+multiple independent repositories.
 
 ## Installation
 
-Use the local `AGENTS.override.md` bootstrap for automatic Codex discovery.
-Run either supported command:
-
-From `.ai`:
+For a Git parent checkout, use the local `AGENTS.override.md` bootstrap for
+Codex discovery:
 
 ```bash
+# From .ai
 pnpm setup:agents-override
-```
 
-From the project root:
-
-```bash
+# From the containing workspace
 pnpm --dir .ai setup:agents-override
 ```
 
-The command creates this exact ignored project-root file:
+It creates this ignored workspace-root file:
 
 ```md
 # Local Project AI Instructions
@@ -31,108 +27,73 @@ Read and follow `.ai/AGENTS.md` before starting work.
 Use `.ai/instructions/index.md` to load only instructions relevant to the request.
 ```
 
-It also adds `/AGENTS.override.md` to the repository-local Git exclude. Before
-either managed target changes, setup refuses any parent-root `AGENTS.md` entry,
-legacy `.codex/AGENTS.md`, its matching fallback, or manual-token hook conflict.
-Resolve those local conflicts explicitly, then rerun the utility. See
-`.ai/docs/codex-agent.md` for setup and compatibility details. Active prompts
-continue to load `.ai/AGENTS.md` directly.
+Setup uses the parent's repository-local Git exclude. It refuses conflicting
+parent `AGENTS.md`, legacy `.codex/AGENTS.md`, fallback, or hook configurations.
+In an unversioned coordination root, the utility intentionally stops before
+mutation because no parent Git exclude exists; use an existing operator-managed
+`AGENTS.override.md` with the exact content above. See
+[Codex Agent Setup](docs/codex-agent.md).
 
-## Explicit Workflow
+## Workflow
 
-1. Run `.ai/prompts/select-workflow.md` for read-only LOW/MEDIUM/HIGH intake.
-2. For LOW, explicitly invoke `.ai/prompts/create-plan.md` and save
-   `.ai/plans/<plan-name>.md`. Keeping a conversational plan is not enough.
-3. For MEDIUM/HIGH, explicitly invoke `.ai/prompts/generate-spec.md` to finalize
-   `feature-spec@1` or `bugfix-spec@1`.
-4. Explicitly invoke `.ai/prompts/create-plan.md`. It determines
-   whether end-to-end tracing is required, reuses a complete pair or creates
-   missing `user-journey@1` and `implementation-map@1` artifacts, then saves
-   `plan-manifest@2`.
-5. Optionally invoke `.ai/prompts/generate-flow-artifacts.md` directly before
-   planning when the pair is useful as a standalone deliverable.
-6. Explicitly execute LOW/MEDIUM with `execute <plan-file>` or HIGH with the
-   returned two-line `/goal <exact-goal>` plus `plan: <plan-file>` invocation.
-7. Optionally invoke `.ai/prompts/create-pull-request.md` after the branch's
-   local commits are complete.
+Each arrow is a separate explicit invocation:
 
-See [Workflow Usage](docs/workflow-usage.md) for Codex mode selection and
-copy-ready invocations for every workflow class.
+```text
+LOW:    intake -> saved plan -> execute
+MEDIUM: intake -> finalized spec -> saved plan -> execute
+HIGH:   intake -> finalized spec -> saved plan + handoff -> /goal
+```
 
-Saving or finalizing an artifact does not invoke the next stage. There is no
-preview, plan approval, validator, or persisted progress gate.
+Planning may create missing flow artifacts. Delivery remains an optional later
+invocation. Copy-ready inputs are in [Workflow Usage](docs/workflow-usage.md).
 
-## Contracts
+## Current Contracts
 
-- `.ai/AGENTS.md` owns behavior, scope, transparency, and validation rules.
-- `.ai/instructions/shared/workflow-state.md` owns the explicit stage sequence.
-- `.ai/prompts/generate-spec.md` owns both typed spec schemas and the mandatory
-  evidence-backed bug RCA gate.
-- `.ai/prompts/generate-flow-artifacts.md` owns both flow artifact schemas;
-  create-plan applies it when required artifacts are missing.
-- `.ai/templates/plan.template.md` owns `plan-manifest@2`, including explicit
-  Git repository roots and integration-base refs.
-- `.ai/prompts/review-changes.md` owns the mandatory independent MEDIUM/HIGH
-  whole-plan review, priority gate, three default automatic rounds, and the
-  continuation checkpoint thereafter. At an active checkpoint, `END_REVIEW`
-  uses the disclosed operator-ended path, `REVIEW_NEXT_ROUND` authorizes one
-  fresh round, and `REVIEW_UNTIL_CLEAR` persists safe review cycles until clear
-  or a defined stop condition.
-- `.ai/prompts/goal-checkpoint.md` owns the reusable HIGH task delegation,
-  per-task review, validation, commit protocol, and final-review remediation
-  commits.
-- `.ai/prompts/create-pull-request.md` owns optional GitHub pull request
-  inspection, title and summary generation, publication approval, and creation.
-- `.ai/config/agent-models.toml` locks the reviewer model and reasoning effort
-  used by every final review round.
-- Wrappers under `.ai/wrappers/` are input adapters only.
+- Specs: `feature-spec@1`, `bugfix-spec@1`
+- Flow artifacts: `user-journey@1`, `implementation-map@1`
+- Plan: `plan-manifest@3` with `review-strategy@2` and a saved review budget
+- MEDIUM review: `implementation-review@2`
+- HIGH handoff: `goal-handoff@2`
+- Worktree preparation report: `worktree-setup@1`, tied to its current plan
+
+Contract owners:
+
+- [Global invariants](AGENTS.md)
+- [Stage sequence](instructions/shared/workflow-state.md)
+- [Plan structure](templates/plan.template.md)
+- [Review loop](prompts/review-changes.md)
+- [HIGH progress and commit evidence](prompts/goal-checkpoint.md)
+- [Portable worktree setup](prompts/prepare-worktree.md)
+
+Legacy generated artifacts remain untouched and cannot authorize execution or
+resume; create a new plan under the current contracts.
 
 ## Repository Boundaries
 
-The parent project ignores `.ai/`. The nested `.ai/.gitignore` allowlists
-shared source and keeps project-local instructions, specs, plans, artifacts,
-logs, state, dependencies, and historical generated files ignored and
-untracked. Git history is the authority for tracked instruction history; this
-repository does not maintain instruction changelogs.
-
-Project-local instruction routing begins at ignored
-`.ai/instructions/index.md`. All reusable instructions, including canonical
-workflow guidance, remain under `.ai/instructions/shared/`; other immediate
-Markdown files under `.ai/instructions/` are project-local and ignored.
+Tracked reusable source is allowlisted by the nested `.ai/.gitignore`.
+Project-local instructions, specs, plans, artifacts, logs, state, dependencies,
+and historical generated files remain ignored and untracked. When a Git parent
+checkout exists, it must not track `.ai/` paths.
 
 ## Local Record Cleanup
 
-Use the explicit preview-first cleanup utility for ignored workflow records:
+Preview before explicitly deleting ignored workflow records:
 
 ```bash
 pnpm cleanup:local
 pnpm cleanup:local --apply
 ```
 
-Preview lists the exact targets and makes no changes. Apply removes every entry
-under `artifacts/`, `logs/`, `plans/`, `specs/`, `state/`, and `tmp/`, including
-active records; invoke it only when that deletion is intended.
+## Checks
 
-## Self-Contained Checks
-
-The private package requires Node `>=20.20.2` and pins `pnpm@10.34.4`,
-`prettier@3.9.6`, and `tsx@4.23.12`.
-
-From `.ai`:
+The package requires Node `>=20.20.2` and pins its pnpm and test toolchain.
 
 ```bash
+# From .ai
 pnpm health
 pnpm health:full
-```
 
-From any other working directory:
-
-```bash
+# From any other directory
 node /absolute/path/to/.ai/scripts/maintenance/health-check.mjs
 node /absolute/path/to/.ai/scripts/maintenance/health-check.mjs --full
 ```
-
-The checks resolve the nested repository from the script location, validate
-canonical paths and references, enforce ignore/untracked boundaries, check
-active workflow Markdown and script formatting, and run focused or full tests
-without shell command substitution.
