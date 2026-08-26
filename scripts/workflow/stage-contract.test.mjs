@@ -183,6 +183,7 @@ test("review-changes is the singular review-loop authority", async () => {
   assert.match(review, /sole authority/);
   for (const uniqueProtocolText of [
     "REVIEW_ONE_MORE",
+    "REVIEW_UNTIL_CLEAR",
     "ACCEPT_UNREVIEWED_REMEDIATION",
     "Awaiting risk decision",
     "Completed with accepted review risk",
@@ -204,7 +205,7 @@ test("implementation-review@2 limits blocking findings to attributable scope", a
   assert.match(review, /`P0`–`P2` are blocking and `P3` is advisory/);
 });
 
-test("review loop covers clear, budget exhaustion, and one-more authorization", async () => {
+test("review loop covers clear, budget exhaustion, and continuation authorization", async () => {
   const review = normalize(await readSource("prompts/review-changes.md"));
 
   assert.match(review, /A clear returned round sets `Ready to complete`/);
@@ -223,6 +224,30 @@ test("review loop covers clear, budget exhaustion, and one-more authorization", 
   assert.match(
     review,
     /runtime or evidence failure preserves the unconsumed authorization/,
+  );
+  assert.match(
+    review,
+    /`REVIEW_UNTIL_CLEAR` authorizes successive fresh cumulative reviews beyond the automatic budget/,
+  );
+  assert.match(
+    review,
+    /After each blocking report, remediate every known in-scope `P0`–`P2`.*rerun required validation.*automatically start the next fresh review/,
+  );
+  assert.match(
+    review,
+    /A clear report ends the authorization and sets `Ready to complete`/,
+  );
+  assert.match(
+    review,
+    /runtime, or evidence failure returns no round, preserves the authorization, and requires explicit resume/,
+  );
+  assert.match(
+    review,
+    /session interruption also preserves the recorded authorization for explicit resume without another risk-decision token/,
+  );
+  assert.match(
+    review,
+    /never expands implementation scope or authorizes delivery, pushing, or a pull request/,
   );
 });
 
@@ -252,6 +277,10 @@ test("review stops repeated root causes and rejects invalid or stale tokens", as
     /return to planning for the saved architectural fallback/,
   );
   assert.match(review, /Stop incremental fixes/);
+  assert.match(
+    review,
+    /repeated-family fallback and every other mandatory `Blocked` condition still stop the loop/,
+  );
   assert.match(
     review,
     /Invalid, stale, duplicate, combined, or out-of-context tokens/,

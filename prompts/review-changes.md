@@ -53,6 +53,9 @@ reports no in-scope `P0`–`P2`.
   review consumes at most that many returned fresh rounds.
 - A risk-authorized one-more round is recorded separately from the automatic
   budget and authorizes exactly one returned fresh report.
+- A risk-authorized review-until-clear continuation is recorded separately
+  from the automatic budget. Its returned fresh rounds keep the same strictly
+  increasing sequence without increasing the automatic-rounds-used count.
 
 ## Authoritative State Machine
 
@@ -85,6 +88,19 @@ decision`. This status is forbidden while any known `P0`–`P2` is unresolved
      A runtime or evidence failure preserves the unconsumed authorization for
      explicit resume. A clear result sets `Ready to complete`; a blocking result
      returns to steps 3, 4, and 6 after remediation and validation.
+   - `REVIEW_UNTIL_CLEAR` authorizes successive fresh cumulative reviews beyond
+     the automatic budget. After each blocking report, remediate every known
+     in-scope `P0`–`P2`, complete applicable targeted and mutation/property
+     checks, rerun required validation, record applicable HIGH remediation
+     commits, and automatically start the next fresh review. A clear report
+     ends the authorization and sets `Ready to complete`. The repeated-family
+     fallback and every other mandatory `Blocked` condition still stop the
+     loop. A reviewer startup, runtime, or evidence failure returns no round,
+     preserves the authorization, and requires explicit resume. A session
+     interruption also preserves the recorded authorization for explicit
+     resume without another risk-decision token. This authorization never
+     expands implementation scope or authorizes delivery, pushing, or a pull
+     request.
    - `ACCEPT_UNREVIEWED_REMEDIATION` sets `Completed with accepted review risk`
      only when all known `P0`–`P2` are fixed, required validation passes, and
      applicable HIGH remediation commits exist. Record that the latest
@@ -142,13 +158,13 @@ Fix required | Awaiting risk decision | Ready to complete | Completed with accep
 
 ## Risk Decision
 
-- Token: <None | REVIEW_ONE_MORE | ACCEPT_UNREVIEWED_REMEDIATION>
+- Token: <None | REVIEW_ONE_MORE | REVIEW_UNTIL_CLEAR | ACCEPT_UNREVIEWED_REMEDIATION>
 - Eligibility: <eligible reason | not eligible reason>
 - Disclosure: <None | latest remediation was not independently re-reviewed>
 
 ## Required Next Action
 
-<fresh review | remediate and validate | risk decision | complete | replan for fallback | exact blocker resolution>
+<fresh review | continue review until clear | remediate and validate | risk decision | complete | replan for fallback | exact blocker resolution>
 ```
 
 ## HIGH Evidence
