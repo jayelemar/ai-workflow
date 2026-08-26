@@ -76,7 +76,7 @@ complete`, `Completed with accepted review risk`, and `Blocked`.
    fixes; never clear, downgrade, or risk-accept that family.
 5. After successful remediation and validation, automatically start the next
    fresh round only when the automatic budget still has one. HIGH first records
-   required remediation commits under `.ai/prompts/goal-checkpoint.md`.
+   required remediation commits under `.ai/prompts/workflow/goal-checkpoint.md`.
 6. When a blocking result consumed the last automatic round, finish all known
    remediation, rerun required validation, and then set `Awaiting risk
 decision`. This status is forbidden while any known `P0`–`P2` is unresolved
@@ -172,5 +172,5 @@ Fix required | Awaiting risk decision | Ready to complete | Completed with accep
 For HIGH, record the same state, immutable budget, strictly increasing fresh
 rounds, findings, validation, risk decision, remediation commit evidence, and
 next action in the `goal-handoff@2` fields owned by
-`.ai/prompts/goal-checkpoint.md`. Do not copy this state machine into the
+`.ai/prompts/workflow/goal-checkpoint.md`. Do not copy this state machine into the
 handoff.

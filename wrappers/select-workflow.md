@@ -1,5 +1,5 @@
 # Select Workflow
 
-Use `.ai/prompts/select-workflow.md`.
+Use `.ai/prompts/workflow/select-workflow.md`.
 
 Target: `<requested work>`

@@ -22,14 +22,14 @@ applies; otherwise stop for the ambiguous input.
 Read `.ai/AGENTS.md`, `.ai/instructions/index.md`, the routed workflow,
 reasoning, flow-trace, testing, and delivery instructions, and every finalized
 input. When tracing is required, apply
-`.ai/prompts/generate-flow-artifacts.md`. Inspect repository ownership,
+`.ai/prompts/workflow/generate-flow-artifacts.md`. Inspect repository ownership,
 contracts, validation, Git roots, and integration bases.
 
 ## Preconditions
 
 - LOW has no spec. MEDIUM/HIGH requires one readable `feature-spec@1` or
   `bugfix-spec@1` whose `Open Decisions` is exactly `None`.
-- Reapply the deterministic classifier in `.ai/prompts/select-workflow.md` to
+- Reapply the deterministic classifier in `.ai/prompts/workflow/select-workflow.md` to
   the planned scope. Stop if the requested class is lower than its trigger.
 - Reuse a complete valid `user-journey@1` and `implementation-map@1` pair. If
   tracing is required and either is missing, create or complete the pair before
@@ -87,7 +87,7 @@ Use `.ai/templates/plan.template.md` and save
 ## HIGH Handoff
 
 For HIGH, initialize `.ai/artifacts/<plan-name>/goal-handoff.md` as
-`goal-handoff@2` through `.ai/prompts/goal-checkpoint.md`. Record current
+`goal-handoff@2` through `.ai/prompts/workflow/goal-checkpoint.md`. Record current
 repository state, ordered tasks as not started, no validation or review rounds,
 `Awaiting explicit /goal invocation` as the blocker, and this next action:
 

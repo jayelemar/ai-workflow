@@ -3,11 +3,11 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const preparePrompt = await readFile(
-  new URL("../../prompts/prepare-worktree.md", import.meta.url),
+  new URL("../../prompts/workflow/prepare-worktree.md", import.meta.url),
   "utf8",
 );
 const createPlanPrompt = await readFile(
-  new URL("../../prompts/create-plan.md", import.meta.url),
+  new URL("../../prompts/workflow/create-plan.md", import.meta.url),
   "utf8",
 );
 

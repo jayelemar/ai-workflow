@@ -2,7 +2,7 @@
 
 Create both canonical flow artifacts for a finalized MEDIUM or HIGH spec. Apply
 this contract when the user invokes it directly or when an explicit
-`.ai/prompts/create-plan.md` invocation needs missing required flow artifacts.
+`.ai/prompts/workflow/create-plan.md` invocation needs missing required flow artifacts.
 It does not implement application behavior.
 
 ## Input

@@ -39,13 +39,29 @@ const collectFiles = async (relativeDirectory, predicate) => {
   return files.sort();
 };
 
+test("prompts remain grouped by workflow and utilities", async () => {
+  const promptFiles = await collectFiles("prompts", (file) =>
+    file.endsWith(".md"),
+  );
+
+  for (const promptFile of promptFiles) {
+    assert.match(
+      promptFile,
+      /^prompts\/(README\.md|(workflow|utilities)\/[^/]+\.md)$/,
+      promptFile,
+    );
+  }
+  assert.ok(promptFiles.some((file) => file.startsWith("prompts/workflow/")));
+  assert.ok(promptFiles.some((file) => file.startsWith("prompts/utilities/")));
+});
+
 test("explicit stages retain intake, spec, plan, and execution boundaries", async () => {
   const [agents, selection, stages, createPlan, execute] = await Promise.all([
     readSource("AGENTS.md"),
-    readSource("prompts/select-workflow.md"),
+    readSource("prompts/workflow/select-workflow.md"),
     readSource("instructions/shared/workflow-state.md"),
-    readSource("prompts/create-plan.md"),
-    readSource("prompts/execute-plan.md"),
+    readSource("prompts/workflow/create-plan.md"),
+    readSource("prompts/workflow/execute-plan.md"),
   ]);
 
   assert.match(selection, /This invocation is read-only/);
@@ -61,7 +77,9 @@ test("explicit stages retain intake, spec, plan, and execution boundaries", asyn
 });
 
 test("classification uses deterministic LOW and HIGH triggers with MEDIUM fallback", async () => {
-  const selection = normalize(await readSource("prompts/select-workflow.md"));
+  const selection = normalize(
+    await readSource("prompts/workflow/select-workflow.md"),
+  );
 
   for (const trigger of [
     "multiple repositories",
@@ -88,8 +106,8 @@ test("classification uses deterministic LOW and HIGH triggers with MEDIUM fallba
 
 test("spec and flow artifact formats remain unchanged", async () => {
   const [spec, flowPrompt, flowInstruction] = await Promise.all([
-    readSource("prompts/generate-spec.md"),
-    readSource("prompts/generate-flow-artifacts.md"),
+    readSource("prompts/workflow/generate-spec.md"),
+    readSource("prompts/workflow/generate-flow-artifacts.md"),
     readSource("instructions/shared/flow-trace-artifacts.md"),
   ]);
 
@@ -104,7 +122,7 @@ test("spec and flow artifact formats remain unchanged", async () => {
 test("current plans use versioned structure and a required Plan name input", async () => {
   const [template, prompt, wrapper, workflow] = await Promise.all([
     readSource("templates/plan.template.md"),
-    readSource("prompts/create-plan.md"),
+    readSource("prompts/workflow/create-plan.md"),
     readSource("wrappers/create-plan.md"),
     readSource("instructions/shared/ai-workflow.md"),
   ]);
@@ -124,7 +142,7 @@ test("current plans use versioned structure and a required Plan name input", asy
 test("LOW plans are compact unless a named sensitive boundary triggers detail", async () => {
   const [template, createPlan] = await Promise.all([
     readSource("templates/plan.template.md"),
-    readSource("prompts/create-plan.md"),
+    readSource("prompts/workflow/create-plan.md"),
   ]);
 
   assert.match(createPlan, /Keep LOW plans compact/);
@@ -141,7 +159,7 @@ test("LOW plans are compact unless a named sensitive boundary triggers detail", 
 test("review-strategy@2 owns all three deterministic budget selections", async () => {
   const [template, createPlan] = await Promise.all([
     readSource("templates/plan.template.md"),
-    readSource("prompts/create-plan.md"),
+    readSource("prompts/workflow/create-plan.md"),
   ]);
   const source = normalize(createPlan);
 
@@ -163,7 +181,7 @@ test("review-strategy@2 owns all three deterministic budget selections", async (
 });
 
 test("review-changes is the singular review-loop authority", async () => {
-  const review = await readSource("prompts/review-changes.md");
+  const review = await readSource("prompts/workflow/review-changes.md");
   const otherFiles = [
     "AGENTS.md",
     "README.md",
@@ -171,7 +189,8 @@ test("review-changes is the singular review-loop authority", async () => {
     ...(await collectFiles("instructions", (file) => file.endsWith(".md"))),
     ...(await collectFiles(
       "prompts",
-      (file) => file.endsWith(".md") && file !== "prompts/review-changes.md",
+      (file) =>
+        file.endsWith(".md") && file !== "prompts/workflow/review-changes.md",
     )),
     ...(await collectFiles("templates", (file) => file.endsWith(".md"))),
     ...(await collectFiles("wrappers", (file) => file.endsWith(".md"))),
@@ -195,7 +214,9 @@ test("review-changes is the singular review-loop authority", async () => {
 });
 
 test("implementation-review@2 limits blocking findings to attributable scope", async () => {
-  const review = normalize(await readSource("prompts/review-changes.md"));
+  const review = normalize(
+    await readSource("prompts/workflow/review-changes.md"),
+  );
 
   assert.match(review, /implementation-review@2/);
   assert.match(review, /defect introduced by the plan-owned diff/);
@@ -206,7 +227,9 @@ test("implementation-review@2 limits blocking findings to attributable scope", a
 });
 
 test("review loop covers clear, budget exhaustion, and continuation authorization", async () => {
-  const review = normalize(await readSource("prompts/review-changes.md"));
+  const review = normalize(
+    await readSource("prompts/workflow/review-changes.md"),
+  );
 
   assert.match(review, /A clear returned round sets `Ready to complete`/);
   assert.match(
@@ -252,7 +275,9 @@ test("review loop covers clear, budget exhaustion, and continuation authorizatio
 });
 
 test("risk acceptance requires fixed findings and passing validation", async () => {
-  const review = normalize(await readSource("prompts/review-changes.md"));
+  const review = normalize(
+    await readSource("prompts/workflow/review-changes.md"),
+  );
 
   assert.match(
     review,
@@ -266,7 +291,9 @@ test("risk acceptance requires fixed findings and passing validation", async () 
 });
 
 test("review stops repeated root causes and rejects invalid or stale tokens", async () => {
-  const review = normalize(await readSource("prompts/review-changes.md"));
+  const review = normalize(
+    await readSource("prompts/workflow/review-changes.md"),
+  );
 
   assert.match(
     review,
@@ -297,9 +324,9 @@ test("review stops repeated root causes and rejects invalid or stale tokens", as
 
 test("review round evidence is monotonically increasing", async () => {
   const [review, checkpoint, resume] = await Promise.all([
-    readSource("prompts/review-changes.md"),
-    readSource("prompts/goal-checkpoint.md"),
-    readSource("prompts/resume-goal.md"),
+    readSource("prompts/workflow/review-changes.md"),
+    readSource("prompts/workflow/goal-checkpoint.md"),
+    readSource("prompts/workflow/resume-goal.md"),
   ]);
 
   assert.match(review, /positive and strictly increasing/);
@@ -312,7 +339,7 @@ test("review round evidence is monotonically increasing", async () => {
 });
 
 test("goal-handoff@2 stores exact portable evidence without copied protocols", async () => {
-  const checkpoint = await readSource("prompts/goal-checkpoint.md");
+  const checkpoint = await readSource("prompts/workflow/goal-checkpoint.md");
   const schema = checkpoint.split("## Required Handoff Content")[1];
 
   assert.match(checkpoint, /goal-handoff@2/);
@@ -338,7 +365,9 @@ test("goal-handoff@2 stores exact portable evidence without copied protocols", a
 });
 
 test("HIGH retains task-scoped validation, review, and commit safeguards", async () => {
-  const checkpoint = normalize(await readSource("prompts/goal-checkpoint.md"));
+  const checkpoint = normalize(
+    await readSource("prompts/workflow/goal-checkpoint.md"),
+  );
 
   assert.match(checkpoint, /Process planned tasks serially/);
   assert.match(checkpoint, /Run the task's exact validation/);
@@ -354,12 +383,12 @@ test("HIGH retains task-scoped validation, review, and commit safeguards", async
 
 test("legacy artifacts are rejected precisely without migration or deletion", async () => {
   const requiredFiles = [
-    "prompts/create-plan.md",
-    "prompts/execute-plan.md",
-    "prompts/review-changes.md",
-    "prompts/goal-checkpoint.md",
-    "prompts/resume-goal.md",
-    "prompts/prepare-worktree.md",
+    "prompts/workflow/create-plan.md",
+    "prompts/workflow/execute-plan.md",
+    "prompts/workflow/review-changes.md",
+    "prompts/workflow/goal-checkpoint.md",
+    "prompts/workflow/resume-goal.md",
+    "prompts/workflow/prepare-worktree.md",
   ];
   const exactResponse =
     /Legacy workflow artifact: <path> uses <format>; replan using the current contract before execution or resume\./;
@@ -374,7 +403,7 @@ test("legacy artifacts are rejected precisely without migration or deletion", as
     );
   }
   assert.match(
-    await readSource("prompts/prepare-worktree.md"),
+    await readSource("prompts/workflow/prepare-worktree.md"),
     /same `plan-manifest@3`/,
   );
 });
@@ -439,8 +468,8 @@ test("repository docs support Git parents and unversioned coordination roots", a
   const [agents, readme, createPlan, prepare] = await Promise.all([
     readSource("AGENTS.md"),
     readSource("README.md"),
-    readSource("prompts/create-plan.md"),
-    readSource("prompts/prepare-worktree.md"),
+    readSource("prompts/workflow/create-plan.md"),
+    readSource("prompts/workflow/prepare-worktree.md"),
   ]);
 
   for (const source of [agents, readme, createPlan, prepare]) {
@@ -452,8 +481,8 @@ test("repository docs support Git parents and unversioned coordination roots", a
 
 test("HIGH response and resume preserve exact explicit goal invocation", async () => {
   const [createPlan, resume] = await Promise.all([
-    readSource("prompts/create-plan.md"),
-    readSource("prompts/resume-goal.md"),
+    readSource("prompts/workflow/create-plan.md"),
+    readSource("prompts/workflow/resume-goal.md"),
   ]);
   const highResponse = createPlan.split("HIGH returns exactly:")[1];
 
@@ -488,15 +517,15 @@ test("wrappers remain thin input adapters", async () => {
 
 test("workflow sources load AGENTS directly and omit retired state concepts", async () => {
   const promptFiles = [
-    "prompts/select-workflow.md",
-    "prompts/generate-spec.md",
-    "prompts/generate-flow-artifacts.md",
-    "prompts/create-plan.md",
-    "prompts/execute-plan.md",
-    "prompts/review-changes.md",
-    "prompts/goal-checkpoint.md",
-    "prompts/resume-goal.md",
-    "prompts/create-pull-request.md",
+    "prompts/workflow/select-workflow.md",
+    "prompts/workflow/generate-spec.md",
+    "prompts/workflow/generate-flow-artifacts.md",
+    "prompts/workflow/create-plan.md",
+    "prompts/workflow/execute-plan.md",
+    "prompts/workflow/review-changes.md",
+    "prompts/workflow/goal-checkpoint.md",
+    "prompts/workflow/resume-goal.md",
+    "prompts/utilities/pull-request-creation.md",
   ];
   for (const promptFile of promptFiles) {
     assert.match(await readSource(promptFile), /\.ai\/AGENTS\.md/, promptFile);
@@ -536,7 +565,7 @@ test("retired workflow paths remain absent", async () => {
 
 test("pull request creation remains explicit and delivery-owned", async () => {
   const [prompt, workflow] = await Promise.all([
-    readSource("prompts/create-pull-request.md"),
+    readSource("prompts/utilities/pull-request-creation.md"),
     readSource("instructions/shared/ai-workflow.md"),
   ]);
   assert.match(prompt, /Wait for explicit approval before pushing or creating/);

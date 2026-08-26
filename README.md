@@ -61,9 +61,9 @@ Contract owners:
 - [Global invariants](AGENTS.md)
 - [Stage sequence](instructions/shared/workflow-state.md)
 - [Plan structure](templates/plan.template.md)
-- [Review loop](prompts/review-changes.md)
-- [HIGH progress and commit evidence](prompts/goal-checkpoint.md)
-- [Portable worktree setup](prompts/prepare-worktree.md)
+- [Review loop](prompts/workflow/review-changes.md)
+- [HIGH progress and commit evidence](prompts/workflow/goal-checkpoint.md)
+- [Portable worktree setup](prompts/workflow/prepare-worktree.md)
 
 Legacy generated artifacts remain untouched and cannot authorize execution or
 resume; create a new plan under the current contracts.

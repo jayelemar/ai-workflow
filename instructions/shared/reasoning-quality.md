@@ -9,12 +9,12 @@ Define the shared reasoning baseline for explicit workflow stages.
 
 ## Applies To
 
-- `.ai/prompts/select-workflow.md`
-- `.ai/prompts/generate-spec.md`
-- `.ai/prompts/create-plan.md`
-- `.ai/prompts/execute-plan.md`
-- `.ai/prompts/review-changes.md`
-- `.ai/prompts/goal-checkpoint.md`
+- `.ai/prompts/workflow/select-workflow.md`
+- `.ai/prompts/workflow/generate-spec.md`
+- `.ai/prompts/workflow/create-plan.md`
+- `.ai/prompts/workflow/execute-plan.md`
+- `.ai/prompts/workflow/review-changes.md`
+- `.ai/prompts/workflow/goal-checkpoint.md`
 
 ## Rules
 

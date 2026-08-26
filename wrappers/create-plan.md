@@ -1,6 +1,6 @@
 # Create Plan
 
-Use `.ai/prompts/create-plan.md`.
+Use `.ai/prompts/workflow/create-plan.md`.
 
 Plan name: `<kebab-case-name>`
 Classification: `LOW | MEDIUM | HIGH | resolve from current finalized context`

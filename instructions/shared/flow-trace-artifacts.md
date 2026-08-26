@@ -21,7 +21,7 @@ implementation map, and how planning reuses or creates that pair.
 ## Saved Artifacts
 
 When required, create-plan applies
-`.ai/prompts/generate-flow-artifacts.md` to reuse or create both:
+`.ai/prompts/workflow/generate-flow-artifacts.md` to reuse or create both:
 
 - `.ai/artifacts/<plan-name>/user-journey.md` using `user-journey@1`;
 - `.ai/artifacts/<plan-name>/implementation-map.md` using

@@ -57,7 +57,7 @@ and fresh task review pass.
 ## HIGH Final-Review Commit Rules
 
 After all task records are complete, run all plan validation and invoke only
-`.ai/prompts/review-changes.md` for final-review control. When canonical review
+`.ai/prompts/workflow/review-changes.md` for final-review control. When canonical review
 remediation changes a repository:
 
 - validate every affected task and plan check;

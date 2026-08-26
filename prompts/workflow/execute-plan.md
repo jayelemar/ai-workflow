@@ -35,7 +35,7 @@ contract before execution or resume.` Do not migrate, overwrite, or delete it.
 LOW self-checks actual scope, diff, required validation, repositories, and
 preserved unrelated work.
 
-MEDIUM invokes `.ai/prompts/review-changes.md` and saves its
+MEDIUM invokes `.ai/prompts/workflow/review-changes.md` and saves its
 `implementation-review@2` result. That prompt exclusively controls review
 rounds, remediation, statuses, risk decisions, and completion eligibility; do
 not restate or reinterpret its transitions here.

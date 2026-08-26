@@ -1,6 +1,6 @@
 # Bug Intake and RCA
 
-Use `.ai/prompts/select-workflow.md`.
+Use `.ai/prompts/workflow/select-workflow.md`.
 
 Target: `<bug, regression, or incident>`
 

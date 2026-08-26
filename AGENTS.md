@@ -30,7 +30,7 @@ repository conventions.
   review. Plans and artifacts must not add behavior absent from that spec.
 - New execution uses `plan-manifest@3`. MEDIUM and HIGH completion uses the
   independent `implementation-review@2` contract in
-  `.ai/prompts/review-changes.md` and the locked reviewer runtime in
+  `.ai/prompts/workflow/review-changes.md` and the locked reviewer runtime in
   `.ai/config/agent-models.toml`. `P0`, `P1`, and `P2` remain blocking; `P3` is
   advisory.
 - Do not introduce a workflow runner, transition state, event journal, sidecar

@@ -15,14 +15,14 @@ duplicating stage or review protocols.
 - `.ai/instructions/shared/workflow-state.md` owns stage transitions only.
 - `.ai/templates/plan.template.md` owns `plan-manifest@3`, plan structure,
   `review-strategy@2`, and review-budget fields.
-- `.ai/prompts/review-changes.md` solely owns `implementation-review@2`, final
+- `.ai/prompts/workflow/review-changes.md` solely owns `implementation-review@2`, final
   review transitions, risk decisions, and review-round accounting.
-- `.ai/prompts/goal-checkpoint.md` owns `goal-handoff@2`, HIGH task progress,
+- `.ai/prompts/workflow/goal-checkpoint.md` owns `goal-handoff@2`, HIGH task progress,
   commit evidence, and HIGH commit rules. Handoffs store evidence without
   copying policy text.
-- `.ai/prompts/generate-flow-artifacts.md` owns the unchanged
+- `.ai/prompts/workflow/generate-flow-artifacts.md` owns the unchanged
   `user-journey@1` and `implementation-map@1` schemas.
-- `.ai/prompts/create-pull-request.md` owns optional, explicitly invoked pull
+- `.ai/prompts/utilities/pull-request-creation.md` owns optional, explicitly invoked pull
   request delivery.
 - Wrappers adapt inputs only.
 

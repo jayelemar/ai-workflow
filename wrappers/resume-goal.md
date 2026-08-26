@@ -1,5 +1,5 @@
 # Resume Goal
 
-Use `.ai/prompts/resume-goal.md`.
+Use `.ai/prompts/workflow/resume-goal.md`.
 
 Goal name: `<stable-kebab-case-name>`

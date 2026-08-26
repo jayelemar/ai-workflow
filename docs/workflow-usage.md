@@ -60,7 +60,7 @@ Flow artifacts: AUTO
 ```
 
 The current plan template records `review-strategy@2` and its deterministic
-automatic review budget. See [Create Plan](../prompts/create-plan.md) and the
+automatic review budget. See [Create Plan](../prompts/workflow/create-plan.md) and the
 [Plan Template](../templates/plan.template.md).
 
 ## Execute LOW/MEDIUM
@@ -72,7 +72,7 @@ Command: execute .ai/plans/<plan-name>.md
 ```
 
 When MEDIUM execution returns a review action, respond only as directed by the
-current [Review Contract](../prompts/review-changes.md). That prompt is the sole
+current [Review Contract](../prompts/workflow/review-changes.md). That prompt is the sole
 source for statuses, round transitions, remediation, and risk decisions.
 
 ## Execute or Resume HIGH
@@ -103,13 +103,13 @@ Use `.ai/wrappers/resume-goal.md`.
 Goal name: <plan-name>
 ```
 
-The [HIGH checkpoint contract](../prompts/goal-checkpoint.md) owns task and
+The [HIGH checkpoint contract](../prompts/workflow/goal-checkpoint.md) owns task and
 commit evidence. The handoff itself does not copy policy.
 
 ## Optional Worktree and Delivery Utilities
 
 ```text
-run .ai/prompts/prepare-worktree.md, plan: .ai/plans/<plan-name>.md
+run .ai/prompts/workflow/prepare-worktree.md, plan: .ai/plans/<plan-name>.md
 ```
 
 ```text

@@ -77,7 +77,7 @@ const createFixture = async () => {
     "config/agent-models.toml",
     "instructions/shared/ai-workflow.md",
     "instructions/shared/testing.md",
-    "prompts/select-workflow.md",
+    "prompts/workflow/select-workflow.md",
     "scripts/check.test.mjs",
     "templates/plan.template.md",
     ...wrapperPaths,
