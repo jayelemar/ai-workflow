@@ -33,6 +33,8 @@ Independent repository setup, discovery, maintenance, and delivery actions:
   assess repo-relevant skills.
 - [Instructions management](utilities/instructions-management.md): create,
   update, route, or retire instruction guidance.
+- [Workflow cleanup](utilities/cleanup-workflow.md): preview and safely remove
+  local workflow records and task worktrees with explicit issue approval.
 - [Review until clear](utilities/review-until-clear.md): repeatedly review,
   remediate, and validate an implemented plan until no blocking findings remain.
 - [Commit organizer](utilities/commit-organizer.md): organize focused commits.

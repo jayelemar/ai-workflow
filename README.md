@@ -75,14 +75,26 @@ Project-local instructions, specs, plans, artifacts, logs, state, dependencies,
 and historical generated files remain ignored and untracked. When a Git parent
 checkout exists, it must not track `.ai/` paths.
 
-## Local Record Cleanup
+## Local Cleanup
 
-Preview before explicitly deleting ignored workflow records:
+Preview before explicitly deleting ignored workflow records only:
 
 ```bash
 pnpm cleanup:local
 pnpm cleanup:local --apply
 ```
+
+Use the canonical utility when cleanup must also remove task worktrees. It
+lists dirty, locked, orphaned, or otherwise questionable task roots and waits
+for an explicit `yes` or `no` before any deletion:
+
+```text
+Run `.ai/prompts/utilities/cleanup-workflow.md`.
+
+Mode: apply
+```
+
+Git branches are retained. Use `Mode: preview` for a read-only inventory.
 
 ## Checks
 

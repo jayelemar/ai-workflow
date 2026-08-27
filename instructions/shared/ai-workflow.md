@@ -1,5 +1,5 @@
-Version: 6.1
-Last Updated: 2026-08-27
+Version: 6.2
+Last Updated: 2026-08-28
 
 # AI Workflow Instructions
 
@@ -25,6 +25,8 @@ duplicating stage or review protocols.
   `user-journey@1` and `implementation-map@1` schemas.
 - `.ai/prompts/utilities/pull-request-creation.md` owns optional, explicitly invoked pull
   request delivery.
+- `.ai/prompts/utilities/cleanup-workflow.md` owns prompt-led approval for
+  destructive cleanup; its maintenance script owns inventory and mutation.
 - Wrappers adapt inputs only.
 
 ## Plan Ownership

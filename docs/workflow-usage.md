@@ -136,3 +136,20 @@ Base: AUTO
 Worktree setup supports both a Git parent checkout and an unversioned
 multi-repository coordination root. Neither utility starts implementation or
 delivery without its documented explicit invocation.
+
+## Local Workflow Cleanup
+
+Preview or remove ignored workflow records together with task worktrees:
+
+```text
+Run `.ai/prompts/utilities/cleanup-workflow.md`.
+
+Mode: preview | apply
+```
+
+In `apply` mode, clean task roots are already authorized. When dirty, locked,
+or otherwise questionable task roots exist, the utility lists every issue and
+waits for an explicit `yes` or `no` before deleting anything. `yes` includes
+the listed task roots; `no` deletes the clean roots while preserving the listed
+roots and their safely resolvable workflow context. Git branches are always
+retained.

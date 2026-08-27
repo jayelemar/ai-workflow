@@ -564,6 +564,44 @@ test("repository docs support Git parents and unversioned coordination roots", a
   }
 });
 
+test("workflow cleanup requires prompt-led approval and always retains branches", async () => {
+  const [prompt, packageSource, readme, usage] = await Promise.all([
+    readSource("prompts/utilities/cleanup-workflow.md"),
+    readSource("package.json"),
+    readSource("README.md"),
+    readSource("docs/workflow-usage.md"),
+  ]);
+  const normalizedPrompt = normalize(prompt);
+
+  assert.match(prompt, /Mode: preview \| apply/);
+  assert.match(prompt, /scripts\/maintenance\/cleanup-workflow\.mjs/);
+  assert.match(prompt, /do not delete anything yet/i);
+  assert.match(
+    normalizedPrompt,
+    /Deleting these task roots will permanently discard their local files\. Git branches will be retained\. Delete these task roots too\? Reply yes or no\./,
+  );
+  assert.match(prompt, /Wait for exactly `yes` or `no`/);
+  assert.match(prompt, /`--apply-clean`/);
+  assert.match(prompt, /`--apply-all`/);
+  assert.match(prompt, /`--approve <task-name>`/);
+  assert.match(normalizedPrompt, /issue set differs.*ask again/i);
+  assert.match(normalizedPrompt, /Git branches are always retained/i);
+  assert.match(
+    await readSource("scripts/maintenance/cleanup-workflow.mjs"),
+    /!name\.toUpperCase\(\)\.startsWith\("GIT_"\)/,
+  );
+  assert.doesNotMatch(prompt, /git worktree prune/i);
+  assert.doesNotMatch(prompt, /git branch -[dD]/i);
+  assert.equal(
+    JSON.parse(packageSource).scripts["cleanup:workflow"],
+    "node scripts/maintenance/cleanup-workflow.mjs",
+  );
+  for (const source of [readme, usage]) {
+    assert.match(source, /prompts\/utilities\/cleanup-workflow\.md/);
+    assert.match(normalize(source), /Git branches are (always )?retained/i);
+  }
+});
+
 test("HIGH response and resume preserve exact explicit goal invocation", async () => {
   const [createPlan, resume] = await Promise.all([
     readSource("prompts/workflow/create-plan.md"),
