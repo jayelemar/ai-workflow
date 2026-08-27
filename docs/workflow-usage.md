@@ -75,6 +75,21 @@ When MEDIUM execution returns a review action, respond only as directed by the
 current [Review Contract](../prompts/workflow/review-changes.md). That prompt is the sole
 source for statuses, round transitions, remediation, and risk decisions.
 
+## Manual Review Until Clear
+
+After any current plan has been implemented, run one independent review,
+remediation, validation, and fresh-review loop with:
+
+```text
+Run `.ai/prompts/utilities/review-until-clear.md`.
+
+Plan: .ai/plans/<plan-name>.md
+```
+
+This uses the locked workflow reviewer rather than the operator-only Codex UI
+`/review` action. It leaves P3 findings advisory and stops only when no in-scope
+P0–P2 remain or the canonical review contract requires a blocker.
+
 ## Execute or Resume HIGH
 
 Run the exact two-line command emitted by plan creation or returned by the

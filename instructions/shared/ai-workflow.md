@@ -1,5 +1,5 @@
-Version: 6.0
-Last Updated: 2026-08-25
+Version: 6.1
+Last Updated: 2026-08-27
 
 # AI Workflow Instructions
 
@@ -16,7 +16,8 @@ duplicating stage or review protocols.
 - `.ai/templates/plan.template.md` owns `plan-manifest@3`, plan structure,
   `review-strategy@2`, and review-budget fields.
 - `.ai/prompts/workflow/review-changes.md` solely owns `implementation-review@2`, final
-  review transitions, risk decisions, and review-round accounting.
+  and explicitly invoked manual review loops, risk decisions, and review-round
+  accounting.
 - `.ai/prompts/workflow/goal-checkpoint.md` owns `goal-handoff@2`, HIGH task progress,
   commit evidence, and HIGH commit rules. Handoffs store evidence without
   copying policy text.

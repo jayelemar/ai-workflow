@@ -1,15 +1,63 @@
 # Review Implemented Changes
 
-This prompt is the sole authority for the MEDIUM/HIGH final-review loop,
-`implementation-review@2`, review-round accounting, statuses, transitions, and
-risk-decision tokens. Read `.ai/AGENTS.md`, the current `plan-manifest@3`, its
-finalized spec and flow artifacts, actual repository diffs, validation evidence,
-and the saved `review-strategy@2` plus review budget.
+This prompt is the sole authority for the MEDIUM/HIGH final-review loop, the
+explicit any-plan manual-until-clear loop, `implementation-review@2`,
+review-round accounting, statuses, transitions, and risk-decision tokens. Read
+`.ai/AGENTS.md`, the current `plan-manifest@3`, its finalized spec and flow
+artifacts, actual repository diffs, validation evidence, and the saved
+`review-strategy@2` plus review budget.
 
 If a plan, review, handoff, or worktree report belongs to an older contract,
 return exactly: `Legacy workflow artifact: <path> uses <format>; replan using
 the current contract before execution or resume.` Do not migrate, overwrite, or
 delete the artifact.
+
+## Invocation Modes
+
+Formal completion mode is invoked by the owning MEDIUM execution or HIGH goal
+stage and follows the automatic budget and authoritative state machine below.
+
+Manual-until-clear mode starts only from an explicit invocation of
+`.ai/prompts/utilities/review-until-clear.md` with `Plan: <plan-file>`. It is
+available for every current `plan-manifest@3` classification and authorizes
+review plus corrective remediation of an already implemented plan-owned diff.
+Before review:
+
+1. Validate the plan, its declared repositories and integration bases, required
+   spec and artifacts, current Git state, and preserved unrelated work.
+2. Require plan-owned implementation evidence in the cumulative diff or
+   committed HIGH tasks and evidence that the implementation stage attempted
+   the plan validation. Manual mode never executes an untouched plan or
+   substitutes for initial implementation; use `Blocked` and return the owning
+   execute or goal invocation when this evidence is absent.
+3. Read all known review findings and required validation evidence. Remediate
+   every known in-scope `P0`–`P2` and rerun every affected task and plan
+   validation before starting a fresh independent reviewer. `P3` remains
+   advisory.
+4. After each complete blocking round, remediate and validate in the same way,
+   then automatically start a fresh independent reviewer. Continue until a
+   complete round is clear or a mandatory `Blocked` condition applies. The
+   repeated-root-cause fallback in the authoritative state machine remains
+   mandatory.
+
+For LOW, manual mode keeps round evidence in the final response for this
+invocation and does not create an `implementation-review@2` artifact. Report
+scope, reviewer runtime, fresh rounds, resolved and advisory findings,
+validation, deferred checks, and `Clear` or the exact blocker.
+
+For MEDIUM, read or initialize the declared `review.md`; for HIGH, update the
+existing `goal-handoff@2` and apply the remediation commit rules in
+`.ai/prompts/workflow/goal-checkpoint.md`. Preserve all existing round history,
+record `REVIEW_UNTIL_CLEAR` as the manual authorization, and keep fresh round
+numbers positive and strictly increasing. Manual returned review work is
+separate from the immutable automatic budget and does not increase the
+automatic-rounds-used count. A clear round sets `Ready to complete`; a runtime,
+evidence, material-discovery, repeated-family, or validation blocker uses
+`Blocked` or `Fix required` as required below.
+
+Manual mode never expands plan or spec scope and does not authorize delivery,
+pushing, or a pull request. It also does not replace the exact risk-decision
+tokens accepted by formal completion mode at `Awaiting risk decision`.
 
 ## Independent Reviewer
 
