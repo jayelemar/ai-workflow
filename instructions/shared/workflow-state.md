@@ -1,5 +1,5 @@
-Version: 4.0
-Last Updated: 2026-08-25
+Version: 4.1
+Last Updated: 2026-08-27
 
 # Workflow Stage Instructions
 
@@ -31,6 +31,8 @@ start planning.
   remains inside the already authorized execution stage.
 - Review, checkpoint, and delivery actions remain part of their owning stage;
   none silently invokes delivery or another workflow stage.
+- An explicit manual review may remediate an already implemented plan-owned
+  diff, but it never starts an untouched plan or expands execution scope.
 
 ## Anti-Patterns
 

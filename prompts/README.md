@@ -17,8 +17,8 @@ Ordered application-development stages and their supporting controls:
   targets.
 - [Execute plan](workflow/execute-plan.md): implement an explicitly invoked
   plan.
-- [Review changes](workflow/review-changes.md): perform the independent review
-  loop.
+- [Review changes](workflow/review-changes.md): perform formal or explicitly
+  invoked manual independent review loops.
 - [Goal checkpoint](workflow/goal-checkpoint.md): manage HIGH task evidence and
   commits.
 - [Resume goal](workflow/resume-goal.md): resume a valid HIGH handoff.
@@ -33,6 +33,8 @@ Independent repository setup, discovery, maintenance, and delivery actions:
   assess repo-relevant skills.
 - [Instructions management](utilities/instructions-management.md): create,
   update, route, or retire instruction guidance.
+- [Review until clear](utilities/review-until-clear.md): repeatedly review,
+  remediate, and validate an implemented plan until no blocking findings remain.
 - [Commit organizer](utilities/commit-organizer.md): organize focused commits.
 - [Pull request creation](utilities/pull-request-creation.md): prepare and create
   an explicitly requested pull request.

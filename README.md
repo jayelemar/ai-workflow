@@ -61,7 +61,7 @@ Contract owners:
 - [Global invariants](AGENTS.md)
 - [Stage sequence](instructions/shared/workflow-state.md)
 - [Plan structure](templates/plan.template.md)
-- [Review loop](prompts/workflow/review-changes.md)
+- [Formal and manual review loops](prompts/workflow/review-changes.md)
 - [HIGH progress and commit evidence](prompts/workflow/goal-checkpoint.md)
 - [Portable worktree setup](prompts/utilities/prepare-worktree.md)
 

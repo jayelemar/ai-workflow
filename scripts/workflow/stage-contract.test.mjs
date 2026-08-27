@@ -274,6 +274,47 @@ test("review loop covers clear, budget exhaustion, and continuation authorizatio
   );
 });
 
+test("manual review until clear is bounded, any-plan, and non-executing", async () => {
+  const review = normalize(
+    await readSource("prompts/workflow/review-changes.md"),
+  );
+  const utility = normalize(
+    await readSource("prompts/utilities/review-until-clear.md"),
+  );
+
+  assert.match(
+    review,
+    /explicit invocation of `.ai\/prompts\/utilities\/review-until-clear\.md` with `Plan: <plan-file>`/,
+  );
+  assert.match(review, /every current `plan-manifest@3` classification/);
+  assert.match(review, /plan-owned implementation evidence/);
+  assert.match(
+    review,
+    /never executes an untouched plan or substitutes for initial implementation/,
+  );
+  assert.match(
+    review,
+    /LOW.*does not create an `implementation-review@2` artifact/,
+  );
+  assert.match(review, /MEDIUM.*review\.md.*HIGH.*goal-handoff@2/);
+  assert.match(review, /does not increase the automatic-rounds-used count/);
+  assert.match(
+    review,
+    /remediate every known in-scope `P0`–`P2`.*rerun.*validation.*fresh independent reviewer/i,
+  );
+  assert.match(review, /`P3` remains advisory/);
+  assert.match(
+    review,
+    /does not authorize delivery, pushing, or a pull request/,
+  );
+  assert.match(utility, /Read `.ai\/AGENTS\.md`/);
+  assert.match(
+    utility,
+    /use `.ai\/prompts\/workflow\/review-changes\.md` as the sole review-loop authority/,
+  );
+  assert.match(utility, /Plan: `.ai\/plans\/<plan-name>\.md`/);
+});
+
 test("risk acceptance requires fixed findings and passing validation", async () => {
   const review = normalize(
     await readSource("prompts/workflow/review-changes.md"),
