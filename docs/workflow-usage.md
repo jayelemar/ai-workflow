@@ -109,7 +109,7 @@ commit evidence. The handoff itself does not copy policy.
 ## Optional Worktree and Delivery Utilities
 
 ```text
-run .ai/prompts/workflow/prepare-worktree.md, plan: .ai/plans/<plan-name>.md
+run .ai/prompts/utilities/prepare-worktree.md, plan: .ai/plans/<plan-name>.md
 ```
 
 ```text

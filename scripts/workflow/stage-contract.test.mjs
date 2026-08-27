@@ -388,7 +388,7 @@ test("legacy artifacts are rejected precisely without migration or deletion", as
     "prompts/workflow/review-changes.md",
     "prompts/workflow/goal-checkpoint.md",
     "prompts/workflow/resume-goal.md",
-    "prompts/workflow/prepare-worktree.md",
+    "prompts/utilities/prepare-worktree.md",
   ];
   const exactResponse =
     /Legacy workflow artifact: <path> uses <format>; replan using the current contract before execution or resume\./;
@@ -403,7 +403,7 @@ test("legacy artifacts are rejected precisely without migration or deletion", as
     );
   }
   assert.match(
-    await readSource("prompts/workflow/prepare-worktree.md"),
+    await readSource("prompts/utilities/prepare-worktree.md"),
     /same `plan-manifest@3`/,
   );
 });
@@ -469,7 +469,7 @@ test("repository docs support Git parents and unversioned coordination roots", a
     readSource("AGENTS.md"),
     readSource("README.md"),
     readSource("prompts/workflow/create-plan.md"),
-    readSource("prompts/workflow/prepare-worktree.md"),
+    readSource("prompts/utilities/prepare-worktree.md"),
   ]);
 
   for (const source of [agents, readme, createPlan, prepare]) {

@@ -18,7 +18,7 @@ This prompt supports all of these layouts without a project-specific branch:
 Run only when explicitly invoked with:
 
 ```text
-run .ai/prompts/workflow/prepare-worktree.md, plan: .ai/plans/<plan-name>.md
+run .ai/prompts/utilities/prepare-worktree.md, plan: .ai/plans/<plan-name>.md
 ```
 
 Accept the repository-relative plan path above or a bare `<plan-name>`, which

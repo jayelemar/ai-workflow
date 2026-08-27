@@ -63,7 +63,7 @@ Contract owners:
 - [Plan structure](templates/plan.template.md)
 - [Review loop](prompts/workflow/review-changes.md)
 - [HIGH progress and commit evidence](prompts/workflow/goal-checkpoint.md)
-- [Portable worktree setup](prompts/workflow/prepare-worktree.md)
+- [Portable worktree setup](prompts/utilities/prepare-worktree.md)
 
 Legacy generated artifacts remain untouched and cannot authorize execution or
 resume; create a new plan under the current contracts.
