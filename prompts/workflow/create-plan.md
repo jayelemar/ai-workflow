@@ -67,6 +67,16 @@ Use `.ai/templates/plan.template.md` and save
   invariants into root-cause families, select applicable adversarial variants,
   choose mutation/property coverage, and save a specific architectural
   fallback. Otherwise omit `### Sensitive Boundary Detail`.
+- Treat asynchronous UI state with multiple independent writers—such as query
+  lifecycle, deep-link or router input, local user actions, timers, or
+  gestures—as a repeated-family risk even in a LOW plan. Record the writer
+  precedence and invariant in Scope or Implementation, target their ordering
+  transitions in validation, and save a concrete architectural fallback such
+  as a single reducer, state arbiter, or owning hook. Do not use `N/A` merely
+  because LOW formal execution uses self-check; `N/A` is allowed only when no
+  named sensitive boundary or asynchronous multi-writer state surface exists,
+  and it must give that concrete reason. Include every path that fallback may
+  create or change in planned ownership so activation never expands scope.
 - Save exactly one automatic fresh-review budget for MEDIUM/HIGH:
   - `1` for single-repository MEDIUM work with no sensitive surface and no
     cross-boundary contract;

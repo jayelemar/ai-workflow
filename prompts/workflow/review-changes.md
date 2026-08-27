@@ -119,9 +119,19 @@ complete`, `Completed with accepted review risk`, and `Blocked`.
    relevant, and rerun every affected task and plan validation. Never begin
    another review while a known `P0`–`P2` remains unresolved or required
    validation fails.
-4. If one root-cause family remains blocking in two fresh rounds, set `Blocked`
-   and return to planning for the saved architectural fallback. Stop incremental
-   fixes; never clear, downgrade, or risk-accept that family.
+4. If one root-cause family remains blocking in two fresh rounds, stop
+   incremental fixes; never clear, downgrade, or risk-accept that family. For a
+   LOW manual-until-clear loop whose saved architectural fallback is concrete,
+   bounded by the existing plan-owned paths and behavior, and introduces no
+   material discovery under `.ai/AGENTS.md`, record fallback activation, set
+   `Fix required`, apply that fallback exactly once, rerun its targeted checks
+   and all required validation, and automatically start a fresh cumulative
+   review. If the fallback is missing, `N/A`, inapplicable, or outside those
+   boundaries, set `Blocked` and return to planning. If the same family remains
+   blocking in any fresh round after fallback activation, set `Blocked` and
+   return to planning; do not apply another redesign incrementally. Formal
+   MEDIUM/HIGH review retains `Blocked` and returns to planning for its saved
+   fallback.
 5. After successful remediation and validation, automatically start the next
    fresh round only when the automatic budget still has one. HIGH first records
    required remediation commits under `.ai/prompts/workflow/goal-checkpoint.md`.
@@ -141,9 +151,9 @@ decision`. This status is forbidden while any known `P0`–`P2` is unresolved
      in-scope `P0`–`P2`, complete applicable targeted and mutation/property
      checks, rerun required validation, record applicable HIGH remediation
      commits, and automatically start the next fresh review. A clear report
-     ends the authorization and sets `Ready to complete`. The repeated-family
-     fallback and every other mandatory `Blocked` condition still stop the
-     loop. A reviewer startup, runtime, or evidence failure returns no round,
+     ends the authorization and sets `Ready to complete`. The one-time LOW
+     manual fallback rule and every mandatory `Blocked` condition still apply.
+     A reviewer startup, runtime, or evidence failure returns no round,
      preserves the authorization, and requires explicit resume. A session
      interruption also preserves the recorded authorization for explicit
      resume without another risk-decision token. This authorization never
@@ -158,9 +168,10 @@ decision`. This status is forbidden while any known `P0`–`P2` is unresolved
    state, start no reviewer, and complete nothing. Continue to require the
    current state's valid action.
 9. Use `Blocked` for unavailable mandatory evidence/runtime, invalid round
-   history, a material discovery, the repeated-family fallback trigger, or a
-   genuine external blocker. Use `Fix required` for incomplete remediation or
-   failed required validation.
+   history, a material discovery, a missing or inapplicable repeated-family
+   fallback, recurrence after fallback activation, or a genuine external
+   blocker. Use `Fix required` for incomplete remediation, an activated
+   one-time LOW manual fallback, or failed required validation.
 
 ## MEDIUM Artifact
 
