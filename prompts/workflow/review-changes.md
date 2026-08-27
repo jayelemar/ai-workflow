@@ -125,7 +125,26 @@ complete`, `Completed with accepted review risk`, and `Blocked`.
    planning. Carry the saved architectural fallback and complete round evidence
    into the next plan, and reassess the classification because repeated failure
    may show that the prior risk estimate was too low. Do not activate or apply
-   the fallback incrementally under the current plan.
+   the fallback incrementally under the current plan. Make the blocked result
+   immediately actionable without a follow-up question:
+   - For MEDIUM or HIGH, derive a concise unused kebab-case plan name from the
+     saved fallback boundary and record this complete invocation under
+     `Do this next:` and in the durable next-action field:
+
+     ```text
+     execute .ai/prompts/workflow/create-plan.md
+
+     Plan name: <derived unused fallback plan name>
+     Classification: resolve from current finalized context
+     Spec: <current finalized spec path>
+     Flow artifacts: AUTO
+     ```
+
+   - For LOW, derive the fallback plan name in the same way and return a direct
+     create-plan invocation with `Classification: LOW`, `Spec: N/A: LOW`, and
+     `Flow artifacts: AUTO`. Create-plan reapplies the deterministic classifier
+     and stops with an exact escalation action only if the fallback proves a
+     higher-class trigger; LOW itself never requires a spec.
 5. After successful remediation and validation, automatically start the next
    fresh round only when the automatic budget still has one. HIGH first records
    required remediation commits under `.ai/prompts/workflow/goal-checkpoint.md`.
@@ -216,8 +235,12 @@ Fix required | Awaiting risk decision | Ready to complete | Completed with accep
 
 ## Required Next Action
 
-<fresh review | continue review until clear | remediate and validate | risk decision | complete | replan for fallback | exact blocker resolution>
+<exact copy-pasteable invocation, or exact blocker resolution followed by the invocation that resumes the owning stage>
 ```
+
+For every non-complete status, write the exact action the user can take now.
+Lead the user-facing result with the status and cause, then reproduce the
+durable action under `Do this next:`. Never require the user to ask what to do.
 
 ## HIGH Evidence
 

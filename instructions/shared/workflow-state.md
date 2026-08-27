@@ -1,5 +1,5 @@
-Version: 4.1
-Last Updated: 2026-08-27
+Version: 4.2
+Last Updated: 2026-08-28
 
 # Workflow Stage Instructions
 
@@ -33,6 +33,21 @@ start planning.
   none silently invokes delivery or another workflow stage.
 - An explicit manual review may remediate an already implemented plan-owned
   diff, but it never starts an untouched plan or expands execution scope.
+
+## Actionable Stops
+
+- Whenever a workflow stage stops for a blocker, missing input, or required
+  stage transition, its final response must state the exact blocker and then
+  immediately provide `Do this next:` followed by the exact user action.
+- When the action invokes another stage or resumes the current one, provide a
+  complete copy-pasteable invocation with every currently known required input
+  filled in. When an operator decision or external action must happen first,
+  name that exact decision or action and include the invocation to resume.
+- A durable `Next Action` or `Required Next Action` field follows the same
+  contract. Do not reduce it to generic prose such as `return to planning`,
+  `resolve the blocker`, or a request for the user to ask what to do next.
+- Providing the invocation does not start or authorize that stage. The user
+  must still invoke it explicitly.
 
 ## Anti-Patterns
 

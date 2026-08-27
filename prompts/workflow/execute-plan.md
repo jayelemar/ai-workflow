@@ -46,3 +46,11 @@ Report changed scope by repository, required validation, deferred optional
 checks and risk, preserved unrelated work, and the LOW self-check or exact
 MEDIUM review status and required next action. Claim completion only when the
 canonical review result permits it.
+
+For every blocked or otherwise non-complete result, lead with the exact status
+and cause, then write `Do this next:` and provide the exact action required by
+`.ai/instructions/shared/workflow-state.md`. For MEDIUM, reproduce the
+canonical review artifact's `## Required Next Action` verbatim; do not
+paraphrase it into a generic recommendation. For LOW, construct the exact
+blocker resolution and resume invocation directly. Never make the user ask
+what to do next. Providing a command does not invoke the next stage.

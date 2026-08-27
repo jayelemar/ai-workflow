@@ -76,6 +76,49 @@ test("explicit stages retain intake, spec, plan, and execution boundaries", asyn
   );
 });
 
+test("blocked workflow results provide an exact next action without a follow-up", async () => {
+  const [stages, review, execute] = await Promise.all([
+    readSource("instructions/shared/workflow-state.md"),
+    readSource("prompts/workflow/review-changes.md"),
+    readSource("prompts/workflow/execute-plan.md"),
+  ]);
+  const stageContract = normalize(stages);
+  const reviewContract = normalize(review);
+  const executeContract = normalize(execute);
+
+  assert.match(
+    stageContract,
+    /final response must state the exact blocker.*immediately provide `Do this next:` followed by the exact user action/i,
+  );
+  assert.match(stageContract, /complete copy-pasteable invocation/);
+  assert.match(
+    stageContract,
+    /Do not reduce it to generic prose such as `return to planning`/,
+  );
+  assert.match(
+    stageContract,
+    /Providing the invocation does not start or authorize that stage/,
+  );
+
+  assert.match(
+    reviewContract,
+    /Make the blocked result immediately actionable without a follow-up question/,
+  );
+  assert.match(
+    review,
+    /execute \.ai\/prompts\/workflow\/create-plan\.md[\s\S]*Classification: resolve from current finalized context[\s\S]*Flow artifacts: AUTO/,
+  );
+  assert.match(
+    reviewContract,
+    /For LOW, derive the fallback plan name.*direct create-plan invocation with `Classification: LOW`, `Spec: N\/A: LOW`/,
+  );
+  assert.match(
+    executeContract,
+    /reproduce the canonical review artifact's `## Required Next Action` verbatim/,
+  );
+  assert.match(executeContract, /Never make the user ask what to do next/);
+});
+
 test("classification uses deterministic LOW and HIGH triggers with MEDIUM fallback", async () => {
   const selection = normalize(
     await readSource("prompts/workflow/select-workflow.md"),
