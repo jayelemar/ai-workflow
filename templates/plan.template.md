@@ -39,7 +39,7 @@ relative to the plan workspace.
 - Format: `review-strategy@2`
 - Sensitive-boundary trigger: <named boundary and deterministic trigger | `None: no named sensitive boundary`>
 - Targeted checks: <checks for the named boundary | compact correctness and changed-boundary regression checks>
-- Architectural fallback: <specific isolation, allowlist, closed-form enforcement, reducer/state arbiter/owning-hook redesign, or other bounded redesign to apply if one root-cause family remains blocking in two fresh rounds; required for a named sensitive boundary or asynchronous UI state with multiple independent writers | `N/A: no named sensitive boundary or asynchronous multi-writer state surface`>
+- Architectural fallback: <specific isolation, allowlist, closed-form enforcement, reducer/state arbiter/owning-hook redesign, or other bounded redesign to carry into replanning if one root-cause family remains blocking in two fresh rounds; required for a named sensitive boundary or asynchronous UI state with multiple independent writers | `N/A: no named sensitive boundary or asynchronous multi-writer state surface`>
 - External evidence: <operator, staging, credential, device, or service evidence | `N/A: no external evidence required`>
 
 Include this subsection only when `Sensitive-boundary trigger` names a boundary:

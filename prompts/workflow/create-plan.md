@@ -76,7 +76,8 @@ Use `.ai/templates/plan.template.md` and save
   because LOW formal execution uses self-check; `N/A` is allowed only when no
   named sensitive boundary or asynchronous multi-writer state surface exists,
   and it must give that concrete reason. Include every path that fallback may
-  create or change in planned ownership so activation never expands scope.
+  create or change in planned ownership so any required replan has an explicit,
+  reviewable starting boundary.
 - Save exactly one automatic fresh-review budget for MEDIUM/HIGH:
   - `1` for single-repository MEDIUM work with no sensitive surface and no
     cross-boundary contract;

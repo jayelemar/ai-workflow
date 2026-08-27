@@ -156,7 +156,7 @@ test("LOW plans are compact unless a named sensitive boundary triggers detail", 
   assert.match(template, /Mutation or property testing/);
 });
 
-test("LOW asynchronous multi-writer plans save and can apply one architectural fallback", async () => {
+test("LOW asynchronous multi-writer plans save a fallback and replan repeated families", async () => {
   const [template, createPlan, review] = await Promise.all([
     readSource("templates/plan.template.md"),
     readSource("prompts/workflow/create-plan.md"),
@@ -190,14 +190,14 @@ test("LOW asynchronous multi-writer plans save and can apply one architectural f
   assert.doesNotMatch(template, /N\/A: LOW has no independent review rounds/);
   assert.match(
     reviewLoop,
-    /LOW manual-until-clear loop.*saved architectural fallback is concrete/,
+    /For every classification and invocation mode.*set `Blocked` and return to planning/,
   );
-  assert.match(reviewLoop, /apply that fallback exactly once/);
-  assert.match(reviewLoop, /automatically start a fresh cumulative review/);
+  assert.match(reviewLoop, /reassess the classification/);
   assert.match(
     reviewLoop,
-    /same family remains blocking.*after fallback activation.*`Blocked`/,
+    /Do not activate or apply the fallback incrementally under the current plan/,
   );
+  assert.doesNotMatch(reviewLoop, /one-time LOW manual fallback/);
 });
 
 test("review-strategy@2 owns all three deterministic budget selections", async () => {
@@ -386,12 +386,12 @@ test("review stops repeated root causes and rejects invalid or stale tokens", as
   );
   assert.match(
     review,
-    /fallback is missing, `N\/A`, inapplicable, or outside those boundaries, set `Blocked` and return to planning/,
+    /For every classification and invocation mode.*set `Blocked` and return to planning/,
   );
   assert.match(review, /stop incremental fixes/i);
   assert.match(
     review,
-    /same family remains blocking in any fresh round after fallback activation, set `Blocked` and return to planning/,
+    /Do not activate or apply the fallback incrementally under the current plan/,
   );
   assert.match(
     review,
@@ -403,7 +403,7 @@ test("review stops repeated root causes and rejects invalid or stale tokens", as
   );
   assert.match(
     review,
-    /Use `Fix required` for incomplete remediation, an activated one-time LOW manual fallback, or failed required validation/,
+    /Use `Fix required` for incomplete remediation or failed required validation/,
   );
 });
 

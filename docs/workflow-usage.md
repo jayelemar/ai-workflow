@@ -90,6 +90,12 @@ This uses the locked workflow reviewer rather than the operator-only Codex UI
 `/review` action. It leaves P3 findings advisory and stops only when no in-scope
 P0–P2 remain or the canonical review contract requires a blocker.
 
+For LOW, MEDIUM, and HIGH alike, if the same root-cause family remains blocking
+in two fresh review rounds, stop incremental fixes, mark the current execution
+`Blocked`, and return to planning with the saved architectural fallback and
+round evidence. Reassess classification during replanning; no classification
+may activate that fallback inside the blocked plan.
+
 ## Execute or Resume HIGH
 
 Run the exact two-line command emitted by plan creation or returned by the
