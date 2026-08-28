@@ -8,14 +8,26 @@ saving the plan.
 ## Input
 
 ```text
-Plan name: <kebab-case-name>
+Plan name: <kebab-case-name> | AUTO
+Supersedes: N/A | .ai/plans/<current-plan-name>.md
 Classification: LOW | MEDIUM | HIGH | resolve from current finalized context
 Spec: .ai/specs/<name>.spec.md | N/A: LOW | resolve from current finalized context
 Flow artifacts: .ai/artifacts/<name>/ | AUTO | N/A: <concrete reason>
 ```
 
-`Plan name` is required and determines the plan filename and artifact
-directory. Treat an omitted `Flow artifacts` value as `AUTO`. Resolve
+`Plan name` is required and `Supersedes` is required. For an initial plan, require a safe
+kebab-case name and `Supersedes: N/A`; that name is both the plan name and
+stable work-item name, with revision `1`. Accept `Plan name: AUTO` only with a
+root-level active predecessor under `.ai/plans/`. Derive the successor as
+`<work-item>-r<N+1>` from the predecessor's lineage. A predecessor without a
+`## Plan Lineage` section is a compatible revision `1` whose work-item name is
+its `# Plan:` name and whose archive history is empty. Reject a supplied name
+for a replan, a non-AUTO initial name, unsafe or inconsistent lineage, a name
+or archive collision, and more than one active plan for the same work item.
+
+The resolved plan name determines the active plan filename and new
+revision-specific artifact directory. Treat an omitted `Flow artifacts` value
+as `AUTO`. Resolve
 classification or spec from conversation only when exactly one finalized input
 applies; otherwise stop for the ambiguous input.
 
@@ -39,6 +51,9 @@ contracts, validation, Git roots, and integration bases.
   artifacts.
 - Stop for missing desired behavior, unresolved decisions, or an unidentified
   integration base.
+- Treat only root-level `.ai/plans/*.md` files as active execution authority.
+  Files named `superseded-plan.md` under `.ai/artifacts/` are immutable history
+  and cannot authorize execution, review, resume, or worktree preparation.
 - If any supplied plan, review, handoff, or worktree report belongs to an older
   contract, return exactly: `Legacy workflow artifact: <path> uses <format>;
 replan using the current contract before execution or resume.` Do not migrate,
@@ -48,6 +63,12 @@ replan using the current contract before execution or resume.` Do not migrate,
 
 Use `.ai/templates/plan.template.md` and save
 `.ai/plans/<plan-name>.md`.
+
+- Populate `## Plan Lineage` on every newly generated plan. For an initial
+  plan, record its stable name, revision `1`, no predecessor, and no archived
+  revisions. For a replan, preserve the predecessor's work-item name, increment
+  its revision by exactly one, record the immediate archive destination, and
+  copy the complete ordered archive history followed by that destination.
 
 - Declare every Git repository by stable ID, explicit relative root, planned
   ownership, and evidence-backed integration base. The plan workspace may be a
@@ -95,6 +116,32 @@ Use `.ai/templates/plan.template.md` and save
   criteria into the plan.
 - Create no workflow state, sidecar, event log, preview, or progress record.
 
+## Replan Activation
+
+For a replan, finish and validate the successor plan in `.ai/tmp/` and any new
+artifacts at their declared revision-specific paths before changing the active
+plan set. Reuse the predecessor's declared flow-artifact pair only when it
+remains complete and consistent with the current finalized spec; otherwise
+create the required pair under the successor artifact directory. MEDIUM review
+evidence and HIGH handoff evidence are always revision-specific and never
+reused. Create an initial HIGH handoff from the validated candidate through the
+candidate exception in `.ai/prompts/workflow/goal-checkpoint.md`; it remains
+non-authoritative until activation succeeds.
+
+Activate the replan only through
+`.ai/scripts/workflow/activate-replan.mjs`, following the workspace's required
+command wrapper. The helper must move the predecessor to
+`.ai/artifacts/<predecessor-plan-name>/superseded-plan.md` and move the validated
+candidate into `.ai/plans/<successor-plan-name>.md` as one rollback-protected
+operation. Never overwrite an archive or active plan. If activation fails,
+leave the predecessor active, expose no partial successor in `.ai/plans/`,
+preserve diagnostic artifacts, and return the exact blocker and retry action.
+Invoke it with exactly these resolved paths:
+
+```text
+node .ai/scripts/workflow/activate-replan.mjs --predecessor .ai/plans/<predecessor-plan-name>.md --candidate .ai/tmp/<successor-plan-name>.md
+```
+
 ## HIGH Handoff
 
 For HIGH, initialize `.ai/artifacts/<plan-name>/goal-handoff.md` as
@@ -112,7 +159,8 @@ The handoff stores evidence, not copied review or commit policy.
 
 ## Stage Boundary and Final Response
 
-Saving a plan does not implement it. LOW/MEDIUM next uses
+Saving a plan does not implement it. For a replan, archive activation also does
+not implement it. LOW/MEDIUM next uses
 `execute .ai/plans/<plan-name>.md`. HIGH returns exactly:
 
 ```text

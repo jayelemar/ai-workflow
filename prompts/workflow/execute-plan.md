@@ -9,6 +9,10 @@ routed for the implementation scope.
 
 ## Preconditions
 
+- Require the requested plan to be a root-level active `.ai/plans/*.md` file.
+  If its former active path was superseded, apply `## Superseded Plan
+Resolution` from `.ai/instructions/shared/workflow-state.md` and stop without
+  implementation.
 - Reject any older plan, review, handoff, or worktree report with exactly:
   `Legacy workflow artifact: <path> uses <format>; replan using the current
 contract before execution or resume.` Do not migrate, overwrite, or delete it.
@@ -26,7 +30,8 @@ contract before execution or resume.` Do not migrate, overwrite, or delete it.
   order.
 - Classify discoveries only through the corrective-deviation table in
   `.ai/AGENTS.md`. Record a qualifying correction and affected evidence; stop
-  for a material discovery.
+  for a material discovery. Its actionable planning invocation must use
+  `Plan name: AUTO` and name this active plan under `Supersedes`.
 - Run every required plan validation command. Defer optional external evidence
   only under `.ai/AGENTS.md` disclosure rules.
 

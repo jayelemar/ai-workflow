@@ -54,6 +54,7 @@ evidence. The canonical spec prompt defines its evidence gate.
 Use `.ai/wrappers/create-plan.md`.
 
 Plan name: <kebab-case-name>
+Supersedes: N/A
 Classification: LOW | MEDIUM | HIGH
 Spec: N/A: LOW | .ai/specs/<name>.spec.md
 Flow artifacts: AUTO
@@ -62,6 +63,24 @@ Flow artifacts: AUTO
 The current plan template records `review-strategy@2` and its deterministic
 automatic review budget. See [Create Plan](../prompts/workflow/create-plan.md) and the
 [Plan Template](../templates/plan.template.md).
+
+For a replan, reference the current root-level active plan and let the workflow
+derive the revision name:
+
+```text
+Use `.ai/wrappers/create-plan.md`.
+
+Plan name: AUTO
+Supersedes: .ai/plans/<current-plan-name>.md
+Classification: resolve from current finalized context
+Spec: N/A: LOW | .ai/specs/<name>.spec.md
+Flow artifacts: AUTO
+```
+
+The validated predecessor moves to
+`.ai/artifacts/<current-plan-name>/superseded-plan.md`; only the successor stays
+under `.ai/plans/`. Replanning reclassifies the actual successor scope and uses
+`/goal` only when that result is HIGH.
 
 ## Execute LOW/MEDIUM
 

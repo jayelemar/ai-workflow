@@ -27,8 +27,8 @@ prune, branch deletion, or manual record deletion.
 ## Preview
 
 Run the utility without apply flags. Report its complete task-root
-classification and workflow-record count. Do not mutate anything or ask for a
-deletion decision in `preview` mode.
+classification, active-plan count, archived-revision count, and workflow-record
+count. Do not mutate anything or ask for a deletion decision in `preview` mode.
 
 Treat these utility classifications as authoritative:
 

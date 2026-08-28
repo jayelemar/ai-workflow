@@ -178,6 +178,7 @@ test("preview lists clean, dirty, and orphan tasks without mutation", async () =
     const orphanRoot = path.join(fixture.worktreesDirectory, "orphan-task");
     await mkdir(path.join(orphanRoot, ".ai"), { recursive: true });
     await writeRecord(fixture, "plans/clean-task.md");
+    await writeRecord(fixture, "artifacts/old-clean-task/superseded-plan.md");
 
     const { output, result } = await run(fixture, [clean, dirty]);
 
@@ -187,6 +188,8 @@ test("preview lists clean, dirty, and orphan tasks without mutation", async () =
     assert.match(output.join("\n"), /M src\/changed\.js/);
     assert.match(output.join("\n"), /\?\? src\/new\.js/);
     assert.match(output.join("\n"), /orphan-task: Approval required/);
+    assert.match(output.join("\n"), /Active plans: 1/);
+    assert.match(output.join("\n"), /Archived plan revisions: 1/);
     assert.match(output.join("\n"), /No mutation occurred/);
     assert.equal(await pathExists(clean.taskRoot), true);
     assert.equal(await pathExists(dirty.taskRoot), true);
@@ -204,12 +207,17 @@ test("clean-only apply removes clean tasks and unrelated records but preserves d
     await writeRecord(
       fixture,
       "plans/dirty-task.md",
-      "Spec: `.ai/specs/dirty-request.spec.md`\n",
+      [
+        "Spec: `.ai/specs/dirty-request.spec.md`",
+        "Archived revisions: `.ai/artifacts/old-dirty-task/superseded-plan.md`",
+        "",
+      ].join("\n"),
     );
     await writeRecord(fixture, "specs/clean-task.spec.md");
     await writeRecord(fixture, "specs/dirty-request.spec.md");
     await writeRecord(fixture, "artifacts/clean-task/review.md");
     await writeRecord(fixture, "artifacts/dirty-task/review.md");
+    await writeRecord(fixture, "artifacts/old-dirty-task/superseded-plan.md");
 
     const { commands, output, result } = await run(fixture, [clean, dirty], {
       args: ["--apply-clean"],
@@ -234,6 +242,16 @@ test("clean-only apply removes clean tasks and unrelated records but preserves d
     assert.equal(
       await readFile(
         path.join(fixture.workflowDirectory, "artifacts/dirty-task/review.md"),
+        "utf8",
+      ),
+      "record\n",
+    );
+    assert.equal(
+      await readFile(
+        path.join(
+          fixture.workflowDirectory,
+          "artifacts/old-dirty-task/superseded-plan.md",
+        ),
         "utf8",
       ),
       "record\n",

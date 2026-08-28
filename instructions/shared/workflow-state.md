@@ -1,4 +1,4 @@
-Version: 4.2
+Version: 4.3
 Last Updated: 2026-08-28
 
 # Workflow Stage Instructions
@@ -29,6 +29,9 @@ start planning.
 - A material execution discovery returns to a newly invoked specification or
   planning stage. A qualifying correction under the table in `.ai/AGENTS.md`
   remains inside the already authorized execution stage.
+- Replanning does not itself change classification. Planning reapplies the
+  deterministic classifier, archives the predecessor only after the successor
+  is valid, and leaves exactly one active plan revision for that work item.
 - Review, checkpoint, and delivery actions remain part of their owning stage;
   none silently invokes delivery or another workflow stage.
 - An explicit manual review may remediate an already implemented plan-owned
@@ -48,6 +51,21 @@ start planning.
   `resolve the blocker`, or a request for the user to ask what to do next.
 - Providing the invocation does not start or authorize that stage. The user
   must still invoke it explicitly.
+
+## Superseded Plan Resolution
+
+Only a root-level `.ai/plans/<name>.md` file is active. When an invocation
+references a missing former active plan, inspect
+`.ai/artifacts/<name>/superseded-plan.md` and the lineage of root-level active
+plans. Treat it as superseded only when exactly one active plan has the same
+work-item name and lists that archive in its ordered history. Return
+`Superseded plan: <former path> -> <active path>`, then `Do this next:` and the
+active plan's exact `execute` invocation for LOW/MEDIUM or validated two-line
+`/goal` invocation for HIGH. Do not start it.
+
+Missing, malformed, cyclic, duplicate, or ambiguous lineage is a blocker. Name
+the conflicting paths and require an explicit create-plan repair; never choose
+by modification time, filename sorting, or conversation recency.
 
 ## Anti-Patterns
 

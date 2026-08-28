@@ -106,11 +106,11 @@ test("blocked workflow results provide an exact next action without a follow-up"
   );
   assert.match(
     review,
-    /execute \.ai\/prompts\/workflow\/create-plan\.md[\s\S]*Classification: resolve from current finalized context[\s\S]*Flow artifacts: AUTO/,
+    /execute \.ai\/prompts\/workflow\/create-plan\.md[\s\S]*Plan name: AUTO[\s\S]*Supersedes: <current active plan path>[\s\S]*Classification: resolve from current finalized context[\s\S]*Flow artifacts: AUTO/,
   );
   assert.match(
     reviewContract,
-    /For LOW, derive the fallback plan name.*direct create-plan invocation with `Classification: LOW`, `Spec: N\/A: LOW`/,
+    /For LOW, return the same AUTO replan invocation.*`Classification: LOW`, `Spec: N\/A: LOW`/,
   );
   assert.match(
     executeContract,
@@ -177,9 +177,62 @@ test("current plans use versioned structure and a required Plan name input", asy
     assert.match(source, /Plan name: `?<kebab-case-name>`?/);
   }
   assert.match(prompt, /`Plan name` is required/);
+  assert.match(prompt, /`Supersedes` is required/);
+  assert.match(template, /## Plan Lineage/);
+  assert.match(template, /Work item/);
+  assert.match(template, /Revision/);
+  assert.match(template, /Archived revisions/);
   assert.match(template, /### Repository: <repository-id>/);
   assert.match(template, /Integration base/);
   assert.match(template, /Repository: `<exactly-one-repository-id>`/);
+});
+
+test("replans archive one predecessor and retain one active lineage revision", async () => {
+  const [createPlan, stages, execute, checkpoint, prepare, packageSource] =
+    await Promise.all([
+      readSource("prompts/workflow/create-plan.md"),
+      readSource("instructions/shared/workflow-state.md"),
+      readSource("prompts/workflow/execute-plan.md"),
+      readSource("prompts/workflow/goal-checkpoint.md"),
+      readSource("prompts/utilities/prepare-worktree.md"),
+      readSource("package.json"),
+    ]);
+  const planning = normalize(createPlan);
+  const stageContract = normalize(stages);
+
+  assert.match(planning, /Plan name: <kebab-case-name> \| AUTO/);
+  assert.match(
+    planning,
+    /Supersedes: N\/A \| \.ai\/plans\/<current-plan-name>\.md/,
+  );
+  assert.match(planning, /without a `## Plan Lineage` section.*revision `1`/i);
+  assert.match(planning, /<work-item>-r<N\+1>/);
+  assert.match(planning, /activate-replan\.mjs/);
+  assert.match(
+    planning,
+    /--predecessor \.ai\/plans\/<predecessor-plan-name>\.md --candidate \.ai\/tmp\/<successor-plan-name>\.md/,
+  );
+  assert.match(planning, /Never overwrite an archive or active plan/);
+  assert.match(planning, /leave the predecessor active/i);
+  assert.match(
+    stageContract,
+    /Only a root-level `\.ai\/plans\/<name>\.md` file is active/,
+  );
+  assert.match(
+    stageContract,
+    /Superseded plan: <former path> -> <active path>/,
+  );
+  for (const source of [execute, prepare]) {
+    assert.match(normalize(source), /Superseded Plan Resolution/);
+  }
+  assert.match(
+    normalize(checkpoint),
+    /initial handoff creation.*validated replan candidate.*cannot refresh it, execute it, or authorize the candidate/i,
+  );
+  assert.match(
+    JSON.parse(packageSource).scripts["test:focused"],
+    /activate-replan\.test\.mjs/,
+  );
 });
 
 test("LOW plans are compact unless a named sensitive boundary triggers detail", async () => {

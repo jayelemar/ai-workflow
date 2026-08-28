@@ -14,6 +14,14 @@ worktree report with exactly: `Legacy workflow artifact: <path> uses <format>;
 replan using the current contract before execution or resume.` Never migrate,
 overwrite, or delete it.
 
+Require `.ai/plans/<goal-name>.md` to be the root-level active plan. The only
+exception is initial handoff creation called by create-plan for a validated
+replan candidate at `.ai/tmp/<goal-name>.md`; this may write the new handoff but
+cannot refresh it, execute it, or authorize the candidate. If a former active
+plan was superseded, apply `## Superseded Plan Resolution` from
+`.ai/instructions/shared/workflow-state.md` and stop without modifying the old
+handoff.
+
 ## Scope
 
 - This action records verified progress only. It does not implement work,

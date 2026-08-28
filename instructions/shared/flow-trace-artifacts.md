@@ -1,4 +1,4 @@
-Version: 3.2
+Version: 3.3
 Last Updated: 2026-08-24
 
 # Flow Artifact Instructions
@@ -26,6 +26,11 @@ When required, create-plan applies
 - `.ai/artifacts/<plan-name>/user-journey.md` using `user-journey@1`;
 - `.ai/artifacts/<plan-name>/implementation-map.md` using
   `implementation-map@1`.
+
+A replan may continue to reference its predecessor's pair when both files
+remain complete and consistent with the current finalized spec. Otherwise it
+creates a new pair under the successor plan name. Review and handoff evidence
+are never reused across revisions.
 
 The finalized spec owns desired behavior. Repository inspection supplies only
 current entry points, ownership, contracts, data effects, services, and tests.

@@ -12,7 +12,8 @@ Ordered application-development stages and their supporting controls:
   bug-fix behavior.
 - [Generate flow artifacts](workflow/generate-flow-artifacts.md): map required
   journeys and implementation ownership.
-- [Create plan](workflow/create-plan.md): save the executable plan.
+- [Create plan](workflow/create-plan.md): save an initial executable plan or
+  archive an active predecessor and activate its lineage successor.
 - [Prepare worktree](utilities/prepare-worktree.md): prepare validated execution
   targets.
 - [Execute plan](workflow/execute-plan.md): implement an explicitly invoked

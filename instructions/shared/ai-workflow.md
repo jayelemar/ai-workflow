@@ -1,4 +1,4 @@
-Version: 6.2
+Version: 6.3
 Last Updated: 2026-08-28
 
 # AI Workflow Instructions
@@ -14,7 +14,8 @@ duplicating stage or review protocols.
   table.
 - `.ai/instructions/shared/workflow-state.md` owns stage transitions only.
 - `.ai/templates/plan.template.md` owns `plan-manifest@3`, plan structure,
-  `review-strategy@2`, and review-budget fields.
+  backward-compatible plan lineage, `review-strategy@2`, and review-budget
+  fields.
 - `.ai/prompts/workflow/review-changes.md` solely owns `implementation-review@2`, final
   and explicitly invoked manual review loops, risk decisions, and review-round
   accounting.
@@ -38,6 +39,9 @@ duplicating stage or review protocols.
   use dependent tasks with an explicit provider-to-consumer contract.
 - The plan workspace may be a Git parent checkout or an unversioned
   coordination root for multiple independent repositories.
+- Only root-level `.ai/plans/*.md` files are active plans. Replanning preserves
+  one active revision per work item and stores superseded plans as evidence
+  under the predecessor's artifact directory.
 
 ## Validation
 

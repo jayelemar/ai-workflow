@@ -10,7 +10,13 @@ It does not implement application behavior.
 ```text
 Spec: .ai/specs/<name>.spec.md
 Classification: MEDIUM | HIGH
+Artifact owner: <safe-plan-name> | AUTO
 ```
+
+Default an omitted `Artifact owner` or `AUTO` to the spec basename for a direct
+invocation. When create-plan applies this prompt, it must supply the resolved
+active plan name so new artifacts remain revision-specific. Reuse a valid
+predecessor pair instead of creating files when the replan contract permits it.
 
 Read `.ai/AGENTS.md`, the finalized spec,
 `.ai/instructions/shared/flow-trace-artifacts.md`,
@@ -23,7 +29,7 @@ stop with the exact missing spec decision.
 
 ## User Journey
 
-Save `.ai/artifacts/<name>/user-journey.md` using this schema:
+Save `.ai/artifacts/<artifact-owner>/user-journey.md` using this schema:
 
 ```md
 # <journey title>
@@ -57,7 +63,7 @@ entry points to observed repository paths. `Open Decisions` must be exactly
 
 ## Implementation Map
 
-Save `.ai/artifacts/<name>/implementation-map.md` using this schema:
+Save `.ai/artifacts/<artifact-owner>/implementation-map.md` using this schema:
 
 ```md
 # Implementation Map: <name>
@@ -113,7 +119,7 @@ end with no open decisions.
 
 Return exactly:
 
-`Flow artifacts saved to .ai/artifacts/<name>/ [user-journey@1, implementation-map@1]`
+`Flow artifacts saved to .ai/artifacts/<artifact-owner>/ [user-journey@1, implementation-map@1]`
 
 When create-plan applies this prompt, return control to create-plan after both
 artifacts pass validation instead of emitting the standalone final response.

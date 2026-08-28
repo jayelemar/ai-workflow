@@ -12,6 +12,11 @@ return exactly: `Legacy workflow artifact: <path> uses <format>; replan using
 the current contract before execution or resume.` Do not migrate, overwrite, or
 delete the artifact.
 
+Require the owning plan to be a root-level active `.ai/plans/*.md` file. If its
+former active path was superseded, apply `## Superseded Plan Resolution` from
+`.ai/instructions/shared/workflow-state.md` and stop without review or
+remediation.
+
 ## Invocation Modes
 
 Formal completion mode is invoked by the owning MEDIUM execution or HIGH goal
@@ -127,24 +132,24 @@ complete`, `Completed with accepted review risk`, and `Blocked`.
    may show that the prior risk estimate was too low. Do not activate or apply
    the fallback incrementally under the current plan. Make the blocked result
    immediately actionable without a follow-up question:
-   - For MEDIUM or HIGH, derive a concise unused kebab-case plan name from the
-     saved fallback boundary and record this complete invocation under
+   - For MEDIUM or HIGH, record this complete invocation under
      `Do this next:` and in the durable next-action field:
 
      ```text
      execute .ai/prompts/workflow/create-plan.md
 
-     Plan name: <derived unused fallback plan name>
+     Plan name: AUTO
+     Supersedes: <current active plan path>
      Classification: resolve from current finalized context
      Spec: <current finalized spec path>
      Flow artifacts: AUTO
      ```
 
-   - For LOW, derive the fallback plan name in the same way and return a direct
-     create-plan invocation with `Classification: LOW`, `Spec: N/A: LOW`, and
-     `Flow artifacts: AUTO`. Create-plan reapplies the deterministic classifier
-     and stops with an exact escalation action only if the fallback proves a
-     higher-class trigger; LOW itself never requires a spec.
+   - For LOW, return the same AUTO replan invocation with this active plan under
+     `Supersedes`, `Classification: LOW`, `Spec: N/A: LOW`, and `Flow artifacts:
+AUTO`. Create-plan reapplies the deterministic classifier and stops with an
+     exact escalation action only if the fallback proves a higher-class
+     trigger; LOW itself never requires a spec.
 5. After successful remediation and validation, automatically start the next
    fresh round only when the automatic budget still has one. HIGH first records
    required remediation commits under `.ai/prompts/workflow/goal-checkpoint.md`.

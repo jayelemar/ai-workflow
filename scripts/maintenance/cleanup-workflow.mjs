@@ -388,6 +388,14 @@ const printInventory = ({ inventory, output }) => {
     for (const blocker of task.blockers) output(`  Blocker: ${blocker}`);
   }
   for (const blocker of inventory.blockers) output(`BLOCKER: ${blocker}`);
+  const activePlans = inventory.records.entries.filter((entry) =>
+    /^plans\/[^/]+\.md$/.test(entry.relativePath),
+  ).length;
+  const archivedRevisions = inventory.records.entries.filter((entry) =>
+    /^artifacts\/[^/]+\/superseded-plan\.md$/.test(entry.relativePath),
+  ).length;
+  output(`Active plans: ${activePlans}`);
+  output(`Archived plan revisions: ${archivedRevisions}`);
   output(`Workflow record target count: ${inventory.records.entries.length}`);
 };
 

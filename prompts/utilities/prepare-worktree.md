@@ -26,6 +26,10 @@ resolves to `.ai/plans/<plan-name>.md`. If none is supplied, inspect
 `.ai/plans/*.md`; use it only when exactly one plan exists, otherwise stop and
 list the candidate paths. Do not select by recency.
 
+Only root-level `.ai/plans/*.md` files are active. If an explicitly requested
+former active path was superseded, apply `## Superseded Plan Resolution` from
+`.ai/instructions/shared/workflow-state.md` and stop before mutation.
+
 Resolve the **plan workspace** as the directory containing the source `.ai/`
 directory. The workspace may or may not be a Git repository. Reject absolute
 paths, traversal, symlink escapes, unreadable files, and plans outside the
@@ -39,6 +43,12 @@ plan workspace, and an explicit integration-base ref. Resolve each root to a
 Git checkout. A resolved root may be inside the plan workspace. For a plan
 that declares two or more repositories, it may instead be an immediate sibling
 of the plan workspace when both directories have the same real parent.
+
+When `## Plan Lineage` is present, require a safe work-item name, a positive
+revision, a plan name consistent with that revision, an immediate predecessor
+that is last in the unique ordered archive history, and no second root-level
+active plan for the same work item. A lineage-free `plan-manifest@3` remains a
+compatible revision `1` whose work-item name equals its plan name.
 
 If the plan, a required handoff/review, or an existing worktree report belongs
 to an older contract, stop before mutation and return exactly: `Legacy workflow

@@ -4,6 +4,13 @@
 
 plan-manifest@3
 
+## Plan Lineage
+
+- Work item: `<stable-kebab-case-name>`
+- Revision: `<positive-integer>`
+- Supersedes: `N/A: initial plan` | `.ai/artifacts/<predecessor-plan-name>/superseded-plan.md`
+- Archived revisions: `None` | `<ordered comma-separated archived-plan paths, oldest first>`
+
 ## Classification
 
 LOW | MEDIUM | HIGH

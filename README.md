@@ -51,7 +51,8 @@ invocation. Copy-ready inputs are in [Workflow Usage](docs/workflow-usage.md).
 
 - Specs: `feature-spec@1`, `bugfix-spec@1`
 - Flow artifacts: `user-journey@1`, `implementation-map@1`
-- Plan: `plan-manifest@3` with `review-strategy@2` and a saved review budget
+- Plan: `plan-manifest@3` with backward-compatible lineage,
+  `review-strategy@2`, and a saved review budget
 - MEDIUM review: `implementation-review@2`
 - HIGH handoff: `goal-handoff@2`
 - Worktree preparation report: `worktree-setup@1`, tied to its current plan
@@ -67,6 +68,12 @@ Contract owners:
 
 Legacy generated artifacts remain untouched and cannot authorize execution or
 resume; create a new plan under the current contracts.
+
+Only root-level files under `.ai/plans/` are active. A replan keeps the stable
+work-item identity, creates the next deterministic `-rN` plan, and archives its
+predecessor as `.ai/artifacts/<predecessor>/superseded-plan.md`. Archived plans
+remain evidence but cannot execute or resume. Existing plans without lineage
+remain compatible revision-1 plans and are not migrated automatically.
 
 ## Repository Boundaries
 
