@@ -195,9 +195,20 @@ add -b <branch> <task-root> <base-commit>` so Git creates the task root. For
 5. Copy project-local `.agents/skills` only when source instructions require
    it. Copy independent files, require the target to be ignored, and never
    copy `.agents` state, `.claude`, or other session data by default.
+6. When the source workspace has a `docs/` directory, mirror its complete
+   contents into `<task-root>/docs/`, including ignored, hidden, and untracked
+   documentation files. Preserve safe symlinks, permissions, timestamps, and
+   relative paths with the same archive-preserving copy semantics used for
+   `.ai/`. A Git-created target `docs/` directory may already contain tracked
+   documentation; before copying, require every existing source/destination
+   entry to have the same type and contents, and stop rather than overwrite a
+   mismatch. Require every newly introduced documentation file inside a Git
+   worktree to be ignored. For an existing task root, require the documentation
+   mirror to match and stop rather than refreshing it.
 
 In a coordination-root layout, the copied control context must remain outside
-every application worktree.
+every application worktree. This includes the mirrored workspace `docs/`
+directory.
 
 Keep the copied plan byte-for-byte unchanged. Its declared repository roots
 record source provenance and may not resolve to the generated targets from the
@@ -217,10 +228,13 @@ instruction file inside `.codex/`.
 Do not copy `node_modules`, build outputs, caches, credentials, or populated
 environment files as part of a general directory mirror.
 
-When a declared repository needs populated environment files for dependency,
-runtime, or setup validation, discover their required paths only from the
-saved plan and applicable repository instructions. For each required `.env` or
-`.env.*` source file:
+For every declared repository, treat an exact root-level `.env` in its primary
+checkout as required populated configuration even when the saved plan and
+repository instructions do not name it. Discover additional required `.env.*`
+paths from the saved plan and applicable repository instructions. A tracked
+`.env.example`, `.env.sample`, or `.env.template` is ordinary worktree content:
+it never satisfies, replaces, or suppresses copying an available populated
+`.env`. For each required `.env` or `.env.*` source file:
 
 - require a non-empty source, a safe destination within the matching target
   worktree, and a destination ignored by Git;
@@ -263,14 +277,17 @@ Verify without revealing secrets:
    root, verify the selected plan and required artifacts are readable there
    without refreshing durable control context. The task-root
    `AGENTS.override.md` is a regular file, matches the source root, and resolves
-   only to task-local instructions.
+   only to task-local instructions. When the source workspace has `docs/`, its
+   complete tree matches `<task-root>/docs/` with the same checksum dry-run
+   standard and no itemized changes, including for a reused task root.
 2. Each target is registered in `git worktree list`, resolves to its expected
    top-level directory, and has the derived branch and recorded base commit.
 3. Each source primary still has its preflight branch, commit, and status.
 4. Target control files are outside application worktrees in coordination-root
    layouts. Worktree-local Codex configuration, `AGENTS.override.md`, copied
-   skills, and environment files are ignored whenever they are inside a Git
-   worktree and do not resolve into the source workspace.
+   skills, newly introduced documentation files, and environment files are
+   ignored whenever they are inside a Git worktree and do not resolve into the
+   source workspace.
 5. Every copied environment file is non-empty, `0600`, ignored, and has only
    the required key names checked. Report the environment-file count only.
 6. Dependencies completed for every participating repository, and no tracked
@@ -299,9 +316,9 @@ Create or update only this non-secret task-local report using document format
 Record the source plan, classification, topology, repository IDs, primary and
 target paths, task-root-relative repository mapping, bases and commits,
 branches, control-context mirror result, environment destination names and
-permission status, documented runtime assignments, dependency results, user
-decisions, validation results, the source `plan-manifest@3` format, and any
-partial failure. Never record
+permission status, documentation mirror result, documented runtime
+assignments, dependency results, user decisions, validation results, the source
+`plan-manifest@3` format, and any partial failure. Never record
 environment values or credential-derived data.
 
 If a failure occurs after mutation, leave every created root, worktree, branch,
@@ -318,7 +335,7 @@ Plan: <task-local plan path>
 Topology: single Git root | monorepo | coordination root with repositories
 Task root: <absolute path>
 Repositories: <id: branch @ base commit — worktree path, one per line>
-Control context: <.ai mirror and portable Codex setup result>
+Control context: <.ai, docs, and portable Codex setup result>
 Environment: <count and non-secret validation status>
 Runtime: <documented assignments or not required>
 Dependencies: <status per repository>
@@ -340,5 +357,5 @@ Finally print the exact resolved handoff in a separate text block:
 State that setup did not run the handoff and that the user must invoke it in
 the new Codex session to authorize implementation.
 
-Version: 6.2
-Last Updated: 2026-08-21
+Version: 6.3
+Last Updated: 2026-08-31

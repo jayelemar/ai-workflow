@@ -45,6 +45,25 @@ test("prepared execution uses a verified task-local repository overlay", () => {
   assert.match(preparePrompt, /same `plan-manifest@3`/);
 });
 
+test("prepare-worktree mirrors populated root environments and workspace docs", () => {
+  assert.match(
+    preparePrompt,
+    /treat an exact root-level `.env` in its primary\s+checkout as required populated configuration/i,
+  );
+  assert.match(
+    preparePrompt,
+    /`.env.example`.*never satisfies, replaces, or suppresses copying an available\s+populated\s+`.env`/s,
+  );
+  assert.match(
+    preparePrompt,
+    /mirror its complete\s+contents into `<task-root>\/docs\/`/,
+  );
+  assert.match(
+    preparePrompt,
+    /complete tree matches `<task-root>\/docs\/` with the same checksum dry-run/,
+  );
+});
+
 test("create-plan rejects repository topology that prepare-worktree cannot use", () => {
   assert.match(createPlanPrompt, /For multi-repository coordination only/);
   assert.match(createPlanPrompt, /explicitly\s+declared immediate sibling/);
