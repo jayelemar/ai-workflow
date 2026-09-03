@@ -64,6 +64,33 @@ test("prepare-worktree mirrors populated root environments and workspace docs", 
   );
 });
 
+test("prepare-worktree emits a paste-ready tmux workspace launcher", () => {
+  assert.match(
+    preparePrompt,
+    /Create exactly two\s+full-height panes regardless of repository count/,
+  );
+  assert.match(
+    preparePrompt,
+    /initial task pane on\s+the left at approximately one-third width/,
+  );
+  assert.match(
+    preparePrompt,
+    /tmux new -s '<plan-name>' \\; splitw -t '<plan-name>:' -h -p 67/,
+  );
+  assert.match(preparePrompt, /Use only the one horizontal split above/);
+  assert.match(preparePrompt, /do not add one pane per repository/);
+  assert.match(preparePrompt, /Target the split explicitly at the new session/);
+  assert.match(
+    preparePrompt,
+    /`--panes <count>` is\s+not a supported `tmux new`\s+option/,
+  );
+  assert.match(
+    preparePrompt,
+    /Codex startup command to paste into the chosen task pane/,
+  );
+  assert.match(preparePrompt, /session-name collision/);
+});
+
 test("create-plan rejects repository topology that prepare-worktree cannot use", () => {
   assert.match(createPlanPrompt, /For multi-repository coordination only/);
   assert.match(createPlanPrompt, /explicitly\s+declared immediate sibling/);

@@ -342,10 +342,31 @@ Dependencies: <status per repository>
 Validation: <passed checks and exact gaps>
 ```
 
-Then print paste-ready session startup commands:
+Then print compact paste-ready session commands. Change to the task root first,
+then use the safe plan name as the `tmux` session name. Create exactly two
+full-height panes regardless of repository count: keep the initial task pane on
+the left at approximately one-third width and create one working pane on the
+right at approximately two-thirds width. Keep the command short and use
+standard `tmux` syntax because `--panes <count>` is not a supported `tmux new`
+option:
 
 ```bash
 cd '<resolved-task-root>'
+tmux new -s '<plan-name>' \; splitw -t '<plan-name>:' -h -p 67
+```
+
+Use only the one horizontal split above; do not add one pane per repository.
+Target the split explicitly at the new session so the command cannot alter
+another attached session. Both panes inherit the task-root working directory;
+the task-local setup report remains the authoritative repository-path map. Do
+not silently attach to,
+replace, or add panes to an existing session-name collision. If the session
+already exists, print a short collision note and use a collision-free suggested
+session name.
+
+Then print the Codex startup command to paste into the chosen task pane:
+
+```bash
 codex -m '<resolved-parent-model>' -c model_reasoning_effort='<resolved-parent-reasoning-effort>'
 ```
 
@@ -357,5 +378,5 @@ Finally print the exact resolved handoff in a separate text block:
 State that setup did not run the handoff and that the user must invoke it in
 the new Codex session to authorize implementation.
 
-Version: 6.3
-Last Updated: 2026-08-31
+Version: 6.7
+Last Updated: 2026-09-03
