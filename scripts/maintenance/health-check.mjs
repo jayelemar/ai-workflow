@@ -419,7 +419,9 @@ const validateLiteralReferences = async ({ root, stderr }) => {
     for (const match of source.matchAll(/\.ai\/[A-Za-z0-9_./*<>@-]+/g)) {
       const reference = match[0].replace(/[.,;:]+$/, "");
       if (/[<>*]/.test(reference)) continue;
-      if (/^\.ai\/(artifacts|logs|plans|specs|state)(\/|$)/.test(reference)) {
+      if (
+        /^\.ai\/(artifacts|logs|plans|specs|state|tmp)(\/|$)/.test(reference)
+      ) {
         continue;
       }
       const target = path.resolve(root, "..", reference);

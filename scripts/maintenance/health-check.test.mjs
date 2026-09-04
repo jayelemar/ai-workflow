@@ -3,6 +3,7 @@ import {
   mkdtemp,
   mkdir,
   readFile,
+  readdir,
   rm,
   symlink,
   unlink,
@@ -440,6 +441,25 @@ test("health fails when an instruction route is a directory", async () => {
   });
 });
 
+test("health permits references to ignored temporary workflow data", async () => {
+  await withFixture(async (fixture) => {
+    await writeFixtureFile(
+      fixture.root,
+      "prompts/workflow/select-workflow.md",
+      "# Prompt\n\nRead `.ai/tmp/worktree-setup.json` when it exists.\n",
+    );
+    const output = [];
+    const result = await runHealthCheck({
+      commandExecutor: createCommandExecutor(fixture),
+      stderr: (message) => output.push(message),
+      stdout: (message) => output.push(message),
+      workflowDirectory: fixture.root,
+    });
+
+    assert.equal(result.ok, true, output.join("\n"));
+  });
+});
+
 test("health fails when a local-only path is not ignored", async () => {
   const fixture = await runFixture({
     ignoredPaths: ["plans/.health-check-probe"],
@@ -650,6 +670,60 @@ test("test:all delegates to full health while focused tests remain fast", async 
   assert.equal(packageJson.scripts["test:all"], "pnpm health:full");
   assert.match(packageJson.scripts["test:focused"], /--test/);
   assert.doesNotMatch(packageJson.scripts["test:focused"], /health:full/);
+});
+
+test("CI provisions its ignored instruction index before full health", async () => {
+  const [workflow, instructionIndex, architectureInstruction] =
+    await Promise.all([
+      readFile(path.join(workflowRoot, ".github/workflows/health.yml"), "utf8"),
+      readFile(
+        path.join(workflowRoot, ".github/fixtures/instructions-index.md"),
+        "utf8",
+      ),
+      readFile(
+        path.join(
+          workflowRoot,
+          ".github/fixtures/instructions-architecture.md",
+        ),
+        "utf8",
+      ),
+    ]);
+  const provisionIndexCommand =
+    "cp .github/fixtures/instructions-index.md instructions/index.md";
+  const provisionArchitectureCommand =
+    "cp .github/fixtures/instructions-architecture.md instructions/architecture.md";
+
+  assert.match(workflow, /^\s+working-directory: \.ai$/m);
+  assert.match(workflow, /^\s+path: \.ai$/m);
+  assert.match(workflow, /^\s+package_json_file: \.ai\/package\.json$/m);
+  assert.match(workflow, /^\s+cache-dependency-path: \.ai\/pnpm-lock\.yaml$/m);
+  assert.ok(workflow.includes(provisionIndexCommand));
+  assert.ok(workflow.includes(provisionArchitectureCommand));
+  assert.ok(
+    workflow.indexOf(provisionIndexCommand) <
+      workflow.indexOf("pnpm health:full"),
+  );
+  assert.ok(
+    workflow.indexOf(provisionArchitectureCommand) <
+      workflow.indexOf("pnpm health:full"),
+  );
+  assert.match(instructionIndex, /^## Rules$/m);
+  assert.match(instructionIndex, /`architecture\.md`/);
+  assert.match(architectureInstruction, /^## Rules$/m);
+
+  const sharedInstructions = await readdir(
+    path.join(workflowRoot, "instructions/shared"),
+  );
+  for (const file of sharedInstructions.filter((file) =>
+    file.endsWith(".md"),
+  )) {
+    const route = `shared/${file}`;
+    assert.match(
+      instructionIndex,
+      new RegExp(route.replace(".", "\\.")),
+      route,
+    );
+  }
 });
 
 test("health implementation is read-only and has no retired progress expectation", async () => {
