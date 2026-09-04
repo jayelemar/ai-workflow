@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -45,12 +45,89 @@ tier = "balanced"
 reasoning_effort = "high"
 `;
 
+const createApplyFixture = async ({ codexConfig } = {}) => {
+  const temporaryRoot = await mkdtemp(
+    path.join(os.tmpdir(), "agent-model-update-"),
+  );
+  const sourcePath = path.join(temporaryRoot, "latest-model.md");
+  const registryPath = path.join(temporaryRoot, "agent-models.toml");
+  const codexConfigPath = path.join(temporaryRoot, ".codex", "config.toml");
+  await Promise.all([
+    writeFile(sourcePath, latestModelMarkdown, "utf8"),
+    readFile(
+      path.join(workflowRoot, "config", "agent-models.toml"),
+      "utf8",
+    ).then((contents) => writeFile(registryPath, contents, "utf8")),
+  ]);
+  if (codexConfig !== undefined) {
+    await mkdir(path.dirname(codexConfigPath), { recursive: true });
+    await writeFile(codexConfigPath, codexConfig, "utf8");
+  }
+  return { codexConfigPath, registryPath, sourcePath, temporaryRoot };
+};
+
+const applyOptions = ({ sourcePath, registryPath, codexConfigPath }) =>
+  parseArgs([
+    "--apply",
+    "--eval-approved",
+    "--source",
+    sourcePath,
+    "--registry",
+    registryPath,
+    "--codex-config",
+    codexConfigPath,
+  ]);
+
+const failOnInstallation = (installationToFail) => {
+  let installations = 0;
+  return async (filePath, contents) => {
+    installations += 1;
+    if (installations === installationToFail) {
+      throw new Error(`simulated installation failure ${installations}`);
+    }
+    await mkdir(path.dirname(filePath), { recursive: true });
+    await writeFile(filePath, contents, "utf8");
+  };
+};
+
 test("model updater defaults to a read-only check", () => {
   const options = parseArgs([]);
   assert.equal(options.apply, false);
   assert.equal(options.evalApproved, false);
   assert.match(options.source, /^https:\/\/developers\.openai\.com\//);
   assert.doesNotThrow(() => validateOptions(options));
+});
+
+test("model updater defaults are independent of the caller working directory", async () => {
+  const unrelatedDirectory = await mkdtemp(
+    path.join(os.tmpdir(), "agent-model-cwd-"),
+  );
+  const originalDirectory = process.cwd();
+  const expectedRegistry = path.join(
+    workflowRoot,
+    "config",
+    "agent-models.toml",
+  );
+  const expectedCodexConfig = path.join(
+    path.dirname(workflowRoot),
+    ".codex",
+    "config.toml",
+  );
+  try {
+    for (const directory of [
+      path.dirname(workflowRoot),
+      workflowRoot,
+      unrelatedDirectory,
+    ]) {
+      process.chdir(directory);
+      const options = parseArgs([]);
+      assert.equal(options.registry, expectedRegistry);
+      assert.equal(options.codexConfig, expectedCodexConfig);
+    }
+  } finally {
+    process.chdir(originalDirectory);
+    await rm(unrelatedDirectory, { recursive: true, force: true });
+  }
 });
 
 test("model updater requires explicit eval approval before writes", () => {
@@ -122,5 +199,81 @@ test("read-only model checks do not require a Codex config", async () => {
     await assert.rejects(readFile(missingConfigPath, "utf8"), /ENOENT/);
   } finally {
     await rm(temporaryRoot, { recursive: true, force: true });
+  }
+});
+
+test("apply failure before installation preserves both original files", async () => {
+  const fixture = await createApplyFixture({
+    codexConfig: 'approval_policy = "never"\n',
+  });
+  try {
+    const [originalRegistry, originalCodexConfig] = await Promise.all([
+      readFile(fixture.registryPath, "utf8"),
+      readFile(fixture.codexConfigPath, "utf8"),
+    ]);
+
+    await assert.rejects(
+      inspectAndUpdateModels(applyOptions(fixture), {
+        writeInstalledFile: failOnInstallation(1),
+      }),
+      /simulated installation failure 1/,
+    );
+
+    assert.equal(
+      await readFile(fixture.registryPath, "utf8"),
+      originalRegistry,
+    );
+    assert.equal(
+      await readFile(fixture.codexConfigPath, "utf8"),
+      originalCodexConfig,
+    );
+  } finally {
+    await rm(fixture.temporaryRoot, { recursive: true, force: true });
+  }
+});
+
+test("apply failure after one installation restores both original files", async () => {
+  const fixture = await createApplyFixture({
+    codexConfig: 'approval_policy = "never"\n',
+  });
+  try {
+    const [originalRegistry, originalCodexConfig] = await Promise.all([
+      readFile(fixture.registryPath, "utf8"),
+      readFile(fixture.codexConfigPath, "utf8"),
+    ]);
+
+    await assert.rejects(
+      inspectAndUpdateModels(applyOptions(fixture), {
+        writeInstalledFile: failOnInstallation(2),
+      }),
+      /simulated installation failure 2/,
+    );
+
+    assert.equal(
+      await readFile(fixture.registryPath, "utf8"),
+      originalRegistry,
+    );
+    assert.equal(
+      await readFile(fixture.codexConfigPath, "utf8"),
+      originalCodexConfig,
+    );
+  } finally {
+    await rm(fixture.temporaryRoot, { recursive: true, force: true });
+  }
+});
+
+test("apply rollback removes a Codex config that was previously absent", async () => {
+  const fixture = await createApplyFixture({ codexConfig: undefined });
+  try {
+    await assert.rejects(
+      inspectAndUpdateModels(applyOptions(fixture), {
+        writeInstalledFile: failOnInstallation(2),
+      }),
+      /simulated installation failure 2/,
+    );
+
+    await assert.rejects(readFile(fixture.codexConfigPath, "utf8"), /ENOENT/);
+  } finally {
+    await rm(fixture.temporaryRoot, { recursive: true, force: true });
   }
 });

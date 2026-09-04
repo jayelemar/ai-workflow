@@ -1,6 +1,6 @@
 # Feature Intake
 
-Use `.ai/prompts/select-workflow.md`.
+Use `.ai/prompts/workflow/select-workflow.md`.
 
 Target: `<feature request>`
 

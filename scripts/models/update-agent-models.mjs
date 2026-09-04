@@ -6,8 +6,10 @@ import { fileURLToPath } from "node:url";
 
 export const DEFAULT_SOURCE =
   "https://developers.openai.com/api/docs/guides/latest-model.md";
-const DEFAULT_REGISTRY = ".ai/config/agent-models.toml";
-const DEFAULT_CODEX_CONFIG = ".codex/config.toml";
+const workflowRoot = fileURLToPath(new URL("../../", import.meta.url));
+const projectRoot = path.dirname(workflowRoot);
+const DEFAULT_REGISTRY = path.join(workflowRoot, "config", "agent-models.toml");
+const DEFAULT_CODEX_CONFIG = path.join(projectRoot, ".codex", "config.toml");
 const ALLOWED_REASONING_EFFORTS = new Set([
   "low",
   "medium",
@@ -292,6 +294,25 @@ const writeAtomically = async (filePath, contents) => {
   }
 };
 
+const snapshotFile = async (filePath) => {
+  try {
+    return { exists: true, contents: await readFile(filePath, "utf8") };
+  } catch (error) {
+    if (error?.code === "ENOENT") return { exists: false, contents: "" };
+    throw error;
+  }
+};
+
+const restoreFile = async (filePath, snapshot) => {
+  if (snapshot.exists) {
+    await writeAtomically(filePath, snapshot.contents);
+    return;
+  }
+  await unlink(filePath).catch((error) => {
+    if (error?.code !== "ENOENT") throw error;
+  });
+};
+
 const printHelp = () => {
   process.stdout
     .write(`Usage: rtk node .ai/scripts/models/update-agent-models.mjs [options]
@@ -308,7 +329,10 @@ Options:
 `);
 };
 
-export const inspectAndUpdateModels = async (options) => {
+export const inspectAndUpdateModels = async (
+  options,
+  { writeInstalledFile = writeAtomically } = {},
+) => {
   const registryPath = path.resolve(options.registry);
   const codexConfigPath = path.resolve(options.codexConfig);
   const [markdown, registry] = await Promise.all([
@@ -330,12 +354,11 @@ export const inspectAndUpdateModels = async (options) => {
   };
 
   if (options.apply) {
-    const codexConfig = await readFile(codexConfigPath, "utf8").catch(
-      (error) => {
-        if (error?.code === "ENOENT") return "";
-        throw error;
-      },
-    );
+    const [registrySnapshot, codexConfigSnapshot] = await Promise.all([
+      snapshotFile(registryPath),
+      snapshotFile(codexConfigPath),
+    ]);
+    const codexConfig = codexConfigSnapshot.contents;
     const updatedRegistry = updateRegistryModels(registry, candidate);
     const updatedRuntime = readRuntimeRegistry(updatedRegistry);
     const parent = updatedRuntime.roles.parent;
@@ -343,11 +366,26 @@ export const inspectAndUpdateModels = async (options) => {
       model: parent.model,
       reasoningEffort: parent.reasoningEffort,
     });
-    if (updatedCodexConfig !== codexConfig) {
-      await writeAtomically(codexConfigPath, updatedCodexConfig);
-    }
-    if (updatedRegistry !== registry) {
-      await writeAtomically(registryPath, updatedRegistry);
+    try {
+      if (updatedCodexConfig !== codexConfig) {
+        await writeInstalledFile(codexConfigPath, updatedCodexConfig);
+      }
+      if (updatedRegistry !== registry) {
+        await writeInstalledFile(registryPath, updatedRegistry);
+      }
+    } catch (installationError) {
+      try {
+        await Promise.all([
+          restoreFile(registryPath, registrySnapshot),
+          restoreFile(codexConfigPath, codexConfigSnapshot),
+        ]);
+      } catch (rollbackError) {
+        throw new AggregateError(
+          [installationError, rollbackError],
+          "model update failed and rollback could not be completed",
+        );
+      }
+      throw installationError;
     }
     result.status = updateAvailable ? "updated" : "current";
     result.parentConfig = {

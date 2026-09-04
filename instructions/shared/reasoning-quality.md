@@ -1,5 +1,5 @@
-Version: 2.0
-Last Updated: 2026-07-29
+Version: 3.0
+Last Updated: 2026-08-25
 
 # Reasoning Quality Instructions
 
@@ -9,12 +9,12 @@ Define the shared reasoning baseline for explicit workflow stages.
 
 ## Applies To
 
-- `.ai/prompts/select-workflow.md`
-- `.ai/prompts/generate-spec.md`
-- `.ai/prompts/create-plan.md`
-- `.ai/prompts/execute-plan.md`
-- `.ai/prompts/review-changes.md`
-- `.ai/prompts/goal-checkpoint.md`
+- `.ai/prompts/workflow/select-workflow.md`
+- `.ai/prompts/workflow/generate-spec.md`
+- `.ai/prompts/workflow/create-plan.md`
+- `.ai/prompts/workflow/execute-plan.md`
+- `.ai/prompts/workflow/review-changes.md`
+- `.ai/prompts/workflow/goal-checkpoint.md`
 
 ## Rules
 
@@ -25,13 +25,15 @@ Define the shared reasoning baseline for explicit workflow stages.
 - Check implied edge cases: empty inputs, permission boundaries, state
   transitions, failed validation, out-of-scope files, repeated execution, and
   material scope discoveries.
-- Keep scope within the saved plan and spec. A material discovery pauses work
-  and returns to the correct explicit stage instead of being absorbed silently.
+- Keep behavior within the saved plan and spec. Classify execution discoveries
+  only with the corrective-deviation decision table in `.ai/AGENTS.md`.
 - Use actual implementation evidence for review. MEDIUM writes a complete
-  status artifact; HIGH reviews every task before its commit.
+  status artifact; HIGH reviews every task before its commit. After all
+  implementation, both classes require a fresh independent reviewer on the
+  cumulative plan-owned diff and must clear blocking findings before
+  completion.
 - For HIGH tasks, apply the saved delegation decision exactly. Do not invent
-  an ad-hoc delegation during execution; a material discovery updates the
-  plan, and a missing required delegation result blocks the task.
+  ad-hoc delegation; a missing required result blocks the task.
 
 ## Validation
 

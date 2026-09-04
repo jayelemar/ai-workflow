@@ -1,0 +1,29 @@
+name: Workflow health
+
+on:
+  pull_request:
+  push:
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .ai
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: .ai
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: .ai/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.20.2
+          cache: pnpm
+          cache-dependency-path: .ai/pnpm-lock.yaml
+      - run: pnpm --ignore-workspace install --frozen-lockfile
+      - run: |
+          cp .github/fixtures/instructions-index.md instructions/index.md
+          cp .github/fixtures/instructions-architecture.md instructions/architecture.md
+      - run: pnpm health:full

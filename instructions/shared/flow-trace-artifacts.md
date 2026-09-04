@@ -1,5 +1,5 @@
-Version: 3.1
-Last Updated: 2026-08-14
+Version: 3.3
+Last Updated: 2026-08-24
 
 # Flow Artifact Instructions
 
@@ -21,11 +21,16 @@ implementation map, and how planning reuses or creates that pair.
 ## Saved Artifacts
 
 When required, create-plan applies
-`.ai/prompts/generate-flow-artifacts.md` to reuse or create both:
+`.ai/prompts/workflow/generate-flow-artifacts.md` to reuse or create both:
 
 - `.ai/artifacts/<plan-name>/user-journey.md` using `user-journey@1`;
 - `.ai/artifacts/<plan-name>/implementation-map.md` using
   `implementation-map@1`.
+
+A replan may continue to reference its predecessor's pair when both files
+remain complete and consistent with the current finalized spec. Otherwise it
+creates a new pair under the successor plan name. Review and handoff evidence
+are never reused across revisions.
 
 The finalized spec owns desired behavior. Repository inspection supplies only
 current entry points, ownership, contracts, data effects, services, and tests.
@@ -49,6 +54,12 @@ The implementation map must contain:
 Every journey action and acceptance scenario must map to ownership and
 validation. The implementation map must not introduce actions absent from the
 user journey.
+
+When one mapped action or planned task consumes another task's service, the
+implementation map must state the callable internal contract—including the
+inputs the consumer is allowed to supply and the provider-owned data it must
+resolve internally. Validation must exercise that provider-to-consumer handoff,
+not only the provider's isolated domain behavior.
 
 The flow-artifact prompt may also be invoked directly before planning. A
 separate invocation is optional because an explicit create-plan invocation owns

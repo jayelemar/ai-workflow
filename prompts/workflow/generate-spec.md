@@ -119,8 +119,6 @@ maps to defined behavior, all material branches and failures are deterministic,
 and no desired behavior was inferred from code. For `bugfix-spec@1`, also
 verify every RCA conclusion is evidence-backed.
 
-Manual token telemetry is optional and does not affect finalization.
-
 ## Final Response
 
 Return exactly:

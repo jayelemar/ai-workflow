@@ -7,6 +7,8 @@
 !/README.md
 !/package.json
 !/pnpm-lock.yaml
+!/.github/
+!/.github/**
 
 # Canonical source directories
 !/config/
@@ -14,7 +16,6 @@
 !/docs/
 !/docs/**
 !/instructions/
-!/instructions/ai-workflow.md
 !/instructions/shared/
 !/instructions/shared/**
 !/prompts/
@@ -29,10 +30,10 @@
 # Project-local and generated workflow data
 /instructions/index.md
 /instructions/*.md
-!/instructions/ai-workflow.md
 /artifacts/
 /logs/
 /plans/
 /specs/
 /state/
+/tmp/
 /node_modules/

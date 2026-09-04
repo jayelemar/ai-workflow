@@ -2,7 +2,14 @@
 
 ## Document Format
 
-plan-manifest@2
+plan-manifest@3
+
+## Plan Lineage
+
+- Work item: `<stable-kebab-case-name>`
+- Revision: `<positive-integer>`
+- Supersedes: `N/A: initial plan` | `.ai/artifacts/<predecessor-plan-name>/superseded-plan.md`
+- Archived revisions: `None` | `<ordered comma-separated archived-plan paths, oldest first>`
 
 ## Classification
 
@@ -14,8 +21,8 @@ LOW | MEDIUM | HIGH
 
 ## Repositories
 
-Repeat this entry for every Git repository the plan owns. Repository IDs must
-be unique and roots must be explicit paths relative to the plan workspace.
+Repeat for every Git repository. IDs are unique and roots are explicit paths
+relative to the plan workspace.
 
 ### Repository: <repository-id>
 
@@ -25,44 +32,61 @@ be unique and roots must be explicit paths relative to the plan workspace.
 
 ## Artifacts
 
-- User journey: `.ai/artifacts/<plan-name>/user-journey.md` | `N/A: <concrete reason>`
-- Implementation map: `.ai/artifacts/<plan-name>/implementation-map.md` | `N/A: <same concrete reason>`
+- User journey: `.ai/artifacts/<plan-name>/user-journey.md` | `N/A: <reason>`
+- Implementation map: `.ai/artifacts/<plan-name>/implementation-map.md` | `N/A: <same reason>`
 - MEDIUM review: `.ai/artifacts/<plan-name>/review.md` | `N/A: not MEDIUM`
-- HIGH-GOAL handoff: `.ai/artifacts/<plan-name>/goal-handoff.md` | `N/A: not HIGH`
+- HIGH handoff: `.ai/artifacts/<plan-name>/goal-handoff.md` | `N/A: not HIGH`
 
 ## Scope
 
 <bounded desired behavior, current constraints, and non-goals>
 
+## Review Strategy
+
+- Format: `review-strategy@2`
+- Sensitive-boundary trigger: <named boundary and deterministic trigger | `None: no named sensitive boundary`>
+- Targeted checks: <checks for the named boundary | compact correctness and changed-boundary regression checks>
+- Architectural fallback: <specific isolation, allowlist, closed-form enforcement, reducer/state arbiter/owning-hook redesign, or other bounded redesign to carry into replanning if one root-cause family remains blocking in two fresh rounds; required for a named sensitive boundary or asynchronous UI state with multiple independent writers | `N/A: no named sensitive boundary or asynchronous multi-writer state surface`>
+- External evidence: <operator, staging, credential, device, or service evidence | `N/A: no external evidence required`>
+
+Include this subsection only when `Sensitive-boundary trigger` names a boundary:
+
+### Sensitive Boundary Detail
+
+- Root-cause families: <failed invariants to group across fresh rounds>
+- Adversarial matrix: <applicable direct, alias, reassignment, computed/destructured, invocation-wrapper, reflection/mutation, container/member, encoding/normalization, and environment/process-control variants>
+- Mutation or property testing: <automated variant coverage and cheapest valid layer>
+
+## Review Budget
+
+- Fresh rounds: <`1` | `2` | `3` | `N/A: LOW uses self-check`>
+- Selection reason: <exact deterministic budget rule>
+
 ## Implementation
 
-For LOW/MEDIUM, provide ordered steps. Each step names its repository ID,
-owned paths, behavior, dependency, and exact validation. Cross-repository work
-uses dependent steps.
+For LOW, use only the minimum ordered steps needed to name ownership, outcome,
+and validation. For MEDIUM, include dependencies and contracts as applicable.
 
 1. <imperative outcome>
-   * Repository: `<repository-id>`
-   * Behavior: <one exact outcome>
-   * Owned paths: <exact repo-relative paths>
-   * Depends on: None | <earlier step>
-   * Validation: `<exact command>` — <expected result>
+   - Repository: `<repository-id>`
+   - Owned paths: <exact repo-relative paths>
+   - Validation: `<exact command>` — <expected result>
 
-For HIGH, replace the steps above with task entries. Every task belongs to
-exactly one repository. Split cross-repository outcomes into dependent tasks.
+For HIGH, replace the steps with task entries. Every task belongs to exactly
+one repository; split cross-repository outcomes into dependent tasks.
 
 ### Task <number>: <imperative outcome>
 
 - Repository: `<exactly-one-repository-id>`
 - Behavior: <one exact outcome>
 - Owned paths: <exact repo-relative paths>
-- Depends on: None | <earlier task>
+- Depends on: None | <earlier task and callable internal contract>
 - Delegation: `REQUIRED` | `NONE`
 - Required roles: `investigator`, `builder`, and/or `reviewer` | `N/A: NONE`
-- Delegation rule and expected result: <matching rule and bounded deliverable>
-- Agent runtime: <role-specific registry and bounded-context use> | `N/A: no delegated role`
+- Delegation result: <bounded expected evidence | `N/A: NONE`>
 - Implementation: <task-scoped steps>
 - Validation: `<exact command>` — <expected result>
-- Review evidence: <actual-diff review and required delegation outcome>
+- Review evidence: <actual-diff and provider-to-consumer evidence>
 - Commit purpose: `<type>(<scope>): <summary>`
 
 ## Validation

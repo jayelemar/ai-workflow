@@ -1,6 +1,6 @@
 # Feature Spec
 
-Use `.ai/prompts/generate-spec.md`.
+Use `.ai/prompts/workflow/generate-spec.md`.
 
 Spec type: `feature-spec@1`
 Name: `<kebab-case name>`
