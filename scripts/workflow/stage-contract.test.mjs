@@ -187,6 +187,46 @@ test("current plans use versioned structure and a required Plan name input", asy
   assert.match(template, /Repository: `<exactly-one-repository-id>`/);
 });
 
+test("plan validation gates are feasible, invariant-driven, and risk-based", async () => {
+  const [agents, testing, template, createPlan, execute] = await Promise.all([
+    readSource("AGENTS.md"),
+    readSource("instructions/shared/testing.md"),
+    readSource("templates/plan.template.md"),
+    readSource("prompts/workflow/create-plan.md"),
+    readSource("prompts/workflow/execute-plan.md"),
+  ]);
+  const testingContract = normalize(testing);
+  const planningContract = normalize(createPlan);
+
+  assert.match(
+    testingContract,
+    /required validation.*smallest sufficient set.*changed-boundary risk/i,
+  );
+  assert.match(
+    testingContract,
+    /broader repository-wide.*required completion gate.*distinct risk/i,
+  );
+  assert.match(
+    planningContract,
+    /observable invariant.*expected result.*exact command/i,
+  );
+  assert.match(
+    planningContract,
+    /relevant environment and configuration sources/i,
+  );
+  assert.match(
+    planningContract,
+    /broader repository-wide.*distinct risk.*focused validation/i,
+  );
+  assert.match(template, /observable invariant and expected result/);
+
+  assert.match(
+    agents,
+    /Required validation must pass before completion.*Never silently weaken/i,
+  );
+  assert.match(execute, /Run every required plan validation command/);
+});
+
 test("replans archive one predecessor and retain one active lineage revision", async () => {
   const [createPlan, stages, execute, checkpoint, prepare, packageSource] =
     await Promise.all([

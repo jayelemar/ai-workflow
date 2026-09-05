@@ -114,6 +114,14 @@ Use `.ai/templates/plan.template.md` and save
   `OPTIONAL`.
 - Refer to the corrective-deviation table in `.ai/AGENTS.md`; do not copy its
   criteria into the plan.
+- Select required validation through `shared/testing.md`. For every validation
+  entry, state the observable invariant and expected result before saving its
+  exact command, and verify that the command can feasibly exercise that
+  condition in the declared repository and prepared environment after
+  accounting for relevant environment and configuration sources. Make a
+  broader repository-wide command a required completion gate only when its
+  distinct risk is not covered by focused validation, and record that risk in
+  the plan.
 - Create no workflow state, sidecar, event log, preview, or progress record.
 
 ## Replan Activation

@@ -70,7 +70,7 @@ and validation. For MEDIUM, include dependencies and contracts as applicable.
 1. <imperative outcome>
    - Repository: `<repository-id>`
    - Owned paths: <exact repo-relative paths>
-   - Validation: `<exact command>` — <expected result>
+   - Validation: `<exact command>` — <observable invariant and expected result>
 
 For HIGH, replace the steps with task entries. Every task belongs to exactly
 one repository; split cross-repository outcomes into dependent tasks.
@@ -91,7 +91,7 @@ one repository; split cross-repository outcomes into dependent tasks.
 
 ## Validation
 
-1. `<exact command>` — <expected result>
+1. `<exact command>` — <observable invariant and expected result>
 
 ## Completion Condition
 
