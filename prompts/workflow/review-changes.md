@@ -130,11 +130,20 @@ complete`, `Completed with accepted review risk`, and `Blocked`.
 4. If one root-cause family remains blocking in two fresh rounds, stop
    incremental fixes; never clear, downgrade, or risk-accept that family. For
    every classification and invocation mode, set `Blocked` and return to
-   planning. Carry the saved architectural fallback and complete round evidence
-   into the next plan, and reassess the classification because repeated failure
-   may show that the prior risk estimate was too low. Do not activate or apply
-   the fallback incrementally under the current plan. Make the blocked result
-   immediately actionable without a follow-up question:
+   planning unless the round evidence exposes an unresolved material decision,
+   requires a spec-content change, or makes a LOW work item classify higher; in
+   those cases route first under `## Material Discovery Routing`. Carry the
+   saved architectural fallback and complete round evidence into the next plan,
+   and reassess the classification because repeated failure may show that the
+   prior risk estimate was too low. Do not activate or apply the fallback
+   incrementally under the current plan. Make the blocked result immediately
+   actionable without a follow-up question:
+   - If the round evidence exposes an unresolved material decision, requires
+     any finalized spec-content change, or makes a LOW work item classify
+     higher, apply
+     `## Material Discovery Routing` from
+     `.ai/instructions/shared/workflow-state.md` instead of the plan invocation
+     below.
    - For MEDIUM or HIGH, record this complete invocation under
      `Do this next:` and in the durable next-action field:
 
@@ -148,11 +157,10 @@ complete`, `Completed with accepted review risk`, and `Blocked`.
      Flow artifacts: AUTO
      ```
 
-   - For LOW, return the same AUTO replan invocation with this active plan under
-     `Supersedes`, `Classification: LOW`, `Spec: N/A: LOW`, and `Flow artifacts:
-AUTO`. Create-plan reapplies the deterministic classifier and stops with an
-     exact escalation action only if the fallback proves a higher-class
-     trigger; LOW itself never requires a spec.
+   - For LOW that remains LOW after classification, return the same AUTO replan
+     invocation with this active plan under `Supersedes`, `Classification: LOW`,
+     `Spec: N/A: LOW`, and `Flow artifacts: AUTO`. Material Discovery Routing
+     owns higher-class escalation; this LOW-only branch never requires a spec.
 5. After successful remediation and validation, automatically start the next
    fresh round only when the automatic budget still has one. HIGH first records
    required remediation commits under `.ai/prompts/workflow/goal-checkpoint.md`.
@@ -190,8 +198,11 @@ decision`. This status is forbidden while any known `P0`–`P2` is unresolved
    current state's valid action.
 9. Use `Blocked` for unavailable mandatory evidence/runtime, invalid round
    history, a material discovery, a root-cause family that remains blocking in
-   two fresh rounds, or a genuine external blocker. Use `Fix required` for
-   incomplete remediation or failed required validation.
+   two fresh rounds, or a genuine external blocker. For a material discovery,
+   apply `## Material Discovery Routing` from
+   `.ai/instructions/shared/workflow-state.md` and save its exact applicable
+   next action. Use `Fix required` for incomplete remediation or failed
+   required validation.
 
 ## MEDIUM Artifact
 

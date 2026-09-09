@@ -30,8 +30,9 @@ contract before execution or resume.` Do not migrate, overwrite, or delete it.
   order.
 - Classify discoveries only through the corrective-deviation table in
   `.ai/AGENTS.md`. Record a qualifying correction and affected evidence; stop
-  for a material discovery. Its actionable planning invocation must use
-  `Plan name: AUTO` and name this active plan under `Supersedes`.
+  for a material discovery. Apply `## Material Discovery Routing` from
+  `.ai/instructions/shared/workflow-state.md` and return its exact applicable
+  specification or planning invocation as the immediate action.
 - Run every required plan validation command. Defer optional external evidence
   only under `.ai/AGENTS.md` disclosure rules.
 
@@ -54,8 +55,10 @@ canonical review result permits it.
 
 For every blocked or otherwise non-complete result, lead with the exact status
 and cause, then write `Do this next:` and provide the exact action required by
-`.ai/instructions/shared/workflow-state.md`. For MEDIUM, reproduce the
-canonical review artifact's `## Required Next Action` verbatim; do not
-paraphrase it into a generic recommendation. For LOW, construct the exact
-blocker resolution and resume invocation directly. Never make the user ask
-what to do next. Providing a command does not invoke the next stage.
+`.ai/instructions/shared/workflow-state.md`. For MEDIUM after review evidence
+exists, reproduce the canonical review artifact's `## Required Next Action`
+verbatim; do not paraphrase it into a generic recommendation. For a stop before
+review evidence exists, including a material discovery, construct the exact
+applicable workflow-state action directly. For LOW, construct the exact blocker
+resolution and resume invocation directly. Never make the user ask what to do
+next. Providing a command does not invoke the next stage.

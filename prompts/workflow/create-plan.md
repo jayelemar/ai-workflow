@@ -41,6 +41,14 @@ contracts, validation, Git roots, and integration bases.
 
 - LOW has no spec. MEDIUM/HIGH requires one readable `feature-spec@1` or
   `bugfix-spec@1` whose `Open Decisions` is exactly `None`.
+- Treat every finalized spec path as immutable. For a replan, compare the
+  supplied spec with the predecessor plan's spec. Reuse the exact predecessor
+  path only when the complete finalized spec remains authoritative without any
+  content change. Require a different readable finalized spec path when any
+  content changed, including evidence, root-cause analysis, or other context
+  changes that preserve desired behavior. Never overwrite or edit the
+  predecessor's spec; each plan revision must retain the exact spec path it was
+  created from.
 - Reapply the deterministic classifier in `.ai/prompts/workflow/select-workflow.md` to
   the planned scope. Stop if the requested class is lower than its trigger.
 - Reuse a complete valid `user-journey@1` and `implementation-map@1` pair. If
@@ -128,12 +136,14 @@ Use `.ai/templates/plan.template.md` and save
 
 For a replan, finish and validate the successor plan in `.ai/tmp/` and any new
 artifacts at their declared revision-specific paths before changing the active
-plan set. Reuse the predecessor's declared flow-artifact pair only when it
-remains complete and consistent with the current finalized spec; otherwise
-create the required pair under the successor artifact directory. MEDIUM review
-evidence and HIGH handoff evidence are always revision-specific and never
-reused. Create an initial HIGH handoff from the validated candidate through the
-candidate exception in `.ai/prompts/workflow/goal-checkpoint.md`; it remains
+plan set. Confirm that the predecessor's referenced finalized spec remains
+readable, and do not modify it during replanning or activation. Reuse the
+predecessor's declared flow-artifact pair only when it remains complete and
+consistent with the current finalized spec; otherwise create the required pair
+under the successor artifact directory. MEDIUM review evidence and HIGH
+handoff evidence are always revision-specific and never reused. Create an
+initial HIGH handoff from the validated candidate through the candidate
+exception in `.ai/prompts/workflow/goal-checkpoint.md`; it remains
 non-authoritative until activation succeeds.
 
 Activate the replan only through

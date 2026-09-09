@@ -110,13 +110,105 @@ test("blocked workflow results provide an exact next action without a follow-up"
   );
   assert.match(
     reviewContract,
-    /For LOW, return the same AUTO replan invocation.*`Classification: LOW`, `Spec: N\/A: LOW`/,
+    /For LOW that remains LOW after classification, return the same AUTO replan invocation.*`Classification: LOW`, `Spec: N\/A: LOW`/,
   );
   assert.match(
     executeContract,
     /reproduce the canonical review artifact's `## Required Next Action` verbatim/,
   );
   assert.match(executeContract, /Never make the user ask what to do next/);
+});
+
+test("material discoveries route spec changes before replanning", async () => {
+  const [stages, execute, checkpoint, review] = await Promise.all([
+    readSource("instructions/shared/workflow-state.md"),
+    readSource("prompts/workflow/execute-plan.md"),
+    readSource("prompts/workflow/goal-checkpoint.md"),
+    readSource("prompts/workflow/review-changes.md"),
+  ]);
+  const routing = normalize(
+    stages.split("## Material Discovery Routing")[1].split("## Superseded")[0],
+  );
+  const decisionBranch = routing.split(
+    "- For MEDIUM or HIGH, if any finalized spec content must change",
+  )[0];
+
+  assert.match(
+    decisionBranch,
+    /unresolved behavior, permission, or other material decision/i,
+  );
+  assert.match(
+    decisionBranch,
+    /exact decision, bounded choices, and consequence of each choice/i,
+  );
+  assert.match(
+    decisionBranch,
+    /do not resume the current execution, review, or HIGH `\/goal` stage with a `Decision:` input/i,
+  );
+  assert.match(
+    decisionBranch,
+    /one complete copy-pasteable next-stage invocation per choice.*MEDIUM or HIGH.*`execute \.ai\/prompts\/workflow\/generate-spec\.md` as the command/i,
+  );
+  assert.match(
+    decisionBranch,
+    /MEDIUM or HIGH.*exact current spec type.*`Name: AUTO`.*exact current spec path under `Supersedes`.*`Request and decisions:` with that choice filled in/i,
+  );
+  assert.match(
+    decisionBranch,
+    /LOW.*reapply the classifier with that choice.*current work-item name.*`Supersedes: N\/A`.*resulting MEDIUM or HIGH classification.*`Request and decisions:` with that choice filled in.*generate-spec\.md.*If it instead remains LOW.*create-plan\.md.*`Plan name: AUTO`.*`Classification: LOW`.*`Spec: N\/A: LOW`.*`Flow artifacts: AUTO`/i,
+  );
+  assert.match(
+    decisionBranch,
+    /selected specification or LOW planning invocation is the only immediate action.*Do not provide execution, review, or `\/goal` as an alternative immediate action/i,
+  );
+  assert.match(
+    routing,
+    /For MEDIUM or HIGH, if any finalized spec content must change.*route first.*generate-spec\.md/i,
+  );
+  assert.match(
+    routing,
+    /complete copy-pasteable spec invocation with.*`execute \.ai\/prompts\/workflow\/generate-spec\.md` as the command.*exact spec type.*`Name: AUTO`.*exact current spec path under `Supersedes`.*classification determined from the current discovery context.*complete request and decisions.*bug evidence/i,
+  );
+  assert.match(
+    routing,
+    /Do not derive a successor name or provide create-plan as the immediate action.*owning specification prompt must resolve and finalize the new immutable spec first/i,
+  );
+  assert.doesNotMatch(routing, /Resolve the first unused revisioned name/i);
+  assert.match(
+    routing,
+    /complete finalized spec remains authoritative without content changes.*create-plan\.md.*Plan name: AUTO.*Supersedes.*resolve from current finalized context.*exact finalized spec path.*Flow artifacts: AUTO/i,
+  );
+  assert.match(
+    routing,
+    /For LOW, reapply the deterministic classifier to the material discovery before constructing the next action/i,
+  );
+  assert.match(
+    routing,
+    /If it classifies as MEDIUM or HIGH, route first.*generate-spec\.md.*`Do this next:`.*complete copy-pasteable invocation.*`execute \.ai\/prompts\/workflow\/generate-spec\.md` as the command.*exact spec type.*`Name: <current work item name>`.*`Supersedes: N\/A`.*resolved classification.*complete request, decisions, and bug-evidence inputs/i,
+  );
+  assert.match(
+    routing,
+    /If it remains LOW, route directly to create-plan.*Classification: LOW.*Spec: N\/A: LOW/i,
+  );
+  for (const caller of [execute, checkpoint, review]) {
+    assert.match(caller, /Material Discovery Routing/);
+  }
+  assert.match(
+    normalize(execute),
+    /For a stop before review evidence exists, including a material discovery, construct the exact applicable workflow-state action directly/i,
+  );
+  assert.match(
+    normalize(checkpoint),
+    /material-discovery stop.*`Do this next:`.*handoff's exact `## Next Action`/i,
+  );
+  assert.match(
+    normalize(review),
+    /unresolved material decision.*requires a spec-content change.*LOW work item classify higher.*Material Discovery Routing/i,
+  );
+  assert.doesNotMatch(
+    normalize(execute),
+    /material discovery\. Its actionable planning invocation must use `Plan name: AUTO`/i,
+  );
 });
 
 test("classification uses deterministic LOW and HIGH triggers with MEDIUM fallback", async () => {
@@ -159,6 +251,88 @@ test("spec and flow artifact formats remain unchanged", async () => {
   for (const source of [flowPrompt, flowInstruction]) {
     assert.match(source, /user-journey@1/);
     assert.match(source, /implementation-map@1/);
+  }
+});
+
+test("finalized specs are immutable and replans retain exact spec references", async () => {
+  const [workflow, stages, spec, createPlan, usage, feature, bugfix] =
+    await Promise.all([
+      readSource("instructions/shared/ai-workflow.md"),
+      readSource("instructions/shared/workflow-state.md"),
+      readSource("prompts/workflow/generate-spec.md"),
+      readSource("prompts/workflow/create-plan.md"),
+      readSource("docs/workflow-usage.md"),
+      readSource("wrappers/generate-feature-spec.md"),
+      readSource("wrappers/generate-bugfix-spec.md"),
+    ]);
+
+  assert.match(normalize(workflow), /Finalized spec files are immutable/);
+  assert.match(normalize(stages), /Finalized specs are immutable/);
+  assert.match(normalize(spec), /Finalized spec paths are immutable/);
+  assert.match(spec, /Name: <kebab-case name> \| AUTO/);
+  assert.match(
+    spec,
+    /Supersedes: N\/A \| \.ai\/specs\/<current-spec-name>\.spec\.md/,
+  );
+  assert.match(
+    normalize(spec),
+    /Accept `Name: AUTO` only with one readable current finalized spec/i,
+  );
+  assert.match(
+    normalize(createPlan),
+    /Treat every finalized spec path as immutable/,
+  );
+  assert.match(normalize(usage), /Finalized specs are immutable/);
+  assert.match(normalize(spec), /leave its bytes unchanged/i);
+  assert.match(normalize(spec), /do not modify, replace, or delete it/i);
+  assert.match(normalize(spec), /every non-exact requested content revision/i);
+  assert.match(
+    normalize(spec),
+    /root-cause analysis.*changes that preserve desired behavior/i,
+  );
+  assert.match(
+    normalize(spec),
+    /For AUTO, start at revision `2`.*increment until.*does not exist.*first unused candidate/i,
+  );
+  assert.match(
+    normalize(spec),
+    /occupied AUTO candidate is skipped, never treated as an output collision/i,
+  );
+  assert.match(
+    normalize(spec),
+    /If it is an exact valid match.*reuse its path as `<final-spec-path>`.*Otherwise save the new immutable spec only at the resolved unused successor path.*use it as `<final-spec-path>`/i,
+  );
+  assert.match(spec, /Spec finalized at <final-spec-path> \[<spec-type>\]/);
+  assert.match(spec, /Only this prompt resolves the successor name/i);
+  assert.match(
+    normalize(spec),
+    /stop with `Do this next:` followed by a complete copy-pasteable invocation/i,
+  );
+  assert.match(
+    normalize(createPlan),
+    /reuse the exact predecessor path only when the complete finalized spec remains authoritative without any content change/i,
+  );
+  assert.match(
+    normalize(createPlan),
+    /require a different readable finalized spec path when any content changed/i,
+  );
+  assert.match(
+    normalize(createPlan),
+    /root-cause analysis.*changes that preserve desired behavior/i,
+  );
+  assert.match(
+    normalize(createPlan),
+    /each plan revision must retain the exact spec path it was created from/i,
+  );
+  for (const wrapper of [feature, bugfix]) {
+    assert.match(
+      wrapper,
+      /Name: `<kebab-case name \| AUTO: content revision>`/,
+    );
+    assert.match(
+      wrapper,
+      /Supersedes: `N\/A \| \.ai\/specs\/<current-spec-name>\.spec\.md`/,
+    );
   }
 });
 

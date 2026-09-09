@@ -1,4 +1,4 @@
-Version: 6.4
+Version: 6.5
 Last Updated: 2026-09-09
 
 # AI Workflow Instructions
@@ -13,6 +13,9 @@ duplicating stage or review protocols.
 - `.ai/AGENTS.md` owns global invariants and the corrective-deviation decision
   table.
 - `.ai/instructions/shared/workflow-state.md` owns stage transitions only.
+- `.ai/prompts/workflow/generate-spec.md` owns finalized-spec schemas,
+  immutable spec-path creation, and exact-match reuse versus content-revision
+  naming.
 - `.ai/templates/plan.template.md` owns `plan-manifest@3`, plan structure,
   backward-compatible plan lineage, `review-strategy@2`, and review-budget
   fields.
@@ -32,6 +35,9 @@ duplicating stage or review protocols.
 
 ## Plan Ownership
 
+- Finalized spec files are immutable. Plan revisions retain the exact spec path
+  they were created from; any spec-content change uses a newly finalized spec
+  at a new path, while an exact unchanged spec reuses the predecessor's path.
 - Every new plan declares each Git repository root and integration-base ref.
 - A validated `worktree-setup@1` report may overlay filesystem targets only;
   it never changes plan ownership, bases, order, or desired behavior.

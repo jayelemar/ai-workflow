@@ -69,6 +69,12 @@ Contract owners:
 Legacy generated artifacts remain untouched and cannot authorize execution or
 resume; create a new plan under the current contracts.
 
+Finalized specs are immutable. Replans reuse the predecessor's spec path only
+for an exact content match and use a newly finalized, uniquely named spec for
+any content change, including evidence-only revisions that preserve desired
+behavior. This keeps every archived plan tied to the exact spec that governed
+it.
+
 Only root-level files under `.ai/plans/` are active. A replan keeps the stable
 work-item identity, creates the next deterministic `-rN` plan, and archives its
 predecessor as `.ai/artifacts/<predecessor>/superseded-plan.md`. Archived plans

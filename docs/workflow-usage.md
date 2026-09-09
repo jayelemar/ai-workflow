@@ -41,12 +41,20 @@ Evidence:
 Use `.ai/wrappers/generate-feature-spec.md`.
 
 Name: <kebab-case-name>
+Supersedes: N/A
 Classification: <MEDIUM-or-HIGH>
 Request and decisions: <portable request evidence and decisions>
 ```
 
 For a bug, use `.ai/wrappers/generate-bugfix-spec.md` and include causal
 evidence. The canonical spec prompt defines its evidence gate.
+
+Finalized specs are immutable. Reuse the existing spec path only for an exact
+content match. For any content change—including corrected evidence or
+root-cause analysis that preserves desired behavior—invoke specification with
+`Name: AUTO` and the current spec path under `Supersedes`. The canonical spec
+prompt selects the unused revisioned name; do not overwrite the spec referenced
+by an existing plan.
 
 ## Create a Saved Plan
 
@@ -76,6 +84,20 @@ Classification: resolve from current finalized context
 Spec: N/A: LOW | .ai/specs/<name>.spec.md
 Flow artifacts: AUTO
 ```
+
+Set `Spec` to the predecessor's exact spec path only when the complete spec is
+unchanged. If any spec content changed, first finalize a new immutable spec
+under an unused name and set `Spec` to that new path. The archived predecessor
+continues to reference its original spec.
+
+During execution or review, a material discovery that changes any spec content
+stops with the complete specification invocation as the immediate next action.
+Only a discovery that leaves the complete spec unchanged routes directly to
+the AUTO replan invocation.
+
+For LOW work, the workflow first reclassifies a material discovery. It creates
+a typed spec before replanning when the discovery classifies as MEDIUM or HIGH;
+only a discovery that remains LOW uses the LOW/no-spec replan.
 
 The validated predecessor moves to
 `.ai/artifacts/<current-plan-name>/superseded-plan.md`; only the successor stays

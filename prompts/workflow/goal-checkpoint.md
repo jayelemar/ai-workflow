@@ -47,7 +47,11 @@ deterministic delegation decision and record its bounded result.
 For each task:
 
 1. Implement only its single-repository scope or a correction qualifying under
-   the decision table in `.ai/AGENTS.md`.
+   the decision table in `.ai/AGENTS.md`. Stop for a material discovery, apply
+   `## Material Discovery Routing` from
+   `.ai/instructions/shared/workflow-state.md`, and record its exact applicable
+   specification or planning invocation in `## Next Action` before returning
+   it under `Do this next:`.
 2. Run the task's exact validation and review its actual diff, delegation
    evidence, provider-to-consumer contract, regressions, and unrelated files.
 3. Stage only task-owned changes and never `.ai` artifacts.
@@ -150,6 +154,9 @@ two-line `/goal` invocation referencing the linked plan as `## Next Action`.
 
 ## Final Output
 
-When called by create-plan, return control to it. Otherwise return only:
+When called by create-plan, return control to it. When refreshing a HIGH
+checkpoint for a material-discovery stop, return the exact status and cause,
+then `Do this next:` and the handoff's exact `## Next Action`. Otherwise return
+only:
 
 `Goal checkpoint refreshed at .ai/artifacts/<goal-name>/goal-handoff.md`
