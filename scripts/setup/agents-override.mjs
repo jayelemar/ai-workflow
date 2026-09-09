@@ -19,6 +19,17 @@ const OVERRIDE_CONTENT = `# Local Project AI Instructions
 
 Read and follow \`.ai/AGENTS.md\` before starting work.
 Use \`.ai/instructions/index.md\` to load only instructions relevant to the request.
+
+## Code Review Rules
+
+- Before approving changes, check that login and access control still work.
+- Do not expose private client, user, or firm data.
+- Run the relevant tests. If a test cannot be run, clearly say why.
+
+## Parallel Work Rules
+
+- Agents may research or review in parallel.
+- Never have more than one agent edit the same file at the same time.
 `;
 const REQUIRED_WORKFLOW_FILES = ["AGENTS.md", "instructions/index.md"];
 
@@ -380,7 +391,7 @@ const verifyResult = async (excludePath) => {
 const setupAgentsOverride = async () => {
   if (process.argv.length > 2) {
     throw new Error(
-      "setup:agents-override does not accept arguments or force-overwrite options",
+      "setup:codex does not accept arguments or force-overwrite options",
     );
   }
 

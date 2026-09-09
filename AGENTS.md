@@ -36,6 +36,12 @@ requires the corresponding explicitly invoked workflow stage.
 - Prefer readable, strongly typed, maintainable code that follows existing
   architecture and naming. Avoid duplicate behavior, dead code, speculative
   logic, needless dependencies, and unrelated refactors.
+- Before approving changes, verify that authentication and access control still
+  work, private client, user, and firm data remain protected, and every
+  relevant test has passed or has an explicit deferral reason.
+- Parallel agents may research or review in parallel, but concurrent write work
+  must have exclusive file ownership. Never assign more than one agent to edit
+  the same file at the same time.
 - Read `.ai/instructions/index.md`, then only the routed instructions that match
   the work. Prompts may directly require a canonical shared instruction.
 - Intake is read-only. Every later stage requires its own explicit user
@@ -86,5 +92,5 @@ boundaries, not immutable security boundaries.
   artifacts, logs, and workflow-local state ignored and untracked.
 - When a Git parent checkout exists, do not stage `.ai` files in it.
 
-Version: 2.0
-Last Updated: 2026-08-25
+Version: 2.1
+Last Updated: 2026-09-09

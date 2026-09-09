@@ -65,6 +65,10 @@ duplicating stage or review protocols.
   role, full `model`, and `reasoning_effort` supplied to the spawn. Also include
   the exact subagent name, role, full model, and reasoning effort in its bounded
   assignment and in durable delegation or review evidence.
+- Parallel assignments may overlap only for read-only work such as research or
+  review. Every concurrent write assignment must declare exclusive file-path
+  ownership or use a separate worktree; no two agents may edit the same file at
+  the same time.
 
 ## Validation
 

@@ -12,10 +12,10 @@ Codex discovery:
 
 ```bash
 # From .ai
-pnpm setup:agents-override
+pnpm setup:codex
 
 # From the containing workspace
-pnpm --dir .ai setup:agents-override
+pnpm --dir .ai setup:codex
 ```
 
 It creates this ignored workspace-root file:
@@ -25,6 +25,17 @@ It creates this ignored workspace-root file:
 
 Read and follow `.ai/AGENTS.md` before starting work.
 Use `.ai/instructions/index.md` to load only instructions relevant to the request.
+
+## Code Review Rules
+
+- Before approving changes, check that login and access control still work.
+- Do not expose private client, user, or firm data.
+- Run the relevant tests. If a test cannot be run, clearly say why.
+
+## Parallel Work Rules
+
+- Agents may research or review in parallel.
+- Never have more than one agent edit the same file at the same time.
 ```
 
 Setup uses the parent's repository-local Git exclude. It refuses conflicting

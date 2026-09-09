@@ -4,7 +4,7 @@ Run only when the operator explicitly requests local project instruction setup.
 
 From the direct parent project root, run:
 
-`pnpm --dir .ai setup:agents-override`
+`pnpm --dir .ai setup:codex`
 
 Delegate all mutation and validation to the package utility. Do not add independent filesystem, Git, or workflow-stage logic.
 

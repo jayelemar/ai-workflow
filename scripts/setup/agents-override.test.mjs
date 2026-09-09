@@ -33,6 +33,17 @@ const overrideContent = `# Local Project AI Instructions
 
 Read and follow \`.ai/AGENTS.md\` before starting work.
 Use \`.ai/instructions/index.md\` to load only instructions relevant to the request.
+
+## Code Review Rules
+
+- Before approving changes, check that login and access control still work.
+- Do not expose private client, user, or firm data.
+- Run the relevant tests. If a test cannot be run, clearly say why.
+
+## Parallel Work Rules
+
+- Agents may research or review in parallel.
+- Never have more than one agent edit the same file at the same time.
 `;
 const excludeRule = "/AGENTS.override.md";
 
@@ -85,7 +96,7 @@ const installWorkflow = async (projectRoot, { nestedGit = true } = {}) => {
         private: true,
         type: "module",
         scripts: {
-          "setup:agents-override": "node scripts/setup/agents-override.mjs",
+          "setup:codex": "node scripts/setup/agents-override.mjs",
         },
       },
       null,
@@ -179,7 +190,7 @@ test("nested package command creates the exact regular override and local exclud
   await withFixture(async (fixture) => {
     const result = await invokePnpm(
       fixture,
-      ["setup:agents-override"],
+      ["setup:codex"],
       fixture.workflowRoot,
     );
     assert.equal(result.exitCode, 0, result.stderr);
@@ -203,7 +214,7 @@ test("project-root package command produces the same result", async () => {
   await withFixture(async (fixture) => {
     const result = await invokePnpm(
       fixture,
-      ["--dir", ".ai", "setup:agents-override"],
+      ["--dir", ".ai", "setup:codex"],
       fixture.projectRoot,
     );
     assert.equal(result.exitCode, 0, result.stderr);

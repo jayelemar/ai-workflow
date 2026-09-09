@@ -12,13 +12,13 @@ bootstrap to select the workflow without changing shared project instructions.
 From `.ai`, run:
 
 ```bash
-pnpm setup:agents-override
+pnpm setup:codex
 ```
 
 Or from the project root, run:
 
 ```bash
-pnpm --dir .ai setup:agents-override
+pnpm --dir .ai setup:codex
 ```
 
 Both commands create this exact project-root file:
@@ -28,6 +28,17 @@ Both commands create this exact project-root file:
 
 Read and follow `.ai/AGENTS.md` before starting work.
 Use `.ai/instructions/index.md` to load only instructions relevant to the request.
+
+## Code Review Rules
+
+- Before approving changes, check that login and access control still work.
+- Do not expose private client, user, or firm data.
+- Run the relevant tests. If a test cannot be run, clearly say why.
+
+## Parallel Work Rules
+
+- Agents may research or review in parallel.
+- Never have more than one agent edit the same file at the same time.
 ```
 
 The utility also adds the exact `/AGENTS.override.md` rule to the parent's resolved
