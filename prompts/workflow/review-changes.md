@@ -67,11 +67,14 @@ tokens accepted by formal completion mode at `Awaiting risk decision`.
 ## Independent Reviewer
 
 1. Resolve the locked `reviewer` role, model, reasoning effort, and decimal
-   `fork_turns` from `.ai/config/agent-models.toml`. If unavailable or invalid,
-   use `Blocked`; never substitute a runtime.
+   `fork_turns` and `name_format` from `.ai/config/agent-models.toml`. If
+   unavailable or invalid, use `Blocked`; never substitute a runtime.
 2. Every fresh round uses a newly spawned reviewer with a self-contained,
    bounded assignment and no full-history fork. The reviewer reports findings
-   only and never implements fixes.
+   only and never implements fixes. Apply `## Subagent Identity and Creation`
+   from `.ai/instructions/shared/ai-workflow.md`, pass the resolved full model
+   and reasoning effort explicitly, and use a unique name such as
+   `reviewer_sol_xhigh_auth_flow_round_1`.
 3. Review the cumulative plan-owned diff from every declared integration base,
    including committed HIGH tasks and current remediation. Preserve and exclude
    unrelated user work.
@@ -211,7 +214,7 @@ Fix required | Awaiting risk decision | Ready to complete | Completed with accep
 
 ## Reviewer Runtime
 
-<locked model, reasoning effort, and fork turns>
+<subagent name, reviewer role, locked full model, reasoning effort, and fork turns>
 
 ## Review Budget
 

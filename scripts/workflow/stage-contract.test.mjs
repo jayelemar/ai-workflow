@@ -360,6 +360,56 @@ test("review-strategy@2 owns all three deterministic budget selections", async (
   assert.match(source, /LOW records `N\/A: LOW uses self-check`/);
 });
 
+test("subagent names expose role, model family, effort, and purpose", async () => {
+  const [workflow, models, template, createPlan, checkpoint, review] =
+    await Promise.all([
+      readSource("instructions/shared/ai-workflow.md"),
+      readSource("config/agent-models.toml"),
+      readSource("templates/plan.template.md"),
+      readSource("prompts/workflow/create-plan.md"),
+      readSource("prompts/workflow/goal-checkpoint.md"),
+      readSource("prompts/workflow/review-changes.md"),
+    ]);
+  const identityContract = normalize(workflow);
+  const checkpointContract = normalize(checkpoint);
+
+  assert.match(models, /\[roles\.scout\]/);
+  assert.match(models, /\[roles\.builder\]/);
+  assert.match(models, /\[roles\.reviewer\]/);
+  assert.match(
+    models,
+    /name_format = "\{role\}_\{model_family\}_\{reasoning_effort\}_\{purpose\}"/,
+  );
+  assert.match(
+    identityContract,
+    /only workflow subagent roles are `scout`, `builder`, and `reviewer`/i,
+  );
+  assert.match(
+    identityContract,
+    /`<role>_<model-family>_<reasoning-effort>_<purpose>`/,
+  );
+  assert.match(identityContract, /`scout_terra_high_auth_flow`/);
+  assert.match(
+    identityContract,
+    /match the explicit role, full `model`, and `reasoning_effort` supplied to the spawn/i,
+  );
+  assert.match(template, /`scout`, `builder`, and\/or `reviewer`/);
+  assert.match(createPlan, /Use `REQUIRED` for a scout/);
+  assert.match(
+    checkpointContract,
+    /pass the resolved full model and reasoning effort explicitly/,
+  );
+  assert.match(
+    checkpoint,
+    /subagent name, role, full model, reasoning effort, and result/,
+  );
+  assert.match(review, /`reviewer_sol_xhigh_auth_flow_round_1`/);
+  assert.match(
+    review,
+    /subagent name, reviewer role, locked full model, reasoning effort, and fork turns/,
+  );
+});
+
 test("review-changes is the singular review-loop authority", async () => {
   const review = await readSource("prompts/workflow/review-changes.md");
   const otherFiles = [

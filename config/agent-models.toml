@@ -13,7 +13,7 @@ reasoning_effort = "high"
 elevated_reasoning_effort = "xhigh"
 elevate_when = "security-critical, migration, destructive, or materially ambiguous architecture work"
 
-[roles.investigator]
+[roles.scout]
 tier = "balanced"
 reasoning_effort = "high"
 
@@ -27,3 +27,4 @@ reasoning_effort = "xhigh"
 
 [spawn]
 fork_turns = 4
+name_format = "{role}_{model_family}_{reasoning_effort}_{purpose}"

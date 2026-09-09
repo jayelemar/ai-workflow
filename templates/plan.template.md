@@ -82,7 +82,7 @@ one repository; split cross-repository outcomes into dependent tasks.
 - Owned paths: <exact repo-relative paths>
 - Depends on: None | <earlier task and callable internal contract>
 - Delegation: `REQUIRED` | `NONE`
-- Required roles: `investigator`, `builder`, and/or `reviewer` | `N/A: NONE`
+- Required roles: `scout`, `builder`, and/or `reviewer` | `N/A: NONE`
 - Delegation result: <bounded expected evidence | `N/A: NONE`>
 - Implementation: <task-scoped steps>
 - Validation: `<exact command>` — <expected result>

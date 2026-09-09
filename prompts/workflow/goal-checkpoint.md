@@ -37,8 +37,12 @@ handoff.
 
 Process planned tasks serially. Before HIGH execution, resolve every required
 role from `.ai/config/agent-models.toml`; never substitute an unavailable
-runtime. Apply the plan's deterministic delegation decision and record its
-bounded result.
+runtime. Before every required delegation, apply `## Subagent Identity and
+Creation` from `.ai/instructions/shared/ai-workflow.md`: use only `scout`,
+`builder`, or `reviewer`; pass the resolved full model and reasoning effort
+explicitly; and name the subagent
+`<role>_<model-family>_<reasoning-effort>_<purpose>`. Apply the plan's
+deterministic delegation decision and record its bounded result.
 
 For each task:
 
@@ -108,7 +112,7 @@ goal-handoff@2
 
 1. <task number and state: not started | active | complete | blocked>
    - Repository: <ID>
-   - Delegation evidence: <role and result | N/A>
+   - Delegation evidence: <subagent name, role, full model, reasoning effort, and result | N/A>
    - Validation evidence: <command and result | pending>
    - Actual-diff review: <result | pending>
    - Commit: <SHA and subject | no tracked change | pending>

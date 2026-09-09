@@ -233,7 +233,7 @@ const readRuntimeRegistry = (registry) => {
     balanced: getSectionString(registry, "tiers.balanced", "model"),
   };
   const roles = {};
-  for (const role of ["parent", "investigator", "builder", "reviewer"]) {
+  for (const role of ["parent", "scout", "builder", "reviewer"]) {
     const section = `roles.${role}`;
     const tier = getSectionString(registry, section, "tier");
     const reasoningEffort = getSectionString(

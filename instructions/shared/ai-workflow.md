@@ -1,5 +1,5 @@
-Version: 6.3
-Last Updated: 2026-08-28
+Version: 6.4
+Last Updated: 2026-09-09
 
 # AI Workflow Instructions
 
@@ -42,6 +42,23 @@ duplicating stage or review protocols.
 - Only root-level `.ai/plans/*.md` files are active plans. Replanning preserves
   one active revision per work item and stores superseded plans as evidence
   under the predecessor's artifact directory.
+
+## Subagent Identity and Creation
+
+- The only workflow subagent roles are `scout`, `builder`, and `reviewer`.
+- Resolve the role's full model ID and reasoning effort plus decimal
+  `fork_turns` and `name_format` from `.ai/config/agent-models.toml` before
+  every spawn. If any value is missing or invalid, stop as blocked; never
+  substitute a runtime.
+- Set every subagent name from `name_format` as
+  `<role>_<model-family>_<reasoning-effort>_<purpose>`. Derive `model-family`
+  from the final hyphen-delimited token of the resolved model ID (`terra` from
+  `gpt-5.6-terra`), and write `purpose` as short lowercase snake case. Example:
+  `scout_terra_high_auth_flow`.
+- The name's role, model family, and reasoning effort must match the explicit
+  role, full `model`, and `reasoning_effort` supplied to the spawn. Also include
+  the exact subagent name, role, full model, and reasoning effort in its bounded
+  assignment and in durable delegation or review evidence.
 
 ## Validation
 

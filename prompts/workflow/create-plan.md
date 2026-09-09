@@ -108,7 +108,7 @@ Use `.ai/templates/plan.template.md` and save
     external security boundary.
     LOW records `N/A: LOW uses self-check`.
 - Every HIGH task declares owned paths, exact validation, commit purpose, and a
-  deterministic delegation decision. Use `REQUIRED` for an investigator when
+  deterministic delegation decision. Use `REQUIRED` for a scout when
   evidence spans three or more source areas, a builder for implementation fully
   isolated from other tasks, and a reviewer for a sensitive boundary. Never use
   `OPTIONAL`.
