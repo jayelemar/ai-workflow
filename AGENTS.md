@@ -4,6 +4,20 @@ This file is the behavioral authority for work that uses the `.ai` workflow.
 Prompts own stage contracts and output schemas; routed instructions own reusable
 repository conventions.
 
+## Scope
+
+The `.ai` workflow is opt-in: it starts only when the user explicitly invokes a
+workflow prompt or stage. A direct request does not invoke the workflow by
+default.
+
+Ordinary read-only requests—including codebase analysis, explanation, search,
+diagnosis, and status reporting—remain outside the workflow unless the user
+explicitly invokes it. Do not classify, plan, execute, or formally review those
+requests under the `.ai` workflow.
+
+Creating or changing workflow artifacts, or implementing an authorized plan,
+requires the corresponding explicitly invoked workflow stage.
+
 ## Sources of Truth
 
 - The user request and a finalized spec define desired behavior.
