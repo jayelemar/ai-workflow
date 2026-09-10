@@ -164,6 +164,43 @@ or contains an exact valid match that will remain byte-unchanged. For
 
 ## Final Response
 
-Return exactly:
+Finalizing the spec stops before planning. Return the finalized path and a
+complete planning invocation; providing it does not invoke or authorize the
+planning stage.
 
-`Spec finalized at <final-spec-path> [<spec-type>]`
+For an initial spec, or for a content revision with no active predecessor plan,
+return exactly:
+
+````text
+Spec finalized at <final-spec-path> [<spec-type>]
+
+Do this next:
+```text
+Use `.ai/wrappers/create-plan.md`.
+
+Plan name: <resolved-name>
+Supersedes: N/A
+Classification: <classification>
+Spec: <final-spec-path>
+Flow artifacts: AUTO
+```
+````
+
+When a content revision has exactly one active predecessor plan whose `## Spec`
+references the supplied `Supersedes` spec, use that plan as
+`<current-active-plan-path>` and return exactly:
+
+````text
+Spec finalized at <final-spec-path> [<spec-type>]
+
+Do this next:
+```text
+Use `.ai/wrappers/create-plan.md`.
+
+Plan name: AUTO
+Supersedes: <current-active-plan-path>
+Classification: <classification>
+Spec: <final-spec-path>
+Flow artifacts: AUTO
+```
+````

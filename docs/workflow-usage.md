@@ -58,6 +58,10 @@ Request and decisions: <portable request evidence and decisions>
 For a bug, use `.ai/wrappers/generate-bugfix-spec.md` and include causal
 evidence. The canonical spec prompt defines its evidence gate.
 
+On success, specification returns the finalized path followed by `Do this
+next:` and a complete copy-pasteable create-plan invocation. That response does
+not start planning; invoke the returned prompt explicitly.
+
 Finalized specs are immutable. Reuse the existing spec path only for an exact
 content match. For any content change—including corrected evidence or
 root-cause analysis that preserves desired behavior—invoke specification with

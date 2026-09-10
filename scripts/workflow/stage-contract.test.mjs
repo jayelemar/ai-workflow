@@ -363,6 +363,14 @@ test("finalized specs are immutable and replans retain exact spec references", a
     /If it is an exact valid match.*reuse its path as `<final-spec-path>`.*Otherwise save the new immutable spec only at the resolved unused successor path.*use it as `<final-spec-path>`/i,
   );
   assert.match(spec, /Spec finalized at <final-spec-path> \[<spec-type>\]/);
+  assert.match(
+    spec,
+    /Spec finalized at <final-spec-path> \[<spec-type>\][\s\S]*Do this next:[\s\S]*Use `\.ai\/wrappers\/create-plan\.md`\.[\s\S]*Plan name: <resolved-name>[\s\S]*Supersedes: N\/A[\s\S]*Classification: <classification>[\s\S]*Spec: <final-spec-path>[\s\S]*Flow artifacts: AUTO/,
+  );
+  assert.match(
+    normalize(spec),
+    /When a content revision has exactly one active predecessor plan.*Plan name: AUTO.*Supersedes: <current-active-plan-path>.*Spec: <final-spec-path>/i,
+  );
   assert.match(spec, /Only this prompt resolves the successor name/i);
   assert.match(
     normalize(spec),
