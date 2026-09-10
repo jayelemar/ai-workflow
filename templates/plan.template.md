@@ -99,4 +99,5 @@ one repository; split cross-repository outcomes into dependent tasks.
 
 ## Final Output
 
-`Plan saved to .ai/plans/<plan-name>.md [<classification>]`
+Follow `.ai/prompts/workflow/create-plan.md`'s classification-specific
+final-response contract.

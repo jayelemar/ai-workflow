@@ -1,4 +1,4 @@
-Version: 6.6
+Version: 6.7
 Last Updated: 2026-09-10
 
 # AI Workflow Instructions
@@ -19,6 +19,8 @@ duplicating stage or review protocols.
 - `.ai/templates/plan.template.md` owns `plan-manifest@3`, plan structure,
   backward-compatible plan lineage, `review-strategy@2`, and review-budget
   fields.
+- `.ai/prompts/workflow/create-plan.md` owns planning final responses,
+  including worktree and direct-execution choices.
 - `.ai/prompts/workflow/review-changes.md` solely owns `implementation-review@2`, final
   and explicitly invoked manual review loops, risk decisions, and review-round
   accounting.

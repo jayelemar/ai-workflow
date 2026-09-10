@@ -1,5 +1,5 @@
-Version: 4.4
-Last Updated: 2026-09-09
+Version: 4.5
+Last Updated: 2026-09-10
 
 # Workflow Stage Instructions
 
@@ -55,6 +55,9 @@ start planning.
 - A durable `Next Action` or `Required Next Action` field follows the same
   contract. Do not reduce it to generic prose such as `return to planning`,
   `resolve the blocker`, or a request for the user to ask what to do next.
+- A successful planning response presents optional isolated worktree setup and
+  direct execution as two complete choices. Worktree setup remains a utility;
+  it does not invoke or authorize the execution choice.
 - Providing the invocation does not start or authorize that stage. The user
   must still invoke it explicitly.
 

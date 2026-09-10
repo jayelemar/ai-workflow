@@ -1030,16 +1030,48 @@ test("workflow cleanup requires prompt-led approval and always retains branches"
   }
 });
 
-test("HIGH response and resume preserve exact explicit goal invocation", async () => {
-  const [createPlan, resume] = await Promise.all([
+test("plan response offers worktree setup or direct execution", async () => {
+  const [workflow, createPlan, planTemplate, resume] = await Promise.all([
+    readSource("instructions/shared/ai-workflow.md"),
     readSource("prompts/workflow/create-plan.md"),
+    readSource("templates/plan.template.md"),
     readSource("prompts/workflow/resume-goal.md"),
   ]);
-  const highResponse = createPlan.split("HIGH returns exactly:")[1];
+  const finalResponse = createPlan.split(
+    "## Stage Boundary and Final Response",
+  )[1];
 
   assert.match(
-    highResponse,
+    finalResponse,
+    /Plan saved to \.ai\/plans\/<plan-name>\.md \[<classification>\]/,
+  );
+  assert.match(
+    finalResponse,
+    /Do this next: choose one\.[\s\S]*Prepare an isolated worktree:[\s\S]*run \.ai\/prompts\/utilities\/prepare-worktree\.md, plan: \.ai\/plans\/<plan-name>\.md/,
+  );
+  assert.match(
+    finalResponse,
+    /For HIGH[\s\S]*Execute in the current checkout:[\s\S]*```text\n\/goal <finalized spec `## Goal` text verbatim>\n\nplan: \.ai\/plans\/<plan-name>\.md\n```/,
+  );
+  assert.match(
+    finalResponse,
+    /For LOW or MEDIUM[\s\S]*Execute in the current checkout:[\s\S]*execute \.ai\/plans\/<plan-name>\.md/,
+  );
+  assert.match(
+    createPlan,
     /```text\n\/goal <finalized spec `## Goal` text verbatim>\n\nplan: \.ai\/plans\/<plan-name>\.md\n```/,
+  );
+  assert.match(
+    normalize(workflow),
+    /create-plan\.md.*owns.*planning final responses.*worktree.*direct-execution choices/i,
+  );
+  assert.match(
+    normalize(planTemplate),
+    /Final Output.*Follow.*create-plan\.md.*classification-specific final-response contract/i,
+  );
+  assert.doesNotMatch(
+    planTemplate,
+    /## Final Output\s+`Plan saved to \.ai\/plans\/<plan-name>\.md/,
   );
   assert.match(
     resume,

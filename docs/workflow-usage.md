@@ -152,8 +152,10 @@ may activate that fallback inside the blocked plan.
 
 ## Execute or Resume HIGH
 
-Run the exact two-line command emitted by plan creation or returned by the
-resume wrapper:
+After plan creation, choose the emitted isolated-worktree setup command or the
+direct current-checkout command. Worktree setup returns a task-local copy of
+the exact two-line `/goal` invocation; it does not invoke that command. Direct
+execution uses:
 
 ```text
 /goal <exact saved goal>
@@ -182,6 +184,9 @@ The [HIGH checkpoint contract](../prompts/workflow/goal-checkpoint.md) owns task
 commit evidence. The handoff itself does not copy policy.
 
 ## Optional Worktree and Delivery Utilities
+
+Plan creation surfaces this worktree command alongside direct execution for
+LOW, MEDIUM, and HIGH plans:
 
 ```text
 run .ai/prompts/utilities/prepare-worktree.md, plan: .ai/plans/<plan-name>.md

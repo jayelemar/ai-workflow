@@ -178,15 +178,45 @@ The handoff stores evidence, not copied review or commit policy.
 ## Stage Boundary and Final Response
 
 Saving a plan does not implement it. For a replan, archive activation also does
-not implement it. LOW/MEDIUM next uses
-`execute .ai/plans/<plan-name>.md`. HIGH returns exactly:
+not implement it. Every successful response must offer the optional isolated
+worktree preparation command before the direct execution command. Preparing a
+worktree does not authorize or start execution; it returns a task-local command
+that the user must invoke explicitly.
 
+For HIGH return exactly:
+
+````text
+Plan saved to .ai/plans/<plan-name>.md [<classification>]
+
+Do this next: choose one.
+
+Prepare an isolated worktree:
+```text
+run .ai/prompts/utilities/prepare-worktree.md, plan: .ai/plans/<plan-name>.md
+```
+
+Execute in the current checkout:
 ```text
 /goal <finalized spec `## Goal` text verbatim>
 
 plan: .ai/plans/<plan-name>.md
 ```
+````
 
-For LOW/MEDIUM return exactly:
+For LOW or MEDIUM return exactly:
 
-`Plan saved to .ai/plans/<plan-name>.md [<classification>]`
+````text
+Plan saved to .ai/plans/<plan-name>.md [<classification>]
+
+Do this next: choose one.
+
+Prepare an isolated worktree:
+```text
+run .ai/prompts/utilities/prepare-worktree.md, plan: .ai/plans/<plan-name>.md
+```
+
+Execute in the current checkout:
+```text
+execute .ai/plans/<plan-name>.md
+```
+````
