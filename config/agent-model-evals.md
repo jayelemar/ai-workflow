@@ -8,6 +8,8 @@ tools, and success criteria for both runs.
 
 - Parent: task decomposition, conflict resolution, scope control, validation,
   and final synthesis remain correct.
+- Specification and planning: the advisory stage mappings remain appropriate
+  for deterministic behavior definition and executable task decomposition.
 - Scout: code-path and contract maps remain complete and evidence-backed.
 - Builder: implementation stays within owned files and passes exact task tests.
 - Reviewer: known correctness and security defects are found without inventing

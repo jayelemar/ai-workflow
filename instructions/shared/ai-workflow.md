@@ -1,5 +1,5 @@
-Version: 6.5
-Last Updated: 2026-09-09
+Version: 6.6
+Last Updated: 2026-09-10
 
 # AI Workflow Instructions
 
@@ -31,6 +31,8 @@ duplicating stage or review protocols.
   request delivery.
 - `.ai/prompts/utilities/cleanup-workflow.md` owns prompt-led approval for
   destructive cleanup; its maintenance script owns inventory and mutation.
+- `.ai/config/agent-models.toml` owns workflow role locks and advisory runtime
+  recommendations for specification and planning.
 - Wrappers adapt inputs only.
 
 ## Plan Ownership
@@ -69,6 +71,22 @@ duplicating stage or review protocols.
   review. Every concurrent write assignment must declare exclusive file-path
   ownership or use a separate worktree; no two agents may edit the same file at
   the same time.
+
+## Stage Runtime Recommendations
+
+- Intake resolves the next writable stage before returning: LOW routes to
+  `planning`, while MEDIUM and HIGH route to `specification`.
+- Resolve the recommended stage's tier and reasoning effort from
+  `.ai/config/agent-models.toml`, then map the tier to its full model ID. Never
+  infer or hard-code a substitute when the mapping is missing or invalid.
+- Report the resolved model and reasoning effort as an advisory recommendation
+  in the intake result. The operator remains responsible for selecting the
+  runtime before explicitly invoking the next stage.
+- Intake must make its `Next action` a complete copy-pasteable prompt with all
+  known inputs filled in. A wrapper path or generic instruction is not an
+  actionable next-stage invocation.
+- A recommendation does not inspect or change the active runtime, block a later
+  stage, create a subagent, or authorize the next stage.
 
 ## Validation
 

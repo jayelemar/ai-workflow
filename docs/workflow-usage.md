@@ -12,6 +12,15 @@ behavior, schemas, validation, review decisions, and final responses.
 
 ## Intake
 
+Intake reports the recommended model and reasoning effort for the next writable
+stage. LOW recommends the configured planning runtime; MEDIUM and HIGH
+recommend the configured specification runtime. This is advisory only: switch
+the model and effort manually when desired. Intake does not inspect or change
+the active runtime, block specification or planning, or create a subagent.
+Its `Next action` is a complete copy-pasteable prompt with the known intake
+details filled in: a plan invocation for LOW, or the applicable feature- or
+bugfix-spec invocation for MEDIUM and HIGH.
+
 ```text
 Use `.ai/wrappers/feature-intake.md`.
 

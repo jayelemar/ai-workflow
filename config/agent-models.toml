@@ -25,6 +25,14 @@ reasoning_effort = "high"
 tier = "frontier"
 reasoning_effort = "xhigh"
 
+[stages.specification]
+tier = "frontier"
+reasoning_effort = "high"
+
+[stages.planning]
+tier = "frontier"
+reasoning_effort = "high"
+
 [spawn]
 fork_turns = 4
 name_format = "{role}_{model_family}_{reasoning_effort}_{purpose}"

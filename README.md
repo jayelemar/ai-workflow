@@ -56,7 +56,10 @@ HIGH:   intake -> finalized spec -> saved plan + handoff -> /goal
 ```
 
 Planning may create missing flow artifacts. Delivery remains an optional later
-invocation. Copy-ready inputs are in [Workflow Usage](docs/workflow-usage.md).
+invocation. Intake also reports the configured model and reasoning-effort
+recommendation for the next writable stage; the operator applies it manually.
+It returns that stage as a complete copy-pasteable prompt with known inputs
+filled in. Copy-ready inputs are in [Workflow Usage](docs/workflow-usage.md).
 
 ## Current Contracts
 

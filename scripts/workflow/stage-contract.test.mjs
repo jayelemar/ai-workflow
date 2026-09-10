@@ -239,6 +239,66 @@ test("classification uses deterministic LOW and HIGH triggers with MEDIUM fallba
   assert.match(selection, /Apply these rules in order/);
 });
 
+test("intake recommends runtimes and returns filled copy-pasteable prompts", async () => {
+  const [selection, workflow, models, usage] = await Promise.all([
+    readSource("prompts/workflow/select-workflow.md"),
+    readSource("instructions/shared/ai-workflow.md"),
+    readSource("config/agent-models.toml"),
+    readSource("docs/workflow-usage.md"),
+  ]);
+  const recommendationContract = normalize(
+    workflow.split("## Stage Runtime Recommendations")[1],
+  );
+
+  assert.match(
+    models,
+    /\[stages\.specification\][\s\S]*tier = "frontier"[\s\S]*reasoning_effort = "high"/,
+  );
+  assert.match(
+    models,
+    /\[stages\.planning\][\s\S]*tier = "frontier"[\s\S]*reasoning_effort = "high"/,
+  );
+  assert.match(
+    normalize(selection),
+    /`planning` for LOW and `specification` for MEDIUM or HIGH/,
+  );
+  assert.match(
+    selection,
+    /Recommended next-stage runtime: <full model ID> \/ <reasoning effort>/,
+  );
+  assert.match(selection, /Intake type: `feature \| bugfix`/);
+  assert.match(
+    normalize(selection),
+    /`Next action` containing one complete prompt rather than a wrapper path or generic instruction/,
+  );
+  assert.match(
+    selection,
+    /Use `\.ai\/wrappers\/create-plan\.md`\.[\s\S]*Plan name: <derived-kebab-case-name>[\s\S]*Supersedes: N\/A[\s\S]*Classification: LOW[\s\S]*Spec: N\/A: LOW[\s\S]*Flow artifacts: AUTO/,
+  );
+  assert.match(
+    selection,
+    /Use `\.ai\/wrappers\/generate-feature-spec\.md`\.[\s\S]*Name: <derived-kebab-case-name>[\s\S]*Supersedes: N\/A[\s\S]*Classification: <MEDIUM \| HIGH>[\s\S]*Request and decisions:/,
+  );
+  assert.match(
+    selection,
+    /Use `\.ai\/wrappers\/generate-bugfix-spec\.md`\.[\s\S]*Name: <derived-kebab-case-name>[\s\S]*Supersedes: N\/A[\s\S]*Classification: <MEDIUM \| HIGH>[\s\S]*Request and decisions:[\s\S]*Bug evidence:/,
+  );
+  assert.match(recommendationContract, /advisory recommendation/i);
+  assert.match(recommendationContract, /operator remains responsible/i);
+  assert.match(
+    recommendationContract,
+    /does not inspect or change the active runtime, block a later stage, create a subagent/,
+  );
+  assert.match(
+    normalize(usage),
+    /This is advisory only: switch the model and effort manually/,
+  );
+  assert.match(
+    normalize(usage),
+    /`Next action` is a complete copy-pasteable prompt with the known intake details filled in/,
+  );
+});
+
 test("spec and flow artifact formats remain unchanged", async () => {
   const [spec, flowPrompt, flowInstruction] = await Promise.all([
     readSource("prompts/workflow/generate-spec.md"),
