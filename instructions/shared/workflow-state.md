@@ -1,4 +1,4 @@
-Version: 4.5
+Version: 4.6
 Last Updated: 2026-09-10
 
 # Workflow Stage Instructions
@@ -55,6 +55,9 @@ start planning.
 - A durable `Next Action` or `Required Next Action` field follows the same
   contract. Do not reduce it to generic prose such as `return to planning`,
   `resolve the blocker`, or a request for the user to ask what to do next.
+- Filename confirmation is a continuation of the already-invoked specification
+  stage. Its direct `Use <name>.spec.md` reply is the complete resume action;
+  it does not require repeating the full specification invocation.
 - A successful planning response presents optional isolated worktree setup and
   direct execution as two complete choices. Worktree setup remains a utility;
   it does not invoke or authorize the execution choice.
@@ -75,16 +78,17 @@ action from the discovered content before constructing the actionable stop:
   next-stage invocation per choice:
   - for MEDIUM or HIGH, use
     `execute .ai/prompts/workflow/generate-spec.md` as the command with the
-    exact current spec type, `Name: AUTO`, the exact current spec path under
-    `Supersedes`, classification from the current discovery context, `Request
-and decisions:` with that choice filled in, and complete bug evidence; or
+    exact current spec type, the exact current spec path under `Supersedes`,
+    classification from the current discovery context, `Request and decisions:`
+    with that choice filled in, and complete bug evidence; or
   - for LOW, reapply the classifier with that choice. Use the current work-item
-    name, `Supersedes: N/A`, the resulting MEDIUM or HIGH classification,
-    `Request and decisions:` with that choice filled in, and complete bug
-    evidence under `execute .ai/prompts/workflow/generate-spec.md`. If it
-    instead remains LOW, use `execute .ai/prompts/workflow/create-plan.md`
-    with `Plan name: AUTO`, the current active plan under `Supersedes`,
-    `Classification: LOW`, `Spec: N/A: LOW`, and `Flow artifacts: AUTO`.
+    name as request context, `Supersedes: N/A`, the resulting MEDIUM or HIGH
+    classification, `Request and decisions:` with that choice filled in, and
+    complete bug evidence under
+    `execute .ai/prompts/workflow/generate-spec.md`. If it instead remains LOW,
+    use `execute .ai/prompts/workflow/create-plan.md` with `Plan name: AUTO`,
+    the current active plan under `Supersedes`, `Classification: LOW`,
+    `Spec: N/A: LOW`, and `Flow artifacts: AUTO`.
 
   The selected specification or LOW planning invocation is the only immediate
   action. A selected typed-spec invocation finalizes the decided immutable spec
@@ -98,7 +102,6 @@ and decisions:` with that choice filled in, and complete bug evidence; or
   complete copy-pasteable spec invocation with:
   - `execute .ai/prompts/workflow/generate-spec.md` as the command;
   - the exact spec type;
-  - `Name: AUTO`;
   - the exact current spec path under `Supersedes`;
   - classification determined from the current discovery context;
   - the complete request and decisions; and
@@ -125,7 +128,6 @@ AUTO`. If it classifies as MEDIUM or HIGH, route first to an explicitly
   provide a complete copy-pasteable invocation with:
   - `execute .ai/prompts/workflow/generate-spec.md` as the command;
   - the exact spec type;
-  - `Name: <current work item name>`;
   - `Supersedes: N/A`;
   - the resolved classification; and
   - complete request, decisions, and bug-evidence inputs.

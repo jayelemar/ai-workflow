@@ -49,7 +49,6 @@ Evidence:
 ```text
 Use `.ai/wrappers/generate-feature-spec.md`.
 
-Name: <kebab-case-name>
 Supersedes: N/A
 Classification: <MEDIUM-or-HIGH>
 Request and decisions: <portable request evidence and decisions>
@@ -58,6 +57,10 @@ Request and decisions: <portable request evidence and decisions>
 For a bug, use `.ai/wrappers/generate-bugfix-spec.md` and include causal
 evidence. The canonical spec prompt defines its evidence gate.
 
+Before creating a new spec file, specification returns one short, specific
+filename recommendation and waits for an explicit `Use <name>.spec.md` reply.
+No spec file is written before that selection.
+
 On success, specification returns the finalized path followed by `Do this
 next:` and a complete copy-pasteable create-plan invocation. That response does
 not start planning; invoke the returned prompt explicitly.
@@ -65,9 +68,9 @@ not start planning; invoke the returned prompt explicitly.
 Finalized specs are immutable. Reuse the existing spec path only for an exact
 content match. For any content change—including corrected evidence or
 root-cause analysis that preserves desired behavior—invoke specification with
-`Name: AUTO` and the current spec path under `Supersedes`. The canonical spec
-prompt selects the unused revisioned name; do not overwrite the spec referenced
-by an existing plan.
+the current spec path under `Supersedes`. The canonical spec prompt suggests
+the next unused revisioned name and waits for confirmation; do not overwrite
+the spec referenced by an existing plan.
 
 ## Create a Saved Plan
 

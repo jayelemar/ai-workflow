@@ -35,24 +35,26 @@ runtime.
 
 ## Copy-Pasteable Next Action
 
-Derive one safe kebab-case work-item name from `Target`. Preserve the complete
-known target, evidence, decisions, constraints, and acceptance expectations in
-the next-stage input; do not replace concrete intake evidence with a summary
-that loses information.
+Derive one safe kebab-case work-item name from `Target` only for LOW planning.
+Do not select a spec filename during intake; `generate-spec.md` owns the
+filename recommendation and confirmation for MEDIUM and HIGH. Preserve the
+complete known target, evidence, decisions, constraints, and acceptance
+expectations in the next-stage input; do not replace concrete intake evidence
+with a summary that loses information.
 
 - For LOW, emit a complete `.ai/wrappers/create-plan.md` invocation with the
   derived name, `Supersedes: N/A`, `Classification: LOW`, `Spec: N/A: LOW`, and
   `Flow artifacts: AUTO`.
 - For MEDIUM or HIGH feature intake, emit a complete
-  `.ai/wrappers/generate-feature-spec.md` invocation with the derived name,
-  `Supersedes: N/A`, the resolved classification, and the supplied feature
-  request, decisions, constraints, and acceptance expectations.
+  `.ai/wrappers/generate-feature-spec.md` invocation with `Supersedes: N/A`, the
+  resolved classification, and the supplied feature request, decisions,
+  constraints, and acceptance expectations.
 - For MEDIUM or HIGH bugfix intake, emit a complete
-  `.ai/wrappers/generate-bugfix-spec.md` invocation with the derived name,
-  `Supersedes: N/A`, the resolved classification, expected behavior,
-  constraints, and acceptance expectations under `Request and decisions`, and
-  all supplied reproduction, actual behavior, logs, affected-boundary, recent-
-  change, and causal evidence under `Bug evidence`.
+  `.ai/wrappers/generate-bugfix-spec.md` invocation with `Supersedes: N/A`, the
+  resolved classification, expected behavior, constraints, and acceptance
+  expectations under `Request and decisions`, and all supplied reproduction,
+  actual behavior, logs, affected-boundary, recent-change, and causal evidence
+  under `Bug evidence`.
 
 If `Missing decision` is not `None`, do not fabricate a writable-stage
 invocation. Instead, make `Next action` a complete copy-pasteable invocation of
@@ -95,7 +97,6 @@ Flow artifacts: AUTO
 ```text
 Use `.ai/wrappers/generate-feature-spec.md`.
 
-Name: <derived-kebab-case-name>
 Supersedes: N/A
 Classification: <MEDIUM | HIGH>
 Request and decisions: <complete known feature intake>
@@ -106,7 +107,6 @@ Request and decisions: <complete known feature intake>
 ```text
 Use `.ai/wrappers/generate-bugfix-spec.md`.
 
-Name: <derived-kebab-case-name>
 Supersedes: N/A
 Classification: <MEDIUM | HIGH>
 Request and decisions: <complete known expected behavior, constraints, and acceptance expectations>

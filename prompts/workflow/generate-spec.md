@@ -8,54 +8,83 @@ prompt with a spec type and input. Do not plan or implement.
 
 ```text
 Spec type: feature-spec@1 | bugfix-spec@1
-Name: <kebab-case name> | AUTO
 Supersedes: N/A | .ai/specs/<current-spec-name>.spec.md
 Classification: MEDIUM | HIGH
 Request and decisions: <desired behavior, constraints, and acceptance evidence>
 Bug evidence: <required for bugfix-spec@1; N/A for feature-spec@1>
 ```
 
-`Name` and `Supersedes` are required. Use an explicit safe kebab-case name with
-`Supersedes: N/A` for an initial spec or an idempotent exact-match invocation.
-Accept `Name: AUTO` only with one readable current finalized spec under
-`.ai/specs/` named by `Supersedes`. For AUTO, start at revision `2` after an
-unrevisioned predecessor or at `<N+1>` after `<base>-rN`, then increment until
-`.ai/specs/<base>-rN.spec.md` does not exist. Use that first unused candidate;
-an occupied AUTO candidate is skipped, never treated as an output collision.
-Reject an explicit name combined with `Supersedes`, `AUTO` without a valid
-predecessor, unsafe paths, and explicit output collisions.
+`Supersedes` is required. Use `Supersedes: N/A` for an initial spec. For a
+content revision or an idempotent exact-match invocation, provide exactly one
+readable current finalized spec under `.ai/specs/`. Reject unsafe paths and a
+missing, malformed, unreadable, or non-regular predecessor; never use such an
+artifact as revision lineage.
 
 If the type, class, desired behavior, or a material decision is missing, stop
 and request only the missing input. Inspect the codebase to establish current
 facts and constraints, never to invent desired behavior.
 
-The candidate output path is `.ai/specs/<resolved-name>.spec.md`. Finalized spec
-paths are immutable. For an explicit name, inspect whether that path exists. If
-it contains the exact valid spec requested by this invocation, leave its bytes
-unchanged, use that path as `<final-spec-path>`, and return the normal final
-response; planning may reuse that exact path. If it contains a different valid
-finalized spec, do not modify, replace,
-or delete it. Treat every non-exact requested content revision—including
-evidence, root-cause analysis, rejected hypotheses, constraints, or acceptance
-criteria changes that preserve desired behavior—the same way: stop with `Do
-this next:` followed by a complete copy-pasteable invocation of this prompt
-using `Name: AUTO`, the colliding valid spec path under `Supersedes`, and every
-other supplied input unchanged. Only this prompt resolves the successor name.
+## Filename Confirmation Gate
 
-If an explicit output path exists but is unreadable, malformed, or not a
-regular file, preserve it and stop with the exact blocker. Resolve a new unused
-explicit kebab-case name in this prompt and provide the complete retry
-invocation under `Do this next:` with `Supersedes: N/A` and every other supplied
-input unchanged. Never use a malformed artifact as an AUTO predecessor. These
-rules keep predecessor plans tied to the exact valid spec they were created
-from.
+Finalized spec paths are immutable. Before creating any spec file, ask the user
+to select its filename and show one suggested filename that is short and
+specific. Write nothing before receiving the user's explicit filename
+selection. A filename included in the initial invocation is only a naming
+preference and never counts as the required selection; the selection must be a
+direct reply to the filename question during this invoked stage. Use that
+preference as the suggestion only when it satisfies every naming and collision
+rule below.
 
-For `Name: AUTO`, compare the requested complete content with the predecessor.
-If it is an exact valid match, leave the predecessor byte-unchanged, reuse its
-path as `<final-spec-path>`, and return the normal final response. Otherwise
-save the new immutable spec only at the resolved unused successor path, use it
-as `<final-spec-path>`, and never modify the predecessor. For a new explicit
-name, use its saved candidate path as `<final-spec-path>`.
+Ask only after every non-filename input, decision, schema rule, and applicable
+RCA gate is complete enough to produce the final content. Construct all
+semantic spec content in memory before suggesting a name. Render the schema's
+`<name>` from the selected filename stem; for an exact-predecessor comparison,
+render it from the predecessor's stem. For an initial spec, derive two to five
+kebab-case words, with a maximum of 48 characters before `.spec.md`. Choose the
+shortest name that remains specific to the requested behavior, normally an
+action plus its distinguishing object. Exclude generic filler such as
+`feature`, `bugfix`, `spec`, `update`, `change`, or `misc`.
+
+The suggestion must resolve to an unused path. If the shortest natural initial
+name is occupied, add the shortest distinguishing request term that still fits
+the limits. If no unused specific variant remains, append the lowest available
+integer starting at `2`, shortening earlier words as needed to keep the stem at
+48 characters or fewer.
+
+Treat every non-exact requested content revision—including evidence,
+root-cause analysis, rejected hypotheses, constraints, or acceptance criteria
+changes that preserve desired behavior—as creation of a new immutable spec and
+apply this filename confirmation gate.
+
+For a changed spec with `Supersedes`, derive the suggestion from its predecessor:
+start at revision `2` after an unrevisioned predecessor or at `<N+1>` after
+`<base>-rN`, then increment until `.ai/specs/<base>-rN.spec.md` does not exist.
+Use that first unused candidate. The inherited base may exceed the initial-name
+length or word limits; do not rename established lineage merely to shorten it.
+
+If the predecessor is an exact valid match for the requested complete content,
+leave it byte-unchanged, reuse its path as `<final-spec-path>`, return the normal
+final response, and do not ask for a filename because no file will be created.
+Otherwise return exactly this filename question and stop without writing:
+
+```text
+Spec filename required before creation.
+Suggested filename: `<suggested-name>.spec.md`
+Reply with `Use <suggested-name>.spec.md` to accept, or `Use <other-safe-kebab-case-name>.spec.md`.
+```
+
+Accept only a direct reply in that form whose filename is a basename ending in
+`.spec.md` and whose stem is safe kebab-case. Resolve it only under `.ai/specs/`.
+If the reply does not match this form, repeat the same filename question and
+suggestion and write nothing.
+If the selected path does not exist, save the candidate content there and use
+it as `<final-spec-path>`. If it contains the exact valid spec requested, leave
+its bytes unchanged and reuse it as `<final-spec-path>`. If the selected path
+already contains a different valid spec, preserve it and ask again with a new
+unused suggestion; do not modify, replace, or delete it. If it exists but is
+unreadable, malformed, or not a regular file, also preserve it and ask again
+with a new unused suggestion. Never modify, replace, or delete an existing spec
+path.
 
 ## Shared Rules
 
@@ -70,8 +99,8 @@ name, use its saved candidate path as `<final-spec-path>`.
   the user provided them as non-negotiable constraints.
 - Ask for explicit decisions when alternatives materially change behavior.
 - Never update a finalized spec in place. Any requested spec-content change
-  requires a newly invoked specification stage with a new unused name;
-  planning then records the resulting immutable spec path.
+  requires a newly invoked specification stage and a newly confirmed unused
+  filename; planning then records the resulting immutable spec path.
 - Finalizing and saving the spec does not invoke flow artifacts or planning.
 
 ## Feature Contract
@@ -158,9 +187,12 @@ evidence. `Open Decisions` must be exactly `None` before finalization.
 
 Before saving, verify the selected schema is exact, every acceptance criterion
 maps to defined behavior, all material branches and failures are deterministic,
-no desired behavior was inferred from code, and the output path is either new
-or contains an exact valid match that will remain byte-unchanged. For
-`bugfix-spec@1`, also verify every RCA conclusion is evidence-backed.
+no desired behavior was inferred from code, the filename was explicitly
+selected after the required question, and the output path is either new or
+contains an exact valid match that will remain byte-unchanged. For
+`bugfix-spec@1`, also verify every RCA conclusion is evidence-backed. An exact
+predecessor reuse is exempt only from the filename-selection check because it
+does not create a file.
 
 ## Final Response
 

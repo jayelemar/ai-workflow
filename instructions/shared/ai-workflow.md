@@ -1,4 +1,4 @@
-Version: 6.7
+Version: 6.8
 Last Updated: 2026-09-10
 
 # AI Workflow Instructions
@@ -14,8 +14,8 @@ duplicating stage or review protocols.
   table.
 - `.ai/instructions/shared/workflow-state.md` owns stage transitions only.
 - `.ai/prompts/workflow/generate-spec.md` owns finalized-spec schemas,
-  immutable spec-path creation, and exact-match reuse versus content-revision
-  naming.
+  immutable spec-path creation, mandatory filename confirmation, and
+  exact-match reuse versus content-revision suggestions.
 - `.ai/templates/plan.template.md` owns `plan-manifest@3`, plan structure,
   backward-compatible plan lineage, `review-strategy@2`, and review-budget
   fields.
