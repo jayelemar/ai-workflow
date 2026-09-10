@@ -1,7 +1,7 @@
 # Execute Plan
 
 Run only when the user explicitly invokes `execute <plan-file>`. This command
-authorizes implementation of one saved LOW or MEDIUM `plan-manifest@3`.
+authorizes implementation of one saved LOW or MEDIUM `plan-manifest@4`.
 
 Read `.ai/AGENTS.md`, the plan, its finalized spec and flow artifacts when
 declared, current Git state in every repository, and only project instructions
@@ -17,7 +17,7 @@ Resolution` from `.ai/instructions/shared/workflow-state.md` and stop without
   `Legacy workflow artifact: <path> uses <format>; replan using the current
 contract before execution or resume.` Do not migrate, overwrite, or delete it.
 - Every declared repository root and integration-base ref must resolve.
-- Validate a current `worktree-setup@1` report against the `plan-manifest@3`,
+- Validate a current `worktree-setup@1` report against the `plan-manifest@4`,
   repository mappings, branches, bases, and Git worktree registries before using
   its filesystem-target overlay. Reject a stale or legacy report.
 - LOW requires its saved compact plan. MEDIUM requires its finalized typed spec.
@@ -42,7 +42,7 @@ LOW self-checks actual scope, diff, required validation, repositories, and
 preserved unrelated work.
 
 MEDIUM invokes `.ai/prompts/workflow/review-changes.md` and saves its
-`implementation-review@2` result. That prompt exclusively controls review
+`implementation-review@3` result. That prompt exclusively controls review
 rounds, remediation, statuses, risk decisions, and completion eligibility; do
 not restate or reinterpret its transitions here.
 

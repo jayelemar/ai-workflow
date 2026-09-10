@@ -42,7 +42,7 @@ test("prepared execution uses a verified task-local repository overlay", () => {
     /maps every repository ID to one verified target path/,
   );
   assert.match(preparePrompt, /worktree-setup@1/);
-  assert.match(preparePrompt, /same `plan-manifest@3`/);
+  assert.match(preparePrompt, /same `plan-manifest@4`/);
 });
 
 test("prepare-worktree mirrors populated root environments and workspace docs", () => {

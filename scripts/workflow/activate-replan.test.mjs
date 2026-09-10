@@ -22,7 +22,7 @@ const initialPlan = (name) => `# Plan: ${name}
 
 ## Document Format
 
-plan-manifest@3
+plan-manifest@4
 `;
 
 const revisionPlan = ({
@@ -35,7 +35,7 @@ const revisionPlan = ({
 
 ## Document Format
 
-plan-manifest@3
+plan-manifest@4
 
 ## Plan Lineage
 
@@ -95,7 +95,7 @@ test("arguments require one predecessor and candidate", () => {
   );
 });
 
-test("lineage-free plan-manifest@3 is inferred as revision one", () => {
+test("lineage-free plan-manifest@4 is inferred as revision one", () => {
   assert.deepEqual(parsePlanManifest(initialPlan("trip-style")), {
     archivedRevisions: [],
     name: "trip-style",
@@ -104,13 +104,20 @@ test("lineage-free plan-manifest@3 is inferred as revision one", () => {
   });
 });
 
+test("plan-manifest@3 is rejected as legacy activation input", () => {
+  assert.throws(
+    () => parsePlanManifest(initialPlan("trip-style").replace("@4", "@3")),
+    /plan is not plan-manifest@4/,
+  );
+});
+
 test("new initial lineage accepts the template's code-formatted None value", () => {
   assert.deepEqual(
     parsePlanManifest(`# Plan: trip-style
 
 ## Document Format
 
-plan-manifest@3
+plan-manifest@4
 
 ## Plan Lineage
 

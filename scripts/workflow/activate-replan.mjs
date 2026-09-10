@@ -90,8 +90,8 @@ export const parsePlanManifest = (source) => {
   if (!nameMatch || !SAFE_NAME.test(nameMatch[1])) {
     throw new Error("plan has a missing or unsafe # Plan name");
   }
-  if (!/^plan-manifest@3$/m.test(source)) {
-    throw new Error("plan is not plan-manifest@3");
+  if (!/^plan-manifest@4$/m.test(source)) {
+    throw new Error("plan is not plan-manifest@4");
   }
 
   const name = nameMatch[1];

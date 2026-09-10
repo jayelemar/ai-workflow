@@ -2,7 +2,7 @@
 
 ## Document Format
 
-plan-manifest@3
+plan-manifest@4
 
 ## Plan Lineage
 
@@ -59,7 +59,7 @@ Include this subsection only when `Sensitive-boundary trigger` names a boundary:
 
 ## Review Budget
 
-- Fresh rounds: <`1` | `2` | `3` | `N/A: LOW uses self-check`>
+- Fresh rounds: <`2` | `3` | `N/A: LOW uses self-check`>
 - Selection reason: <exact deterministic budget rule>
 
 ## Implementation

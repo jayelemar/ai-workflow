@@ -1,6 +1,6 @@
 # Create Plan
 
-Create one saved `plan-manifest@3` only after explicit plan invocation. For
+Create one saved `plan-manifest@4` only after explicit plan invocation. For
 MEDIUM or HIGH, require a finalized spec. In the same invocation, determine
 whether flow tracing is required and reuse or create the required pair before
 saving the plan.
@@ -108,9 +108,7 @@ Use `.ai/templates/plan.template.md` and save
   create or change in planned ownership so any required replan has an explicit,
   reviewable starting boundary.
 - Save exactly one automatic fresh-review budget for MEDIUM/HIGH:
-  - `1` for single-repository MEDIUM work with no sensitive surface and no
-    cross-boundary contract;
-  - `2` for every other MEDIUM plan and ordinary HIGH plan;
+  - `2` for every MEDIUM plan and ordinary HIGH plan;
   - `3` for HIGH work involving multiple repositories, authentication or
     authorization, payments, secrets, migrations, destructive behavior, or an
     external security boundary.
@@ -163,7 +161,7 @@ node .ai/scripts/workflow/activate-replan.mjs --predecessor .ai/plans/<predecess
 ## HIGH Handoff
 
 For HIGH, initialize `.ai/artifacts/<plan-name>/goal-handoff.md` as
-`goal-handoff@2` through `.ai/prompts/workflow/goal-checkpoint.md`. Record current
+`goal-handoff@3` through `.ai/prompts/workflow/goal-checkpoint.md`. Record current
 repository state, ordered tasks as not started, no validation or review rounds,
 `Awaiting explicit /goal invocation` as the blocker, and this next action:
 

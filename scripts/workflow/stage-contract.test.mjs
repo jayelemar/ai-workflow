@@ -436,7 +436,7 @@ test("current plans use versioned structure and a required Plan name input", asy
   ]);
 
   for (const source of [template, prompt, workflow]) {
-    assert.match(source, /plan-manifest@3/);
+    assert.match(source, /plan-manifest@4/);
   }
   for (const source of [prompt, wrapper]) {
     assert.match(source, /Plan name: `?<kebab-case-name>`?/);
@@ -450,6 +450,18 @@ test("current plans use versioned structure and a required Plan name input", asy
   assert.match(template, /### Repository: <repository-id>/);
   assert.match(template, /Integration base/);
   assert.match(template, /Repository: `<exactly-one-repository-id>`/);
+});
+
+test("every MEDIUM plan has an automatic remediation-verification round", async () => {
+  const [template, createPlan] = await Promise.all([
+    readSource("templates/plan.template.md"),
+    readSource("prompts/workflow/create-plan.md"),
+  ]);
+
+  assert.match(createPlan, /`2` for every MEDIUM plan and ordinary HIGH plan/);
+  assert.doesNotMatch(createPlan, /`1` for .*MEDIUM/);
+  assert.match(template, /Fresh rounds: <`2` \| `3`/);
+  assert.doesNotMatch(template, /Fresh rounds: <`1`/);
 });
 
 test("plan validation gates are feasible, invariant-driven, and risk-based", async () => {
@@ -601,7 +613,7 @@ test("LOW asynchronous multi-writer plans save a fallback and replan repeated fa
   assert.doesNotMatch(reviewLoop, /one-time LOW manual fallback/);
 });
 
-test("review-strategy@2 owns all three deterministic budget selections", async () => {
+test("review-strategy@2 owns the deterministic review budgets", async () => {
   const [template, createPlan] = await Promise.all([
     readSource("templates/plan.template.md"),
     readSource("prompts/workflow/create-plan.md"),
@@ -609,15 +621,8 @@ test("review-strategy@2 owns all three deterministic budget selections", async (
   const source = normalize(createPlan);
 
   assert.match(template, /Format: `review-strategy@2`/);
-  assert.match(template, /Fresh rounds: <`1` \| `2` \| `3`/);
-  assert.match(
-    source,
-    /`1` for single-repository MEDIUM work with no sensitive surface and no cross-boundary contract/,
-  );
-  assert.match(
-    source,
-    /`2` for every other MEDIUM plan and ordinary HIGH plan/,
-  );
+  assert.match(template, /Fresh rounds: <`2` \| `3`/);
+  assert.match(source, /`2` for every MEDIUM plan and ordinary HIGH plan/);
   assert.match(
     source,
     /`3` for HIGH work involving multiple repositories, authentication or authorization, payments, secrets, migrations, destructive behavior, or an external security boundary/,
@@ -708,12 +713,12 @@ test("review-changes is the singular review-loop authority", async () => {
   }
 });
 
-test("implementation-review@2 limits blocking findings to attributable scope", async () => {
+test("implementation-review@3 limits blocking findings to attributable scope", async () => {
   const review = normalize(
     await readSource("prompts/workflow/review-changes.md"),
   );
 
-  assert.match(review, /implementation-review@2/);
+  assert.match(review, /implementation-review@3/);
   assert.match(review, /defect introduced by the plan-owned diff/);
   assert.match(review, /direct violation of the request or finalized spec/);
   assert.match(review, /regression in a boundary changed by the plan/);
@@ -781,7 +786,7 @@ test("manual review until clear is bounded, any-plan, and non-executing", async 
     review,
     /explicit invocation of `.ai\/prompts\/utilities\/review-until-clear\.md` with `Plan: <plan-file>`/,
   );
-  assert.match(review, /every current `plan-manifest@3` classification/);
+  assert.match(review, /every current `plan-manifest@4` classification/);
   assert.match(review, /plan-owned implementation evidence/);
   assert.match(
     review,
@@ -789,9 +794,9 @@ test("manual review until clear is bounded, any-plan, and non-executing", async 
   );
   assert.match(
     review,
-    /LOW.*does not create an `implementation-review@2` artifact/,
+    /LOW.*does not create an `implementation-review@3` artifact/,
   );
-  assert.match(review, /MEDIUM.*review\.md.*HIGH.*goal-handoff@2/);
+  assert.match(review, /MEDIUM.*review\.md.*HIGH.*goal-handoff@3/);
   assert.match(review, /does not increase the automatic-rounds-used count/);
   assert.match(
     review,
@@ -810,20 +815,56 @@ test("manual review until clear is bounded, any-plan, and non-executing", async 
   assert.match(utility, /Plan: `.ai\/plans\/<plan-name>\.md`/);
 });
 
-test("risk acceptance requires fixed findings and passing validation", async () => {
+test("risk acceptance is limited to P2-only non-sensitive remediation", async () => {
   const review = normalize(
     await readSource("prompts/workflow/review-changes.md"),
   );
 
   assert.match(
     review,
-    /`ACCEPT_UNREVIEWED_REMEDIATION` sets `Completed with accepted review risk` only when all known `P0`–`P2` are fixed, required validation passes/,
+    /`ACCEPT_UNREVIEWED_REMEDIATION` sets `Completed with accepted review risk` only when every in-scope blocking finding.*was `P2`.*plan declares no sensitive boundary.*required validation passes/,
   );
+  assert.match(
+    review,
+    /Any in-scope `P0` or `P1`.*makes this token ineligible/,
+  );
+  assert.match(review, /current post-remediation fingerprint is recorded/);
   assert.match(review, /latest remediation was not independently re-reviewed/);
   assert.match(
     review,
     /status is forbidden while any known `P0`–`P2` is unresolved or required validation fails/,
   );
+});
+
+test("review clearance is bound to deterministic plan-owned fingerprints", async () => {
+  const [agents, workflow, review, checkpoint, resume, helper] =
+    await Promise.all([
+      readSource("AGENTS.md"),
+      readSource("instructions/shared/ai-workflow.md"),
+      readSource("prompts/workflow/review-changes.md"),
+      readSource("prompts/workflow/goal-checkpoint.md"),
+      readSource("prompts/workflow/resume-goal.md"),
+      readSource("scripts/workflow/review-fingerprint.mjs"),
+    ]);
+  const reviewContract = normalize(review);
+
+  assert.match(agents, /review-input-fingerprint@1/);
+  assert.match(workflow, /owns no transition or completion decision/);
+  assert.match(review, /## Review Input Fingerprints/);
+  assert.match(reviewContract, /use only .*review-fingerprint\.mjs/i);
+  assert.match(
+    reviewContract,
+    /recompute every fingerprint before accepting the report.*mismatch.*discard the report as stale.*consume no round or authorization/i,
+  );
+  assert.match(
+    reviewContract,
+    /recompute it again immediately before `Ready to complete` or either owning stage claims completion/i,
+  );
+  assert.match(checkpoint, /Review input fingerprints/);
+  assert.match(normalize(resume), /recompute.*review-input-fingerprint@1/i);
+  assert.match(helper, /review-input-fingerprint@1/);
+  assert.match(helper, /--literal-pathspecs/);
+  assert.doesNotMatch(helper, /writeFile|appendFile/);
 });
 
 test("review stops repeated root causes and rejects invalid or stale tokens", async () => {
@@ -874,11 +915,11 @@ test("review round evidence is monotonically increasing", async () => {
   assert.match(resume, /positive, strictly increasing/);
 });
 
-test("goal-handoff@2 stores exact portable evidence without copied protocols", async () => {
+test("goal-handoff@3 stores exact portable evidence without copied protocols", async () => {
   const checkpoint = await readSource("prompts/workflow/goal-checkpoint.md");
   const schema = checkpoint.split("## Required Handoff Content")[1];
 
-  assert.match(checkpoint, /goal-handoff@2/);
+  assert.match(checkpoint, /goal-handoff@3/);
   for (const section of [
     "Exact Goal",
     "Linked Artifacts",
@@ -940,7 +981,7 @@ test("legacy artifacts are rejected precisely without migration or deletion", as
   }
   assert.match(
     await readSource("prompts/utilities/prepare-worktree.md"),
-    /same `plan-manifest@3`/,
+    /same `plan-manifest@4`/,
   );
 });
 

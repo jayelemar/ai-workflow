@@ -1,9 +1,9 @@
 # Review Implemented Changes
 
 This prompt is the sole authority for the MEDIUM/HIGH final-review loop, the
-explicit any-plan manual-until-clear loop, `implementation-review@2`,
+explicit any-plan manual-until-clear loop, `implementation-review@3`,
 review-round accounting, statuses, transitions, and risk-decision tokens. Read
-`.ai/AGENTS.md`, the current `plan-manifest@3`, its finalized spec and flow
+`.ai/AGENTS.md`, the current `plan-manifest@4`, its finalized spec and flow
 artifacts, actual repository diffs, validation evidence, and the saved
 `review-strategy@2` plus review budget.
 
@@ -24,7 +24,7 @@ stage and follows the automatic budget and authoritative state machine below.
 
 Manual-until-clear mode starts only from an explicit invocation of
 `.ai/prompts/utilities/review-until-clear.md` with `Plan: <plan-file>`. It is
-available for every current `plan-manifest@3` classification and authorizes
+available for every current `plan-manifest@4` classification and authorizes
 review plus corrective remediation of an already implemented plan-owned diff.
 Before review:
 
@@ -46,12 +46,13 @@ Before review:
    mandatory.
 
 For LOW, manual mode keeps round evidence in the final response for this
-invocation and does not create an `implementation-review@2` artifact. Report
-scope, reviewer runtime, fresh rounds, resolved and advisory findings,
-validation, deferred checks, and `Clear` or the exact blocker.
+invocation and does not create an `implementation-review@3` artifact. Report
+scope, review-input fingerprints, reviewer runtime, fresh rounds, resolved and
+advisory findings, validation, deferred checks, and `Clear` or the exact
+blocker.
 
 For MEDIUM, read or initialize the declared `review.md`; for HIGH, update the
-existing `goal-handoff@2` and apply the remediation commit rules in
+existing `goal-handoff@3` and apply the remediation commit rules in
 `.ai/prompts/workflow/goal-checkpoint.md`. Preserve all existing round history,
 record `REVIEW_UNTIL_CLEAR` as the manual authorization, and keep fresh round
 numbers positive and strictly increasing. Manual returned review work is
@@ -64,6 +65,39 @@ Manual mode never expands plan or spec scope and does not authorize delivery,
 pushing, or a pull request. It also does not replace the exact risk-decision
 tokens accepted by formal completion mode at `Awaiting risk decision`.
 
+## Review Input Fingerprints
+
+Use only `.ai/scripts/workflow/review-fingerprint.mjs` to create
+`review-input-fingerprint@1` evidence. The helper is read-only and returns no
+file contents. Before every fresh round, run it once per declared repository
+with that repository's ID, current filesystem root, declared integration base,
+and one repeated `--owned-path` for every exact file in the cumulative
+plan-owned diff. Include recorded corrective-deviation and review-remediation
+files; exclude preserved unrelated work. An unavailable helper, rejected input,
+or invalid output is `Blocked`; never substitute an ad hoc digest.
+
+```text
+node .ai/scripts/workflow/review-fingerprint.mjs --repository-id <id> --repository-root <current-root> --integration-base <declared-base> --owned-path <exact-path> [--owned-path <exact-path> ...]
+```
+
+Record each repository's resolved base SHA, audit-only HEAD SHA, and
+`planOwnedDigest`. Pass the complete fingerprint set to the reviewer as the
+only authorized diff snapshot. Immediately after the reviewer returns,
+recompute every fingerprint before accepting the report. A mismatch means the
+review input changed while the round was active: discard the report as stale,
+consume no round or authorization, use `Blocked`, and require the exact owning
+execution, goal-resume, or manual-review invocation after concurrent
+plan-owned writers are stopped.
+
+Store the matching fingerprint set with every counted round. Recompute it
+again immediately before `Ready to complete` or either owning stage claims
+completion. Any later plan-owned drift invalidates clearance and requires a
+fresh round. Use remaining automatic budget when available; otherwise set
+`Awaiting risk decision`, where only `REVIEW_ONE_MORE` or
+`REVIEW_UNTIL_CLEAR` is eligible for drift that was not recorded review
+remediation. A changed audit-only HEAD with an unchanged base SHA and
+`planOwnedDigest` does not invalidate review.
+
 ## Independent Reviewer
 
 1. Resolve the locked `reviewer` role, model, reasoning effort, and decimal
@@ -75,9 +109,10 @@ tokens accepted by formal completion mode at `Awaiting risk decision`.
    from `.ai/instructions/shared/ai-workflow.md`, pass the resolved full model
    and reasoning effort explicitly, and use a unique name such as
    `reviewer_sol_xhigh_auth_flow_round_1`.
-3. Review the cumulative plan-owned diff from every declared integration base,
-   including committed HIGH tasks and current remediation. Preserve and exclude
-   unrelated user work.
+3. Review only the cumulative plan-owned diff identified by the supplied
+   fingerprint set from every declared integration base, including committed
+   HIGH tasks and current remediation. Preserve and exclude unrelated user
+   work, and return the supplied fingerprint set with the report.
 4. Complete the full planned review surface before returning. For a named
    sensitive boundary, execute every targeted check and applicable adversarial
    variant in `review-strategy@2`; group variants by stable failed-invariant
@@ -100,8 +135,10 @@ reports no in-scope `P0`–`P2`.
 ## Round Accounting
 
 - A round increments only when a fresh independent reviewer returns a complete
-  cumulative report. Task review, validation, remediation, reviewer startup
-  failure, and advisory triage do not increment it.
+  cumulative report and every pre-review fingerprint still matches its
+  post-review recomputation. A stale report, task review, validation,
+  remediation, reviewer startup failure, and advisory triage do not increment
+  it.
 - Read the existing review or HIGH handoff before every review or resume.
   Review round numbers must be positive and strictly increasing. Missing,
   duplicate, decreasing, or reset round evidence is `Blocked`; never guess.
@@ -118,10 +155,12 @@ reports no in-scope `P0`–`P2`.
 Use exactly these statuses: `Fix required`, `Awaiting risk decision`, `Ready to
 complete`, `Completed with accepted review risk`, and `Blocked`.
 
-1. Start a fresh review automatically while no round is active and the saved
-   automatic budget has a remaining round.
-2. A clear returned round sets `Ready to complete`. Required validation must
-   still pass; retain advisory findings.
+1. Capture the current fingerprint set and start a fresh review automatically
+   while no round is active and the saved automatic budget has a remaining
+   round.
+2. A clear returned round sets `Ready to complete` only when its post-review
+   fingerprint recomputation matches. Required validation must still pass;
+   retain advisory findings and recheck the fingerprint before completion.
 3. A blocking returned round sets `Fix required`. Remediate every known in-scope
    `P0`–`P2`, apply the saved targeted and mutation/property checks where
    relevant, and rerun every affected task and plan validation. Never begin
@@ -189,10 +228,14 @@ decision`. This status is forbidden while any known `P0`–`P2` is unresolved
      expands implementation scope or authorizes delivery, pushing, or a pull
      request.
    - `ACCEPT_UNREVIEWED_REMEDIATION` sets `Completed with accepted review risk`
-     only when all known `P0`–`P2` are fixed, required validation passes, and
-     applicable HIGH remediation commits exist. Record that the latest
-     remediation was not independently re-reviewed. This is risk acceptance,
-     never reviewer clearance.
+     only when every in-scope blocking finding in the complete review history
+     was `P2`, all are fixed, the plan declares no sensitive boundary, required
+     validation passes, applicable HIGH remediation commits exist, and the
+     current post-remediation fingerprint is recorded. Any in-scope `P0` or
+     `P1`, named sensitive boundary, or unrecorded plan-owned drift makes this
+     token ineligible and requires independent clearance. Record the accepted
+     fingerprint and that the latest remediation was not independently
+     re-reviewed. This is risk acceptance, never reviewer clearance.
 8. Invalid, stale, duplicate, combined, or out-of-context tokens change no
    state, start no reviewer, and complete nothing. Continue to require the
    current state's valid action.
@@ -213,7 +256,7 @@ Save `.ai/artifacts/<plan-name>/review.md` with exactly this schema:
 
 ## Document Format
 
-implementation-review@2
+implementation-review@3
 
 ## Status
 
@@ -223,13 +266,18 @@ Fix required | Awaiting risk decision | Ready to complete | Completed with accep
 
 <cumulative plan-owned paths by repository and excluded unrelated work>
 
+## Review Input Fingerprints
+
+- Round <N>: <one review-input-fingerprint@1 entry per repository with repository ID, base SHA, audit-only HEAD SHA, plan-owned digest, and post-review match>
+- Current completion: <matching clear round and digest | accepted unreviewed-remediation digest and reason | stale and exact disposition>
+
 ## Reviewer Runtime
 
 <subagent name, reviewer role, locked full model, reasoning effort, and fork turns>
 
 ## Review Budget
 
-- Automatic fresh rounds: <1 | 2 | 3>
+- Automatic fresh rounds: <2 | 3>
 - Automatic rounds used: <number>
 - One-more authorization: <None | authorized for round N | consumed by round N>
 
@@ -249,7 +297,7 @@ Fix required | Awaiting risk decision | Ready to complete | Completed with accep
 ## Risk Decision
 
 - Token: <None | REVIEW_ONE_MORE | REVIEW_UNTIL_CLEAR | ACCEPT_UNREVIEWED_REMEDIATION>
-- Eligibility: <eligible reason | not eligible reason>
+- Eligibility: <eligible P2-only non-sensitive remediation reason | not eligible reason>
 - Disclosure: <None | latest remediation was not independently re-reviewed>
 
 ## Required Next Action
@@ -265,6 +313,6 @@ durable action under `Do this next:`. Never require the user to ask what to do.
 
 For HIGH, record the same state, immutable budget, strictly increasing fresh
 rounds, findings, validation, risk decision, remediation commit evidence, and
-next action in the `goal-handoff@2` fields owned by
+next action in the `goal-handoff@3` fields owned by
 `.ai/prompts/workflow/goal-checkpoint.md`. Do not copy this state machine into the
 handoff.

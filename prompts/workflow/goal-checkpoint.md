@@ -1,7 +1,7 @@
 # Goal Checkpoint
 
 Create or refresh the portable evidence checkpoint for a HIGH work item. Read
-`.ai/AGENTS.md`, the current `plan-manifest@3`, linked finalized artifacts, and
+`.ai/AGENTS.md`, the current `plan-manifest@4`, linked finalized artifacts, and
 repository state before writing.
 
 ## Input
@@ -27,7 +27,7 @@ handoff.
 - This action records verified progress only. It does not implement work,
   change the goal, authorize execution, or create workflow state.
 - Create or refresh only
-  `.ai/artifacts/<goal-name>/goal-handoff.md` as `goal-handoff@2`.
+  `.ai/artifacts/<goal-name>/goal-handoff.md` as `goal-handoff@3`.
 - Inspect current repository state read-only. Never store secrets, raw diffs,
   full command output, or copied policy text.
 - The handoff records review and commit evidence but never embeds the review
@@ -95,7 +95,7 @@ Write concise Markdown with exactly these sections:
 
 ## Document Format
 
-goal-handoff@2
+goal-handoff@3
 
 ## Exact Goal
 
@@ -104,7 +104,7 @@ goal-handoff@2
 ## Linked Artifacts
 
 - Spec: <finalized spec path>
-- Plan: <plan-manifest@3 path>
+- Plan: <plan-manifest@4 path>
 - User journey: <path | N/A from plan>
 - Implementation map: <path | N/A from plan>
 
@@ -127,9 +127,10 @@ goal-handoff@2
 
 ## Review State
 
-- Format: implementation-review@2
+- Format: implementation-review@3
 - Status: <canonical status | Not started>
-- Automatic budget: <1 | 2 | 3>
+- Automatic budget: <2 | 3>
+- Review input fingerprints: <per-round review-input-fingerprint@1 repository evidence and current completion match | None>
 - Fresh rounds: <None | strictly increasing ordered round records>
 - Findings: <blocking, resolved, advisory, and pre-existing dispositions | None>
 - Risk decision: <canonical recorded evidence | None>

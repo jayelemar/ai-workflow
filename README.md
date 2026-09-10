@@ -65,10 +65,12 @@ filled in. Copy-ready inputs are in [Workflow Usage](docs/workflow-usage.md).
 
 - Specs: `feature-spec@1`, `bugfix-spec@1`
 - Flow artifacts: `user-journey@1`, `implementation-map@1`
-- Plan: `plan-manifest@3` with backward-compatible lineage,
+- Plan: `plan-manifest@4` with backward-compatible lineage,
   `review-strategy@2`, and a saved review budget
-- MEDIUM review: `implementation-review@2`
-- HIGH handoff: `goal-handoff@2`
+- MEDIUM review: `implementation-review@3`
+- HIGH handoff: `goal-handoff@3`
+- Review input: `review-input-fingerprint@1`, generated read-only from each
+  repository's integration base and exact plan-owned diff
 - Worktree preparation report: `worktree-setup@1`, tied to its current plan
 
 Contract owners:
@@ -77,6 +79,7 @@ Contract owners:
 - [Stage sequence](instructions/shared/workflow-state.md)
 - [Plan structure](templates/plan.template.md)
 - [Formal and manual review loops](prompts/workflow/review-changes.md)
+- [Review input fingerprints](scripts/workflow/review-fingerprint.mjs)
 - [HIGH progress and commit evidence](prompts/workflow/goal-checkpoint.md)
 - [Portable worktree setup](prompts/utilities/prepare-worktree.md)
 
@@ -135,4 +138,12 @@ pnpm health:full
 # From any other directory
 node /absolute/path/to/.ai/scripts/maintenance/health-check.mjs
 node /absolute/path/to/.ai/scripts/maintenance/health-check.mjs --full
+```
+
+Generate one repository's read-only review input fingerprint with repeated
+exact plan-owned paths:
+
+```bash
+pnpm review:fingerprint --repository-id <id> --repository-root <path> \
+  --integration-base <ref> --owned-path <path> [--owned-path <path> ...]
 ```

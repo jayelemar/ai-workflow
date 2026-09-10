@@ -6,7 +6,7 @@ behavior, schemas, validation, review decisions, and final responses.
 ## Choose a Mode
 
 - Use Agent mode for intake, specs, plans, and LOW/MEDIUM execution.
-- Use Goal mode only for the exact HIGH command saved in `goal-handoff@2`.
+- Use Goal mode only for the exact HIGH command saved in `goal-handoff@3`.
 - Product Plan mode is optional brainstorming and does not replace the saved
   plan stage.
 
@@ -88,6 +88,12 @@ The current plan template records `review-strategy@2` and its deterministic
 automatic review budget. See [Create Plan](../prompts/workflow/create-plan.md) and the
 [Plan Template](../templates/plan.template.md).
 
+Every MEDIUM plan receives up to two automatic fresh rounds. A clear first
+round completes review immediately; when the first round is blocking, the
+second independently verifies remediation without requiring an operator risk
+decision. Ordinary HIGH plans also receive two rounds, while elevated-risk HIGH
+plans receive three.
+
 For a replan, reference the current root-level active plan and let the workflow
 derive the revision name:
 
@@ -131,6 +137,14 @@ Command: execute .ai/plans/<plan-name>.md
 When MEDIUM execution returns a review action, respond only as directed by the
 current [Review Contract](../prompts/workflow/review-changes.md). That prompt is the sole
 source for statuses, round transitions, remediation, and risk decisions.
+
+Every fresh review is bound to `review-input-fingerprint@1` evidence for the
+exact plan-owned diff in each repository. Concurrent plan-owned drift makes a
+returned report stale without consuming a round; unchanged unrelated work or
+an audit-only HEAD change does not. Unreviewed-remediation risk acceptance is
+available only for validated, P2-only remediation on a plan without a named
+sensitive boundary. P0, P1, and sensitive-boundary remediation always requires
+fresh independent clearance.
 
 ## Manual Review Until Clear
 

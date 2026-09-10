@@ -1,5 +1,5 @@
-Version: 3.0
-Last Updated: 2026-08-25
+Version: 3.1
+Last Updated: 2026-09-11
 
 # Reasoning Quality Instructions
 
@@ -32,6 +32,10 @@ Define the shared reasoning baseline for explicit workflow stages.
   implementation, both classes require a fresh independent reviewer on the
   cumulative plan-owned diff and must clear blocking findings before
   completion.
+- Trust a review report or completion claim only while its recomputed
+  `review-input-fingerprint@1` evidence matches the reviewed plan-owned diff.
+  Treat a changed audit-only HEAD with an unchanged base and plan-owned digest
+  as unrelated repository movement, not review drift.
 - For HIGH tasks, apply the saved delegation decision exactly. Do not invent
   ad-hoc delegation; a missing required result blocks the task.
 

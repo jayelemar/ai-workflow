@@ -1,5 +1,5 @@
-Version: 6.8
-Last Updated: 2026-09-10
+Version: 6.9
+Last Updated: 2026-09-11
 
 # AI Workflow Instructions
 
@@ -16,15 +16,18 @@ duplicating stage or review protocols.
 - `.ai/prompts/workflow/generate-spec.md` owns finalized-spec schemas,
   immutable spec-path creation, mandatory filename confirmation, and
   exact-match reuse versus content-revision suggestions.
-- `.ai/templates/plan.template.md` owns `plan-manifest@3`, plan structure,
+- `.ai/templates/plan.template.md` owns `plan-manifest@4`, plan structure,
   backward-compatible plan lineage, `review-strategy@2`, and review-budget
   fields.
 - `.ai/prompts/workflow/create-plan.md` owns planning final responses,
   including worktree and direct-execution choices.
-- `.ai/prompts/workflow/review-changes.md` solely owns `implementation-review@2`, final
+- `.ai/prompts/workflow/review-changes.md` solely owns `implementation-review@3`, final
   and explicitly invoked manual review loops, risk decisions, and review-round
   accounting.
-- `.ai/prompts/workflow/goal-checkpoint.md` owns `goal-handoff@2`, HIGH task progress,
+- `.ai/scripts/workflow/review-fingerprint.mjs` solely owns deterministic,
+  read-only `review-input-fingerprint@1` generation. It provides evidence to
+  the review prompt and owns no transition or completion decision.
+- `.ai/prompts/workflow/goal-checkpoint.md` owns `goal-handoff@3`, HIGH task progress,
   commit evidence, and HIGH commit rules. Handoffs store evidence without
   copying policy text.
 - `.ai/prompts/workflow/generate-flow-artifacts.md` owns the unchanged

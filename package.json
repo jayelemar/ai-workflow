@@ -12,8 +12,9 @@
     "health:full": "node scripts/maintenance/health-check.mjs --full",
     "cleanup:local": "node scripts/maintenance/cleanup-local.mjs",
     "cleanup:workflow": "node scripts/maintenance/cleanup-workflow.mjs",
+    "review:fingerprint": "node scripts/workflow/review-fingerprint.mjs",
     "setup:codex": "node scripts/setup/agents-override.mjs",
-    "test:focused": "node --import tsx --test scripts/maintenance/cleanup-local.test.mjs scripts/maintenance/cleanup-workflow.test.mjs scripts/maintenance/health-check.test.mjs scripts/setup/agents-override.test.mjs scripts/workflow/activate-replan.test.mjs scripts/workflow/prepare-worktree-topology.test.mjs scripts/workflow/stage-contract.test.mjs",
+    "test:focused": "node --import tsx --test scripts/maintenance/cleanup-local.test.mjs scripts/maintenance/cleanup-workflow.test.mjs scripts/maintenance/health-check.test.mjs scripts/setup/agents-override.test.mjs scripts/workflow/activate-replan.test.mjs scripts/workflow/prepare-worktree-topology.test.mjs scripts/workflow/review-fingerprint.test.mjs scripts/workflow/stage-contract.test.mjs",
     "test:all": "pnpm health:full"
   },
   "devDependencies": {

@@ -7,9 +7,10 @@ read-only. Read `.ai/AGENTS.md` first.
 2. Require `.ai/plans/<goal-name>.md` to be the root-level active plan. If the
    plan was superseded, apply `## Superseded Plan Resolution` from
    `.ai/instructions/shared/workflow-state.md` and return its exact result.
-3. Require `goal-handoff@2`, its linked current `plan-manifest@3`, finalized
+3. Require `goal-handoff@3`, its linked current `plan-manifest@4`, finalized
    spec, and declared flow artifacts. Validate positive, strictly increasing
-   review round numbers and re-check repository state.
+   review round numbers, re-check repository state, and recompute the current
+   `review-input-fingerprint@1` evidence before trusting review clearance.
 4. If any handoff, plan, review, or worktree report uses an older contract,
    return exactly: `Legacy workflow artifact: <path> uses <format>; replan using
 the current contract before execution or resume.` Do not migrate, overwrite,
