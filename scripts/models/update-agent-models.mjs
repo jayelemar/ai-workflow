@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const DEFAULT_SOURCE =
-  "https://developers.openai.com/api/docs/guides/latest-model.md";
+  "https://developers.openai.com/api/docs/models.md";
 const workflowRoot = fileURLToPath(new URL("../../", import.meta.url));
 const projectRoot = path.dirname(workflowRoot);
 const DEFAULT_REGISTRY = path.join(workflowRoot, "config", "agent-models.toml");
@@ -32,7 +32,7 @@ export const parseArgs = (args) => {
     apply: false,
     evalApproved: false,
     help: false,
-    source: DEFAULT_SOURCE,
+    source: undefined,
     registry: DEFAULT_REGISTRY,
     codexConfig: DEFAULT_CODEX_CONFIG,
   };
@@ -71,8 +71,12 @@ export const validateOptions = (options) => {
   if (options.evalApproved && !options.apply) {
     throw new Error("--eval-approved is valid only with --apply");
   }
-  if (/^https?:\/\//.test(options.source)) {
-    const sourceUrl = new URL(options.source);
+  if (options.source) validateSource(options.source);
+};
+
+const validateSource = (source) => {
+  if (/^https?:\/\//.test(source)) {
+    const sourceUrl = new URL(source);
     if (
       sourceUrl.protocol !== "https:" ||
       sourceUrl.hostname !== "developers.openai.com"
@@ -109,27 +113,10 @@ const readSource = async (source) => {
   throw lastError;
 };
 
-const parseLatestModelInfo = (markdown) => {
-  const lines = markdown.split(/\r?\n/);
-  const start = lines.findIndex((line) => /^latestModelInfo:\s*$/.test(line));
-  if (start < 0) throw new Error("latestModelInfo block not found");
-
-  const info = {};
-  for (let index = start + 1; index < lines.length; index += 1) {
-    if (!lines[index].trim()) continue;
-    const match = lines[index].match(
-      /^ {2}([A-Za-z][A-Za-z0-9_-]*):\s*(.+?)\s*$/,
-    );
-    if (!match) break;
-    info[match[1]] = match[2].replace(/^["']|["']$/g, "");
-  }
-  return info;
-};
-
 const modelMentioned = (markdown, model) => {
   const escaped = model.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return new RegExp(
-    `(^|[^A-Za-z0-9_.-])${escaped}($|[^A-Za-z0-9_.-])`,
+    `(^|[^A-Za-z0-9_.-])${escaped}(?=$|[^A-Za-z0-9_.-]|\\.md(?=$|[^A-Za-z0-9_.-]))`,
     "m",
   ).test(markdown);
 };
@@ -141,26 +128,20 @@ const validateModelId = (model, label) => {
 };
 
 export const resolveLatestTiers = (markdown) => {
-  const info = parseLatestModelInfo(markdown);
-  const frontier = info.model?.trim();
-  if (!frontier) throw new Error("latestModelInfo.model is required");
-
-  const balanced =
-    info.balancedModel?.trim() ||
-    (frontier.endsWith("-sol")
-      ? frontier.replace(/-sol$/, "-terra")
-      : undefined);
-  if (!balanced) {
-    throw new Error("balanced model cannot be derived from official guidance");
+  const tiers = {
+    frontier: "gpt-5.6-sol",
+    balanced: "gpt-5.6-terra",
+    efficient: "gpt-5.6-luna",
+  };
+  for (const [tier, model] of Object.entries(tiers)) {
+    validateModelId(model, tier);
+    if (!modelMentioned(markdown, model)) {
+      throw new Error(
+        `${tier} model ${model} is not confirmed by official guidance`,
+      );
+    }
   }
-  validateModelId(frontier, "frontier");
-  validateModelId(balanced, "balanced");
-  if (!modelMentioned(markdown, balanced)) {
-    throw new Error(
-      `balanced model ${balanced} is not confirmed by official guidance`,
-    );
-  }
-  return { frontier, balanced };
+  return tiers;
 };
 
 const findSectionRange = (lines, section) => {
@@ -187,6 +168,21 @@ const getSectionString = (toml, section, key) => {
     if (match) return match[1];
   }
   throw new Error(`missing ${key} in [${section}]`);
+};
+
+const getTopLevelString = (toml, key) => {
+  const lines = toml.replaceAll("\r\n", "\n").split("\n");
+  const firstSection = lines.findIndex((line) =>
+    /^\s*\[[^\]]+\]\s*$/.test(line),
+  );
+  const end = firstSection < 0 ? lines.length : firstSection;
+  for (let index = 0; index < end; index += 1) {
+    const match = lines[index].match(
+      new RegExp(`^\\s*${key}\\s*=\\s*"([^"]+)"\\s*$`),
+    );
+    if (match) return match[1];
+  }
+  throw new Error(`missing ${key} in registry top level`);
 };
 
 const getSectionInteger = (toml, section, key) => {
@@ -219,11 +215,17 @@ const setSectionString = (toml, section, key, value) => {
 export const updateRegistryModels = (registry, models) => {
   validateModelId(models.frontier, "frontier");
   validateModelId(models.balanced, "balanced");
+  validateModelId(models.efficient, "efficient");
   return setSectionString(
-    setSectionString(registry, "tiers.frontier", "model", models.frontier),
-    "tiers.balanced",
+    setSectionString(
+      setSectionString(registry, "tiers.frontier", "model", models.frontier),
+      "tiers.balanced",
+      "model",
+      models.balanced,
+    ),
+    "tiers.efficient",
     "model",
-    models.balanced,
+    models.efficient,
   );
 };
 
@@ -231,6 +233,7 @@ const readRuntimeRegistry = (registry) => {
   const tiers = {
     frontier: getSectionString(registry, "tiers.frontier", "model"),
     balanced: getSectionString(registry, "tiers.balanced", "model"),
+    efficient: getSectionString(registry, "tiers.efficient", "model"),
   };
   const roles = {};
   for (const role of ["parent", "scout", "builder", "reviewer"]) {
@@ -249,6 +252,38 @@ const readRuntimeRegistry = (registry) => {
     }
     roles[role] = { tier, model: tiers[tier], reasoningEffort };
   }
+  const builderRetryTier = getSectionString(
+    registry,
+    "roles.builder",
+    "retry_tier",
+  );
+  const builderRetryReasoningEffort = getSectionString(
+    registry,
+    "roles.builder",
+    "retry_reasoning_effort",
+  );
+  const builderRetryLimit = getSectionInteger(
+    registry,
+    "roles.builder",
+    "retry_limit",
+  );
+  if (!(builderRetryTier in tiers)) {
+    throw new Error(`unknown retry tier ${builderRetryTier} for builder`);
+  }
+  if (!ALLOWED_REASONING_EFFORTS.has(builderRetryReasoningEffort)) {
+    throw new Error(
+      `unsupported retry reasoning effort ${builderRetryReasoningEffort} for builder`,
+    );
+  }
+  if (builderRetryLimit !== 1) {
+    throw new Error("builder.retry_limit must be exactly 1");
+  }
+  roles.builder.retry = {
+    tier: builderRetryTier,
+    model: tiers[builderRetryTier],
+    reasoningEffort: builderRetryReasoningEffort,
+    limit: builderRetryLimit,
+  };
   const forkTurns = getSectionInteger(registry, "spawn", "fork_turns");
   if (forkTurns < 1) throw new Error("spawn.fork_turns must be positive");
   return { tiers, roles, forkTurns };
@@ -335,19 +370,20 @@ export const inspectAndUpdateModels = async (
 ) => {
   const registryPath = path.resolve(options.registry);
   const codexConfigPath = path.resolve(options.codexConfig);
-  const [markdown, registry] = await Promise.all([
-    readSource(options.source),
-    readFile(registryPath, "utf8"),
-  ]);
+  const registry = await readFile(registryPath, "utf8");
+  const source = options.source || getTopLevelString(registry, "source_url");
+  validateSource(source);
+  const markdown = await readSource(source);
   const candidate = resolveLatestTiers(markdown);
   const currentRuntime = readRuntimeRegistry(registry);
   const updateAvailable =
     candidate.frontier !== currentRuntime.tiers.frontier ||
-    candidate.balanced !== currentRuntime.tiers.balanced;
+    candidate.balanced !== currentRuntime.tiers.balanced ||
+    candidate.efficient !== currentRuntime.tiers.efficient;
 
   const result = {
     status: updateAvailable ? "update-available" : "current",
-    source: options.source,
+    source,
     current: currentRuntime.tiers,
     candidate,
     evalGuide: ".ai/config/agent-model-evals.md",

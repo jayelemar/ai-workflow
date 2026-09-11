@@ -66,6 +66,20 @@ empty commit. Never commit failed validation, ambiguous behavior, or unrelated
 work. Never push, amend, squash, force-push, or open a pull request without an
 explicit delivery request.
 
+For a saved required `builder` delegation, resolve the primary and retry policy
+from the registry before the first spawn. Make exactly one Luna XHigh primary
+attempt using the saved assignment and file ownership. If Luna is unavailable,
+rejected, aborted, or does not return a completed assignment, stop with an
+actionable blocker; Terra is not an availability substitute. Only a completed
+Luna assignment with failed or missing exact acceptance or validation evidence
+permits the one configured Terra High retry. Give that retry the identical
+assignment and file ownership. A passing Luna result has no retry; a failed or
+evidence-incomplete Terra retry blocks, as do any changed retry scope,
+additional Luna attempt, or additional Terra retry. Store one ordered durable
+delegation-evidence entry for every actual attempt, naming the actual subagent,
+role, full model, reasoning effort, completion status, and exact evidence
+result.
+
 For a correction to an already committed task, create a separate focused
 `fix(<scope>): <spec-restoring summary>` commit after all affected task checks
 and fresh task review pass.
@@ -116,7 +130,7 @@ goal-handoff@3
 
 1. <task number and state: not started | active | complete | blocked>
    - Repository: <ID>
-   - Delegation evidence: <subagent name, role, full model, reasoning effort, and result | N/A>
+   - Delegation evidence: <ordered actual attempts: subagent name, role, full model, reasoning effort, and result, plus completion status | N/A>
    - Validation evidence: <command and result | pending>
    - Actual-diff review: <result | pending>
    - Commit: <SHA and subject | no tracked change | pending>

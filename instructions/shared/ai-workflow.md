@@ -72,6 +72,18 @@ duplicating stage or review protocols.
   role, full `model`, and `reasoning_effort` supplied to the spawn. Also include
   the exact subagent name, role, full model, and reasoning effort in its bounded
   assignment and in durable delegation or review evidence.
+- A required `builder` delegation resolves its primary model and reasoning
+  effort from `roles.builder`, then resolves its one configured retry runtime
+  from `retry_tier`, `retry_reasoning_effort`, and `retry_limit`. The primary
+  Luna XHigh attempt receives the saved bounded assignment and exclusive file
+  ownership. A Terra High retry is permitted only after that attempt returned a
+  completed assignment with failed or missing exact acceptance or validation
+  evidence; it uses the identical assignment and ownership. Luna unavailability,
+  rejection, abort, or any other absence of a completed assignment blocks the
+  delegation without a substitute. Never retry Luna or make another builder
+  attempt after the single retry. Record one ordered durable evidence entry for
+  every actual primary or retry attempt using its actual name, model, and
+  reasoning effort.
 - Parallel assignments may overlap only for read-only work such as research or
   review. Every concurrent write assignment must declare exclusive file-path
   ownership or use a separate worktree; no two agents may edit the same file at

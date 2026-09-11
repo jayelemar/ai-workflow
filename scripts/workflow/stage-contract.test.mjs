@@ -680,6 +680,50 @@ test("subagent names expose role, model family, effort, and purpose", async () =
   );
 });
 
+test("required builder delegations use Luna first and one exact Terra retry", async () => {
+  const [workflow, models, checkpoint] = await Promise.all([
+    readSource("instructions/shared/ai-workflow.md"),
+    readSource("config/agent-models.toml"),
+    readSource("prompts/workflow/goal-checkpoint.md"),
+  ]);
+  const workflowContract = normalize(workflow);
+  const checkpointContract = normalize(checkpoint);
+
+  assert.match(models, /\[tiers\.efficient\][\s\S]*model = "gpt-5\.6-luna"/);
+  assert.match(
+    models,
+    /\[roles\.builder\][\s\S]*tier = "efficient"[\s\S]*reasoning_effort = "xhigh"[\s\S]*retry_tier = "balanced"[\s\S]*retry_reasoning_effort = "high"[\s\S]*retry_limit = 1/,
+  );
+  assert.match(workflowContract, /primary Luna XHigh attempt/i);
+  assert.match(
+    workflowContract,
+    /completed assignment with failed or missing exact acceptance or validation evidence/i,
+  );
+  assert.match(workflowContract, /identical assignment and ownership/i);
+  assert.match(
+    workflowContract,
+    /unavailability, rejection, abort, or any other absence of a completed assignment blocks the delegation without a substitute/i,
+  );
+  assert.match(
+    workflowContract,
+    /Never retry Luna or make another builder attempt after the single retry/,
+  );
+  assert.match(
+    checkpointContract,
+    /Make exactly one Luna XHigh primary attempt/i,
+  );
+  assert.match(checkpointContract, /Terra is not an availability substitute/i);
+  assert.match(checkpointContract, /one configured Terra High retry/i);
+  assert.match(
+    checkpointContract,
+    /one ordered durable delegation-evidence entry for every actual attempt/i,
+  );
+  assert.match(
+    checkpoint,
+    /ordered actual attempts: subagent name, role, full model, reasoning effort, and result, plus completion status/,
+  );
+});
+
 test("review-changes is the singular review-loop authority", async () => {
   const review = await readSource("prompts/workflow/review-changes.md");
   const otherFiles = [

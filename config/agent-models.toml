@@ -1,11 +1,14 @@
-schema_version = 1
-source_url = "https://developers.openai.com/api/docs/guides/latest-model.md"
+schema_version = 2
+source_url = "https://developers.openai.com/api/docs/models.md"
 
 [tiers.frontier]
 model = "gpt-5.6-sol"
 
 [tiers.balanced]
 model = "gpt-5.6-terra"
+
+[tiers.efficient]
+model = "gpt-5.6-luna"
 
 [roles.parent]
 tier = "balanced"
@@ -18,8 +21,11 @@ tier = "balanced"
 reasoning_effort = "high"
 
 [roles.builder]
-tier = "balanced"
-reasoning_effort = "high"
+tier = "efficient"
+reasoning_effort = "xhigh"
+retry_tier = "balanced"
+retry_reasoning_effort = "high"
+retry_limit = 1
 
 [roles.reviewer]
 tier = "frontier"
