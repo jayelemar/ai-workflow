@@ -86,6 +86,14 @@ remediation changes a repository:
 
 Do not copy final-review transitions into this prompt or the handoff.
 
+Before invoking final review or recording completion, trace every specification
+acceptance criterion to its task or inspected unchanged boundary and evidence.
+Required external evidence that is missing or unavailable makes the current
+status `Blocked`; never record it as an optional deferral. For
+environment-dependent behavior, record the effective non-secret configuration
+and result for every required environment without storing URLs that contain
+credentials or tokens.
+
 ## Required Handoff Content
 
 Write concise Markdown with exactly these sections:
@@ -123,7 +131,7 @@ goal-handoff@3
 
 ## Validation Evidence
 
-- <plan command and result | not run>
+- <Required | Optional; acceptance criteria or plan invariant; plan command or bounded manual/external check and result | not run>
 
 ## Review State
 

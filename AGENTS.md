@@ -73,6 +73,10 @@ boundaries, not immutable security boundaries.
 
 - Required validation must pass before completion. Never silently weaken,
   skip, or replace a required check.
+- A specification acceptance criterion cannot be downgraded to optional or
+  deferred evidence by a plan, execution, handoff, or review. Evidence needed
+  to prove that criterion remains required when it is manual, external, or
+  environment-dependent; unavailable required evidence blocks completion.
 - Optional validation that depends on an unavailable external service,
   environment, credential, device, or operator may be deferred only when the
   final report names the unverified behavior, risk, reason, and smallest
@@ -93,5 +97,5 @@ boundaries, not immutable security boundaries.
   artifacts, logs, and workflow-local state ignored and untracked.
 - When a Git parent checkout exists, do not stage `.ai` files in it.
 
-Version: 2.2
-Last Updated: 2026-09-11
+Version: 2.3
+Last Updated: 2026-09-14

@@ -52,6 +52,11 @@ start planning.
   complete copy-pasteable invocation with every currently known required input
   filled in. When an operator decision or external action must happen first,
   name that exact decision or action and include the invocation to resume.
+- Intake has one narrow continuation exception: when a read-only intake needs
+  a material decision, its `Next action` is a direct copy-pasteable
+  `Decision: <selected choice>` reply. That reply continues the same intake
+  with its known evidence; it does not re-invoke the intake wrapper or start a
+  writable stage.
 - A durable `Next Action` or `Required Next Action` field follows the same
   contract. Do not reduce it to generic prose such as `return to planning`,
   `resolve the blocker`, or a request for the user to ask what to do next.

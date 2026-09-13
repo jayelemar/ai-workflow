@@ -17,9 +17,12 @@ stage. LOW recommends the configured planning runtime; MEDIUM and HIGH
 recommend the configured specification runtime. This is advisory only: switch
 the model and effort manually when desired. Intake does not inspect or change
 the active runtime, block specification or planning, or create a subagent.
-Its `Next action` is a complete copy-pasteable prompt with the known intake
-details filled in: a plan invocation for LOW, or the applicable feature- or
-bugfix-spec invocation for MEDIUM and HIGH.
+When intake is decision-complete, its `Next action` is a complete
+copy-pasteable prompt with the known intake details filled in: a plan invocation
+for LOW, or the applicable feature- or bugfix-spec invocation for MEDIUM and
+HIGH. If one material decision is missing, intake asks for only a
+`Decision: <selected choice>` reply, retains the known evidence, and then
+returns that writable-stage prompt; it does not repeat the intake template.
 
 ```text
 Use `.ai/wrappers/feature-intake.md`.
@@ -93,6 +96,21 @@ round completes review immediately; when the first round is blocking, the
 second independently verifies remediation without requiring an operator risk
 decision. Ordinary HIGH plans also receive two rounds, while elevated-risk HIGH
 plans receive three.
+
+Environment-dependent work must define a local, staging, and production
+environment matrix in its finalized spec. Each required URL names its
+non-secret configuration source and expected behavior. Missing or invalid
+selected URLs must fail fast. Environment selection must be explicit and
+project-defined, never inferred from framework-specific debug, release,
+runtime, or build-mode flags. User-facing link flows also retain and validate
+the specified browser fallback so a failed native handoff never becomes an
+unplanned blank page.
+
+Planning maps every spec acceptance criterion to owned work or an inspected
+unchanged boundary and to required evidence. Manual, device, deployment, DNS,
+TLS, or external-service evidence stays required when it proves an acceptance
+criterion. If unavailable during execution or review, work is blocked rather
+than completed with a deferred check.
 
 For a replan, reference the current root-level active plan and let the workflow
 derive the revision name:

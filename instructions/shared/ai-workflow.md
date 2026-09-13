@@ -87,9 +87,12 @@ duplicating stage or review protocols.
 - Report the resolved model and reasoning effort as an advisory recommendation
   in the intake result. The operator remains responsible for selecting the
   runtime before explicitly invoking the next stage.
-- Intake must make its `Next action` a complete copy-pasteable prompt with all
-  known inputs filled in. A wrapper path or generic instruction is not an
-  actionable next-stage invocation.
+- A decision-complete intake must make its `Next action` a complete
+  copy-pasteable prompt with all known inputs filled in. A wrapper path or
+  generic instruction is not an actionable next-stage invocation. When the
+  intake itself needs a material decision, it instead returns the narrow
+  `Decision:` continuation defined by `shared/workflow-state.md`; it must not
+  repeat the full intake wrapper.
 - A recommendation does not inspect or change the active runtime, block a later
   stage, create a subagent, or authorize the next stage.
 

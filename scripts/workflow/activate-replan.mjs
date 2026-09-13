@@ -263,9 +263,11 @@ export const activateReplan = async ({
       if (!filename.endsWith(".md")) continue;
       const activePath = path.join(root, "plans", filename);
       await requireRegularFile(activePath, "active plan");
-      const activeManifest = parsePlanManifest(
-        await readFile(activePath, "utf8"),
-      );
+      const activeSource = await readFile(activePath, "utf8");
+      // Legacy plans predate the manifest contract and cannot represent a
+      // duplicate under its work-item model. Requested inputs remain strict.
+      if (!/^plan-manifest@4$/m.test(activeSource)) continue;
+      const activeManifest = parsePlanManifest(activeSource);
       if (
         activeManifest.workItem === predecessorManifest.workItem &&
         activePath !== predecessor.path

@@ -22,12 +22,21 @@ contract before execution or resume.` Do not migrate, overwrite, or delete it.
   its filesystem-target overlay. Reject a stale or legacy report.
 - LOW requires its saved compact plan. MEDIUM requires its finalized typed spec.
 - Declared flow artifacts must be present and complete.
+- Reconstruct spec-to-plan coverage before mutation. Every acceptance criterion
+  must map to an implementation owner or inspected unchanged boundary and to
+  required validation evidence. A missing mapping is a material discovery;
+  apply `## Material Discovery Routing` before implementation.
 - Preserve unrelated changes in every repository.
 
 ## Execution
 
 - Follow requested behavior, finalized spec, repository ownership, and plan
   order.
+- For environment-dependent behavior, inspect the effective non-secret
+  configuration at each planned build or deployment boundary before trusting
+  it. Verify required environment-specific URLs, fail-fast behavior for missing
+  or invalid values, isolation from other environments, and the specified
+  browser fallback at the cheapest valid boundary.
 - Classify discoveries only through the corrective-deviation table in
   `.ai/AGENTS.md`. Record a qualifying correction and affected evidence; stop
   for a material discovery. Apply `## Material Discovery Routing` from
@@ -35,6 +44,11 @@ contract before execution or resume.` Do not migrate, overwrite, or delete it.
   specification or planning invocation as the immediate action.
 - Run every required plan validation command. Defer optional external evidence
   only under `.ai/AGENTS.md` disclosure rules.
+- Missing or unavailable required environment evidence is `Blocked`; never
+  defer it or relabel it optional. A mocked, local, or source-only check may
+  supplement but cannot replace evidence for a deployment, DNS, TLS,
+  operating-system association, device, or external-service acceptance
+  criterion.
 
 ## Completion
 

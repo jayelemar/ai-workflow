@@ -181,6 +181,40 @@ test("activates revision two and archives its predecessor", async () => {
   });
 });
 
+test("ignores unrelated legacy active plans when checking duplicate work items", async () => {
+  await withFixture(async (fixture) => {
+    const archive = ".ai/artifacts/trip-style/superseded-plan.md";
+    await writeFile(
+      path.join(fixture.workflowDirectory, "plans/trip-style.md"),
+      initialPlan("trip-style"),
+    );
+    await writeFile(
+      path.join(fixture.workflowDirectory, "plans/legacy-project.md"),
+      "# Legacy project\n\nThis plan predates plan-manifest@4.\n",
+    );
+    await writeFile(
+      path.join(fixture.workflowDirectory, "tmp/trip-style-r2.md"),
+      revisionPlan({
+        history: [archive],
+        name: "trip-style-r2",
+        revision: 2,
+        supersedes: archive,
+        workItem: "trip-style",
+      }),
+    );
+
+    const { output, result } = await run(fixture);
+
+    assert.equal(result.ok, true, output.join("\n"));
+    assert.equal(
+      await exists(
+        path.join(fixture.workflowDirectory, "plans/legacy-project.md"),
+      ),
+      true,
+    );
+  });
+});
+
 test("extends the complete archive history for later revisions", async () => {
   await withFixture(async (fixture) => {
     const first = ".ai/artifacts/trip-style/superseded-plan.md";

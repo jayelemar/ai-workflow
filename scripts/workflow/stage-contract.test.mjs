@@ -269,7 +269,7 @@ test("intake recommends runtimes and returns filled copy-pasteable prompts", asy
   assert.match(selection, /Intake type: `feature \| bugfix`/);
   assert.match(
     normalize(selection),
-    /`Next action` containing one complete prompt rather than a wrapper path or generic instruction/,
+    /For an intake with no missing decision.*`Next action`.*one complete prompt rather than a wrapper path or generic instruction/,
   );
   assert.match(
     selection,
@@ -299,7 +299,30 @@ test("intake recommends runtimes and returns filled copy-pasteable prompts", asy
   );
   assert.match(
     normalize(usage),
-    /`Next action` is a complete copy-pasteable prompt with the known intake details filled in/,
+    /When intake is decision-complete.*`Next action` is a complete copy-pasteable prompt with the known intake details filled in/,
+  );
+});
+
+test("intake decisions resume without repeating the intake wrapper", async () => {
+  const [selection, stages, workflow] = await Promise.all([
+    readSource("prompts/workflow/select-workflow.md"),
+    readSource("instructions/shared/workflow-state.md"),
+    readSource("instructions/shared/ai-workflow.md"),
+  ]);
+
+  assert.match(
+    normalize(selection),
+    /Missing decision.*do not fabricate a writable-stage invocation or repeat the full intake wrapper/i,
+  );
+  assert.match(selection, /Decision: <one permitted choice>/);
+  assert.doesNotMatch(selection, /same intake wrapper/i);
+  assert.match(
+    normalize(stages),
+    /Intake has one narrow continuation exception.*`Decision: <selected choice>` reply/i,
+  );
+  assert.match(
+    normalize(workflow),
+    /When the intake itself needs a material decision.*`Decision:` continuation.*must not repeat the full intake wrapper/i,
   );
 });
 
@@ -502,6 +525,88 @@ test("plan validation gates are feasible, invariant-driven, and risk-based", asy
     /Required validation must pass before completion.*Never silently weaken/i,
   );
   assert.match(execute, /Run every required plan validation command/);
+});
+
+test("environment-dependent acceptance stays explicit and completion-blocking", async () => {
+  const [
+    agents,
+    testing,
+    specification,
+    template,
+    planning,
+    execute,
+    review,
+    checkpoint,
+    usage,
+  ] = await Promise.all([
+    readSource("AGENTS.md"),
+    readSource("instructions/shared/testing.md"),
+    readSource("prompts/workflow/generate-spec.md"),
+    readSource("templates/plan.template.md"),
+    readSource("prompts/workflow/create-plan.md"),
+    readSource("prompts/workflow/execute-plan.md"),
+    readSource("prompts/workflow/review-changes.md"),
+    readSource("prompts/workflow/goal-checkpoint.md"),
+    readSource("docs/workflow-usage.md"),
+  ]);
+
+  assert.match(
+    normalize(specification),
+    /environment-dependent behavior.*local, staging, and production.*environment matrix/i,
+  );
+  assert.match(
+    normalize(specification),
+    /unresolved environment value, source, or expected behavior.*open decision/i,
+  );
+  assert.match(
+    normalize(specification),
+    /environment-specific URL.*fail fast.*missing or invalid.*browser fallback page/i,
+  );
+  assert.match(
+    normalize(specification),
+    /explicit project-defined environment selector.*framework-specific debug, release, runtime, or build-mode flags/i,
+  );
+  assert.match(
+    normalize(planning),
+    /trace every acceptance criterion.*implementation owner.*validation evidence/i,
+  );
+  assert.match(
+    normalize(planning),
+    /environment-dependent acceptance criterion.*cannot be optional or deferred/i,
+  );
+  assert.match(
+    normalize(planning),
+    /environment-specific URL.*configuration source.*fail-fast.*browser fallback/i,
+  );
+  assert.match(template, /External evidence: <Required:.*Optional:.*N\/A:/);
+  assert.match(
+    normalize(testing),
+    /evidence needed to prove a specification acceptance criterion is required/i,
+  );
+  assert.match(
+    normalize(agents),
+    /acceptance criterion.*cannot be downgraded.*optional/i,
+  );
+  assert.match(
+    normalize(execute),
+    /missing or unavailable required environment evidence is `Blocked`.*never defer/i,
+  );
+  assert.match(
+    normalize(review),
+    /mocked or local evidence cannot prove.*DNS, TLS, operating-system association, deployed configuration, or external-service behavior/i,
+  );
+  assert.match(
+    normalize(review),
+    /cross-environment link.*missing or invalid URL.*browser fallback/i,
+  );
+  assert.match(
+    normalize(checkpoint),
+    /required external evidence.*missing.*`Blocked`/i,
+  );
+  assert.match(
+    normalize(usage),
+    /local, staging, and production environment matrix/i,
+  );
 });
 
 test("replans archive one predecessor and retain one active lineage revision", async () => {

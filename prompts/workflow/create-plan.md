@@ -89,6 +89,23 @@ Use `.ai/templates/plan.template.md` and save
   cross-repository outcomes into dependent steps; each HIGH task owns exactly
   one repository.
 - Do not add behavior beyond the finalized spec or LOW request.
+- Before saving, trace every acceptance criterion to its implementation owner,
+  task or unchanged inspected boundary, and validation evidence. Record the
+  criterion references on the applicable task and plan validation entries.
+  Stop when any criterion lacks owned work or evidence; preserving a boundary
+  does not count unless its effective behavior was inspected.
+- An environment-dependent acceptance criterion cannot be optional or
+  deferred. Carry the spec's local, staging, and production matrix into task
+  ownership, configuration sources, and required validation. Require the
+  project's explicit environment selector; never substitute a
+  framework-specific debug, release, runtime, or build-mode flag or a
+  hard-coded fallback. If a required environment value or behavior was
+  unresolved in the finalized spec, stop and route the content change through
+  specification.
+- For an environment-specific URL, name its configuration source and owning
+  build or deployment boundary, require fail-fast behavior for a missing or
+  invalid selected value, preserve the specified browser fallback, and test
+  that no environment can generate a link for another environment.
 - Keep LOW plans compact: minimum scope, ownership, steps, and validation. Use
   the full sensitive-boundary detail only when planning identifies and names a
   sensitive boundary; record its deterministic trigger and targeted checks.
@@ -121,13 +138,20 @@ Use `.ai/templates/plan.template.md` and save
 - Refer to the corrective-deviation table in `.ai/AGENTS.md`; do not copy its
   criteria into the plan.
 - Select required validation through `shared/testing.md`. For every validation
-  entry, state the observable invariant and expected result before saving its
-  exact command, and verify that the command can feasibly exercise that
-  condition in the declared repository and prepared environment after
-  accounting for relevant environment and configuration sources. Make a
+  entry, label it `Required` or `Optional`, cite the acceptance criteria or
+  plan-only invariant it proves, and state the observable invariant and
+  expected result before saving its exact command or bounded manual check.
+  Verify that the check can feasibly exercise that condition in the declared
+  repository and prepared environment after accounting for relevant
+  environment and configuration sources. `External evidence` must likewise be
+  labeled `Required` or `Optional`; optional evidence may not prove a spec
+  acceptance criterion or completion invariant. Make a
   broader repository-wide command a required completion gate only when its
   distinct risk is not covered by focused validation, and record that risk in
   the plan.
+- Write the completion condition so every required validation and required
+  external-evidence item must pass. Unavailable required evidence is an
+  execution blocker, never a permitted completion-time deferral.
 - Create no workflow state, sidecar, event log, preview, or progress record.
 
 ## Replan Activation

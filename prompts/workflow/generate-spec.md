@@ -93,6 +93,19 @@ path.
 - Resolve roles, inputs, outputs, permissions, success paths, failures, edge
   cases, non-goals, compatibility constraints, and pass/fail acceptance
   criteria.
+- For environment-dependent behavior, define a local, staging, and production
+  environment matrix in the existing `Inputs and Outputs` plus `Behavior` or
+  `Fix Behavior` sections. Name each non-secret configuration source, expected
+  value or value shape, selection mechanism, and observable result. Require an
+  explicit project-defined environment selector; do not infer environment from
+  framework-specific debug, release, runtime, or build-mode flags. An
+  unresolved environment value, source, or expected behavior is an open
+  decision and the spec cannot be finalized.
+- When user-facing links cross environments, require one environment-specific
+  URL per matrix row, fail fast when its selected value is missing or invalid,
+  and define the browser fallback page that remains available when native or
+  application handoff does not occur. Never infer these behaviors from current
+  code or silently exclude the fallback from acceptance criteria.
 - Express behavior deterministically with exact IF/THEN rules where branching
   exists. Define every material branch.
 - Keep implementation file scope and execution commands out of the spec unless
@@ -192,7 +205,9 @@ selected after the required question, and the output path is either new or
 contains an exact valid match that will remain byte-unchanged. For
 `bugfix-spec@1`, also verify every RCA conclusion is evidence-backed. An exact
 predecessor reuse is exempt only from the filename-selection check because it
-does not create a file.
+does not create a file. When behavior is environment-dependent, also verify the
+environment matrix is complete and every environment-specific result has a
+pass/fail acceptance criterion.
 
 ## Final Response
 

@@ -45,6 +45,12 @@ Before review:
    repeated-root-cause replan rule in the authoritative state machine remains
    mandatory.
 
+In every invocation mode, independently trace each specification acceptance
+criterion to plan ownership, actual implementation or an inspected unchanged
+boundary, and validation evidence. A missing mapping or a plan that labels
+acceptance-critical evidence optional is a material discovery, not reviewer
+clearance.
+
 For LOW, manual mode keeps round evidence in the final response for this
 invocation and does not create an `implementation-review@3` artifact. Report
 scope, review-input fingerprints, reviewer runtime, fresh rounds, resolved and
@@ -117,6 +123,12 @@ remediation. A changed audit-only HEAD with an unchanged base SHA and
    sensitive boundary, execute every targeted check and applicable adversarial
    variant in `review-strategy@2`; group variants by stable failed-invariant
    root-cause family.
+5. For environment-dependent behavior, compare the effective non-secret values
+   and outcomes against the spec's environment matrix. Mocked or local evidence
+   cannot prove DNS, TLS, operating-system association, deployed configuration,
+   or external-service behavior. For a cross-environment link, verify the
+   selected URL cannot resolve to another environment, a missing or invalid URL
+   fails fast, and the specified browser fallback remains available.
 
 ## Finding Scope and Priority
 
@@ -160,6 +172,7 @@ complete`, `Completed with accepted review risk`, and `Blocked`.
    round.
 2. A clear returned round sets `Ready to complete` only when its post-review
    fingerprint recomputation matches. Required validation must still pass;
+   every required external and environment-evidence item must be present;
    retain advisory findings and recheck the fingerprint before completion.
 3. A blocking returned round sets `Fix required`. Remediate every known in-scope
    `P0`–`P2`, apply the saved targeted and mutation/property checks where
@@ -245,7 +258,8 @@ decision`. This status is forbidden while any known `P0`–`P2` is unresolved
    apply `## Material Discovery Routing` from
    `.ai/instructions/shared/workflow-state.md` and save its exact applicable
    next action. Use `Fix required` for incomplete remediation or failed
-   required validation.
+   required validation. Required external or environment evidence can never be
+   risk-accepted, deferred, or relabeled optional.
 
 ## MEDIUM Artifact
 
@@ -287,7 +301,7 @@ Fix required | Awaiting risk decision | Ready to complete | Completed with accep
 
 ## Validation Evidence
 
-- <required command and result>
+- <required command or bounded manual/external check, acceptance criteria, and result>
 - <optional deferred evidence, reason, and risk>
 
 ## Findings

@@ -47,7 +47,7 @@ relative to the plan workspace.
 - Sensitive-boundary trigger: <named boundary and deterministic trigger | `None: no named sensitive boundary`>
 - Targeted checks: <checks for the named boundary | compact correctness and changed-boundary regression checks>
 - Architectural fallback: <specific isolation, allowlist, closed-form enforcement, reducer/state arbiter/owning-hook redesign, or other bounded redesign to carry into replanning if one root-cause family remains blocking in two fresh rounds; required for a named sensitive boundary or asynchronous UI state with multiple independent writers | `N/A: no named sensitive boundary or asynchronous multi-writer state surface`>
-- External evidence: <operator, staging, credential, device, or service evidence | `N/A: no external evidence required`>
+- External evidence: <Required: operator, staging, credential, device, environment, or service evidence that proves named acceptance criteria | Optional: supplementary evidence that proves no acceptance criterion | `N/A: no external evidence required`>
 
 Include this subsection only when `Sensitive-boundary trigger` names a boundary:
 
@@ -70,7 +70,8 @@ and validation. For MEDIUM, include dependencies and contracts as applicable.
 1. <imperative outcome>
    - Repository: `<repository-id>`
    - Owned paths: <exact repo-relative paths>
-   - Validation: `<exact command>` — <observable invariant and expected result>
+
+- Validation: <Required | Optional; acceptance criteria or plan invariant> — `<exact command or bounded manual check>` — <observable invariant and expected result>
 
 For HIGH, replace the steps with task entries. Every task belongs to exactly
 one repository; split cross-repository outcomes into dependent tasks.
@@ -85,13 +86,13 @@ one repository; split cross-repository outcomes into dependent tasks.
 - Required roles: `scout`, `builder`, and/or `reviewer` | `N/A: NONE`
 - Delegation result: <bounded expected evidence | `N/A: NONE`>
 - Implementation: <task-scoped steps>
-- Validation: `<exact command>` — <expected result>
+- Validation: <Required | Optional; acceptance criteria or plan invariant> — `<exact command or bounded manual check>` — <observable invariant and expected result>
 - Review evidence: <actual-diff and provider-to-consumer evidence>
 - Commit purpose: `<type>(<scope>): <summary>`
 
 ## Validation
 
-1. `<exact command>` — <observable invariant and expected result>
+1. <Required | Optional; acceptance criteria or plan invariant> — `<exact command or bounded manual check>` — <observable invariant and expected result>
 
 ## Completion Condition
 

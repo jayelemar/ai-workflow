@@ -57,15 +57,19 @@ with a summary that loses information.
   under `Bug evidence`.
 
 If `Missing decision` is not `None`, do not fabricate a writable-stage
-invocation. Instead, make `Next action` a complete copy-pasteable invocation of
-the same intake wrapper with all known input preserved and the exact missing
-decision requested. The user must explicitly invoke that prompt; returning it
-does not start another stage.
+invocation or repeat the full intake wrapper. State the exact decision,
+bounded choices, and material consequence in `Missing decision`, then make
+`Next action` a direct, copy-pasteable `Decision:` reply that selects one
+choice. A direct `Decision:` reply continues this already-invoked, read-only
+intake with its known evidence preserved; it does not start a writable stage.
+After the decision is supplied, reclassify only if the decision changes the
+classification, then return the applicable complete writable-stage invocation.
 
 ## Final Response
 
-Return exactly, with `Next action` containing one complete prompt rather than a
-wrapper path or generic instruction:
+For an intake with no missing decision, return exactly, with `Next action`
+containing one complete prompt rather than a wrapper path or generic
+instruction:
 
 ````text
 Classification: LOW | MEDIUM | HIGH
@@ -75,6 +79,19 @@ Recommended next-stage runtime: <full model ID> / <reasoning effort>
 Next action:
 ```text
 <complete copy-pasteable prompt with every known input filled in>
+```
+````
+
+For an intake with a missing decision, return exactly:
+
+````text
+Classification: LOW | MEDIUM | HIGH
+Reason: <concise evidence-backed trigger>
+Missing decision: <exact decision, bounded choices, and consequence>
+Recommended next-stage runtime: <full model ID> / <reasoning effort>
+Next action:
+```text
+Decision: <one permitted choice>
 ```
 ````
 
