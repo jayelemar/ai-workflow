@@ -1,5 +1,5 @@
-Version: 6.9
-Last Updated: 2026-09-11
+Version: 7.0
+Last Updated: 2026-09-14
 
 # AI Workflow Instructions
 
@@ -56,7 +56,7 @@ duplicating stage or review protocols.
   one active revision per work item and stores superseded plans as evidence
   under the predecessor's artifact directory.
 
-## Subagent Identity and Creation
+## Subagent Identity and Session Lifecycle
 
 - The only workflow subagent roles are `scout`, `builder`, and `reviewer`.
 - Resolve the role's full model ID and reasoning effort plus decimal
@@ -72,6 +72,28 @@ duplicating stage or review protocols.
   role, full `model`, and `reasoning_effort` supplied to the spawn. Also include
   the exact subagent name, role, full model, and reasoning effort in its bounded
   assignment and in durable delegation or review evidence.
+- `spawn_agent` starts a new named session. `followup_task` continues an idle
+  named session, and `send_message` may refine its still-active bounded
+  assignment. A continuation retains the original name, role, model, reasoning
+  effort, and boundary; neither continuation mechanism may repurpose a session.
+- For a required `builder`, spawn once for one cohesive HIGH task. Continue that
+  exact session for later implementation or fixes owned by the same task while
+  its scope and exclusive file ownership remain unchanged. A different task,
+  changed scope, or changed exclusive file ownership requires a newly spawned
+  builder with a new purpose-based name.
+- For a required `scout`, spawn once for one HIGH task's bounded investigation
+  question. Continue that exact session for follow-up research only while the
+  task, subsystem, scope, and question remain unchanged. A change to any of
+  those boundaries requires a newly spawned scout with a new purpose-based
+  name.
+- Reviewers are not eligible for builder or scout session reuse. Every distinct
+  review assignment uses a newly spawned reviewer, and every formal fresh round
+  must use its own unique round-specific reviewer. Never use `followup_task` to
+  assign a later review to an earlier reviewer session.
+- Record the initial spawn and every continued assignment and result in order
+  under the same subagent identity. If a required in-boundary builder or scout
+  session cannot be continued, stop as blocked; never silently replace it with
+  a fresh session or substitute another runtime.
 - Parallel assignments may overlap only for read-only work such as research or
   review. Every concurrent write assignment must declare exclusive file-path
   ownership or use a separate worktree; no two agents may edit the same file at

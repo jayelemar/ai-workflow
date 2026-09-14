@@ -37,12 +37,19 @@ handoff.
 
 Process planned tasks serially. Before HIGH execution, resolve every required
 role from `.ai/config/agent-models.toml`; never substitute an unavailable
-runtime. Before every required delegation, apply `## Subagent Identity and
-Creation` from `.ai/instructions/shared/ai-workflow.md`: use only `scout`,
-`builder`, or `reviewer`; pass the resolved full model and reasoning effort
-explicitly; and name the subagent
-`<role>_<model-family>_<reasoning-effort>_<purpose>`. Apply the plan's
-deterministic delegation decision and record its bounded result.
+runtime. Before every required role's first delegation, apply `## Subagent
+Identity and Session Lifecycle` from
+`.ai/instructions/shared/ai-workflow.md`: use only `scout`, `builder`, or
+`reviewer`; pass the resolved full model and reasoning effort explicitly; and
+name the subagent `<role>_<model-family>_<reasoning-effort>_<purpose>`. Apply
+the plan's deterministic delegation decision and record its bounded result.
+Continue the same named builder for implementation and fixes within one
+unchanged task, scope, and exclusive file ownership. Continue the same named
+scout only for follow-up research within one unchanged task, subsystem, scope,
+and investigation question. Record every continuation and result in order. A
+boundary change requires a newly spawned, newly named agent; an unavailable
+required in-boundary continuation is `Blocked`, not permission to replace the
+session or runtime. Never continue a reviewer into another review assignment.
 
 For each task:
 
@@ -124,7 +131,7 @@ goal-handoff@3
 
 1. <task number and state: not started | active | complete | blocked>
    - Repository: <ID>
-   - Delegation evidence: <subagent name, role, full model, reasoning effort, and result | N/A>
+   - Delegation evidence: <ordered initial spawn and continuation entries, each with subagent name, role, full model, reasoning effort, and result, plus its unchanged boundary | N/A>
    - Validation evidence: <command and result | pending>
    - Actual-diff review: <result | pending>
    - Commit: <SHA and subject | no tracked change | pending>

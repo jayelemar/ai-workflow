@@ -111,10 +111,12 @@ remediation. A changed audit-only HEAD with an unchanged base SHA and
    unavailable or invalid, use `Blocked`; never substitute a runtime.
 2. Every fresh round uses a newly spawned reviewer with a self-contained,
    bounded assignment and no full-history fork. The reviewer reports findings
-   only and never implements fixes. Apply `## Subagent Identity and Creation`
-   from `.ai/instructions/shared/ai-workflow.md`, pass the resolved full model
-   and reasoning effort explicitly, and use a unique name such as
-   `reviewer_sol_xhigh_auth_flow_round_1`.
+   only and never implements fixes. Apply the shared lifecycle rules from
+   `.ai/instructions/shared/ai-workflow.md`, pass the resolved full model and
+   reasoning effort explicitly, and use a unique name such as
+   `reviewer_sol_xhigh_auth_flow_round_1`. Never continue or send a later round
+   to a reviewer session from an earlier round; builder and scout reuse does not
+   alter review independence or round accounting.
 3. Review only the cumulative plan-owned diff identified by the supplied
    fingerprint set from every declared integration base, including committed
    HIGH tasks and current remediation. Preserve and exclude unrelated user

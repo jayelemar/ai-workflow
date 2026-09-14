@@ -785,6 +785,61 @@ test("subagent names expose role, model family, effort, and purpose", async () =
   );
 });
 
+test("subagent sessions reuse builders and scouts but never reviewers", async () => {
+  const [workflow, checkpoint, review, readme] = await Promise.all([
+    readSource("instructions/shared/ai-workflow.md"),
+    readSource("prompts/workflow/goal-checkpoint.md"),
+    readSource("prompts/workflow/review-changes.md"),
+    readSource("README.md"),
+  ]);
+  const lifecycle = normalize(workflow);
+  const taskDelegation = normalize(checkpoint);
+  const independentReview = normalize(review);
+  const operatorDocs = normalize(readme);
+
+  assert.match(
+    lifecycle,
+    /`spawn_agent` starts a new named session.*`followup_task` continues an idle named session.*`send_message` may refine its still-active bounded assignment/i,
+  );
+  assert.match(
+    lifecycle,
+    /required `builder`.*spawn once for one cohesive HIGH task.*same task.*scope and exclusive file ownership remain unchanged.*different task, changed scope, or changed exclusive file ownership requires a newly spawned builder/i,
+  );
+  assert.match(
+    lifecycle,
+    /required `scout`.*spawn once.*bounded investigation question.*task, subsystem, scope, and question remain unchanged.*change to any of those boundaries requires a newly spawned scout/i,
+  );
+  assert.match(
+    lifecycle,
+    /Reviewers are not eligible.*Every distinct review assignment uses a newly spawned reviewer.*every formal fresh round.*unique round-specific reviewer.*Never use `followup_task`/i,
+  );
+  assert.match(
+    lifecycle,
+    /Record the initial spawn and every continued assignment and result in order.*cannot be continued, stop as blocked.*never silently replace it/i,
+  );
+  assert.match(
+    taskDelegation,
+    /Continue the same named builder.*unchanged task, scope, and exclusive file ownership.*Continue the same named scout.*unchanged task, subsystem, scope, and investigation question/i,
+  );
+  assert.match(
+    taskDelegation,
+    /boundary change requires a newly spawned, newly named agent.*unavailable required in-boundary continuation is `Blocked`.*Never continue a reviewer/i,
+  );
+  assert.match(
+    checkpoint,
+    /ordered initial spawn and continuation entries, each with subagent name, role, full model, reasoning effort, and result, plus its unchanged boundary/i,
+  );
+  assert.match(
+    independentReview,
+    /Every fresh round uses a newly spawned reviewer.*Never continue or send a later round to a reviewer session from an earlier round.*reuse does not alter review independence or round accounting/i,
+  );
+  assert.match(operatorDocs, /### Subagent Sessions/);
+  assert.match(
+    operatorDocs,
+    /reuses that named session.*scope and exclusive file ownership remain unchanged.*every formal fresh round receives a newly spawned, round-specific independent reviewer/i,
+  );
+});
+
 test("review-changes is the singular review-loop authority", async () => {
   const review = await readSource("prompts/workflow/review-changes.md");
   const otherFiles = [

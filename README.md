@@ -61,6 +61,18 @@ recommendation for the next writable stage; the operator applies it manually.
 It returns that stage as a complete copy-pasteable prompt with known inputs
 filled in. Copy-ready inputs are in [Workflow Usage](docs/workflow-usage.md).
 
+### Subagent Sessions
+
+HIGH execution spawns one builder for a cohesive task and reuses that named
+session for task-scoped implementation and fixes while scope and exclusive file
+ownership remain unchanged. It likewise reuses one scout for follow-up research
+while the task, subsystem, scope, and investigation question remain unchanged.
+A boundary change requires a newly spawned, newly named builder or scout. If a
+required same-boundary continuation is unavailable, execution blocks instead
+of silently replacing the session or runtime. Reviewers are never reused for a
+later review assignment: every formal fresh round receives a newly spawned,
+round-specific independent reviewer.
+
 ## Current Contracts
 
 - Specs: `feature-spec@1`, `bugfix-spec@1`
@@ -76,6 +88,7 @@ filled in. Copy-ready inputs are in [Workflow Usage](docs/workflow-usage.md).
 Contract owners:
 
 - [Global invariants](AGENTS.md)
+- [Subagent identity and session lifecycle](instructions/shared/ai-workflow.md#subagent-identity-and-session-lifecycle)
 - [Stage sequence](instructions/shared/workflow-state.md)
 - [Plan structure](templates/plan.template.md)
 - [Formal and manual review loops](prompts/workflow/review-changes.md)
