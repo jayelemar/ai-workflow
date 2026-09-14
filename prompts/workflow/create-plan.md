@@ -141,6 +141,10 @@ Use `.ai/templates/plan.template.md` and save
   entry, label it `Required` or `Optional`, cite the acceptance criteria or
   plan-only invariant it proves, and state the observable invariant and
   expected result before saving its exact command or bounded manual check.
+  Name the selected venue—focused local, existing compatible development
+  runtime, shared development or staging, fresh build, release pipeline, or a
+  more specific project-defined venue—and record why it is the least costly
+  option that provides sufficient evidence.
   Verify that the check can feasibly exercise that condition in the declared
   repository and prepared environment after accounting for relevant
   environment and configuration sources. `External evidence` must likewise be
@@ -149,6 +153,20 @@ Use `.ai/templates/plan.template.md` and save
   broader repository-wide command a required completion gate only when its
   distinct risk is not covered by focused validation, and record that risk in
   the plan.
+- Before requiring a fresh mobile application build, verify whether focused
+  checks plus a compatible installed development client or matching
+  development/staging environment prove the same invariant. Require the fresh
+  build only for a named native, packaged-configuration, runtime-compatibility,
+  or release-boundary risk, and record why the cheaper venue is insufficient.
+  A deployed environment must not substitute for compilation or packaged
+  configuration evidence, and a successful build must not substitute for
+  effective deployed configuration or external-service evidence.
+- Recommend the selected least-cost sufficient venue in the final response.
+  Do not ask for generic validation approval. Stop for a venue decision only
+  when the alternatives materially change evidence or residual risk and the
+  request or finalized spec does not resolve the choice. When a shared venue
+  requires a new deployment, credential use, privileged action, or shared-data
+  mutation, identify that operator dependency in the plan before execution.
 - Write the completion condition so every required validation and required
   external-evidence item must pass. Unavailable required evidence is an
   execution blocker, never a permitted completion-time deferral.
@@ -210,6 +228,8 @@ For HIGH return exactly:
 ````text
 Plan saved to .ai/plans/<plan-name>.md [<classification>]
 
+Validation recommendation: <least-cost sufficient venue summary; name every required fresh build and why a cheaper compatible development or staging venue is insufficient; name any operator dependency>
+
 Do this next: choose one.
 
 Prepare an isolated worktree:
@@ -229,6 +249,8 @@ For LOW or MEDIUM return exactly:
 
 ````text
 Plan saved to .ai/plans/<plan-name>.md [<classification>]
+
+Validation recommendation: <least-cost sufficient venue summary; name every required fresh build and why a cheaper compatible development or staging venue is insufficient; name any operator dependency>
 
 Do this next: choose one.
 

@@ -518,6 +518,22 @@ test("plan validation gates are feasible, invariant-driven, and risk-based", asy
     planningContract,
     /broader repository-wide.*distinct risk.*focused validation/i,
   );
+  assert.match(
+    testingContract,
+    /validation venue.*least costly venue.*same observable invariant.*equivalent confidence/i,
+  );
+  assert.match(
+    testingContract,
+    /existing development runtime or deployed environment.*fresh build.*application version.*native\/runtime dependencies.*effective configuration/i,
+  );
+  assert.match(
+    planningContract,
+    /before requiring a fresh mobile application build.*compatible installed development client.*development\/staging environment.*same invariant/i,
+  );
+  assert.match(
+    planningContract,
+    /require the fresh build only for a named native, packaged-configuration, runtime-compatibility, or release-boundary risk/i,
+  );
   assert.match(template, /observable invariant and expected result/);
 
   assert.match(
@@ -1268,6 +1284,10 @@ test("plan response offers worktree setup or direct execution", async () => {
   assert.match(
     finalResponse,
     /Plan saved to \.ai\/plans\/<plan-name>\.md \[<classification>\]/,
+  );
+  assert.match(
+    finalResponse,
+    /Validation recommendation: <least-cost sufficient venue summary;/,
   );
   assert.match(
     finalResponse,
