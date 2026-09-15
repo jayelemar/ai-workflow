@@ -1,7 +1,7 @@
 # Execute Plan
 
 Run only when the user explicitly invokes `execute <plan-file>`. This command
-authorizes implementation of one saved LOW or MEDIUM `plan-manifest@4`.
+authorizes implementation of one saved LOW or MEDIUM `plan-manifest@5`.
 
 Read `.ai/AGENTS.md`, the plan, its finalized spec and flow artifacts when
 declared, current Git state in every repository, and only project instructions
@@ -13,11 +13,14 @@ routed for the implementation scope.
   If its former active path was superseded, apply `## Superseded Plan
 Resolution` from `.ai/instructions/shared/workflow-state.md` and stop without
   implementation.
-- Reject any older plan, review, handoff, or worktree report with exactly:
+- Require the plan's linked stable `work-status@1`. Its work item, active plan,
+  spec, classification, and ordered current task IDs must exactly match the
+  plan. Status is evidence, not execution authority.
+- Reject any older plan, status, review, or worktree report with exactly:
   `Legacy workflow artifact: <path> uses <format>; replan using the current
 contract before execution or resume.` Do not migrate, overwrite, or delete it.
 - Every declared repository root and integration-base ref must resolve.
-- Validate a current `worktree-setup@1` report against the `plan-manifest@4`,
+- Validate a current `worktree-setup@1` report against the `plan-manifest@5`,
   repository mappings, branches, bases, and Git worktree registries before using
   its filesystem-target overlay. Reject a stale or legacy report.
 - LOW requires its saved compact plan. MEDIUM requires its finalized typed spec.
@@ -32,6 +35,11 @@ contract before execution or resume.` Do not migrate, overwrite, or delete it.
 
 - Follow requested behavior, finalized spec, repository ownership, and plan
   order.
+- Before starting a task, set only that task to `active`, set overall status to
+  `in progress`, recompute the summary, and save the exact resume action. After
+  each task, update status before starting another: record `complete` only
+  after its required validation passes, or `blocked` with evidence and exact
+  next action. Never rewrite the plan for progress-only changes.
 - For environment-dependent behavior, inspect the effective non-secret
   configuration at each planned build or deployment boundary before trusting
   it. Verify required environment-specific URLs, fail-fast behavior for missing
@@ -53,19 +61,21 @@ contract before execution or resume.` Do not migrate, overwrite, or delete it.
 ## Completion
 
 LOW self-checks actual scope, diff, required validation, repositories, and
-preserved unrelated work.
+preserved unrelated work, then records completion evidence and `complete` in
+stable work status.
 
 MEDIUM invokes `.ai/prompts/workflow/review-changes.md` and saves its
 `implementation-review@3` result. That prompt exclusively controls review
 rounds, remediation, statuses, risk decisions, and completion eligibility; do
-not restate or reinterpret its transitions here.
+not restate or reinterpret its transitions here. Mirror its canonical status,
+evidence link, blocker, and next action into stable work status.
 
 ## Final Response
 
 Report changed scope by repository, required validation, deferred optional
-checks and risk, preserved unrelated work, and the LOW self-check or exact
-MEDIUM review status and required next action. Claim completion only when the
-canonical review result permits it.
+checks and risk, preserved unrelated work, work-status path, and the LOW
+self-check or exact MEDIUM review status and required next action. Claim
+completion only when the canonical review result permits it.
 
 For every blocked or otherwise non-complete result, lead with the exact status
 and cause, then write `Do this next:` and provide the exact action required by

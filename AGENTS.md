@@ -48,15 +48,19 @@ requires the corresponding explicitly invoked workflow stage.
   invocation. A saved artifact never authorizes the next stage.
 - A finalized spec remains authoritative during planning, execution, and
   review. Plans and artifacts must not add behavior absent from that spec.
-- New execution uses `plan-manifest@4`. MEDIUM and HIGH completion uses the
+- New execution uses `plan-manifest@5` and one stable `work-status@1` per work
+  item. MEDIUM and HIGH completion uses the
   independent `implementation-review@3` contract in
   `.ai/prompts/workflow/review-changes.md` and the locked reviewer runtime in
   `.ai/config/agent-models.toml`. `P0`, `P1`, and `P2` remain blocking; `P3` is
   advisory. Reviewer clearance is valid only for matching
   `review-input-fingerprint@1` evidence.
-- Do not introduce a workflow runner, transition state, event journal, sidecar
-  authority, preview gate, pre-execution approval gate, or automatic delivery
-  action.
+- `work-status@1` is an evidence snapshot, not transition authority. Keep its
+  first sections human-readable. Update it at task start and completion,
+  blockers, review changes,
+  and plan activation. Do not introduce a workflow runner, automatic
+  transition state, detailed event journal, sidecar authority, preview gate,
+  pre-execution approval gate, or automatic delivery action.
 
 ## Corrective-Deviation Decision
 
@@ -97,5 +101,5 @@ boundaries, not immutable security boundaries.
   artifacts, logs, and workflow-local state ignored and untracked.
 - When a Git parent checkout exists, do not stage `.ai` files in it.
 
-Version: 2.3
-Last Updated: 2026-09-14
+Version: 2.4
+Last Updated: 2026-09-15

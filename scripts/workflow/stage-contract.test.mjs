@@ -199,7 +199,7 @@ test("material discoveries route spec changes before replanning", async () => {
   );
   assert.match(
     normalize(checkpoint),
-    /material-discovery stop.*`Do this next:`.*handoff's exact `## Next Action`/i,
+    /material-discovery stop.*`Do this next:`.*status's exact `## Next Action`/i,
   );
   assert.match(
     normalize(review),
@@ -450,17 +450,20 @@ test("finalized specs are immutable and replans retain exact spec references", a
   }
 });
 
-test("current plans use versioned structure and a required Plan name input", async () => {
-  const [template, prompt, wrapper, workflow] = await Promise.all([
-    readSource("templates/plan.template.md"),
-    readSource("prompts/workflow/create-plan.md"),
-    readSource("wrappers/create-plan.md"),
-    readSource("instructions/shared/ai-workflow.md"),
-  ]);
+test("current plans and work status use versioned linked structures", async () => {
+  const [template, statusTemplate, prompt, wrapper, workflow] =
+    await Promise.all([
+      readSource("templates/plan.template.md"),
+      readSource("templates/work-status.template.md"),
+      readSource("prompts/workflow/create-plan.md"),
+      readSource("wrappers/create-plan.md"),
+      readSource("instructions/shared/ai-workflow.md"),
+    ]);
 
   for (const source of [template, prompt, workflow]) {
-    assert.match(source, /plan-manifest@4/);
+    assert.match(source, /plan-manifest@5/);
   }
+  assert.match(statusTemplate, /work-status@1/);
   for (const source of [prompt, wrapper]) {
     assert.match(source, /Plan name: `?<kebab-case-name>`?/);
   }
@@ -470,9 +473,62 @@ test("current plans use versioned structure and a required Plan name input", asy
   assert.match(template, /Work item/);
   assert.match(template, /Revision/);
   assert.match(template, /Archived revisions/);
+  assert.match(template, /## Work Tracking/);
+  assert.match(template, /T-001/);
+  assert.match(statusTemplate, /## Current Tasks/);
+  assert.match(statusTemplate, /## Changed or Removed Tasks/);
+  assert.match(statusTemplate, /## Revision Log/);
   assert.match(template, /### Repository: <repository-id>/);
   assert.match(template, /Integration base/);
   assert.match(template, /Repository: `<exactly-one-repository-id>`/);
+});
+
+test("work status is stable, task-driven, and reconciled across replans", async () => {
+  const [agents, createPlan, execute, checkpoint, review] = await Promise.all([
+    readSource("AGENTS.md"),
+    readSource("prompts/workflow/create-plan.md"),
+    readSource("prompts/workflow/execute-plan.md"),
+    readSource("prompts/workflow/goal-checkpoint.md"),
+    readSource("prompts/workflow/review-changes.md"),
+  ]);
+  const planning = normalize(createPlan);
+
+  assert.match(
+    agents,
+    /work-status@1.*evidence snapshot, not transition authority/is,
+  );
+  assert.match(planning, /\.ai\/artifacts\/<work-item>\/work-status\.md/);
+  assert.match(
+    planning,
+    /Progress-only updates never invoke planning or create a plan revision/i,
+  );
+  assert.match(planning, /Reconcile every predecessor task exactly once/i);
+  assert.match(
+    planning,
+    /carry `complete` only when.*validation evidence remain valid/is,
+  );
+  assert.match(
+    planning,
+    /mark `reopened` when an existing outcome is affected/i,
+  );
+  assert.match(planning, /next never-used identifier/i);
+  assert.match(
+    planning,
+    /reset revision-specific review status.*fingerprints.*rounds.*findings.*remediation evidence/is,
+  );
+  assert.match(
+    normalize(execute),
+    /Before starting a task.*set only that task to `active`/i,
+  );
+  assert.match(
+    normalize(execute),
+    /After each task, update status before starting another/i,
+  );
+  assert.match(
+    normalize(checkpoint),
+    /Before work, set only that task to `active`/i,
+  );
+  assert.match(normalize(review), /update stable `work-status@1`/i);
 });
 
 test("every MEDIUM plan has an automatic remediation-verification round", async () => {
@@ -643,15 +699,18 @@ test("replans archive one predecessor and retain one active lineage revision", a
     planning,
     /Supersedes: N\/A \| \.ai\/plans\/<current-plan-name>\.md/,
   );
-  assert.match(planning, /without a `## Plan Lineage` section.*revision `1`/i);
-  assert.match(planning, /<work-item>-r<N\+1>/);
-  assert.match(planning, /activate-replan\.mjs/);
   assert.match(
     planning,
-    /--predecessor \.ai\/plans\/<predecessor-plan-name>\.md --candidate \.ai\/tmp\/<successor-plan-name>\.md/,
+    /Reject a predecessor without `plan-manifest@5` and complete lineage/i,
   );
-  assert.match(planning, /Never overwrite an archive or active plan/);
-  assert.match(planning, /leave the predecessor active/i);
+  assert.match(planning, /<work-item>-r<N\+1>/);
+  assert.match(planning, /activate-plan\.mjs/);
+  assert.match(
+    planning,
+    /--predecessor \.ai\/plans\/<predecessor-plan-name>\.md --candidate-plan \.ai\/tmp\/<successor-plan-name>\.md --candidate-status \.ai\/tmp\/<work-item>\.work-status\.md/,
+  );
+  assert.match(planning, /never expose a plan without matching status/i);
+  assert.match(planning, /leave a predecessor inactive after failure/i);
   assert.match(
     stageContract,
     /Only a root-level `\.ai\/plans\/<name>\.md` file is active/,
@@ -663,13 +722,10 @@ test("replans archive one predecessor and retain one active lineage revision", a
   for (const source of [execute, prepare]) {
     assert.match(normalize(source), /Superseded Plan Resolution/);
   }
-  assert.match(
-    normalize(checkpoint),
-    /initial handoff creation.*validated replan candidate.*cannot refresh it, execute it, or authorize the candidate/i,
-  );
+  assert.match(normalize(checkpoint), /work-status@1/);
   assert.match(
     JSON.parse(packageSource).scripts["test:focused"],
-    /activate-replan\.test\.mjs/,
+    /activate-plan\.test\.mjs/,
   );
 });
 
@@ -791,7 +847,7 @@ test("subagent names expose role, model family, effort, and purpose", async () =
     /pass the resolved full model and reasoning effort explicitly/,
   );
   assert.match(
-    checkpoint,
+    checkpointContract,
     /subagent name, role, full model, reasoning effort, and result/,
   );
   assert.match(review, /`reviewer_sol_xhigh_auth_flow_round_1`/);
@@ -842,7 +898,7 @@ test("subagent sessions reuse builders and scouts but never reviewers", async ()
     /boundary change requires a newly spawned, newly named agent.*unavailable required in-boundary continuation is `Blocked`.*Never continue a reviewer/i,
   );
   assert.match(
-    checkpoint,
+    taskDelegation,
     /ordered initial spawn and continuation entries, each with subagent name, role, full model, reasoning effort, and result, plus its unchanged boundary/i,
   );
   assert.match(
@@ -962,7 +1018,7 @@ test("manual review until clear is bounded, any-plan, and non-executing", async 
     review,
     /explicit invocation of `.ai\/prompts\/utilities\/review-until-clear\.md` with `Plan: <plan-file>`/,
   );
-  assert.match(review, /every current `plan-manifest@4` classification/);
+  assert.match(review, /every current `plan-manifest@5` classification/);
   assert.match(review, /plan-owned implementation evidence/);
   assert.match(
     review,
@@ -972,7 +1028,7 @@ test("manual review until clear is bounded, any-plan, and non-executing", async 
     review,
     /LOW.*does not create an `implementation-review@3` artifact/,
   );
-  assert.match(review, /MEDIUM.*review\.md.*HIGH.*goal-handoff@3/);
+  assert.match(review, /MEDIUM.*review\.md.*HIGH.*goal-checkpoint\.md/);
   assert.match(review, /does not increase the automatic-rounds-used count/);
   assert.match(
     review,
@@ -1091,17 +1147,19 @@ test("review round evidence is monotonically increasing", async () => {
   assert.match(resume, /positive, strictly increasing/);
 });
 
-test("goal-handoff@3 stores exact portable evidence without copied protocols", async () => {
+test("work-status@1 stores current progress without copied protocols", async () => {
   const checkpoint = await readSource("prompts/workflow/goal-checkpoint.md");
-  const schema = checkpoint.split("## Required Handoff Content")[1];
+  const schema = await readSource("templates/work-status.template.md");
 
-  assert.match(checkpoint, /goal-handoff@3/);
+  assert.match(checkpoint, /work-status@1/);
+  assert.match(schema, /work-status@1/);
   for (const section of [
-    "Exact Goal",
-    "Linked Artifacts",
+    "Current Work",
+    "Progress Summary",
     "Repository State",
-    "Task and Commit Records",
-    "Validation Evidence",
+    "Current Tasks",
+    "Changed or Removed Tasks",
+    "Revision Log",
     "Review State",
     "Blockers",
     "Next Action",
@@ -1157,7 +1215,7 @@ test("legacy artifacts are rejected precisely without migration or deletion", as
   }
   assert.match(
     await readSource("prompts/utilities/prepare-worktree.md"),
-    /same `plan-manifest@4`/,
+    /same `plan-manifest@5`/,
   );
 });
 
@@ -1287,6 +1345,10 @@ test("plan response offers worktree setup or direct execution", async () => {
   );
   assert.match(
     finalResponse,
+    /Work status: \.ai\/artifacts\/<work-item>\/work-status\.md/,
+  );
+  assert.match(
+    finalResponse,
     /Validation recommendation: <least-cost sufficient venue summary;/,
   );
   assert.match(
@@ -1319,7 +1381,7 @@ test("plan response offers worktree setup or direct execution", async () => {
   );
   assert.match(
     resume,
-    /Return the handoff's exact `## Next Action` without invoking it/,
+    /Return status's exact `## Next Action` without invoking it/,
   );
 });
 

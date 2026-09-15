@@ -2,4 +2,4 @@
 
 Use `.ai/prompts/workflow/resume-goal.md`.
 
-Goal name: `<stable-kebab-case-name>`
+Work item: `<stable-kebab-case-name>`

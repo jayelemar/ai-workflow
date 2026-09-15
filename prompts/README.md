@@ -22,7 +22,7 @@ Ordered application-development stages and their supporting controls:
   invoked manual independent review loops.
 - [Goal checkpoint](workflow/goal-checkpoint.md): manage HIGH task evidence and
   commits.
-- [Resume goal](workflow/resume-goal.md): resume a valid HIGH handoff.
+- [Resume goal](workflow/resume-goal.md): return a valid HIGH work-status action.
 
 ## Utilities
 

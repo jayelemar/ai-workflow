@@ -1,5 +1,5 @@
-Version: 7.0
-Last Updated: 2026-09-14
+Version: 8.0
+Last Updated: 2026-09-15
 
 # AI Workflow Instructions
 
@@ -16,9 +16,12 @@ duplicating stage or review protocols.
 - `.ai/prompts/workflow/generate-spec.md` owns finalized-spec schemas,
   immutable spec-path creation, mandatory filename confirmation, and
   exact-match reuse versus content-revision suggestions.
-- `.ai/templates/plan.template.md` owns `plan-manifest@4`, plan structure,
-  backward-compatible plan lineage, `review-strategy@2`, and review-budget
+- `.ai/templates/plan.template.md` owns `plan-manifest@5`, plan structure,
+  plan lineage, `review-strategy@2`, and review-budget
   fields.
+- `.ai/templates/work-status.template.md` owns `work-status@1`, the stable
+  per-work-item progress snapshot, task states, revision log, and current
+  artifact links.
 - `.ai/prompts/workflow/create-plan.md` owns planning final responses,
   including worktree and direct-execution choices.
 - `.ai/prompts/workflow/review-changes.md` solely owns `implementation-review@3`, final
@@ -27,9 +30,9 @@ duplicating stage or review protocols.
 - `.ai/scripts/workflow/review-fingerprint.mjs` solely owns deterministic,
   read-only `review-input-fingerprint@1` generation. It provides evidence to
   the review prompt and owns no transition or completion decision.
-- `.ai/prompts/workflow/goal-checkpoint.md` owns `goal-handoff@3`, HIGH task progress,
-  commit evidence, and HIGH commit rules. Handoffs store evidence without
-  copying policy text.
+- `.ai/prompts/workflow/goal-checkpoint.md` owns HIGH task progress and commit
+  evidence in `work-status@1`, plus HIGH commit rules. Status stores evidence
+  without copying policy text.
 - `.ai/prompts/workflow/generate-flow-artifacts.md` owns the unchanged
   `user-journey@1` and `implementation-map@1` schemas.
 - `.ai/prompts/utilities/pull-request-creation.md` owns optional, explicitly invoked pull
@@ -55,6 +58,13 @@ duplicating stage or review protocols.
 - Only root-level `.ai/plans/*.md` files are active plans. Replanning preserves
   one active revision per work item and stores superseded plans as evidence
   under the predecessor's artifact directory.
+- Every work item has exactly one stable
+  `.ai/artifacts/<work-item>/work-status.md`. Plan revisions link it but do not
+  copy progress. Progress-only changes update status and never create a plan
+  revision.
+- Every plan task has one stable `T-001` identifier. Replans preserve IDs for
+  the same outcome, reopen affected outcomes, supersede replaced outcomes, and
+  assign never-used IDs to new outcomes.
 
 ## Subagent Identity and Session Lifecycle
 

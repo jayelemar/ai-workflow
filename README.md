@@ -50,9 +50,9 @@ mutation because no parent Git exclude exists; use an existing operator-managed
 Each arrow is a separate explicit invocation:
 
 ```text
-LOW:    intake -> saved plan -> execute
-MEDIUM: intake -> finalized spec -> saved plan -> execute
-HIGH:   intake -> finalized spec -> saved plan + handoff -> /goal
+LOW:    intake -> saved plan + work status -> execute
+MEDIUM: intake -> finalized spec -> saved plan + work status -> execute
+HIGH:   intake -> finalized spec -> saved plan + work status -> /goal
 ```
 
 Planning may create missing flow artifacts. Delivery remains an optional later
@@ -77,10 +77,11 @@ round-specific independent reviewer.
 
 - Specs: `feature-spec@1`, `bugfix-spec@1`
 - Flow artifacts: `user-journey@1`, `implementation-map@1`
-- Plan: `plan-manifest@4` with backward-compatible lineage,
+- Plan: `plan-manifest@5` with stable task IDs, lineage,
   `review-strategy@2`, and a saved review budget
+- Work status: `work-status@1`, one stable human-readable progress snapshot per
+  work item for LOW, MEDIUM, and HIGH
 - MEDIUM review: `implementation-review@3`
-- HIGH handoff: `goal-handoff@3`
 - Review input: `review-input-fingerprint@1`, generated read-only from each
   repository's integration base and exact plan-owned diff
 - Worktree preparation report: `worktree-setup@1`, tied to its current plan
@@ -91,6 +92,7 @@ Contract owners:
 - [Subagent identity and session lifecycle](instructions/shared/ai-workflow.md#subagent-identity-and-session-lifecycle)
 - [Stage sequence](instructions/shared/workflow-state.md)
 - [Plan structure](templates/plan.template.md)
+- [Work-status structure](templates/work-status.template.md)
 - [Formal and manual review loops](prompts/workflow/review-changes.md)
 - [Review input fingerprints](scripts/workflow/review-fingerprint.mjs)
 - [HIGH progress and commit evidence](prompts/workflow/goal-checkpoint.md)
@@ -105,11 +107,13 @@ any content change, including evidence-only revisions that preserve desired
 behavior. This keeps every archived plan tied to the exact spec that governed
 it.
 
-Only root-level files under `.ai/plans/` are active. A replan keeps the stable
-work-item identity, creates the next deterministic `-rN` plan, and archives its
-predecessor as `.ai/artifacts/<predecessor>/superseded-plan.md`. Archived plans
-remain evidence but cannot execute or resume. Existing plans without lineage
-remain compatible revision-1 plans and are not migrated automatically.
+Only root-level files under `.ai/plans/` are active. A replan keeps stable task
+IDs and work-item identity, creates the next deterministic `-rN` plan, and
+archives its predecessor as
+`.ai/artifacts/<predecessor>/superseded-plan.md`. One stable
+`.ai/artifacts/<work-item>/work-status.md` shows current, completed, reopened,
+blocked, and remaining work across revisions. Progress-only changes update that
+file without creating a plan. Legacy plans are not migrated automatically.
 
 ## Repository Boundaries
 

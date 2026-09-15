@@ -209,6 +209,7 @@ test("clean-only apply removes clean tasks and unrelated records but preserves d
       "plans/dirty-task.md",
       [
         "Spec: `.ai/specs/dirty-request.spec.md`",
+        "Status: `.ai/artifacts/dirty-task/work-status.md`",
         "Archived revisions: `.ai/artifacts/old-dirty-task/superseded-plan.md`",
         "",
       ].join("\n"),
@@ -217,6 +218,7 @@ test("clean-only apply removes clean tasks and unrelated records but preserves d
     await writeRecord(fixture, "specs/dirty-request.spec.md");
     await writeRecord(fixture, "artifacts/clean-task/review.md");
     await writeRecord(fixture, "artifacts/dirty-task/review.md");
+    await writeRecord(fixture, "artifacts/dirty-task/work-status.md");
     await writeRecord(fixture, "artifacts/old-dirty-task/superseded-plan.md");
 
     const { commands, output, result } = await run(fixture, [clean, dirty], {
@@ -242,6 +244,16 @@ test("clean-only apply removes clean tasks and unrelated records but preserves d
     assert.equal(
       await readFile(
         path.join(fixture.workflowDirectory, "artifacts/dirty-task/review.md"),
+        "utf8",
+      ),
+      "record\n",
+    );
+    assert.equal(
+      await readFile(
+        path.join(
+          fixture.workflowDirectory,
+          "artifacts/dirty-task/work-status.md",
+        ),
         "utf8",
       ),
       "record\n",

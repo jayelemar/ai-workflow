@@ -1,9 +1,9 @@
 # Create Plan
 
-Create one saved `plan-manifest@4` only after explicit plan invocation. For
-MEDIUM or HIGH, require a finalized spec. In the same invocation, determine
-whether flow tracing is required and reuse or create the required pair before
-saving the plan.
+Create one saved `plan-manifest@5` and one stable `work-status@1` only after
+explicit plan invocation. For MEDIUM or HIGH, require a finalized spec. In the
+same invocation, determine whether flow tracing is required and reuse or create
+the required pair before activating the plan and status together.
 
 ## Input
 
@@ -19,9 +19,8 @@ Flow artifacts: .ai/artifacts/<name>/ | AUTO | N/A: <concrete reason>
 kebab-case name and `Supersedes: N/A`; that name is both the plan name and
 stable work-item name, with revision `1`. Accept `Plan name: AUTO` only with a
 root-level active predecessor under `.ai/plans/`. Derive the successor as
-`<work-item>-r<N+1>` from the predecessor's lineage. A predecessor without a
-`## Plan Lineage` section is a compatible revision `1` whose work-item name is
-its `# Plan:` name and whose archive history is empty. Reject a supplied name
+`<work-item>-r<N+1>` from the predecessor's lineage. Reject a predecessor
+without `plan-manifest@5` and complete lineage. Reject a supplied name
 for a replan, a non-AUTO initial name, unsafe or inconsistent lineage, a name
 or archive collision, and more than one active plan for the same work item.
 
@@ -32,8 +31,9 @@ classification or spec from conversation only when exactly one finalized input
 applies; otherwise stop for the ambiguous input.
 
 Read `.ai/AGENTS.md`, `.ai/instructions/index.md`, the routed workflow,
-reasoning, flow-trace, testing, and delivery instructions, and every finalized
-input. When tracing is required, apply
+reasoning, flow-trace, testing, and delivery instructions, every finalized
+input, `.ai/templates/plan.template.md`, and
+`.ai/templates/work-status.template.md`. When tracing is required, apply
 `.ai/prompts/workflow/generate-flow-artifacts.md`. Inspect repository ownership,
 contracts, validation, Git roots, and integration bases.
 
@@ -62,21 +62,31 @@ contracts, validation, Git roots, and integration bases.
 - Treat only root-level `.ai/plans/*.md` files as active execution authority.
   Files named `superseded-plan.md` under `.ai/artifacts/` are immutable history
   and cannot authorize execution, review, resume, or worktree preparation.
-- If any supplied plan, review, handoff, or worktree report belongs to an older
+- If any supplied plan, status, review, or worktree report belongs to an older
   contract, return exactly: `Legacy workflow artifact: <path> uses <format>;
 replan using the current contract before execution or resume.` Do not migrate,
   overwrite, or delete it.
 
 ## Planning Contract
 
-Use `.ai/templates/plan.template.md` and save
-`.ai/plans/<plan-name>.md`.
+Use both templates. Prepare the plan at `.ai/tmp/<plan-name>.md` and status at
+`.ai/tmp/<work-item>.work-status.md`, then activate them together. The stable
+status destination is `.ai/artifacts/<work-item>/work-status.md` for every plan
+revision.
 
 - Populate `## Plan Lineage` on every newly generated plan. For an initial
   plan, record its stable name, revision `1`, no predecessor, and no archived
   revisions. For a replan, preserve the predecessor's work-item name, increment
   its revision by exactly one, record the immediate archive destination, and
   copy the complete ordered archive history followed by that destination.
+
+- Give every task one stable identifier beginning at `T-001`. Use task
+  headings from the plan template for LOW, MEDIUM, and HIGH. During a replan,
+  preserve an ID when its outcome remains the same, even when changed behavior
+  reopens it. Supersede a materially replaced outcome and assign each new
+  outcome the next never-used identifier. Never renumber or reuse IDs.
+- Link exactly one stable work-status path from `## Work Tracking`. The plan
+  describes current implementation scope; it never copies live progress.
 
 - Declare every Git repository by stable ID, explicit relative root, planned
   ownership, and evidence-backed integration base. The plan workspace may be a
@@ -170,42 +180,72 @@ Use `.ai/templates/plan.template.md` and save
 - Write the completion condition so every required validation and required
   external-evidence item must pass. Unavailable required evidence is an
   execution blocker, never a permitted completion-time deferral.
-- Create no workflow state, sidecar, event log, preview, or progress record.
+- Required external evidence that is missing makes execution `Blocked`.
+- Create no workflow runner, transition state, detailed event log, preview, or
+  sidecar authority. `work-status@1` is the sole permitted progress snapshot
+  and never authorizes execution.
 
-## Replan Activation
+## Work Status Contract
 
-For a replan, finish and validate the successor plan in `.ai/tmp/` and any new
-artifacts at their declared revision-specific paths before changing the active
-plan set. Confirm that the predecessor's referenced finalized spec remains
-readable, and do not modify it during replanning or activation. Reuse the
-predecessor's declared flow-artifact pair only when it remains complete and
-consistent with the current finalized spec; otherwise create the required pair
-under the successor artifact directory. MEDIUM review evidence and HIGH
-handoff evidence are always revision-specific and never reused. Create an
-initial HIGH handoff from the validated candidate through the candidate
-exception in `.ai/prompts/workflow/goal-checkpoint.md`; it remains
-non-authoritative until activation succeeds.
+For an initial plan, create status with the complete current goal, current spec
+or LOW request, candidate active-plan path, all tasks as `not started`, no
+completed or changed tasks, revision-log entry `1`, current blocker
+`Awaiting explicit execution invocation`, and the classification-specific exact
+next action.
 
-Activate the replan only through
-`.ai/scripts/workflow/activate-replan.mjs`, following the workspace's required
-command wrapper. The helper must move the predecessor to
-`.ai/artifacts/<predecessor-plan-name>/superseded-plan.md` and move the validated
-candidate into `.ai/plans/<successor-plan-name>.md` as one rollback-protected
-operation. Never overwrite an archive or active plan. If activation fails,
-leave the predecessor active, expose no partial successor in `.ai/plans/`,
-preserve diagnostic artifacts, and return the exact blocker and retry action.
-Invoke it with exactly these resolved paths:
+For a replan, require the predecessor's stable status to be readable and valid.
+Reconcile every predecessor task exactly once:
+
+- carry `complete` only when its outcome, dependencies, acceptance criteria,
+  and validation evidence remain valid;
+- keep unchanged unfinished work in its current non-complete state;
+- keep the same ID and mark `reopened` when an existing outcome is affected;
+- move removed or materially replaced outcomes to `## Changed or Removed
+Tasks`, with replacement IDs and reason when applicable; and
+- add new outcomes with the next never-used IDs and state `not started`.
+
+Candidate status must contain exactly the candidate plan's current task IDs in
+plan order, retain changed-or-removed history, append one concise revision-log
+entry, link the candidate plan and exact current spec, recompute its progress
+summary, reset revision-specific review status, fingerprints, rounds, findings,
+and remediation evidence to their unstarted values under the candidate's saved
+budget, and set one exact next action. Progress-only updates never invoke
+planning or create a plan revision.
+
+## Plan Activation
+
+Finish and validate the candidate plan, candidate status, and new artifacts
+before changing the active plan set. For a replan, confirm the predecessor's
+referenced finalized spec and stable status remain readable. Reuse flow
+artifacts only when complete and consistent with the current spec; otherwise
+create the pair under the successor artifact directory. MEDIUM review evidence
+remains revision-specific. HIGH task and commit evidence remains in stable work
+status and is reconciled to the successor.
+
+Activate every plan only through `.ai/scripts/workflow/activate-plan.mjs`. The
+helper validates exact plan/status links and task-ID equality. For a replan it
+also archives the predecessor. Activation is rollback-protected: never expose
+a plan without matching status, overwrite an archive, or leave a predecessor
+inactive after failure. Preserve diagnostic candidates and return the exact
+blocker and retry action.
+
+For an initial plan, invoke:
 
 ```text
-node .ai/scripts/workflow/activate-replan.mjs --predecessor .ai/plans/<predecessor-plan-name>.md --candidate .ai/tmp/<successor-plan-name>.md
+node .ai/scripts/workflow/activate-plan.mjs --candidate-plan .ai/tmp/<plan-name>.md --candidate-status .ai/tmp/<work-item>.work-status.md
 ```
 
-## HIGH Handoff
+For a replan, invoke:
 
-For HIGH, initialize `.ai/artifacts/<plan-name>/goal-handoff.md` as
-`goal-handoff@3` through `.ai/prompts/workflow/goal-checkpoint.md`. Record current
-repository state, ordered tasks as not started, no validation or review rounds,
-`Awaiting explicit /goal invocation` as the blocker, and this next action:
+```text
+node .ai/scripts/workflow/activate-plan.mjs --predecessor .ai/plans/<predecessor-plan-name>.md --candidate-plan .ai/tmp/<successor-plan-name>.md --candidate-status .ai/tmp/<work-item>.work-status.md
+```
+
+## Status Initialization
+
+For HIGH, include current repository state, ordered tasks as not started, no
+validation or review rounds, `Awaiting explicit /goal invocation` as the
+blocker, and this next action:
 
 ```text
 /goal <exact finalized-spec goal>
@@ -213,7 +253,8 @@ repository state, ordered tasks as not started, no validation or review rounds,
 plan: .ai/plans/<plan-name>.md
 ```
 
-The handoff stores evidence, not copied review or commit policy.
+For LOW and MEDIUM, store the exact `execute .ai/plans/<plan-name>.md` action.
+Work status stores evidence, not copied review or commit policy.
 
 ## Stage Boundary and Final Response
 
@@ -227,6 +268,7 @@ For HIGH return exactly:
 
 ````text
 Plan saved to .ai/plans/<plan-name>.md [<classification>]
+Work status: .ai/artifacts/<work-item>/work-status.md
 
 Validation recommendation: <least-cost sufficient venue summary; name every required fresh build and why a cheaper compatible development or staging venue is insufficient; name any operator dependency>
 
@@ -249,6 +291,7 @@ For LOW or MEDIUM return exactly:
 
 ````text
 Plan saved to .ai/plans/<plan-name>.md [<classification>]
+Work status: .ai/artifacts/<work-item>/work-status.md
 
 Validation recommendation: <least-cost sufficient venue summary; name every required fresh build and why a cheaper compatible development or staging venue is insufficient; name any operator dependency>
 

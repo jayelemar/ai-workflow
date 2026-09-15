@@ -6,7 +6,7 @@ behavior, schemas, validation, review decisions, and final responses.
 ## Choose a Mode
 
 - Use Agent mode for intake, specs, plans, and LOW/MEDIUM execution.
-- Use Goal mode only for the exact HIGH command saved in `goal-handoff@3`.
+- Use Goal mode only for the exact HIGH command saved in `work-status@1`.
 - Product Plan mode is optional brainstorming and does not replace the saved
   plan stage.
 
@@ -91,6 +91,12 @@ The current plan template records `review-strategy@2` and its deterministic
 automatic review budget. See [Create Plan](../prompts/workflow/create-plan.md) and the
 [Plan Template](../templates/plan.template.md).
 
+Every new plan also links one stable
+`.ai/artifacts/<work-item>/work-status.md`. Open this file for the complete
+current goal, active plan, completed work, remaining work, changed or removed
+tasks, blockers, and exact next action. Progress updates this status after each
+task and never creates a new plan revision.
+
 Every MEDIUM plan receives up to two automatic fresh rounds. A clear first
 round completes review immediately; when the first round is blocking, the
 second independently verifies remediation without requiring an operator risk
@@ -143,6 +149,12 @@ The validated predecessor moves to
 `.ai/artifacts/<current-plan-name>/superseded-plan.md`; only the successor stays
 under `.ai/plans/`. Replanning reclassifies the actual successor scope and uses
 `/goal` only when that result is HIGH.
+
+Replanning also reconciles stable task IDs into the existing work status.
+Unchanged completed tasks remain complete only while their behavior and
+evidence remain valid. Affected tasks reopen, removed tasks retain a concise
+reason, and new tasks receive IDs that have never been used. Plan and status
+activate together or both remain unchanged.
 
 ## Execute LOW/MEDIUM
 
@@ -203,7 +215,7 @@ Before pausing or switching sessions, refresh portable evidence:
 ```text
 Use `.ai/wrappers/goal-checkpoint.md`.
 
-Goal name: <plan-name>
+Work item: <stable-work-item-name>
 Exact goal: <saved objective>
 ```
 
@@ -212,11 +224,12 @@ Resume read-only analysis with:
 ```text
 Use `.ai/wrappers/resume-goal.md`.
 
-Goal name: <plan-name>
+Work item: <stable-work-item-name>
 ```
 
-The [HIGH checkpoint contract](../prompts/workflow/goal-checkpoint.md) owns task and
-commit evidence. The handoff itself does not copy policy.
+The [HIGH checkpoint contract](../prompts/workflow/goal-checkpoint.md) owns task
+and commit evidence in stable work status. Status does not copy policy or
+authorize execution.
 
 ## Optional Worktree and Delivery Utilities
 

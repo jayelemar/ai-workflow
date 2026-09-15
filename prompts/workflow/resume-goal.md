@@ -1,26 +1,28 @@
 # Resume Goal
 
-Resume analysis for a HIGH work item from portable evidence. This prompt is
-read-only. Read `.ai/AGENTS.md` first.
+Return the exact saved action for a HIGH work item without executing it. Read
+`.ai/AGENTS.md` before inspecting workflow evidence.
 
-1. Read `.ai/artifacts/<goal-name>/goal-handoff.md`.
-2. Require `.ai/plans/<goal-name>.md` to be the root-level active plan. If the
-   plan was superseded, apply `## Superseded Plan Resolution` from
-   `.ai/instructions/shared/workflow-state.md` and return its exact result.
-3. Require `goal-handoff@3`, its linked current `plan-manifest@4`, finalized
-   spec, and declared flow artifacts. Validate positive, strictly increasing
-   review round numbers, re-check repository state, and recompute the current
-   `review-input-fingerprint@1` evidence before trusting review clearance.
-4. If any handoff, plan, review, or worktree report uses an older contract,
+## Input
+
+- Work item: `<stable-kebab-case-work-item>`
+
+## Rules
+
+1. Read `.ai/artifacts/<work-item>/work-status.md`.
+2. Require `work-status@1` and resolve exactly one root-level active
+   `plan-manifest@5` whose lineage, status link, spec, classification, and
+   ordered task IDs match it.
+3. Verify repository evidence and positive, strictly increasing review rounds.
+   Recompute current `review-input-fingerprint@1` evidence before trusting
+   recorded review clearance.
+4. If any status, plan, review, or worktree report uses an older contract,
    return exactly: `Legacy workflow artifact: <path> uses <format>; replan using
-the current contract before execution or resume.` Do not migrate, overwrite,
+the current contract before execution or resume.` Never migrate, overwrite,
    or delete it.
-5. Return the handoff's exact `## Next Action` without invoking it. Stop; the
-   user must explicitly invoke that action.
-
-Do not modify artifacts, infer progress, create workflow state, or reproduce
-review or commit policy.
+5. Return status's exact `## Next Action` without invoking it. Stop; status is
+   evidence, not transition authority.
 
 ## Final Output
 
-Return only the handoff's exact `## Next Action`, or the exact legacy response.
+Return only status's exact `## Next Action`, or the exact legacy response.

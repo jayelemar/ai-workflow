@@ -1,21 +1,21 @@
-Version: 4.6
-Last Updated: 2026-09-10
+Version: 5.0
+Last Updated: 2026-09-15
 
 # Workflow Stage Instructions
 
 ## Authority
 
 Only an explicit user invocation starts a stage. Saved specs, plans, flow
-artifacts, handoffs, Git state, validation evidence, and reviews are durable
+artifacts, work status, Git state, validation evidence, and reviews are durable
 context, not transition authority.
 
 ## Stage Sequence
 
-| Class    | Intake                   | Specification                    | Planning                                                                         | Execution                                                |
-| -------- | ------------------------ | -------------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| `LOW`    | Read-only classification | N/A                              | Explicitly create and save a compact plan                                        | Explicitly `execute <plan-file>`                         |
-| `MEDIUM` | Read-only classification | Explicitly finalize a typed spec | Explicitly create required flow artifacts and save a plan                        | Explicitly `execute <plan-file>`                         |
-| `HIGH`   | Read-only classification | Explicitly finalize a typed spec | Explicitly create required flow artifacts, save a plan, and initialize a handoff | Explicitly invoke the handoff's two-line `/goal` command |
+| Class    | Intake                   | Specification                    | Planning                                                                  | Execution                                                |
+| -------- | ------------------------ | -------------------------------- | ------------------------------------------------------------------------- | -------------------------------------------------------- |
+| `LOW`    | Read-only classification | N/A                              | Explicitly create a compact plan and stable work status                   | Explicitly `execute <plan-file>`                         |
+| `MEDIUM` | Read-only classification | Explicitly finalize a typed spec | Explicitly create required flow artifacts, a plan, and stable work status | Explicitly `execute <plan-file>`                         |
+| `HIGH`   | Read-only classification | Explicitly finalize a typed spec | Explicitly create required flow artifacts, a plan, and stable work status | Explicitly invoke work status's two-line `/goal` command |
 
 Planning may create a missing required flow-artifact pair in the same explicit
 invocation. Direct flow-artifact generation is also available but does not
@@ -25,7 +25,8 @@ start planning.
 
 - Intake never writes the next-stage artifact.
 - LOW never executes from a conversational plan.
-- Finalizing or saving an artifact never starts the next stage.
+- Finalizing or saving an artifact, including work status, never starts the
+  next stage.
 - A material execution discovery returns to a newly invoked specification or
   planning stage. A qualifying correction under the table in `.ai/AGENTS.md`
   remains inside the already authorized execution stage.
@@ -38,6 +39,8 @@ start planning.
 - Replanning does not itself change classification. Planning reapplies the
   deterministic classifier, archives the predecessor only after the successor
   is valid, and leaves exactly one active plan revision for that work item.
+- Progress updates change only stable work status. They never create a new plan
+  revision. Replanning is reserved for scope or implementation changes.
 - Review, checkpoint, and delivery actions remain part of their owning stage;
   none silently invokes delivery or another workflow stage.
 - An explicit manual review may remediate an already implemented plan-owned
@@ -152,7 +155,7 @@ plans. Treat it as superseded only when exactly one active plan has the same
 work-item name and lists that archive in its ordered history. Return
 `Superseded plan: <former path> -> <active path>`, then `Do this next:` and the
 active plan's exact `execute` invocation for LOW/MEDIUM or validated two-line
-`/goal` invocation for HIGH. Do not start it.
+`/goal` invocation from work status for HIGH. Do not start it.
 
 Missing, malformed, cyclic, duplicate, or ambiguous lineage is a blocker. Name
 the conflicting paths and require an explicit create-plan repair; never choose
@@ -162,5 +165,6 @@ by modification time, filename sorting, or conversation recency.
 
 - Creating a spec during intake.
 - Treating `saved` or `finalized` as execution authorization.
-- Introducing runner selection, persisted transition state, event history,
-  sidecars, or a pre-execution approval gate.
+- Introducing runner selection, automatic transition state, detailed event
+  history, sidecar authority beyond evidence-only work status, or a
+  pre-execution approval gate.

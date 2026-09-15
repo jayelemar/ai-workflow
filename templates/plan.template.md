@@ -2,7 +2,7 @@
 
 ## Document Format
 
-plan-manifest@4
+plan-manifest@5
 
 ## Plan Lineage
 
@@ -18,6 +18,12 @@ LOW | MEDIUM | HIGH
 ## Spec
 
 `.ai/specs/<name>.spec.md` | `N/A: LOW plans do not use a spec`
+
+## Work Tracking
+
+- Status: `.ai/artifacts/<stable-work-item-name>/work-status.md`
+- Task IDs: stable `T-001` identifiers; preserve unchanged outcomes across
+  revisions, reopen affected outcomes, and never reuse superseded IDs
 
 ## Repositories
 
@@ -35,7 +41,6 @@ relative to the plan workspace.
 - User journey: `.ai/artifacts/<plan-name>/user-journey.md` | `N/A: <reason>`
 - Implementation map: `.ai/artifacts/<plan-name>/implementation-map.md` | `N/A: <same reason>`
 - MEDIUM review: `.ai/artifacts/<plan-name>/review.md` | `N/A: not MEDIUM`
-- HIGH handoff: `.ai/artifacts/<plan-name>/goal-handoff.md` | `N/A: not HIGH`
 
 ## Scope
 
@@ -67,16 +72,22 @@ Include this subsection only when `Sensitive-boundary trigger` names a boundary:
 For LOW, use only the minimum ordered steps needed to name ownership, outcome,
 and validation. For MEDIUM, include dependencies and contracts as applicable.
 
-1. <imperative outcome>
-   - Repository: `<repository-id>`
-   - Owned paths: <exact repo-relative paths>
+### Task T-001: <imperative outcome>
+
+For later tasks, increment the stable identifier without gaps. During a replan,
+preserve the identifier when the outcome remains the same; never renumber or
+reuse an identifier.
+
+- Behavior: <one exact outcome>
+- Repository: `<repository-id>`
+- Owned paths: <exact repo-relative paths>
 
 - Validation: <Required | Optional; acceptance criteria or plan invariant> — `<exact command or bounded manual check>` — <observable invariant and expected result>
 
 For HIGH, replace the steps with task entries. Every task belongs to exactly
 one repository; split cross-repository outcomes into dependent tasks.
 
-### Task <number>: <imperative outcome>
+### Task T-001: <imperative outcome>
 
 - Repository: `<exactly-one-repository-id>`
 - Behavior: <one exact outcome>

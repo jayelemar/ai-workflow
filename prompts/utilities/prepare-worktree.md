@@ -35,7 +35,7 @@ directory. The workspace may or may not be a Git repository. Reject absolute
 paths, traversal, symlink escapes, unreadable files, and plans outside the
 source `.ai/plans/` directory.
 
-Read the complete plan. It must declare `plan-manifest@4`, exactly one
+Read the complete plan. It must declare `plan-manifest@5`, exactly one
 `LOW`, `MEDIUM`, or `HIGH` classification, a safe kebab-case `# Plan:` name
 that matches the filename, and one or more valid `## Repositories` entries.
 Each entry must provide a unique safe repository ID, a root relative to the
@@ -44,18 +44,17 @@ Git checkout. A resolved root may be inside the plan workspace. For a plan
 that declares two or more repositories, it may instead be an immediate sibling
 of the plan workspace when both directories have the same real parent.
 
-When `## Plan Lineage` is present, require a safe work-item name, a positive
+Require `## Plan Lineage` with a safe work-item name, a positive
 revision, a plan name consistent with that revision, an immediate predecessor
 that is last in the unique ordered archive history, and no second root-level
-active plan for the same work item. A lineage-free `plan-manifest@4` remains a
-compatible revision `1` whose work-item name equals its plan name.
+active plan for the same work item.
 
-If the plan, a required handoff/review, or an existing worktree report belongs
+If the plan, required status/review, or an existing worktree report belongs
 to an older contract, stop before mutation and return exactly: `Legacy workflow
 artifact: <path> uses <format>; replan using the current contract before
 execution or resume.` Do not migrate, overwrite, or delete it. A
 `worktree-setup@1` report is current only when its recorded source plan is the
-same `plan-manifest@4`; an older or mismatched source makes the report legacy.
+same `plan-manifest@5`; an older or mismatched source makes the report legacy.
 
 Treat repository roots as plan-owned path declarations, not general filesystem
 access. Reject absolute roots, symlink escapes, duplicate or overlapping Git
@@ -66,12 +65,13 @@ root.
 
 Validate the classification inputs before any mutation:
 
-- LOW: the saved plan.
-- MEDIUM: the saved plan and its readable saved spec.
-- HIGH: the saved plan, spec, and
-  `.ai/artifacts/<plan-name>/goal-handoff.md` using `goal-handoff@3`.
+- LOW: the saved plan and linked stable `work-status@1`.
+- MEDIUM: the saved plan, readable saved spec, and linked stable status.
+- HIGH: the saved plan, spec, and linked stable status.
 
-For HIGH, require the handoff's single `## Next Action` command to be a
+Require status's work item, active plan, spec, classification, and ordered task
+IDs to exactly match the plan. For HIGH, require status's single `## Next
+Action` command to be a
 `/goal` invocation that references this plan. Do not execute it.
 
 Require and read the source workspace's `AGENTS.override.md` as the root
@@ -318,7 +318,7 @@ target paths, task-root-relative repository mapping, bases and commits,
 branches, control-context mirror result, environment destination names and
 permission status, documentation mirror result, documented runtime
 assignments, dependency results, user decisions, validation results, the source
-`plan-manifest@4` format, and any partial failure. Never record
+`plan-manifest@5` format, stable work-status path, and any partial failure. Never record
 environment values or credential-derived data.
 
 If a failure occurs after mutation, leave every created root, worktree, branch,
@@ -370,13 +370,13 @@ Then print the Codex startup command to paste into the chosen task pane:
 codex -m '<resolved-parent-model>' -c model_reasoning_effort='<resolved-parent-reasoning-effort>'
 ```
 
-Finally print the exact resolved handoff in a separate text block:
+Finally print the exact resolved execution action in a separate text block:
 
 - LOW/MEDIUM: `execute <task-local-plan-path>`
-- HIGH: the validated `/goal` command from `goal-handoff.md`
+- HIGH: the validated `/goal` command from `work-status.md`
 
-State that setup did not run the handoff and that the user must invoke it in
+State that setup did not run the action and that the user must invoke it in
 the new Codex session to authorize implementation.
 
-Version: 6.7
-Last Updated: 2026-09-03
+Version: 7.0
+Last Updated: 2026-09-15

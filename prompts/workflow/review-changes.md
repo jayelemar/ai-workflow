@@ -3,11 +3,11 @@
 This prompt is the sole authority for the MEDIUM/HIGH final-review loop, the
 explicit any-plan manual-until-clear loop, `implementation-review@3`,
 review-round accounting, statuses, transitions, and risk-decision tokens. Read
-`.ai/AGENTS.md`, the current `plan-manifest@4`, its finalized spec and flow
-artifacts, actual repository diffs, validation evidence, and the saved
-`review-strategy@2` plus review budget.
+`.ai/AGENTS.md`, the current `plan-manifest@5`, its stable `work-status@1`,
+finalized spec and flow artifacts, actual repository diffs, validation
+evidence, and the saved `review-strategy@2` plus review budget.
 
-If a plan, review, handoff, or worktree report belongs to an older contract,
+If a plan, status, review, or worktree report belongs to an older contract,
 return exactly: `Legacy workflow artifact: <path> uses <format>; replan using
 the current contract before execution or resume.` Do not migrate, overwrite, or
 delete the artifact.
@@ -24,7 +24,7 @@ stage and follows the automatic budget and authoritative state machine below.
 
 Manual-until-clear mode starts only from an explicit invocation of
 `.ai/prompts/utilities/review-until-clear.md` with `Plan: <plan-file>`. It is
-available for every current `plan-manifest@4` classification and authorizes
+available for every current `plan-manifest@5` classification and authorizes
 review plus corrective remediation of an already implemented plan-owned diff.
 Before review:
 
@@ -57,10 +57,11 @@ scope, review-input fingerprints, reviewer runtime, fresh rounds, resolved and
 advisory findings, validation, deferred checks, and `Clear` or the exact
 blocker.
 
-For MEDIUM, read or initialize the declared `review.md`; for HIGH, update the
-existing `goal-handoff@3` and apply the remediation commit rules in
-`.ai/prompts/workflow/goal-checkpoint.md`. Preserve all existing round history,
-record `REVIEW_UNTIL_CLEAR` as the manual authorization, and keep fresh round
+For MEDIUM, read or initialize the declared `review.md`; for HIGH, apply the
+remediation commit rules in `.ai/prompts/workflow/goal-checkpoint.md`. For every
+classification, update stable `work-status@1` with the canonical review state,
+evidence, blocker, and next action. Preserve all existing round history, record
+`REVIEW_UNTIL_CLEAR` as the manual authorization, and keep fresh round
 numbers positive and strictly increasing. Manual returned review work is
 separate from the immutable automatic budget and does not increase the
 automatic-rounds-used count. A clear round sets `Ready to complete`; a runtime,
@@ -153,7 +154,8 @@ reports no in-scope `P0`–`P2`.
   post-review recomputation. A stale report, task review, validation,
   remediation, reviewer startup failure, and advisory triage do not increment
   it.
-- Read the existing review or HIGH handoff before every review or resume.
+- Read the existing review and stable work status before every review or
+  resume.
   Review round numbers must be positive and strictly increasing. Missing,
   duplicate, decreasing, or reset round evidence is `Blocked`; never guess.
 - The plan's saved automatic budget is immutable during execution. Automatic
@@ -329,6 +331,9 @@ durable action under `Do this next:`. Never require the user to ask what to do.
 
 For HIGH, record the same state, immutable budget, strictly increasing fresh
 rounds, findings, validation, risk decision, remediation commit evidence, and
-next action in the `goal-handoff@3` fields owned by
-`.ai/prompts/workflow/goal-checkpoint.md`. Do not copy this state machine into the
-handoff.
+next action in `work-status@1`. `.ai/prompts/workflow/goal-checkpoint.md` owns
+HIGH task and commit evidence. Do not copy this state machine into status.
+
+For LOW and MEDIUM, mirror the same canonical outcome at the detail supported
+by their review mode. In every classification, update status before returning;
+the review artifact remains authoritative for review transitions.

@@ -1,5 +1,5 @@
-Version: 3.3
-Last Updated: 2026-08-24
+Version: 3.4
+Last Updated: 2026-09-15
 
 # Flow Artifact Instructions
 
@@ -29,8 +29,8 @@ When required, create-plan applies
 
 A replan may continue to reference its predecessor's pair when both files
 remain complete and consistent with the current finalized spec. Otherwise it
-creates a new pair under the successor plan name. Review and handoff evidence
-are never reused across revisions.
+creates a new pair under the successor plan name. Review evidence is never
+reused across revisions. Stable work status is reconciled instead of replaced.
 
 The finalized spec owns desired behavior. Repository inspection supplies only
 current entry points, ownership, contracts, data effects, services, and tests.
