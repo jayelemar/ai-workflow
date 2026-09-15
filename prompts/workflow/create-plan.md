@@ -248,9 +248,9 @@ validation or review rounds, `Awaiting explicit /goal invocation` as the
 blocker, and this next action:
 
 ```text
-/goal <exact finalized-spec goal>
+/goal Complete the active HIGH workflow plan for work item `<work-item>` according to its linked finalized specification.
 
-plan: .ai/plans/<plan-name>.md
+Work item: <work-item>
 ```
 
 For LOW and MEDIUM, store the exact `execute .ai/plans/<plan-name>.md` action.
@@ -281,9 +281,9 @@ run .ai/prompts/utilities/prepare-worktree.md, plan: .ai/plans/<plan-name>.md
 
 Execute in the current checkout:
 ```text
-/goal <finalized spec `## Goal` text verbatim>
+/goal Complete the active HIGH workflow plan for work item `<work-item>` according to its linked finalized specification.
 
-plan: .ai/plans/<plan-name>.md
+Work item: <work-item>
 ```
 ````
 

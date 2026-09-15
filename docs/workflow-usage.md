@@ -200,14 +200,15 @@ may activate that fallback inside the blocked plan.
 ## Execute or Resume HIGH
 
 After plan creation, choose the emitted isolated-worktree setup command or the
-direct current-checkout command. Worktree setup returns a task-local copy of
-the exact two-line `/goal` invocation; it does not invoke that command. Direct
-execution uses:
+direct current-checkout command. Worktree setup returns the same portable,
+work-item-keyed two-line `/goal` invocation; it does not invoke that command.
+The work item resolves the sole active plan, and that plan links the immutable
+finalized spec. Direct execution uses:
 
 ```text
-/goal <exact saved goal>
+/goal Complete the active HIGH workflow plan for work item `<work-item>` according to its linked finalized specification.
 
-plan: .ai/plans/<plan-name>.md
+Work item: <work-item>
 ```
 
 Before pausing or switching sessions, refresh portable evidence:
@@ -216,7 +217,6 @@ Before pausing or switching sessions, refresh portable evidence:
 Use `.ai/wrappers/goal-checkpoint.md`.
 
 Work item: <stable-work-item-name>
-Exact goal: <saved objective>
 ```
 
 Resume read-only analysis with:

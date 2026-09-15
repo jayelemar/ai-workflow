@@ -1,5 +1,5 @@
-Version: 5.0
-Last Updated: 2026-09-15
+Version: 5.1
+Last Updated: 2026-09-16
 
 # Workflow Stage Instructions
 
@@ -11,11 +11,11 @@ context, not transition authority.
 
 ## Stage Sequence
 
-| Class    | Intake                   | Specification                    | Planning                                                                  | Execution                                                |
-| -------- | ------------------------ | -------------------------------- | ------------------------------------------------------------------------- | -------------------------------------------------------- |
-| `LOW`    | Read-only classification | N/A                              | Explicitly create a compact plan and stable work status                   | Explicitly `execute <plan-file>`                         |
-| `MEDIUM` | Read-only classification | Explicitly finalize a typed spec | Explicitly create required flow artifacts, a plan, and stable work status | Explicitly `execute <plan-file>`                         |
-| `HIGH`   | Read-only classification | Explicitly finalize a typed spec | Explicitly create required flow artifacts, a plan, and stable work status | Explicitly invoke work status's two-line `/goal` command |
+| Class    | Intake                   | Specification                    | Planning                                                                  | Execution                                                                |
+| -------- | ------------------------ | -------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `LOW`    | Read-only classification | N/A                              | Explicitly create a compact plan and stable work status                   | Explicitly `execute <plan-file>`                                         |
+| `MEDIUM` | Read-only classification | Explicitly finalize a typed spec | Explicitly create required flow artifacts, a plan, and stable work status | Explicitly `execute <plan-file>`                                         |
+| `HIGH`   | Read-only classification | Explicitly finalize a typed spec | Explicitly create required flow artifacts, a plan, and stable work status | Explicitly invoke work status's work-item-keyed two-line `/goal` command |
 
 Planning may create a missing required flow-artifact pair in the same explicit
 invocation. Direct flow-artifact generation is also available but does not

@@ -72,7 +72,9 @@ Validate the classification inputs before any mutation:
 Require status's work item, active plan, spec, classification, and ordered task
 IDs to exactly match the plan. For HIGH, require status's single `## Next
 Action` command to be a
-`/goal` invocation that references this plan. Do not execute it.
+`/goal` invocation keyed by the plan lineage's stable work item. Resolve that
+work item to this sole active plan and require the plan, linked finalized spec,
+and status to agree. Do not execute it.
 
 Require and read the source workspace's `AGENTS.override.md` as the root
 instruction entrypoint, then read `.ai/AGENTS.md`,
@@ -373,10 +375,12 @@ codex -m '<resolved-parent-model>' -c model_reasoning_effort='<resolved-parent-r
 Finally print the exact resolved execution action in a separate text block:
 
 - LOW/MEDIUM: `execute <task-local-plan-path>`
-- HIGH: the validated `/goal` command from `work-status.md`
+- HIGH: the validated work-item-keyed `/goal` command from `work-status.md`;
+  it must be identical to the action emitted by plan creation and must not
+  contain a source or task-local plan path
 
 State that setup did not run the action and that the user must invoke it in
 the new Codex session to authorize implementation.
 
-Version: 7.0
-Last Updated: 2026-09-15
+Version: 7.1
+Last Updated: 2026-09-16

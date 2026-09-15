@@ -1329,12 +1329,15 @@ test("workflow cleanup requires prompt-led approval and always retains branches"
 });
 
 test("plan response offers worktree setup or direct execution", async () => {
-  const [workflow, createPlan, planTemplate, resume] = await Promise.all([
-    readSource("instructions/shared/ai-workflow.md"),
-    readSource("prompts/workflow/create-plan.md"),
-    readSource("templates/plan.template.md"),
-    readSource("prompts/workflow/resume-goal.md"),
-  ]);
+  const [workflow, createPlan, planTemplate, resume, checkpoint, prepare] =
+    await Promise.all([
+      readSource("instructions/shared/ai-workflow.md"),
+      readSource("prompts/workflow/create-plan.md"),
+      readSource("templates/plan.template.md"),
+      readSource("prompts/workflow/resume-goal.md"),
+      readSource("prompts/workflow/goal-checkpoint.md"),
+      readSource("prompts/utilities/prepare-worktree.md"),
+    ]);
   const finalResponse = createPlan.split(
     "## Stage Boundary and Final Response",
   )[1];
@@ -1357,7 +1360,7 @@ test("plan response offers worktree setup or direct execution", async () => {
   );
   assert.match(
     finalResponse,
-    /For HIGH[\s\S]*Execute in the current checkout:[\s\S]*```text\n\/goal <finalized spec `## Goal` text verbatim>\n\nplan: \.ai\/plans\/<plan-name>\.md\n```/,
+    /For HIGH[\s\S]*Execute in the current checkout:[\s\S]*```text\n\/goal Complete the active HIGH workflow plan for work item `<work-item>` according to its linked finalized specification\.\n\nWork item: <work-item>\n```/,
   );
   assert.match(
     finalResponse,
@@ -1365,7 +1368,18 @@ test("plan response offers worktree setup or direct execution", async () => {
   );
   assert.match(
     createPlan,
-    /```text\n\/goal <finalized spec `## Goal` text verbatim>\n\nplan: \.ai\/plans\/<plan-name>\.md\n```/,
+    /```text\n\/goal Complete the active HIGH workflow plan for work item `<work-item>` according to its linked finalized specification\.\n\nWork item: <work-item>\n```/,
+  );
+  assert.doesNotMatch(createPlan, /\/goal[^\n]*\n\nplan: \.ai\/plans\//);
+  assert.match(checkpoint, /- Work item: `<stable-kebab-case-work-item>`/);
+  assert.doesNotMatch(checkpoint, /- Exact goal:/);
+  assert.match(
+    normalize(checkpoint),
+    /Read the exact goal from that spec's `## Goal`.*Never accept a caller-supplied plan path or duplicate goal text as authority/i,
+  );
+  assert.match(
+    normalize(prepare),
+    /HIGH.*work-item-keyed `\/goal` command.*identical to the action emitted by plan creation.*must not contain a source or task-local plan path/i,
   );
   assert.match(
     normalize(workflow),

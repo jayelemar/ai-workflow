@@ -7,14 +7,16 @@ the existing `work-status@1`, and repository state before writing.
 ## Input
 
 - Work item: `<stable-kebab-case-work-item>`
-- Exact goal: `<finalized spec goal verbatim>`
 
 Reject a missing or invalid work item. Resolve exactly one root-level active
 plan whose `## Plan Lineage` names that work item. Require its linked status at
-`.ai/artifacts/<work-item>/work-status.md`. Reject an older plan, status, review,
-or worktree report with exactly: `Legacy workflow artifact: <path> uses
-<format>; replan using the current contract before execution or resume.` Never
-migrate, overwrite, or delete it.
+`.ai/artifacts/<work-item>/work-status.md` and its linked finalized spec. Read
+the exact goal from that spec's `## Goal`; require the status goal, spec path,
+and active-plan path to match the resolved artifacts. Never accept a
+caller-supplied plan path or duplicate goal text as authority. Reject an older plan,
+status, review, or worktree report with exactly: `Legacy workflow artifact:
+<path> uses <format>; replan using the current contract before execution or
+resume.` Never migrate, overwrite, or delete it.
 
 If a former active plan was superseded, apply `## Superseded Plan Resolution`
 from `.ai/instructions/shared/workflow-state.md` and stop without modifying old
