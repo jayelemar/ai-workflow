@@ -245,6 +245,12 @@ a plan without matching status, overwrite an archive, or leave a predecessor
 inactive after failure. Preserve diagnostic candidates and return the exact
 blocker and retry action.
 
+After successful activation, apply `## Session Plan Indicator
+Synchronization` from `.ai/instructions/shared/ai-workflow.md` to the newly
+stable work status before returning. The indicator must contain only the
+activated plan's current tasks; plan-creation and activation steps are not
+indicator tasks.
+
 For an initial plan, invoke:
 
 ```text

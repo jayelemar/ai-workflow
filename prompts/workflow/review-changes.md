@@ -68,6 +68,10 @@ automatic-rounds-used count. A clear round sets `Ready to complete`; a runtime,
 evidence, material-discovery, repeated-family, or validation blocker uses
 `Blocked` or `Fix required` as required below.
 
+Immediately after every work-status update, apply `## Session Plan Indicator
+Synchronization` from `.ai/instructions/shared/ai-workflow.md`. Review rounds
+and remediation steps are evidence, not additional indicator tasks.
+
 Manual mode never expands plan or spec scope and does not authorize delivery,
 pushing, or a pull request. It also does not replace the exact risk-decision
 tokens accepted by formal completion mode at `Awaiting risk decision`.

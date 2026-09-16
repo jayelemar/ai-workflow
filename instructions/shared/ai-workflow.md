@@ -1,5 +1,5 @@
-Version: 8.0
-Last Updated: 2026-09-15
+Version: 8.1
+Last Updated: 2026-09-16
 
 # AI Workflow Instructions
 
@@ -65,6 +65,30 @@ duplicating stage or review protocols.
 - Every plan task has one stable `T-001` identifier. Replans preserve IDs for
   the same outcome, reopen affected outcomes, supersede replaced outcomes, and
   assign never-used IDs to new outcomes.
+
+## Session Plan Indicator Synchronization
+
+`work-status@1` is the canonical progress snapshot. The session plan indicator
+is a derived user-interface mirror and never becomes workflow authority.
+
+- After plan activation, at execution or goal resume, and immediately after
+  every work-status task-state change, rebuild the session plan with
+  `update_plan` from `## Current Tasks` in the linked stable work status.
+- Mirror exactly the current task headings in their recorded order, including
+  each stable task ID and outcome text. Never add setup, artifact loading,
+  reconciliation, review administration, delivery, or other synthetic items.
+- Map work-status task states to the indicator as follows: `complete` becomes
+  `completed`; `active` or `reopened` becomes `in_progress`; and `not started`
+  or `blocked` becomes `pending`. The durable status remains the source for
+  blocker detail that the indicator cannot represent.
+- Require at most one `in_progress` item. If the status has no active or
+  reopened task, mirror every non-complete task as `pending` rather than
+  inventing active work.
+- Rebuild the complete indicator in one `update_plan` call; do not append to a
+  conversational or previously generated plan. A file edit alone cannot update
+  the indicator.
+- Indicator synchronization is presentation only. It does not authorize a
+  stage, mutate task state, satisfy validation, or replace a work-status write.
 
 ## Subagent Identity and Session Lifecycle
 

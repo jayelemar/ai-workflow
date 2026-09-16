@@ -16,6 +16,10 @@ Resolution` from `.ai/instructions/shared/workflow-state.md` and stop without
 - Require the plan's linked stable `work-status@1`. Its work item, active plan,
   spec, classification, and ordered current task IDs must exactly match the
   plan. Status is evidence, not execution authority.
+- After validating that match and before implementation, apply `## Session
+Plan Indicator Synchronization` from
+  `.ai/instructions/shared/ai-workflow.md`. Rebuild the indicator from status;
+  do not retain conversational setup or reconciliation entries.
 - Reject any older plan, status, review, or worktree report with exactly:
   `Legacy workflow artifact: <path> uses <format>; replan using the current
 contract before execution or resume.` Do not migrate, overwrite, or delete it.
@@ -39,7 +43,9 @@ contract before execution or resume.` Do not migrate, overwrite, or delete it.
   `in progress`, recompute the summary, and save the exact resume action. After
   each task, update status before starting another: record `complete` only
   after its required validation passes, or `blocked` with evidence and exact
-  next action. Never rewrite the plan for progress-only changes.
+  next action. Immediately after each status write, synchronize the session
+  plan indicator from the saved status. Never rewrite the plan for
+  progress-only changes.
 - For environment-dependent behavior, inspect the effective non-secret
   configuration at each planned build or deployment boundary before trusting
   it. Verify required environment-specific URLs, fail-fast behavior for missing

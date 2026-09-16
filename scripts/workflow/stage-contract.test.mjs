@@ -531,6 +531,40 @@ test("work status is stable, task-driven, and reconciled across replans", async 
   assert.match(normalize(review), /update stable `work-status@1`/i);
 });
 
+test("session plan indicator is rebuilt only from canonical work-status tasks", async () => {
+  const [workflow, createPlan, execute, checkpoint, resume, review] =
+    await Promise.all([
+      readSource("instructions/shared/ai-workflow.md"),
+      readSource("prompts/workflow/create-plan.md"),
+      readSource("prompts/workflow/execute-plan.md"),
+      readSource("prompts/workflow/goal-checkpoint.md"),
+      readSource("prompts/workflow/resume-goal.md"),
+      readSource("prompts/workflow/review-changes.md"),
+    ]);
+  const contract = normalize(workflow);
+
+  assert.match(workflow, /## Session Plan Indicator Synchronization/);
+  assert.match(contract, /`work-status@1` is the canonical progress snapshot/);
+  assert.match(contract, /rebuild the session plan with `update_plan`/);
+  assert.match(
+    contract,
+    /Mirror exactly the current task headings in their recorded order/,
+  );
+  assert.match(
+    contract,
+    /`complete` becomes `completed`.*`active` or `reopened` becomes `in_progress`.*`not started` or `blocked` becomes `pending`/,
+  );
+  assert.match(contract, /Never add setup.*reconciliation.*synthetic items/);
+  assert.match(contract, /does not authorize a stage.*mutate task state/is);
+
+  for (const source of [createPlan, execute, checkpoint, resume, review]) {
+    assert.match(normalize(source), /Session Plan Indicator Synchronization/);
+  }
+  assert.match(normalize(execute), /Immediately after each status write/);
+  assert.match(normalize(checkpoint), /Immediately after every status write/);
+  assert.match(normalize(review), /Immediately after every work-status update/);
+});
+
 test("every MEDIUM plan has an automatic remediation-verification round", async () => {
   const [template, createPlan] = await Promise.all([
     readSource("templates/plan.template.md"),

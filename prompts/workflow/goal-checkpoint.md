@@ -33,6 +33,10 @@ evidence.
   command output, or copied policy text.
 - Status records review and commit evidence but never embeds the review state
   machine or HIGH commit rules.
+- Before changing status, synchronize the session plan indicator from the
+  validated current status. Immediately after every status write, rebuild it
+  again from the saved result using `## Session Plan Indicator
+Synchronization` in `.ai/instructions/shared/ai-workflow.md`.
 
 ## HIGH Task and Commit Rules
 
@@ -53,7 +57,8 @@ another review assignment.
 For each task:
 
 1. Before work, set only that task to `active`, overall status to `in progress`,
-   recompute the progress summary, and save the exact resume action.
+   recompute the progress summary, save the exact resume action, and synchronize
+   the session plan indicator from that saved status.
 2. Implement only its single-repository scope or a correction qualifying under
    `.ai/AGENTS.md`. For material discovery, apply Material Discovery Routing
    from `.ai/instructions/shared/workflow-state.md` and record its exact
@@ -67,7 +72,8 @@ For each task:
 6. Create exactly one local conventional commit with the plan's saved purpose.
    Do not start the next task until no task-owned change remains uncommitted and
    status records `complete`, its SHA, subject, validation, review, and
-   delegation.
+   delegation. Synchronize the indicator after recording completion and before
+   activating another task.
 
 If a task has no tracked change, record that result and validation without an
 empty commit. Never commit failed validation, ambiguous behavior, or unrelated

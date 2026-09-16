@@ -20,7 +20,10 @@ Return the exact saved action for a HIGH work item without executing it. Read
    return exactly: `Legacy workflow artifact: <path> uses <format>; replan using
 the current contract before execution or resume.` Never migrate, overwrite,
    or delete it.
-5. Return status's exact `## Next Action` without invoking it. Stop; status is
+5. Apply `## Session Plan Indicator Synchronization` from
+   `.ai/instructions/shared/ai-workflow.md`, rebuilding the indicator from the
+   validated status without adding resume or validation steps.
+6. Return status's exact `## Next Action` without invoking it. Stop; status is
    evidence, not transition authority.
 
 ## Final Output
