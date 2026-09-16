@@ -99,6 +99,18 @@ revision.
   cross-repository outcomes into dependent steps; each HIGH task owns exactly
   one repository.
 - Do not add behavior beyond the finalized spec or LOW request.
+- Before saving, run a complexity-proportionality audit. Map every new
+  persistent store, coordinator, scheduler, cryptographic layer, dependency,
+  external service, abstraction, and recurring validation gate to an exact
+  request/spec criterion and concrete current risk. Use the simplest existing
+  repository mechanism that fully satisfies that contract, collapse redundant
+  tasks and evidence runs, and never activate a saved architectural fallback
+  before its trigger occurs.
+- Omit a mechanism or check that has no exact behavioral or evidentiary basis.
+  If the finalized spec explicitly requires the complexity, preserve it and do
+  not silently weaken its guarantee; simplifying that guarantee requires a new
+  specification decision. A preferred alternative architecture or
+  hypothetical future hardening is not plan scope.
 - Before saving, trace every acceptance criterion to its implementation owner,
   task or unchanged inspected boundary, and validation evidence. Record the
   criterion references on the applicable task and plan validation entries.
@@ -123,6 +135,10 @@ revision.
   invariants into root-cause families, select applicable adversarial variants,
   choose mutation/property coverage, and save a specific architectural
   fallback. Otherwise omit `### Sensitive Boundary Detail`.
+- Make review checks proportionate to realistic changed-boundary risk. The
+  strategy must tell reviewers to seek concrete defects and the smallest
+  sufficient correction, not to introduce new controls, acceptance criteria,
+  or architecture merely because stronger hardening is conceivable.
 - Treat asynchronous UI state with multiple independent writers—such as query
   lifecycle, deep-link or router input, local user actions, timers, or
   gestures—as a repeated-family risk even in a LOW plan. Record the writer

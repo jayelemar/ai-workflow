@@ -1,5 +1,5 @@
-Version: 3.1
-Last Updated: 2026-09-11
+Version: 3.2
+Last Updated: 2026-09-16
 
 # Reasoning Quality Instructions
 
@@ -27,6 +27,15 @@ Define the shared reasoning baseline for explicit workflow stages.
   material scope discoveries.
 - Keep behavior within the saved plan and spec. Classify execution discoveries
   only with the corrective-deviation decision table in `.ai/AGENTS.md`.
+- Apply a proportionality check before adding a requirement, plan component,
+  finding, or remediation: name its exact request/spec/invariant basis, the
+  observed evidence or realistic threat, the smallest sufficient response, and
+  why a simpler existing mechanism is insufficient. A hypothetical risk or
+  architectural preference alone is not a requirement or blocking defect.
+- Distinguish unnecessary implementation from spec-mandated complexity.
+  Remove or simplify the former when doing so preserves behavior. Never relax
+  the latter during planning, execution, or review; a change to its guarantee
+  returns to the user-owned specification decision.
 - Use actual implementation evidence for review. MEDIUM writes a complete
   status artifact; HIGH reviews every task before its commit. After all
   implementation, both classes require a fresh independent reviewer on the
@@ -51,3 +60,5 @@ Define the shared reasoning baseline for explicit workflow stages.
 - Using a pre-execution approval or review as a substitute for an explicit
   next-stage invocation.
 - Claiming a review result without inspecting the implemented diff.
+- Treating optional hardening, aesthetic simplification, or a different valid
+  architecture as blocking remediation.

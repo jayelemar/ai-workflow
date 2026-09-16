@@ -93,6 +93,18 @@ path.
 - Resolve roles, inputs, outputs, permissions, success paths, failures, edge
   cases, non-goals, compatibility constraints, and pass/fail acceptance
   criteria.
+- Apply a minimum-sufficient-design gate before finalization. For every desired
+  behavior that would require new persistence, distributed coordination,
+  custom cryptography, a dependency or external service, scheduled work, or a
+  recurring operational gate, identify the user-required guarantee or concrete
+  current threat and why a simpler existing mechanism cannot satisfy it.
+  Exclude speculative future hardening from required behavior and acceptance
+  criteria; record it as a non-goal when omission could otherwise be ambiguous.
+- Separate required v1 behavior from optional hardening. If removing complexity
+  changes a material guarantee, permission boundary, failure behavior, or
+  operational commitment, ask the user for that decision instead of silently
+  selecting the stronger design. Do not encode an architectural preference as
+  product behavior merely because it is more defensive or comprehensive.
 - For environment-dependent behavior, define a local, staging, and production
   environment matrix in the existing `Inputs and Outputs` plus `Behavior` or
   `Fix Behavior` sections. Name each non-secret configuration source, expected
@@ -207,7 +219,9 @@ contains an exact valid match that will remain byte-unchanged. For
 predecessor reuse is exempt only from the filename-selection check because it
 does not create a file. When behavior is environment-dependent, also verify the
 environment matrix is complete and every environment-specific result has a
-pass/fail acceptance criterion.
+pass/fail acceptance criterion. Also verify that every permanent mechanism and
+operational gate passes the minimum-sufficient-design gate and that optional
+hardening did not become a required acceptance criterion.
 
 ## Final Response
 

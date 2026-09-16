@@ -132,6 +132,9 @@ remediation. A changed audit-only HEAD with an unchanged base SHA and
    or external-service behavior. For a cross-environment link, verify the
    selected URL cannot resolve to another environment, a missing or invalid URL
    fails fast, and the specified browser fallback remains available.
+6. Apply `## Proportionality and Over-Engineering Gate` to every proposed
+   finding before returning it. The reviewer reports defects and evidence, not
+   a preferred redesign or speculative hardening program.
 
 ## Finding Scope and Priority
 
@@ -143,9 +146,51 @@ A blocking finding must be one of:
 
 Record an unrelated pre-existing defect as advisory and do not let it consume
 automatic review work. Every finding names an exact path plus line or symbol,
-concrete impact, and an in-scope fix. Use exactly `P0`, `P1`, `P2`, or `P3`:
-`P0`–`P2` are blocking and `P3` is advisory. A round is clear only when it
-reports no in-scope `P0`–`P2`.
+concrete impact, and an in-scope fix. It also records the exact request, spec,
+or changed-boundary invariant that makes the finding in scope and the smallest
+sufficient correction. Use exactly `P0`, `P1`, `P2`, or `P3`: `P0`–`P2` are
+blocking and `P3` is advisory. A round is clear only when it reports no in-scope
+`P0`–`P2`.
+
+## Proportionality and Over-Engineering Gate
+
+Before accepting any finding or remediation, answer all of the following from
+the actual diff and current evidence:
+
+1. What exact request, finalized-spec criterion, plan invariant, or regression
+   boundary is violated?
+2. What observed evidence proves the violation, rather than merely making a
+   future failure conceivable?
+3. What realistic security, correctness, operability, or maintenance impact
+   follows in the declared environment?
+4. What is the smallest correction that restores the required invariant?
+5. Why is a simpler local correction or existing repository mechanism
+   insufficient?
+6. Would the proposed correction add persistence, distributed coordination,
+   custom cryptography, a dependency or service, scheduled work, or another
+   permanent operational burden?
+
+Apply these dispositions:
+
+- Extra implementation outside the request/spec/plan is removable scope. When
+  it creates concrete risk or maintenance burden, report the applicable
+  in-scope finding and make removal or simplification the default correction.
+- A more complex implementation that fully satisfies the contract is not a
+  blocking defect solely because a reviewer prefers a different design. Without
+  concrete impact, record at most `P3` advice; it cannot force remediation or
+  consume another review round.
+- When a simpler implementation preserves every required behavior and removes
+  a demonstrated defect or burden, recommend that smallest compliant change.
+  Do not pair simplification with unrelated refactoring or new infrastructure.
+- Complexity explicitly required by the finalized spec must not be removed or
+  weakened during review. State the exact requirement. Relaxing its behavior,
+  security guarantee, permission boundary, or operational commitment is a
+  user-owned specification decision and follows Material Discovery Routing;
+  architectural preference alone does not trigger that route.
+- Hypothetical hardening, future extensibility, and defense-in-depth that is not
+  required to correct an evidenced defect are non-blocking and normally
+  omitted. A proposed correction that adds any burden in question 6 is allowed
+  only when the reviewer proves every simpler correction insufficient.
 
 ## Round Accounting
 
@@ -179,10 +224,10 @@ complete`, `Completed with accepted review risk`, and `Blocked`.
    every required external and environment-evidence item must be present;
    retain advisory findings and recheck the fingerprint before completion.
 3. A blocking returned round sets `Fix required`. Remediate every known in-scope
-   `P0`–`P2`, apply the saved targeted and mutation/property checks where
-   relevant, and rerun every affected task and plan validation. Never begin
-   another review while a known `P0`–`P2` remains unresolved or required
-   validation fails.
+   `P0`–`P2` with its recorded smallest sufficient correction, apply the saved
+   targeted and mutation/property checks where relevant, and rerun every
+   affected task and plan validation. Never begin another review while a known
+   `P0`–`P2` remains unresolved or required validation fails.
 4. If one root-cause family remains blocking in two fresh rounds, stop
    incremental fixes; never clear, downgrade, or risk-accept that family. For
    every classification and invocation mode, set `Blocked` and return to
@@ -310,7 +355,7 @@ Fix required | Awaiting risk decision | Ready to complete | Completed with accep
 
 ## Findings
 
-- <known blocking, resolved blocking, advisory, and unrelated pre-existing findings with disposition>
+- <known blocking, resolved blocking, advisory, and unrelated pre-existing findings with exact basis, evidence, impact, smallest sufficient correction, proportionality disposition, and final disposition>
 
 ## Risk Decision
 

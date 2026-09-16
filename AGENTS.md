@@ -30,7 +30,14 @@ requires the corresponding explicitly invoked workflow stage.
 ## Global Invariants
 
 - Keep changes minimal, traceable to the request, spec, and plan, and inside
-  declared repository ownership. Preserve unrelated work.
+  declared repository ownership. Preserve unrelated work. Do not convert a
+  hypothetical future need, preferred architecture, or defense-in-depth idea
+  into required behavior, permanent infrastructure, or a blocking finding.
+- Prefer the simplest implementation and correction that fully satisfies the
+  required behavior and evidenced risk. New persistence, coordination,
+  cryptography, dependencies, services, schedulers, and operational gates need
+  an explicit requirement or concrete failure that a simpler existing
+  mechanism cannot satisfy.
 - Inspect evidence before reaching conclusions. Surface assumptions,
   uncertainty, failures, deviations, and deferred checks explicitly.
 - Prefer readable, strongly typed, maintainable code that follows existing
@@ -101,5 +108,5 @@ boundaries, not immutable security boundaries.
   artifacts, logs, and workflow-local state ignored and untracked.
 - When a Git parent checkout exists, do not stage `.ai` files in it.
 
-Version: 2.4
-Last Updated: 2026-09-15
+Version: 2.5
+Last Updated: 2026-09-16
