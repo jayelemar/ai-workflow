@@ -55,10 +55,10 @@ Set a shared testing standard that provides high release confidence while minimi
 
 ## Validation
 
-- When selecting required validation for a saved plan, choose the smallest
+- When selecting required validation for a living plan, choose the smallest
   sufficient set that covers every changed-boundary risk.
 - A broader repository-wide validation command may be a required completion
-  gate only when the plan states the distinct risk that focused validation
+  gate only when the request or plan states the distinct risk that focused validation
   cannot cover; otherwise omit it from required validation.
 - Before saving a validation command, state its observable invariant and
   expected result, then verify that the exact command can exercise that

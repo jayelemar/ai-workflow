@@ -28,21 +28,6 @@ const bootstrapPaths = [
   "pnpm-lock.yaml",
 ];
 
-const wrapperPaths = [
-  "wrappers/README.md",
-  "wrappers/bug-intake-rca.md",
-  "wrappers/create-plan.md",
-  "wrappers/create-pull-request.md",
-  "wrappers/execute-plan.md",
-  "wrappers/feature-intake.md",
-  "wrappers/generate-bugfix-spec.md",
-  "wrappers/generate-feature-spec.md",
-  "wrappers/generate-flow-artifacts.md",
-  "wrappers/goal-checkpoint.md",
-  "wrappers/resume-goal.md",
-  "wrappers/select-workflow.md",
-];
-
 const localInstructionPaths = [
   "instructions/admin.md",
   "instructions/architecture.md",
@@ -74,14 +59,15 @@ const createFixture = async () => {
   await mkdir(path.join(temporaryRoot, ".git"), { recursive: true });
   const sourcePaths = [
     ...bootstrapPaths,
+    ".agents/skills/change-workflow/SKILL.md",
+    ".agents/skills/change-workflow/agents/openai.yaml",
+    ".agents/skills/change-workflow/references/plan-template.md",
+    ".agents/skills/change-workflow/references/review-checklist.md",
     ".github/workflows/health.yml",
-    "config/agent-models.toml",
-    "instructions/shared/ai-workflow.md",
+    "docs/workflow-usage.md",
     "instructions/shared/testing.md",
-    "prompts/workflow/select-workflow.md",
+    "prompts/utilities/commit-organizer.md",
     "scripts/check.test.mjs",
-    "templates/plan.template.md",
-    ...wrapperPaths,
   ];
   for (const relativePath of sourcePaths) {
     await writeFixtureFile(root, relativePath);
@@ -92,7 +78,7 @@ const createFixture = async () => {
   await writeFixtureFile(
     root,
     "instructions/index.md",
-    "# Index Instructions\n\n## Rules\n\n- Load `shared/ai-workflow.md`, `shared/testing.md`, and `architecture.md` for workflow checks.\n",
+    "# Index Instructions\n\n## Rules\n\n- Load `shared/testing.md` and `architecture.md` for guidance checks.\n",
   );
   return { root, sourcePaths, temporaryRoot };
 };
@@ -270,7 +256,10 @@ test("health fails when a canonical source is not tracked", async () => {
   try {
     assert.equal(fixture.result.ok, false);
     assert.match(fixture.output.join("\n"), /canonical source is untracked/);
-    assert.match(fixture.output.join("\n"), /config\/agent-models\.toml/);
+    assert.match(
+      fixture.output.join("\n"),
+      /\.agents\/skills\/change-workflow\/SKILL\.md/,
+    );
   } finally {
     await rm(fixture.temporaryRoot, { force: true, recursive: true });
   }
@@ -349,41 +338,6 @@ test("health fails when a tracked source is a directory", async () => {
   });
 });
 
-test("health fails when an expected wrapper is absent", async () => {
-  await withFixture(async (fixture) => {
-    await unlink(path.join(fixture.root, "wrappers/resume-goal.md"));
-    const output = [];
-    const result = await runHealthCheck({
-      commandExecutor: createCommandExecutor(fixture),
-      stderr: (message) => output.push(message),
-      stdout: (message) => output.push(message),
-      workflowDirectory: fixture.root,
-    });
-
-    assert.equal(result.ok, false);
-    assert.match(output.join("\n"), /missing expected wrapper/);
-  });
-});
-
-test("health fails when an expected wrapper is replaced by a directory", async () => {
-  await withFixture(async (fixture) => {
-    const wrapperPath = path.join(fixture.root, "wrappers/bug-intake-rca.md");
-    await unlink(wrapperPath);
-    await mkdir(wrapperPath);
-    const output = [];
-    const result = await runHealthCheck({
-      commandExecutor: createCommandExecutor(fixture),
-      stderr: (message) => output.push(message),
-      stdout: (message) => output.push(message),
-      workflowDirectory: fixture.root,
-    });
-
-    assert.equal(result.ok, false);
-    assert.match(output.join("\n"), /expected wrapper is not a file/);
-    assert.match(output.join("\n"), /wrappers\/bug-intake-rca\.md/);
-  });
-});
-
 test("health fails for a missing relative instruction route", async () => {
   await withFixture(async (fixture) => {
     await writeFixtureFile(
@@ -445,7 +399,7 @@ test("health permits references to ignored temporary workflow data", async () =>
   await withFixture(async (fixture) => {
     await writeFixtureFile(
       fixture.root,
-      "prompts/workflow/select-workflow.md",
+      "prompts/utilities/commit-organizer.md",
       "# Prompt\n\nRead `.ai/tmp/worktree-setup.json` when it exists.\n",
     );
     const output = [];
@@ -514,7 +468,7 @@ test("health fails when actual local workflow data is specifically unignored", a
   });
 });
 
-test("health treats tmp as ignored local data and rejects retired telemetry paths", async () => {
+test("health treats tmp as ignored legacy local data", async () => {
   await withFixture(async (fixture) => {
     await writeFixtureFile(fixture.root, "tmp/local-record.txt");
     const output = [];
@@ -526,43 +480,6 @@ test("health treats tmp as ignored local data and rejects retired telemetry path
     });
 
     assert.equal(result.ok, true, output.join("\n"));
-    await writeFixtureFile(
-      fixture.root,
-      "scripts/workflow/telemetry/manual-token-usage.ts",
-    );
-    const retiredOutput = [];
-    const retired = await runHealthCheck({
-      commandExecutor: createCommandExecutor(fixture),
-      stderr: (message) => retiredOutput.push(message),
-      stdout: (message) => retiredOutput.push(message),
-      workflowDirectory: fixture.root,
-    });
-    assert.equal(retired.ok, false);
-    assert.match(
-      retiredOutput.join("\n"),
-      /retired workflow path still exists: scripts\/workflow\/telemetry/,
-    );
-  });
-});
-
-test("health rejects a dangling retired runner-log link", async () => {
-  await withFixture(async (fixture) => {
-    const retiredPath = path.join(fixture.root, "tmp/workflow-runner-test.log");
-    await mkdir(path.dirname(retiredPath), { recursive: true });
-    await symlink("missing-runner-log", retiredPath);
-    const output = [];
-    const result = await runHealthCheck({
-      commandExecutor: createCommandExecutor(fixture),
-      stderr: (message) => output.push(message),
-      stdout: (message) => output.push(message),
-      workflowDirectory: fixture.root,
-    });
-
-    assert.equal(result.ok, false);
-    assert.match(
-      output.join("\n"),
-      /retired workflow path still exists: tmp\/workflow-runner-test\.log/,
-    );
   });
 });
 
@@ -726,7 +643,7 @@ test("CI provisions its ignored instruction index before full health", async () 
   }
 });
 
-test("health implementation is read-only and has no retired progress expectation", async () => {
+test("health implementation is read-only and checks canonical skill source", async () => {
   const sourcePath = path.join(
     workflowRoot,
     "scripts/maintenance/health-check.mjs",
@@ -738,5 +655,5 @@ test("health implementation is read-only and has no retired progress expectation
   assert.doesNotMatch(source, /writeFile|mkdir|rm\(/);
   assert.doesNotMatch(source, /plan-progress/);
   assert.match(source, /CANONICAL_SOURCE_ROOTS/);
-  assert.match(source, /EXPECTED_WRAPPER_PATHS/);
+  assert.match(source, /\.agents\/skills/);
 });

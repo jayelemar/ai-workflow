@@ -75,7 +75,7 @@ test("preview is deterministic and never mutates ordinary, hidden, nested, or li
     assert.match(output.join("\n"), /No mutation occurred/);
     assert.match(
       output.join("\n"),
-      /WARNING: --apply removes active specs, plans, and artifacts/,
+      /WARNING: --apply permanently removes legacy local records/,
     );
     assert.equal(
       await readFile(path.join(plans, "nested", "plan.md"), "utf8"),
@@ -111,7 +111,7 @@ test("apply removes every entry without traversing links and leaves all managed 
     assert.match(output.join("\n"), /Cleanup removed count: 4/);
     assert.match(
       output.join("\n"),
-      /WARNING: --apply removes active specs, plans, and artifacts/,
+      /WARNING: --apply permanently removes legacy local records/,
     );
     assert.equal(await readFile(external, "utf8"), "external\n");
     for (const localRoot of LOCAL_RECORD_ROOTS) {

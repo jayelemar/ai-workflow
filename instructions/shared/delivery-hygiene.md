@@ -19,12 +19,9 @@ Keep changes easy to review, deploy, revert, and trace.
 - Rebase, squash, or otherwise clean noisy intermediate history before merge while preserving needed review and incident traceability.
 - Record scope, validation performed, migration effect, compatibility, rollout risk, rollback or recovery path, and deferred checks in the pull request or commit description when applicable.
 - State dependency order and validation order for cross-layer delivery.
-- Every commit created by the workflow includes these Git trailers, populated
-  from the governing plan and stable work status when present:
-  `Workflow-Work-Item`, `Workflow-Spec`, and `Workflow-Plan-Revision`. Use an
-  explicit `N/A: repository-level commit` value when no workflow plan governs
-  the commit; LOW uses its recorded no-spec value for `Workflow-Spec`. Do not
-  create a tracked workflow ledger for this metadata.
+- Add repository-specific trailers only when an existing delivery convention
+  or explicit user request requires them. Do not create a workflow ledger for
+  commit metadata.
 
 ## Placement
 

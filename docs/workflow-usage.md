@@ -1,272 +1,141 @@
 # Workflow Usage
 
-This operator guide provides copy-ready invocations. Canonical prompts own all
-behavior, schemas, validation, review decisions, and final responses.
+The `.ai` workflow uses normal Codex behavior for routine work and one living
+plan when planning is useful. It has no classification stage, specification
+stage, status sidecar, plan activation, or review state machine.
 
-## Choose a Mode
+## At a Glance
 
-- Use Agent mode for intake, specs, plans, and LOW/MEDIUM execution.
-- Use Goal mode only for the exact HIGH command saved in `work-status@1`.
-- Product Plan mode is optional brainstorming and does not replace the saved
-  plan stage.
+| Work type          | Use when                                                        | Persistent workflow artifact | Review                   |
+| ------------------ | --------------------------------------------------------------- | ---------------------------- | ------------------------ |
+| Direct             | The outcome is bounded and understood                           | None                         | Self-review              |
+| Standard planned   | Work is complex, ambiguous, cross-cutting, or lengthy           | One living plan              | Self-review              |
+| Controlled planned | A named security, trust, migration, or payment boundary changes | One living plan              | Independent final review |
 
-## Intake
+All three paths inspect the repository, preserve unrelated work, run sufficient
+validation, and report the result. None authorizes delivery automatically.
 
-Intake reports the recommended model and reasoning effort for the next writable
-stage. LOW recommends the configured planning runtime; MEDIUM and HIGH
-recommend the configured specification runtime. This is advisory only: switch
-the model and effort manually when desired. Intake does not inspect or change
-the active runtime, block specification or planning, or create a subagent.
-When intake is decision-complete, its `Next action` is a complete
-copy-pasteable prompt with the known intake details filled in: a plan invocation
-for LOW, or the applicable feature- or bugfix-spec invocation for MEDIUM and
-HIGH. If one material decision is missing, intake asks for only a
-`Decision: <selected choice>` reply, retains the known evidence, and then
-returns that writable-stage prompt; it does not repeat the intake template.
+## Direct Work
+
+Use a normal request when the outcome is bounded and understood:
 
 ```text
-Use `.ai/wrappers/feature-intake.md`.
-
-Target: Feature: <name>
-Evidence:
-- Problem or user need: <need>
-- Desired outcome: <outcome>
-- Proposed behavior: <flow>
-- Acceptance expectations: <expectations>
-- Boundaries: <auth, data, integration, release, and non-goals>
+Fix the duplicate receipt import. Preserve existing authorization and run the
+focused receipt tests.
 ```
+
+Codex inspects, implements, validates, self-reviews, and reports. It creates no
+workflow artifact.
+
+## Create One Living Plan
+
+Use native Plan mode or explicitly request a saved plan for complex, ambiguous,
+cross-cutting, or long-running work. If no path is supplied, save one kebab-case
+file under `.ai/plans/`.
+
+A living plan contains the goal, boundaries, decisions, tasks and progress,
+validation, discoveries, and outcome. Update that same file during execution;
+do not create companion status or review-state files.
+
+After saving a plan, Codex must report its exact path and end its response with
+a ready-to-copy `/goal` execution prompt. Creating the plan does not start its
+execution automatically.
+
+The canonical template is
+[plan-template.md](../.agents/skills/change-workflow/references/plan-template.md).
+
+## Execute With Goal Mode
+
+Reference the living plan in a concrete goal:
 
 ```text
-Use `.ai/wrappers/bug-intake-rca.md`.
-
-Target: Bug: <name>
-Evidence:
-- Reproduction: <steps>
-- Expected / actual: <behavior>
-- Affected boundaries: <scope>
-- Logs or errors: <evidence or unavailable>
+/goal Implement .ai/plans/<work-item>.md. Preserve its boundaries, keep the plan updated, run every required validation, and finish only when its definition of done is proven.
 ```
 
-## Finalize a MEDIUM/HIGH Spec
+For controlled work, the generated prompt also requires the independent final
+review defined by the plan before completion.
+
+Goal-mode progress is the runtime progress indicator. Do not mirror it into
+repository state.
+
+During execution, Codex reads the plan, inspects current code and Git state,
+implements the next unfinished task, updates the same plan with discoveries and
+progress, validates the actual changes, and completes the plan outcome. The
+plan describes the work; it does not become an execution engine or permission
+token.
+
+## Start the Next Plan
+
+Each planned outcome gets its own living plan. Do not overwrite a completed
+plan or reuse its runtime state for unrelated work.
+
+1. Finish or stop the current Goal before starting another Goal.
+2. Create a new plan file for the new outcome.
+3. Restate any earlier decision that still applies; old plans do not
+   automatically govern new work.
+4. Start a new `/goal` that explicitly references the new plan.
+
+Example:
 
 ```text
-Use `.ai/wrappers/generate-feature-spec.md`.
-
-Supersedes: N/A
-Classification: <MEDIUM-or-HIGH>
-Request and decisions: <portable request evidence and decisions>
+/goal Implement .ai/plans/next-outcome.md. Preserve its boundaries, keep the plan updated, run every required validation, and finish only when its definition of done is proven.
 ```
 
-For a bug, use `.ai/wrappers/generate-bugfix-spec.md` and include causal
-evidence. The canonical spec prompt defines its evidence gate.
+Repository instructions and current code remain available to the new Goal, but
+the previous plan remains historical evidence only.
 
-Before creating a new spec file, specification returns one short, specific
-filename recommendation and waits for an explicit `Use <name>.spec.md` reply.
-No spec file is written before that selection.
+## Controlled Work
 
-On success, specification returns the finalized path followed by `Do this
-next:` and a complete copy-pasteable create-plan invocation. That response does
-not start planning; invoke the returned prompt explicitly.
+Use controlled mode only when a change affects authentication, authorization,
+payments, secrets, migrations, destructive behavior, or another named security
+or trust boundary.
 
-Finalized specs are immutable. Reuse the existing spec path only for an exact
-content match. For any content change—including corrected evidence or
-root-cause analysis that preserves desired behavior—invoke specification with
-the current spec path under `Supersedes`. The canonical spec prompt suggests
-the next unused revisioned name and waits for confirmation; do not overwrite
-the spec referenced by an existing plan.
+Controlled work uses the same single living plan, plus one independent final
+review of an explicit Git base, commit, or uncommitted diff. Pause plan-owned
+writers before review. After remediation, rerun affected validation and use a
+fresh reviewer only when the reviewed boundary materially changed.
 
-## Create a Saved Plan
+The canonical checklist is
+[review-checklist.md](../.agents/skills/change-workflow/references/review-checklist.md).
+
+## Parallel Work and Worktrees
+
+Do not let multiple agents edit the same file. Use separate Git worktrees when
+independent implementations genuinely need to run in parallel. Ordinary
+single-agent work does not require a worktree.
+
+Prepare worktrees for a living plan with the independent utility:
 
 ```text
-Use `.ai/wrappers/create-plan.md`.
-
-Plan name: <kebab-case-name>
-Supersedes: N/A
-Classification: LOW | MEDIUM | HIGH
-Spec: N/A: LOW | .ai/specs/<name>.spec.md
-Flow artifacts: AUTO
+Run .ai/prompts/utilities/prepare-worktree.md, plan: .ai/plans/<plan-name>.md
 ```
 
-The current plan template records `review-strategy@2` and its deterministic
-automatic review budget. See [Create Plan](../prompts/workflow/create-plan.md) and the
-[Plan Template](../templates/plan.template.md).
+It creates native Git worktrees under `.worktrees/<plan-name>/`, preserves the
+source checkout, and prints the exact `/goal` prompt to run afterward. It does
+not execute the plan, copy secrets, create workflow state, or authorize
+delivery. See [Prepare Task Worktrees](../prompts/utilities/prepare-worktree.md).
 
-Every new plan also links one stable
-`.ai/artifacts/<work-item>/work-status.md`. Open this file for the complete
-current goal, active plan, completed work, remaining work, changed or removed
-tasks, blockers, and exact next action. Progress updates this status after each
-task and never creates a new plan revision.
+Run this preparation after creating the plan and before starting its Goal. Use
+the execution prompt emitted by the preparation result because it directs
+implementation to the prepared worktrees.
 
-Every MEDIUM plan receives up to two automatic fresh rounds. A clear first
-round completes review immediately; when the first round is blocking, the
-second independently verifies remediation without requiring an operator risk
-decision. Ordinary HIGH plans also receive two rounds, while elevated-risk HIGH
-plans receive three.
+## Validation
 
-Environment-dependent work must define a local, staging, and production
-environment matrix in its finalized spec. Each required URL names its
-non-secret configuration source and expected behavior. Missing or invalid
-selected URLs must fail fast. Environment selection must be explicit and
-project-defined, never inferred from framework-specific debug, release,
-runtime, or build-mode flags. User-facing link flows also retain and validate
-the specified browser fallback so a failed native handoff never becomes an
-unplanned blank page.
+Run the smallest sufficient checks that prove the requested behavior. Evidence
+required by an acceptance criterion cannot be deferred. If an optional external
+or environment-dependent check is unavailable, report the unverified behavior,
+risk, reason, and smallest follow-up check.
 
-Planning maps every spec acceptance criterion to owned work or an inspected
-unchanged boundary and to required evidence. Manual, device, deployment, DNS,
-TLS, or external-service evidence stays required when it proves an acceptance
-criterion. If unavailable during execution or review, work is blocked rather
-than completed with a deferred check.
+## Delivery
 
-For a replan, reference the current root-level active plan and let the workflow
-derive the revision name:
+Implementation does not authorize committing, pushing, opening a pull request,
+deploying, releasing, or mutating shared external state. Request those actions
+explicitly when needed.
 
-```text
-Use `.ai/wrappers/create-plan.md`.
+Independent utilities remain available for commit organization and pull-request
+preparation after explicit invocation.
 
-Plan name: AUTO
-Supersedes: .ai/plans/<current-plan-name>.md
-Classification: resolve from current finalized context
-Spec: N/A: LOW | .ai/specs/<name>.spec.md
-Flow artifacts: AUTO
-```
+## Legacy Records
 
-Set `Spec` to the predecessor's exact spec path only when the complete spec is
-unchanged. If any spec content changed, first finalize a new immutable spec
-under an unused name and set `Spec` to that new path. The archived predecessor
-continues to reference its original spec.
-
-During execution or review, a material discovery that changes any spec content
-stops with the complete specification invocation as the immediate next action.
-Only a discovery that leaves the complete spec unchanged routes directly to
-the AUTO replan invocation.
-
-For LOW work, the workflow first reclassifies a material discovery. It creates
-a typed spec before replanning when the discovery classifies as MEDIUM or HIGH;
-only a discovery that remains LOW uses the LOW/no-spec replan.
-
-The validated predecessor moves to
-`.ai/artifacts/<current-plan-name>/superseded-plan.md`; only the successor stays
-under `.ai/plans/`. Replanning reclassifies the actual successor scope and uses
-`/goal` only when that result is HIGH.
-
-Replanning also reconciles stable task IDs into the existing work status.
-Unchanged completed tasks remain complete only while their behavior and
-evidence remain valid. Affected tasks reopen, removed tasks retain a concise
-reason, and new tasks receive IDs that have never been used. Plan and status
-activate together or both remain unchanged.
-
-## Execute LOW/MEDIUM
-
-```text
-Use `.ai/wrappers/execute-plan.md`.
-
-Command: execute .ai/plans/<plan-name>.md
-```
-
-When MEDIUM execution returns a review action, respond only as directed by the
-current [Review Contract](../prompts/workflow/review-changes.md). That prompt is the sole
-source for statuses, round transitions, remediation, and risk decisions.
-
-Every fresh review is bound to `review-input-fingerprint@1` evidence for the
-exact plan-owned diff in each repository. Concurrent plan-owned drift makes a
-returned report stale without consuming a round; unchanged unrelated work or
-an audit-only HEAD change does not. Unreviewed-remediation risk acceptance is
-available only for validated, P2-only remediation on a plan without a named
-sensitive boundary. P0, P1, and sensitive-boundary remediation always requires
-fresh independent clearance.
-
-## Manual Review Until Clear
-
-After any current plan has been implemented, run one independent review,
-remediation, validation, and fresh-review loop with:
-
-```text
-Run `.ai/prompts/utilities/review-until-clear.md`.
-
-Plan: .ai/plans/<plan-name>.md
-```
-
-This uses the locked workflow reviewer rather than the operator-only Codex UI
-`/review` action. It leaves P3 findings advisory. A P2 is blocking only with a
-failing test, concrete reproduction, direct finalized-spec violation, or
-concrete security-boundary violation. The loop stops only when no in-scope
-blocking P0–P2 remain or the canonical review contract requires a blocker.
-
-For LOW, MEDIUM, and HIGH alike, if the same root-cause family remains blocking
-in two fresh review rounds, stop incremental fixes, mark the current execution
-`Blocked`, and return to planning with the saved architectural fallback and
-round evidence. Reassess classification during replanning; no classification
-may activate that fallback inside the blocked plan.
-
-## Execute or Resume HIGH
-
-After plan creation, choose the emitted isolated-worktree setup command or the
-direct current-checkout command. Worktree setup returns the same portable,
-detailed, work-item-keyed two-line `/goal` invocation; it does not invoke that
-command. The goal details are the finalized spec's exact `## Goal`, normalized
-to one line, so the command states the concrete outcome instead of only saying
-to complete a plan. The work item resolves the sole active plan, and that plan
-links the immutable finalized spec. Direct execution uses:
-
-```text
-/goal <complete exact normalized Goal text from the finalized spec>
-
-Work item: <work-item>
-```
-
-Before pausing or switching sessions, refresh portable evidence:
-
-```text
-Use `.ai/wrappers/goal-checkpoint.md`.
-
-Work item: <stable-work-item-name>
-```
-
-Resume read-only analysis with:
-
-```text
-Use `.ai/wrappers/resume-goal.md`.
-
-Work item: <stable-work-item-name>
-```
-
-The [HIGH checkpoint contract](../prompts/workflow/goal-checkpoint.md) owns task
-and commit evidence in stable work status. Status does not copy policy or
-authorize execution.
-
-## Optional Worktree and Delivery Utilities
-
-Plan creation surfaces this worktree command alongside direct execution for
-LOW, MEDIUM, and HIGH plans:
-
-```text
-run .ai/prompts/utilities/prepare-worktree.md, plan: .ai/plans/<plan-name>.md
-```
-
-```text
-Use `.ai/wrappers/create-pull-request.md`.
-
-Base: AUTO
-```
-
-Worktree setup supports both a Git parent checkout and an unversioned
-multi-repository coordination root. Neither utility starts implementation or
-delivery without its documented explicit invocation.
-
-## Local Workflow Cleanup
-
-Preview or remove ignored workflow records together with task worktrees:
-
-```text
-Run `.ai/prompts/utilities/cleanup-workflow.md`.
-
-Mode: preview | apply
-```
-
-In `apply` mode, clean task roots are already authorized. When dirty, locked,
-or otherwise questionable task roots exist, the utility lists every issue and
-waits for an explicit `yes` or `no` before deleting anything. `yes` includes
-the listed task roots; `no` deletes the clean roots while preserving the listed
-roots and their safely resolvable workflow context. Git branches are always
-retained.
+Old ignored specs, plans, statuses, reviews, and other records cannot authorize
+new execution. Preserve them unless the user explicitly requests cleanup.

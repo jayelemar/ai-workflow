@@ -11,4 +11,4 @@ Delegate all mutation and validation to the package utility. Do not add independ
 The utility refuses root-instruction and defined legacy Codex conflicts before
 mutation; resolve them explicitly before retrying.
 
-Report the actual command output and exit status. Do not claim success after a non-zero result or advance any workflow stage.
+Report the actual command output and exit status. Do not claim setup success after a non-zero result.
