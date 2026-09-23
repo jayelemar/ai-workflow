@@ -159,9 +159,9 @@ later if personalized build filtering or notifications are required.
 
 ### Duplicate build number
 
-Do not retry with the same already-uploaded number. Open Xcode Cloud > Settings
-> Build Number, set the next number above the highest TestFlight build, and
-start a new build.
+Do not retry with the same already-uploaded number. Open Xcode Cloud, choose
+**Settings**, then **Build Number**. Set the next number above the highest
+TestFlight build, and start a new build.
 
 ### Build fails during Archive - iOS
 
