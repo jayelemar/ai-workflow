@@ -99,13 +99,23 @@ revision.
   cross-repository outcomes into dependent steps; each HIGH task owns exactly
   one repository.
 - Do not add behavior beyond the finalized spec or LOW request.
+- For every user-triggered API workflow, record in `## Scope` the ordered happy
+  path, current and proposed blocking RPC and materialization counts, canonical
+  owner of each decision, and work kept outside the critical path. Default the
+  proposal to zero additional blocking calls and zero duplicate
+  materializations; any increase must cite an exact requirement or reproduced
+  failure. Preserve server-side authentication, authorization, ownership, and
+  transaction guarantees when using an established authenticated API.
 - Before saving, run a complexity-proportionality audit. Map every new
   persistent store, coordinator, scheduler, cryptographic layer, dependency,
   external service, abstraction, and recurring validation gate to an exact
-  request/spec criterion and concrete current risk. Use the simplest existing
-  repository mechanism that fully satisfies that contract, collapse redundant
-  tasks and evidence runs, and never activate a saved architectural fallback
-  before its trigger occurs.
+  request/spec criterion and concrete current risk. Apply the same audit to
+  every additional blocking RPC, timer, retry, ref, state flag, temporary file,
+  cancellation system, local coordinator, duplicate materialization, and
+  duplicate validation pass. Use the simplest existing repository mechanism
+  that fully satisfies that contract, collapse redundant tasks and evidence
+  runs, and never activate a saved architectural fallback before its trigger
+  occurs.
 - Omit a mechanism or check that has no exact behavioral or evidentiary basis.
   If the finalized spec explicitly requires the complexity, preserve it and do
   not silently weaken its guarantee; simplifying that guarantee requires a new
@@ -134,7 +144,15 @@ revision.
 - Populate `review-strategy@2`. For a named sensitive boundary, group failed
   invariants into root-cause families, select applicable adversarial variants,
   choose mutation/property coverage, and save a specific architectural
-  fallback. Otherwise omit `### Sensitive Boundary Detail`.
+  fallback. For every user-triggered API workflow, make the existing Review
+  Strategy verify its recorded happy path, blocking RPC and materialization
+  counts, canonical decision owners, and outside-critical-path work. Otherwise
+  omit `### Sensitive Boundary Detail`.
+- Preserve flow-artifact grouping in the implementation plan. An internal
+  branch, retry route, validation site, or service hop does not become a
+  separate journey action, task, or mechanism unless it produces materially
+  different user-visible behavior. Group failures by user-visible outcome and
+  stable root-cause family.
 - Make review checks proportionate to realistic changed-boundary risk. The
   strategy must tell reviewers to seek concrete defects and the smallest
   sufficient correction, not to introduce new controls, acceptance criteria,
@@ -187,6 +205,11 @@ revision.
   A deployed environment must not substitute for compilation or packaged
   configuration evidence, and a successful build must not substitute for
   effective deployed configuration or external-service evidence.
+- When acceptance depends on native rendering, frame timing, application
+  lifecycle, platform file URIs, or native upload transport, require a direct
+  check in a compatible native runtime or on a physical device. Mocked,
+  source-only, and non-native tests are supplemental and cannot replace this
+  evidence.
 - Recommend the selected least-cost sufficient venue in the final response.
   Do not ask for generic validation approval. Stop for a venue decision only
   when the alternatives materially change evidence or residual risk and the

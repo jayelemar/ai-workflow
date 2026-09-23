@@ -98,6 +98,9 @@ path.
   custom cryptography, a dependency or external service, scheduled work, or a
   recurring operational gate, identify the user-required guarantee or concrete
   current threat and why a simpler existing mechanism cannot satisfy it.
+  Apply the same gate to every additional blocking RPC, timer, retry, ref, state
+  flag, temporary file, cancellation system, local coordinator, duplicate
+  materialization, and duplicate validation pass.
   Exclude speculative future hardening from required behavior and acceptance
   criteria; record it as a non-goal when omission could otherwise be ambiguous.
 - Separate required v1 behavior from optional hardening. If removing complexity
@@ -120,6 +123,12 @@ path.
   code or silently exclude the fallback from acceptance criteria.
 - Express behavior deterministically with exact IF/THEN rules where branching
   exists. Define every material branch.
+- For every user-triggered API workflow, record in `Behavior` or `Fix Behavior`:
+  the ordered happy path; current and proposed counts of blocking RPCs and data
+  materializations; the canonical owner of each decision; and work explicitly
+  kept outside the user-critical path. Default to zero additional blocking
+  calls and zero duplicate materializations. Permit an increase only when an
+  exact requirement or reproduced failure supports it, and cite that basis.
 - Keep implementation file scope and execution commands out of the spec unless
   the user provided them as non-negotiable constraints.
 - Ask for explicit decisions when alternatives materially change behavior.
@@ -219,9 +228,11 @@ contains an exact valid match that will remain byte-unchanged. For
 predecessor reuse is exempt only from the filename-selection check because it
 does not create a file. When behavior is environment-dependent, also verify the
 environment matrix is complete and every environment-specific result has a
-pass/fail acceptance criterion. Also verify that every permanent mechanism and
-operational gate passes the minimum-sufficient-design gate and that optional
-hardening did not become a required acceptance criterion.
+pass/fail acceptance criterion. Also verify that every permanent mechanism,
+critical-path addition, and operational gate passes the
+minimum-sufficient-design gate; every user-triggered API workflow records its
+critical-path budget; and optional hardening did not become a required
+acceptance criterion.
 
 ## Final Response
 

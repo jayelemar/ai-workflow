@@ -1,5 +1,5 @@
-Version: 3.2
-Last Updated: 2026-09-16
+Version: 3.3
+Last Updated: 2026-09-23
 
 # Reasoning Quality Instructions
 
@@ -32,6 +32,10 @@ Define the shared reasoning baseline for explicit workflow stages.
   observed evidence or realistic threat, the smallest sufficient response, and
   why a simpler existing mechanism is insufficient. A hypothetical risk or
   architectural preference alone is not a requirement or blocking defect.
+- Apply that check to small-looking mechanisms as well as infrastructure:
+  additional blocking RPCs, timers, retries, refs, state flags, temporary
+  files, cancellation systems, local coordinators, duplicate materialization,
+  and duplicate validation all require the same concrete basis.
 - Distinguish unnecessary implementation from spec-mandated complexity.
   Remove or simplify the former when doing so preserves behavior. Never relax
   the latter during planning, execution, or review; a change to its guarantee

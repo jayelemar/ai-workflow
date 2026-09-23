@@ -11,14 +11,18 @@ exact missing decision when evidence cannot establish a class.
 
 Apply these rules in order:
 
-1. Choose `HIGH` when execution spans multiple repositories; includes a
-   migration or destructive behavior; crosses an authentication,
-   authorization, payment, secret, or other external security boundary; or
-   requires independently committed task workflows.
-2. Otherwise choose `LOW` only when the work is bounded, understood, contained
-   in one repository, has no migration or destructive behavior, has no external
-   integration, and has no unresolved behavior decision.
-3. Choose `MEDIUM` for everything else.
+1. Choose `HIGH` only when execution changes an authentication, authorization,
+   secret, payment, trust, destructive, migration, or external-security
+   contract. Name the exact contract that changes; touching code near one of
+   these boundaries or merely calling an external integration is not enough.
+2. Otherwise choose `LOW` when the work is bounded, understood, contained in
+   one repository, has no unresolved behavior decision, and can use existing
+   contracts without changing one of the HIGH contracts above. Routine use or
+   repair of an established upload or authenticated API may be LOW when those
+   conditions hold and server-side authentication, authorization, ownership,
+   transaction, and external-security guarantees remain unchanged.
+3. Choose `MEDIUM` for everything else, including multi-repository or external
+   integration coordination that does not change a HIGH contract.
 
 End-to-end tracing is incompatible with LOW. Escalate when new evidence matches
 a higher-class trigger; never silently downgrade.

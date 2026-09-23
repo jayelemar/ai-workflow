@@ -136,6 +136,10 @@ remediation. A changed audit-only HEAD with an unchanged base SHA and
    or external-service behavior. For a cross-environment link, verify the
    selected URL cannot resolve to another environment, a missing or invalid URL
    fails fast, and the specified browser fallback remains available.
+   When acceptance depends on native rendering, frame timing, application
+   lifecycle, platform file URIs, or native upload transport, require direct
+   evidence from a compatible native runtime or physical device; treat mock
+   tests as supplemental only.
 6. Apply `## Proportionality and Over-Engineering Gate` to every proposed
    finding before returning it. The reviewer reports defects and evidence, not
    a preferred redesign or speculative hardening program.
@@ -152,9 +156,12 @@ Record an unrelated pre-existing defect as advisory and do not let it consume
 automatic review work. Every finding names an exact path plus line or symbol,
 concrete impact, and an in-scope fix. It also records the exact request, spec,
 or changed-boundary invariant that makes the finding in scope and the smallest
-sufficient correction. Use exactly `P0`, `P1`, `P2`, or `P3`: `P0`–`P2` are
-blocking and `P3` is advisory. A round is clear only when it reports no in-scope
-`P0`–`P2`.
+sufficient correction. Use exactly `P0`, `P1`, `P2`, or `P3`: `P0` and `P1`
+are blocking; `P2` is blocking only when supported by a failing test, a
+concrete reproduction with an observed failure, a direct finalized-spec
+violation, or a concrete security-boundary violation; and `P3` is advisory.
+A concern without that P2 evidence is at most `P3`. A round is clear only
+when it reports no in-scope blocking `P0`–`P2`.
 
 ## Proportionality and Over-Engineering Gate
 
@@ -171,8 +178,10 @@ the actual diff and current evidence:
 5. Why is a simpler local correction or existing repository mechanism
    insufficient?
 6. Would the proposed correction add persistence, distributed coordination,
-   custom cryptography, a dependency or service, scheduled work, or another
-   permanent operational burden?
+   custom cryptography, a dependency or service, scheduled work, an additional
+   blocking RPC, timer, retry, ref, state flag, temporary file, cancellation
+   system, local coordinator, duplicate materialization, duplicate validation,
+   or another operational burden?
 
 Apply these dispositions:
 
@@ -193,8 +202,10 @@ Apply these dispositions:
   architectural preference alone does not trigger that route.
 - Hypothetical hardening, future extensibility, and defense-in-depth that is not
   required to correct an evidenced defect are non-blocking and normally
-  omitted. A proposed correction that adds any burden in question 6 is allowed
-  only when the reviewer proves every simpler correction insufficient.
+  omitted. If recorded, classify it `P3`; it cannot automatically trigger
+  implementation or consume a remediation round. A proposed correction that
+  adds any burden in question 6 is allowed only when the reviewer proves every
+  simpler correction insufficient.
 
 ## Round Accounting
 

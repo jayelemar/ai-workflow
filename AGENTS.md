@@ -59,8 +59,10 @@ requires the corresponding explicitly invoked workflow stage.
   item. MEDIUM and HIGH completion uses the
   independent `implementation-review@3` contract in
   `.ai/prompts/workflow/review-changes.md` and the locked reviewer runtime in
-  `.ai/config/agent-models.toml`. `P0`, `P1`, and `P2` remain blocking; `P3` is
-  advisory. Reviewer clearance is valid only for matching
+  `.ai/config/agent-models.toml`. `P0`, `P1`, and evidence-qualified `P2`
+  findings remain blocking under the threshold owned by
+  `.ai/prompts/workflow/review-changes.md`; `P3` is advisory. Reviewer
+  clearance is valid only for matching
   `review-input-fingerprint@1` evidence.
 - `work-status@1` is an evidence snapshot, not transition authority. Keep its
   first sections human-readable. Update it at task start and completion,
@@ -108,5 +110,5 @@ boundaries, not immutable security boundaries.
   artifacts, logs, and workflow-local state ignored and untracked.
 - When a Git parent checkout exists, do not stage `.ai` files in it.
 
-Version: 2.5
-Last Updated: 2026-09-16
+Version: 2.6
+Last Updated: 2026-09-23

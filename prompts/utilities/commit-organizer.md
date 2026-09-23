@@ -79,6 +79,11 @@ After authorization, process each group in dependency order:
 3. Run focused validation appropriate to that group.
 4. Reinspect the staged file list and staged diff.
 5. Create one local conventional commit.
+   Include `Workflow-Work-Item`, `Workflow-Spec`, and
+   `Workflow-Plan-Revision` Git trailers. Populate them from the governing
+   active plan and stable work status; when no plan governs the commit, use
+   `N/A: repository-level commit` for each value. For a LOW plan, preserve its
+   recorded no-spec value in `Workflow-Spec`.
 6. Confirm the group left no unintended staged changes.
 
 Never use repository-wide staging unless the proposed group explicitly covers

@@ -217,11 +217,10 @@ test("classification uses deterministic LOW and HIGH triggers with MEDIUM fallba
   );
 
   for (const trigger of [
-    "multiple repositories",
-    "migration or destructive behavior",
-    "authentication, authorization, payment, secret",
-    "external security boundary",
-    "independently committed task workflows",
+    "authentication, authorization",
+    "secret, payment, trust",
+    "destructive, migration",
+    "external-security contract",
   ]) {
     assert.match(selection, new RegExp(trigger.replaceAll(" ", "\\s+"), "i"));
   }
@@ -229,12 +228,24 @@ test("classification uses deterministic LOW and HIGH triggers with MEDIUM fallba
     "bounded",
     "understood",
     "contained in one repository",
-    "no migration or destructive behavior",
-    "no external integration",
     "no unresolved behavior decision",
+    "existing contracts",
   ]) {
     assert.match(selection, new RegExp(lowRequirement, "i"));
   }
+  assert.match(
+    selection,
+    /Routine use or repair of an established upload or authenticated API may be LOW/,
+  );
+  assert.match(
+    selection,
+    /merely calling an external integration is not enough/,
+  );
+  assert.match(
+    selection,
+    /multi-repository or external integration coordination.*does not change a HIGH contract/,
+  );
+  assert.doesNotMatch(selection, /has no external integration/);
   assert.match(selection, /Choose `MEDIUM` for everything else/);
   assert.match(selection, /Apply these rules in order/);
 });
@@ -338,6 +349,81 @@ test("spec and flow artifact formats remain unchanged", async () => {
   for (const source of [flowPrompt, flowInstruction]) {
     assert.match(source, /user-journey@1/);
     assert.match(source, /implementation-map@1/);
+  }
+});
+
+test("user-triggered API workflows carry a zero-growth critical-path budget", async () => {
+  const [spec, planning, template, reasoning] = await Promise.all([
+    readSource("prompts/workflow/generate-spec.md"),
+    readSource("prompts/workflow/create-plan.md"),
+    readSource("templates/plan.template.md"),
+    readSource("instructions/shared/reasoning-quality.md"),
+  ]);
+
+  for (const source of [spec, planning]) {
+    const contract = normalize(source);
+    assert.match(contract, /user-triggered API workflow/i);
+    assert.match(contract, /ordered happy path/i);
+    assert.match(contract, /blocking RPC/i);
+    assert.match(contract, /materialization/i);
+    assert.match(contract, /canonical owner.*decision/i);
+    assert.match(
+      contract,
+      /outside.*critical path|kept outside the critical path/i,
+    );
+    assert.match(
+      contract,
+      /zero additional blocking calls.*zero duplicate materializations/i,
+    );
+    assert.match(contract, /exact requirement or reproduced failure/i);
+  }
+  assert.match(template, /## Scope[\s\S]*Ordered happy path:/);
+  assert.match(template, /Blocking RPCs: <current count> -> <proposed count/);
+  assert.match(
+    template,
+    /Materializations: <current count> -> <proposed count/,
+  );
+  assert.match(template, /Canonical decision owners:/);
+  assert.match(template, /Outside critical path:/);
+
+  for (const mechanism of [
+    "blocking RPC",
+    "timer",
+    "retry",
+    "ref",
+    "state flag",
+    "temporary file",
+    "cancellation system",
+    "local coordinator",
+    "duplicate materialization",
+    "duplicate validation",
+  ]) {
+    assert.match(
+      normalize(`${spec}\n${planning}\n${reasoning}`),
+      new RegExp(mechanism, "i"),
+    );
+  }
+});
+
+test("flow failures stay grouped by user-visible outcome and root-cause family", async () => {
+  const [instruction, prompt, planning] = await Promise.all([
+    readSource("instructions/shared/flow-trace-artifacts.md"),
+    readSource("prompts/workflow/generate-flow-artifacts.md"),
+    readSource("prompts/workflow/create-plan.md"),
+  ]);
+
+  for (const source of [instruction, prompt, planning]) {
+    const contract = normalize(source);
+    assert.match(contract, /user-visible outcome/i);
+    assert.match(contract, /root-cause family/i);
+    assert.match(
+      contract,
+      /internal branch.*(must not|does not|do not).*journey action.*(plan )?task.*mechanism/i,
+    );
+    assert.match(
+      contract,
+      /materially different.*(observable|user-visible) behavior/i,
+    );
   }
 });
 
@@ -625,6 +711,17 @@ test("plan validation gates are feasible, invariant-driven, and risk-based", asy
     /require the fresh build only for a named native, packaged-configuration, runtime-compatibility, or release-boundary risk/i,
   );
   assert.match(template, /observable invariant and expected result/);
+  for (const source of [testing, createPlan]) {
+    assert.match(
+      normalize(source),
+      /native rendering.*frame timing.*application lifecycle.*platform file URIs.*native upload transport/i,
+    );
+    assert.match(
+      normalize(source),
+      /compatible native runtime.*physical device/i,
+    );
+    assert.match(normalize(source), /Mock.*supplemental.*cannot replace/i);
+  }
 
   assert.match(
     agents,
@@ -980,16 +1077,58 @@ test("review-changes is the singular review-loop authority", async () => {
 });
 
 test("implementation-review@3 limits blocking findings to attributable scope", async () => {
-  const review = normalize(
-    await readSource("prompts/workflow/review-changes.md"),
-  );
+  const [agents, reviewSource] = await Promise.all([
+    readSource("AGENTS.md"),
+    readSource("prompts/workflow/review-changes.md"),
+  ]);
+  const review = normalize(reviewSource);
 
   assert.match(review, /implementation-review@3/);
   assert.match(review, /defect introduced by the plan-owned diff/);
   assert.match(review, /direct violation of the request or finalized spec/);
   assert.match(review, /regression in a boundary changed by the plan/);
   assert.match(review, /unrelated pre-existing defect as advisory/);
-  assert.match(review, /`P0`–`P2` are blocking and `P3` is advisory/);
+  assert.match(review, /`P0` and `P1` are blocking/);
+  assert.match(
+    review,
+    /`P2` is blocking only when supported by a failing test, a concrete reproduction with an observed failure, a direct finalized-spec violation, or a concrete security-boundary violation/,
+  );
+  assert.match(review, /concern without that P2 evidence is at most `P3`/);
+  assert.match(
+    review,
+    /Hypothetical hardening.*classify it `P3`.*cannot automatically trigger implementation/i,
+  );
+  assert.match(
+    normalize(agents),
+    /evidence-qualified `P2` findings remain blocking.*threshold owned by.*review-changes\.md/i,
+  );
+});
+
+test("workflow-created commits include plan traceability trailers", async () => {
+  const [delivery, checkpoint, organizer] = await Promise.all([
+    readSource("instructions/shared/delivery-hygiene.md"),
+    readSource("prompts/workflow/goal-checkpoint.md"),
+    readSource("prompts/utilities/commit-organizer.md"),
+  ]);
+
+  for (const source of [delivery, checkpoint, organizer]) {
+    for (const trailer of [
+      "Workflow-Work-Item",
+      "Workflow-Spec",
+      "Workflow-Plan-Revision",
+    ]) {
+      assert.match(source, new RegExp(trailer));
+    }
+  }
+  assert.match(
+    normalize(checkpoint),
+    /trailers from the active plan and status/,
+  );
+  assert.match(
+    normalize(organizer),
+    /when no plan governs the commit.*`N\/A: repository-level commit`/i,
+  );
+  assert.match(normalize(delivery), /Do not create a tracked workflow ledger/i);
 });
 
 test("review loop covers clear, budget exhaustion, and continuation authorization", async () => {

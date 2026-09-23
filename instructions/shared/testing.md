@@ -1,5 +1,5 @@
-Version: 1.5
-Last Updated: 2026-09-15
+Version: 1.6
+Last Updated: 2026-09-23
 
 # Testing Instructions
 
@@ -79,6 +79,11 @@ Set a shared testing standard that provides high release confidence while minimi
   while development or staging evidence proves only the behavior and
   effective environment boundaries it actually exercises.
 - Use browser or full end-to-end validation only when the change affects a user workflow that cannot be trusted from lower-level tests alone.
+- Require a direct check in a compatible native runtime or on a physical device
+  when acceptance depends on native rendering, frame timing, application
+  lifecycle, platform file URIs, or native upload transport. Mocked,
+  source-only, browser-only, and non-native tests are supplemental; they cannot
+  replace that native evidence.
 - In the Codex sandbox, local E2E that needs Node/Playwright local network access or browser automation may fail for environment reasons before application behavior is exercised; use command-level escalation for those runs instead of broadening validation scope.
 - Do not use `yolo` for local E2E or browser-validation commands; request command-level escalation only for the specific command that needs sandbox bypass.
 - Use full workspace test, build, or lint commands only when changes cross package boundaries or narrower validation cannot cover the risk.

@@ -46,11 +46,21 @@ relative to the plan workspace.
 
 <bounded desired behavior, current constraints, and non-goals>
 
+For each user-triggered API workflow, record these items inside Scope; omit
+them only when no such workflow exists:
+
+- Ordered happy path: <user-critical sequence>
+- Blocking RPCs: <current count> -> <proposed count and requirement or reproduced-failure basis for every increase>
+- Materializations: <current count> -> <proposed count and requirement or reproduced-failure basis for every duplicate>
+- Canonical decision owners: <decision -> owning component/service>
+- Outside critical path: <work deliberately deferred until after the user-critical outcome>
+
 ## Review Strategy
 
 - Format: `review-strategy@2`
 - Sensitive-boundary trigger: <named boundary and deterministic trigger | `None: no named sensitive boundary`>
 - Targeted checks: <checks for the named boundary | compact correctness and changed-boundary regression checks>
+- Critical-path budget: <for each user-triggered API workflow, verify its ordered happy path, blocking RPC and materialization counts, canonical decision owners, and outside-critical-path work | `N/A: no user-triggered API workflow`>
 - Architectural fallback: <specific isolation, allowlist, closed-form enforcement, reducer/state arbiter/owning-hook redesign, or other bounded redesign to carry into replanning if one root-cause family remains blocking in two fresh rounds; required for a named sensitive boundary or asynchronous UI state with multiple independent writers | `N/A: no named sensitive boundary or asynchronous multi-writer state surface`>
 - External evidence: <Required: operator, staging, credential, device, environment, or service evidence that proves named acceptance criteria | Optional: supplementary evidence that proves no acceptance criterion | `N/A: no external evidence required`>
 

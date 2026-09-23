@@ -188,8 +188,10 @@ Plan: .ai/plans/<plan-name>.md
 ```
 
 This uses the locked workflow reviewer rather than the operator-only Codex UI
-`/review` action. It leaves P3 findings advisory and stops only when no in-scope
-P0–P2 remain or the canonical review contract requires a blocker.
+`/review` action. It leaves P3 findings advisory. A P2 is blocking only with a
+failing test, concrete reproduction, direct finalized-spec violation, or
+concrete security-boundary violation. The loop stops only when no in-scope
+blocking P0–P2 remain or the canonical review contract requires a blocker.
 
 For LOW, MEDIUM, and HIGH alike, if the same root-cause family remains blocking
 in two fresh review rounds, stop incremental fixes, mark the current execution

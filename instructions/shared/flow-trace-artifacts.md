@@ -1,5 +1,5 @@
-Version: 3.4
-Last Updated: 2026-09-15
+Version: 3.5
+Last Updated: 2026-09-23
 
 # Flow Artifact Instructions
 
@@ -55,6 +55,14 @@ Every journey action and acceptance scenario must map to ownership and
 validation. The implementation map must not introduce actions absent from the
 user journey.
 
+Journey actions represent user-visible actions or materially different
+outcomes, not implementation branches. Group failure details first by the
+user-visible outcome they prevent or alter and then by stable root-cause
+family. An internal branch, retry route, validation site, or service hop must
+remain detail under that group and must not become another journey action,
+plan task, or mechanism unless it produces materially different observable
+behavior.
+
 When one mapped action or planned task consumes another task's service, the
 implementation map must state the callable internal contract—including the
 inputs the consumer is allowed to supply and the provider-owned data it must
@@ -75,7 +83,8 @@ being silently replaced.
 - A plan records both artifact paths or records `N/A: <concrete reason>` for
   both when tracing is unnecessary.
 - Plan tasks cover every mapped action, contract/data boundary, service, and
-  validation responsibility.
+  validation responsibility without expanding grouped internal failure
+  branches into separate tasks.
 - Review compares required artifacts with the finalized spec, actual diff, and
   validation evidence. When artifacts are `N/A`, review verifies the reason
   still fits the actual scope.

@@ -59,7 +59,10 @@ user-journey@1
 
 Use Markdown and Mermaid only. Tie desired outcomes to the finalized spec and
 entry points to observed repository paths. `Open Decisions` must be exactly
-`None` before saving.
+`None` before saving. Write journey actions only for user-visible actions or
+materially different observable outcomes. In `Failures`, group failures by the
+user-visible outcome and then by stable root-cause family; keep internal
+branches, retries, validation sites, and service hops inside those groups.
 
 ## Implementation Map
 
@@ -109,13 +112,16 @@ None
 
 Create one complete mapping for every user action and acceptance scenario.
 Never add an action absent from the user journey. Use `None: <concrete reason>`
-only when a category genuinely does not apply.
+only when a category genuinely does not apply. An internal failure branch must
+not become another journey action, plan task, or implementation mechanism
+unless its observable behavior materially differs.
 
 ## Validation and Final Response
 
 Verify both files exist, use their exact document formats and section order,
 map every flow and failure branch, contain no invented desired behavior, and
-end with no open decisions.
+end with no open decisions. Also verify failures are grouped by user-visible
+outcome and root-cause family rather than multiplied into internal actions.
 
 Return exactly:
 

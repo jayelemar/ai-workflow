@@ -70,6 +70,10 @@ For each task:
 5. Immediately before committing, inspect the current branch. On `main`,
    `dev`, `development`, or `staging`, obtain explicit operator permission.
 6. Create exactly one local conventional commit with the plan's saved purpose.
+   Append these trailers from the active plan and status:
+   `Workflow-Work-Item: <stable-work-item>`,
+   `Workflow-Spec: <exact-spec-path>`, and
+   `Workflow-Plan-Revision: <positive-integer>`.
    Do not start the next task until no task-owned change remains uncommitted and
    status records `complete`, its SHA, subject, validation, review, and
    delegation. Synchronize the indicator after recording completion and before
@@ -82,7 +86,7 @@ explicit delivery request.
 
 For a correction to an already committed task, create a separate focused
 `fix(<scope>): <spec-restoring summary>` commit after all affected task checks
-and fresh task review pass.
+and fresh task review pass, with the same three current workflow trailers.
 
 ## HIGH Final-Review Commit Rules
 
@@ -94,6 +98,8 @@ review remediation changes a repository:
 - stage only remediation paths;
 - apply the protected-branch permission check above;
 - create one local conventional remediation commit per changed repository; and
+- append the current `Workflow-Work-Item`, `Workflow-Spec`, and
+  `Workflow-Plan-Revision` trailers to every remediation commit; and
 - record the review round, resolved findings, commands/results, SHA, and
   subject in status before the canonical review prompt advances.
 
