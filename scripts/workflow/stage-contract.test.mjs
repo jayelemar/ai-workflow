@@ -1394,7 +1394,7 @@ test("plan response offers worktree setup or direct execution", async () => {
   );
   assert.match(
     finalResponse,
-    /For HIGH[\s\S]*Execute in the current checkout:[\s\S]*```text\n\/goal Complete the active HIGH workflow plan for work item `<work-item>` according to its linked finalized specification\.\n\nWork item: <work-item>\n```/,
+    /For HIGH[\s\S]*Execute in the current checkout:[\s\S]*```text\n\/goal <goal-details>\n\nWork item: <work-item>\n```/,
   );
   assert.match(
     finalResponse,
@@ -1402,7 +1402,11 @@ test("plan response offers worktree setup or direct execution", async () => {
   );
   assert.match(
     createPlan,
-    /```text\n\/goal Complete the active HIGH workflow plan for work item `<work-item>` according to its linked finalized specification\.\n\nWork item: <work-item>\n```/,
+    /finalized spec's exact `## Goal`[\s\S]*```text\n\/goal <goal-details>\n\nWork item: <work-item>\n```/,
+  );
+  assert.match(
+    normalize(createPlan),
+    /Do not replace it with generic text such as `Complete the active plan`/i,
   );
   assert.doesNotMatch(createPlan, /\/goal[^\n]*\n\nplan: \.ai\/plans\//);
   assert.match(checkpoint, /- Work item: `<stable-kebab-case-work-item>`/);
@@ -1413,7 +1417,7 @@ test("plan response offers worktree setup or direct execution", async () => {
   );
   assert.match(
     normalize(prepare),
-    /HIGH.*work-item-keyed `\/goal` command.*identical to the action emitted by plan creation.*must not contain a source or task-local plan path/i,
+    /HIGH.*detailed, work-item-keyed `\/goal` command.*identical to the action emitted by plan creation.*concrete desired outcome.*must not contain a source or task-local plan path/i,
   );
   assert.match(
     normalize(workflow),

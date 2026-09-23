@@ -91,6 +91,22 @@ test("prepare-worktree emits a paste-ready tmux workspace launcher", () => {
   assert.match(preparePrompt, /session-name collision/);
 });
 
+test("prepare-worktree emits the same detailed HIGH goal as plan creation", () => {
+  assert.match(
+    preparePrompt,
+    /finalized\s+spec's exact `## Goal`, normalized to one line/,
+  );
+  assert.match(
+    preparePrompt,
+    /\/goal <complete exact normalized Goal text from the finalized spec>/,
+  );
+  assert.match(
+    preparePrompt,
+    /concrete desired outcome rather than generically say to complete a plan/,
+  );
+  assert.match(createPlanPrompt, /\/goal <goal-details>/);
+});
+
 test("create-plan rejects repository topology that prepare-worktree cannot use", () => {
   assert.match(createPlanPrompt, /For multi-repository coordination only/);
   assert.match(createPlanPrompt, /explicitly\s+declared immediate sibling/);

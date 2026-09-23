@@ -201,12 +201,14 @@ may activate that fallback inside the blocked plan.
 
 After plan creation, choose the emitted isolated-worktree setup command or the
 direct current-checkout command. Worktree setup returns the same portable,
-work-item-keyed two-line `/goal` invocation; it does not invoke that command.
-The work item resolves the sole active plan, and that plan links the immutable
-finalized spec. Direct execution uses:
+detailed, work-item-keyed two-line `/goal` invocation; it does not invoke that
+command. The goal details are the finalized spec's exact `## Goal`, normalized
+to one line, so the command states the concrete outcome instead of only saying
+to complete a plan. The work item resolves the sole active plan, and that plan
+links the immutable finalized spec. Direct execution uses:
 
 ```text
-/goal Complete the active HIGH workflow plan for work item `<work-item>` according to its linked finalized specification.
+/goal <complete exact normalized Goal text from the finalized spec>
 
 Work item: <work-item>
 ```

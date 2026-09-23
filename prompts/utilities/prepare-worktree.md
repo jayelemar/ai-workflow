@@ -71,10 +71,13 @@ Validate the classification inputs before any mutation:
 
 Require status's work item, active plan, spec, classification, and ordered task
 IDs to exactly match the plan. For HIGH, require status's single `## Next
-Action` command to be a
-`/goal` invocation keyed by the plan lineage's stable work item. Resolve that
-work item to this sole active plan and require the plan, linked finalized spec,
-and status to agree. Do not execute it.
+Action` command to be a `/goal` invocation whose goal text is the finalized
+spec's exact `## Goal`, normalized to one line without changing its words or
+punctuation, followed by the plan lineage's stable `Work item:` key. Require
+the status `Goal` field to contain that same normalized text. Resolve the work
+item to this sole active plan and require the plan, linked finalized spec,
+status, and detailed action to agree. Reject a generic action such as
+`Complete the active plan`. Do not execute it.
 
 Require and read the source workspace's `AGENTS.override.md` as the root
 instruction entrypoint, then read `.ai/AGENTS.md`,
@@ -375,12 +378,21 @@ codex -m '<resolved-parent-model>' -c model_reasoning_effort='<resolved-parent-r
 Finally print the exact resolved execution action in a separate text block:
 
 - LOW/MEDIUM: `execute <task-local-plan-path>`
-- HIGH: the validated work-item-keyed `/goal` command from `work-status.md`;
-  it must be identical to the action emitted by plan creation and must not
-  contain a source or task-local plan path
+- HIGH: the validated detailed, work-item-keyed `/goal` command from
+  `work-status.md`, using this exact shape:
+
+  ```text
+  /goal <complete exact normalized Goal text from the finalized spec>
+
+  Work item: <work-item>
+  ```
+
+  It must be identical to the action emitted by plan creation, must describe
+  the concrete desired outcome rather than generically say to complete a plan,
+  and must not contain a source or task-local plan path.
 
 State that setup did not run the action and that the user must invoke it in
 the new Codex session to authorize implementation.
 
-Version: 7.1
-Last Updated: 2026-09-16
+Version: 7.2
+Last Updated: 2026-09-18

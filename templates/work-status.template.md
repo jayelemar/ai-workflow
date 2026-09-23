@@ -64,4 +64,5 @@ revision, and concise reason>
 
 ## Next Action
 
-<one exact action>
+<one exact action; HIGH uses `/goal <exact normalized Goal text from the
+finalized spec>`, a blank line, then `Work item: <stable-work-item-name>`>

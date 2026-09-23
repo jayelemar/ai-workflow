@@ -1,5 +1,5 @@
-Version: 5.1
-Last Updated: 2026-09-16
+Version: 5.2
+Last Updated: 2026-09-18
 
 # Workflow Stage Instructions
 
@@ -11,11 +11,11 @@ context, not transition authority.
 
 ## Stage Sequence
 
-| Class    | Intake                   | Specification                    | Planning                                                                  | Execution                                                                |
-| -------- | ------------------------ | -------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| `LOW`    | Read-only classification | N/A                              | Explicitly create a compact plan and stable work status                   | Explicitly `execute <plan-file>`                                         |
-| `MEDIUM` | Read-only classification | Explicitly finalize a typed spec | Explicitly create required flow artifacts, a plan, and stable work status | Explicitly `execute <plan-file>`                                         |
-| `HIGH`   | Read-only classification | Explicitly finalize a typed spec | Explicitly create required flow artifacts, a plan, and stable work status | Explicitly invoke work status's work-item-keyed two-line `/goal` command |
+| Class    | Intake                   | Specification                    | Planning                                                                  | Execution                                                                          |
+| -------- | ------------------------ | -------------------------------- | ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `LOW`    | Read-only classification | N/A                              | Explicitly create a compact plan and stable work status                   | Explicitly `execute <plan-file>`                                                   |
+| `MEDIUM` | Read-only classification | Explicitly finalize a typed spec | Explicitly create required flow artifacts, a plan, and stable work status | Explicitly `execute <plan-file>`                                                   |
+| `HIGH`   | Read-only classification | Explicitly finalize a typed spec | Explicitly create required flow artifacts, a plan, and stable work status | Explicitly invoke work status's detailed, work-item-keyed two-line `/goal` command |
 
 Planning may create a missing required flow-artifact pair in the same explicit
 invocation. Direct flow-artifact generation is also available but does not
@@ -63,6 +63,10 @@ start planning.
 - A durable `Next Action` or `Required Next Action` field follows the same
   contract. Do not reduce it to generic prose such as `return to planning`,
   `resolve the blocker`, or a request for the user to ask what to do next.
+- A HIGH `Next Action` uses the finalized spec's exact `## Goal`, normalized to
+  one line without changing its words or punctuation, as the `/goal` details,
+  followed by the stable `Work item:` key. Generic text that only says to
+  complete the active plan is not actionable goal detail.
 - Filename confirmation is a continuation of the already-invoked specification
   stage. Its direct `Use <name>.spec.md` reply is the complete resume action;
   it does not require repeating the full specification invocation.

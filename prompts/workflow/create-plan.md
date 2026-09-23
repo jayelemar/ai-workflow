@@ -203,9 +203,12 @@ revision.
 
 ## Work Status Contract
 
-For an initial plan, create status with the complete current goal, current spec
-or LOW request, candidate active-plan path, all tasks as `not started`, no
-completed or changed tasks, revision-log entry `1`, current blocker
+For an initial HIGH plan, copy the finalized spec's exact `## Goal` into the
+status `Goal` field, normalizing Markdown line wrapping to one line without
+changing its words or punctuation. For LOW and MEDIUM, record the complete
+current goal from the authoritative request or finalized spec. Also record the
+current spec or LOW request, candidate active-plan path, all tasks as
+`not started`, no completed or changed tasks, revision-log entry `1`, current blocker
 `Awaiting explicit execution invocation`, and the classification-specific exact
 next action.
 
@@ -267,10 +270,12 @@ node .ai/scripts/workflow/activate-plan.mjs --predecessor .ai/plans/<predecessor
 
 For HIGH, include current repository state, ordered tasks as not started, no
 validation or review rounds, `Awaiting explicit /goal invocation` as the
-blocker, and this next action:
+blocker, and this next action. Set `<goal-details>` to the same exact normalized
+text stored in the status `Goal` field from the finalized spec's `## Goal`.
+Do not replace it with generic text such as `Complete the active plan`:
 
 ```text
-/goal Complete the active HIGH workflow plan for work item `<work-item>` according to its linked finalized specification.
+/goal <goal-details>
 
 Work item: <work-item>
 ```
@@ -303,7 +308,7 @@ run .ai/prompts/utilities/prepare-worktree.md, plan: .ai/plans/<plan-name>.md
 
 Execute in the current checkout:
 ```text
-/goal Complete the active HIGH workflow plan for work item `<work-item>` according to its linked finalized specification.
+/goal <goal-details>
 
 Work item: <work-item>
 ```
