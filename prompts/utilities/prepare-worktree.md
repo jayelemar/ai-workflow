@@ -2,7 +2,9 @@
 
 Create isolated native Git worktrees for one living plan. This utility prepares
 an execution environment only. It does not implement the plan, start `/goal`,
-stage or commit changes, copy secrets, or create workflow state.
+stage or commit changes, copy secrets, or create workflow state. It also creates
+a task-local copy of the workflow and documentation context needed to execute
+the plan from the prepared task root.
 
 Run only when explicitly invoked:
 
@@ -48,14 +50,29 @@ Place every prepared repository under:
 ```
 
 The task root is a coordination directory even when the plan has one
-repository. Keep repository IDs unique and safe. Do not copy `.ai`, plans,
-documentation, or repository files into the task root; the source workspace
-remains their authority.
+repository. Keep repository IDs unique and safe. Do not copy repository files
+into the task root outside their native Git worktrees.
+
+The prepared task root must have this control-context layout:
+
+```text
+<task-root>/
+├── .ai/                   # complete mirrored workflow context
+├── docs/                  # complete mirrored documentation, when present
+├── AGENTS.override.md     # portable root instruction entrypoint
+└── <repository-id>/       # native Git worktree, one per repository
+```
+
+The source workspace is authoritative during preparation. The mirrors are a
+task-local snapshot for execution. Never refresh or overwrite an existing
+control-context destination.
 
 Before creating anything, verify that the workspace's `AGENTS.override.md`,
-`.ai/AGENTS.md`, and `.ai/instructions/index.md` are readable so a Codex session
-started at the workspace can use the prepared worktrees. Stop with the existing
-setup command when routing is missing; do not invent another instruction copy.
+`.ai/AGENTS.md`, and `.ai/instructions/index.md` are readable regular files and
+that the complete source `.ai/` tree is readable. When the workspace has a
+`docs/` directory, require its complete tree to be readable. Stop with the
+existing setup command when routing is missing; do not invent another
+instruction copy.
 
 When `.worktrees/` falls inside a Git checkout, require it to be ignored before
 creating the task root. Do not change ignore rules implicitly.
@@ -89,16 +106,41 @@ merge, rebase, delete, prune, or overwrite source state.
 After every repository passes preflight:
 
 1. Create the task root and no other coordination state.
-2. For each repository, run the equivalent of:
+2. Mirror the complete source `.ai/` tree into `<task-root>/.ai/`. Include
+   ignored, hidden, generated, artifact, log, wrapper, plan, spec, instruction,
+   documentation, and nested-Git entries. Preserve safe symlinks, permissions,
+   timestamps, and relative paths. Require the destination to be absent and use
+   an archive-preserving trailing-slash copy equivalent to:
+
+   ```bash
+   rtk rsync -aH --safe-links '<workspace>/.ai/' '<task-root>/.ai/'
+   ```
+
+3. When `<workspace>/docs/` exists, mirror its complete contents into
+   `<task-root>/docs/` with the same archive-preserving semantics. Include
+   ignored, hidden, and untracked documentation files, preserve safe symlinks,
+   and require the destination to be absent.
+4. Copy `<workspace>/AGENTS.override.md` to
+   `<task-root>/AGENTS.override.md` as a regular file without changing its
+   contents, permissions, or timestamp. Require the destination to be absent.
+   Verify that its `.ai/AGENTS.md` reference resolves within the task root.
+5. For each repository, run the equivalent of:
 
    ```bash
    rtk git -C '<source-root>' worktree add -b '<branch>' '<target>' '<base-commit>'
    ```
 
-3. Never use `-B`, `--force`, detached worktrees, or branch/path reuse.
-4. Verify each target's worktree registration, top-level path, branch name,
+6. Never use `-B`, `--force`, detached worktrees, or branch/path reuse.
+7. Verify each target's worktree registration, top-level path, branch name,
    exact base commit, and clean status.
-5. Recheck every source checkout and confirm setup did not change it.
+8. Verify the source and task-root `.ai/` trees are identical with an
+   archive-preserving checksum dry run equivalent to
+   `rtk rsync -aHncni --delete --safe-links`. When `docs/` was copied, verify it
+   the same way. Verify `AGENTS.override.md` is byte-for-byte identical without
+   printing its contents, and verify the copied plan, required specs and
+   documentation, `.ai/AGENTS.md`, and `.ai/instructions/index.md` are readable
+   from the task root.
+9. Recheck every source checkout and confirm setup did not change it.
 
 If a later repository fails after an earlier one was created, keep the partial
 state, identify every created branch and path, and stop. Do not perform automatic
@@ -128,10 +170,11 @@ Return:
 
 ```text
 Preparation: Ready | Partial | Blocked
-Plan: <exact living-plan path>
+Plan: <exact task-local living-plan path>
 Workspace: <absolute workspace path>
 Task root: <absolute task-root path>
 Repositories: <id: branch @ base commit — target path, one per line>
+Control context: <.ai, docs, and AGENTS.override.md mirror result>
 Source work: <preserved dirty changes or clean>
 Environment: <not requested or non-secret result>
 Dependencies: <not requested or result per repository>
@@ -139,17 +182,17 @@ Validation: <checks passed and exact gaps>
 ```
 
 For a ready task, print this optional two-pane launcher with resolved paths and
-the safe plan name. Start Codex from the workspace so the living plan and
-instruction router remain directly available:
+the safe plan name. Start both panes from the task root so the copied plan,
+specs, documentation, and instruction router are directly available:
 
 ```bash
-rtk tmux new-session -s '<plan-name>' -c '<workspace>' \; split-window -t '<plan-name>:' -h -p 67 -c '<task-root>'
+rtk tmux new-session -s '<plan-name>' -c '<task-root>' \; split-window -t '<plan-name>:' -h -p 67 -c '<task-root>'
 ```
 
 Then print the exact ready-to-copy execution prompt without running it:
 
 ```text
-/goal Implement <exact-plan-path>. Use the prepared worktrees reported above for all plan-owned edits. Preserve its boundaries, keep the plan updated, run every required validation, and finish only when its definition of done is proven.
+/goal Implement <task-root>/.ai/plans/<plan-name>.md. Use the prepared worktrees reported above for all plan-owned edits. Preserve its boundaries, keep the task-local plan updated, run every required validation, and finish only when its definition of done is proven.
 ```
 
 For controlled work, also require completion of the plan's independent final
