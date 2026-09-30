@@ -37,9 +37,13 @@ branch: feat/<plan-name>
 4. Use an explicitly supplied local base ref for a repository. Otherwise use
    that repository's current `HEAD`. Resolve and report the exact base commit.
    Do not fetch, pull, or silently substitute another ref.
-5. Use the supplied branch name or `work/<plan-name>`. Require a safe Git branch
-   name. Separate repositories may use the same branch name because their refs
-   are independent.
+5. Use the supplied branch name when it is exactly `fix/<plan-name>` or
+   `feat/<plan-name>`. Otherwise, use `fix/<plan-name>` when the plan clearly
+   describes a bug fix or `feat/<plan-name>` when it clearly describes feature
+   work. If the plan does not establish the branch type unambiguously, stop and
+   ask the user to choose `fix` or `feat`. Require a safe Git branch name; do not
+   accept another prefix or a different suffix. Separate repositories may use
+   the same branch name because their refs are independent.
 
 ## Use one predictable topology
 
