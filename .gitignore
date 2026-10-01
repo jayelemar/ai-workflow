@@ -7,12 +7,15 @@
 !/README.md
 !/package.json
 !/pnpm-lock.yaml
+!/.agents/
+!/.agents/skills/
+!/.agents/skills/**
+!/.codex/
+!/.codex/config.toml
 !/.github/
 !/.github/**
 
 # Canonical source directories
-!/config/
-!/config/**
 !/docs/
 !/docs/**
 !/instructions/
@@ -22,10 +25,6 @@
 !/prompts/**
 !/scripts/
 !/scripts/**
-!/templates/
-!/templates/**
-!/wrappers/
-!/wrappers/**
 
 # Project-local and generated workflow data
 /instructions/index.md

@@ -1,76 +1,83 @@
 # AGENTS.md
 
-This file is the behavioral authority for work that uses the `.ai` workflow.
-Prompts own stage contracts and output schemas; routed instructions own reusable
-repository conventions.
+This file is the behavioral authority for work that uses the `.ai` repository.
+
+## Scope
+
+Ordinary requests use normal Codex behavior: inspect, implement, validate, and
+report without creating workflow artifacts.
+
+Read `.ai/.agents/skills/change-workflow/SKILL.md` when the user asks to create
+or follow a saved implementation plan, invokes Goal mode with a plan, requests
+long-running or cross-cutting work, or changes authentication, authorization,
+payments, secrets, migrations, destructive behavior, or another named security
+or trust boundary.
+
+Read `.ai/instructions/index.md`, then only the area instructions routed for the
+changed code. A plan never replaces those repository conventions.
 
 ## Sources of Truth
 
-- The user request and a finalized spec define desired behavior.
+- The user request and living plan when present define desired behavior.
 - The codebase defines current behavior, repository facts, and implementation
-  constraints. Do not infer desired behavior from current code.
-- A saved plan defines execution scope and order, not new behavior.
-- When these sources materially conflict, state the conflict and stop for the
-  missing decision instead of inventing a resolution.
+  constraints. Do not infer desired behavior from existing code.
+- Validation and the actual Git diff define what was implemented.
+- When these sources materially conflict, stop for the missing decision rather
+  than inventing a resolution.
 
-## Global Invariants
+## Working Rules
 
-- Keep changes minimal, traceable to the request, spec, and plan, and inside
-  declared repository ownership. Preserve unrelated work.
-- Inspect evidence before reaching conclusions. Surface assumptions,
-  uncertainty, failures, deviations, and deferred checks explicitly.
-- Prefer readable, strongly typed, maintainable code that follows existing
-  architecture and naming. Avoid duplicate behavior, dead code, speculative
-  logic, needless dependencies, and unrelated refactors.
-- Read `.ai/instructions/index.md`, then only the routed instructions that match
-  the work. Prompts may directly require a canonical shared instruction.
-- Intake is read-only. Every later stage requires its own explicit user
-  invocation. A saved artifact never authorizes the next stage.
-- A finalized spec remains authoritative during planning, execution, and
-  review. Plans and artifacts must not add behavior absent from that spec.
-- New execution uses `plan-manifest@3`. MEDIUM and HIGH completion uses the
-  independent `implementation-review@2` contract in
-  `.ai/prompts/workflow/review-changes.md` and the locked reviewer runtime in
-  `.ai/config/agent-models.toml`. `P0`, `P1`, and `P2` remain blocking; `P3` is
-  advisory.
-- Do not introduce a workflow runner, transition state, event journal, sidecar
-  authority, preview gate, pre-execution approval gate, or automatic delivery
-  action.
+- Inspect evidence before reaching conclusions.
+- Make the smallest change that fully satisfies the request. Do not add
+  persistence, services, coordination, cryptography, dependencies, retries,
+  state, or operational gates without a concrete requirement or demonstrated
+  failure that a simpler existing mechanism cannot satisfy.
+- Preserve unrelated work and existing dirty-tree changes. Keep refactors and
+  cleanup outside the requested scope unless they are required for correctness.
+- Prefer readable, strongly typed code that follows existing architecture and
+  naming.
+- Check implied edge cases, failures, state transitions, and permission
+  boundaries at changed surfaces.
+- Before approving sensitive changes, verify authentication and access control,
+  protect private client, user, firm, credential, and configuration data, and
+  run the relevant tests.
+- Prevent concurrent agents from editing the same file. Use isolated worktrees
+  for genuinely parallel implementation.
+- Do not create workflow runners, transition databases, status sidecars,
+  review fingerprints, detailed event ledgers, or automatic delivery actions.
 
-## Corrective-Deviation Decision
+## Action Boundaries
 
-Use this table as the only decision rule for discoveries during authorized
-execution. Planned task paths are implementation, review, staging, and commit
-boundaries, not immutable security boundaries.
-
-| Decision             | Required evidence                                                                                                                                                                                                                                                                   | Action                                                                                                                                                                                                                                                                                                                   |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Corrective deviation | The change restores behavior already required by the finalized spec; stays in a repository declared by the plan; introduces no new user-visible behavior or unresolved decision; and adds no integration, migration, secret, permission model, destructive behavior, or risk class. | Record the mismatch and reason, make the smallest correction, run every affected task check, include it in the required fresh review, and use a separate corrective commit when the owning HIGH task was already committed. No additional operator approval is required solely because an earlier task path is reopened. |
-| Material discovery   | Any corrective-deviation requirement above is unproven or false.                                                                                                                                                                                                                    | Stop the current stage and return to the explicitly invoked specification or planning stage that owns the changed behavior, dependency, risk, or repository boundary.                                                                                                                                                    |
+- Obtain explicit authority before destructive actions, remote data mutation,
+  credential use beyond the request, or changes outside the declared
+  repositories.
+- Do not commit, push, open a pull request, deploy, release, or send external
+  messages unless the user explicitly requests that action.
+- Never store secrets or credential-bearing output in plans, artifacts, logs,
+  commits, or reports.
 
 ## Validation and Completion
 
-- Required validation must pass before completion. Never silently weaken,
-  skip, or replace a required check.
-- Optional validation that depends on an unavailable external service,
-  environment, credential, device, or operator may be deferred only when the
-  final report names the unverified behavior, risk, reason, and smallest
-  follow-up check.
-- Validate the actual plan-owned diff against the request, finalized spec when
-  present, saved plan, routed instructions, and untouched unrelated files.
-- Apply production-readiness checks only at relevant changed boundaries.
+- Run the smallest sufficient validation that proves the changed behavior.
+- Required acceptance evidence cannot be downgraded, skipped, or called
+  optional. Unavailable required evidence blocks completion.
+- Optional environment, service, device, or operator checks may be deferred
+  only when the final report names the unverified behavior, risk, reason, and
+  smallest follow-up check.
+- Validate the actual changed diff against the request, living plan when
+  present, routed instructions, and preserved unrelated work.
 - Never claim completion without reporting changed scope, validation results,
   deferred optional checks, and known limitations.
 
 ## `.ai` Repository Boundary
 
-- `.ai/` is its own Git repository. Its containing workspace may be either a
-  Git parent checkout that ignores `.ai/` or an unversioned coordination root
-  containing multiple independent repositories.
-- Keep reusable instructions tracked under `.ai/instructions/shared/`. Keep
-  project-local instruction routing and area instructions, specs, plans,
-  artifacts, logs, and workflow-local state ignored and untracked.
+- `.ai/` is its own Git repository. Its containing workspace may be a Git
+  parent checkout that ignores `.ai/` or an unversioned coordination root.
+- Keep reusable source tracked in `.ai/`. Keep project-local instructions and
+  living plans under the existing ignored paths.
+- Existing ignored legacy workflow records must remain untouched unless the
+  user explicitly requests cleanup.
 - When a Git parent checkout exists, do not stage `.ai` files in it.
 
-Version: 2.0
-Last Updated: 2026-08-25
+Version: 3.0
+Last Updated: 2026-09-23

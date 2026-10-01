@@ -1,0 +1,4 @@
+interface:
+  display_name: "Change Workflow"
+  short_description: "Plan and execute repository changes safely"
+  default_prompt: "Use $change-workflow to plan and execute this repository change."

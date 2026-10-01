@@ -104,16 +104,15 @@ Bootstrap mode creates a useful local instruction set in one run:
 
 ## Ownership
 
-- Keep portable reusable policy, including canonical workflow-source guidance,
-  under `.ai/instructions/shared/`.
+- Keep portable reusable application policy under `.ai/instructions/shared/`.
 - Keep project paths, commands, framework choices, and area ownership in
   ignored project-local instructions directly under `.ai/instructions/`.
 - Keep `.ai/instructions/index.md` limited to routing. Route every maintained
   local instruction, including applicable debugging, maintainability, and
   documentation/runbook baselines.
-- Keep canonical workflow-source guidance in
-  `.ai/instructions/shared/ai-workflow.md`. Do not recreate a root-level
-  workflow-instruction exception.
+- Keep canonical implementation workflow guidance in
+  `.ai/.agents/skills/change-workflow/`. Do not duplicate it in shared
+  instructions or root-level prompt files.
 - Git history is the instruction history. Do not create or update instruction
   changelogs.
 

@@ -1,118 +1,107 @@
-# Prompt-Driven AI Workflow
+# AI Repository Guidance
 
-This `.ai` Git repository provides reusable prompts, instructions, templates,
-and self-contained checks. The containing workspace may be a Git parent
-checkout that ignores `.ai/` or an unversioned coordination root containing
-multiple independent repositories.
+This nested `.ai` Git repository provides reusable Codex instructions, one
+progressive change-workflow skill, independent utilities, and self-contained
+health checks. It intentionally does not maintain a workflow state machine.
 
 ## Installation
 
-For a Git parent checkout, use the local `AGENTS.override.md` bootstrap for
-Codex discovery:
+For a Git parent checkout, install the local Codex discovery override:
 
 ```bash
 # From .ai
-pnpm setup:agents-override
+pnpm setup:codex
 
 # From the containing workspace
-pnpm --dir .ai setup:agents-override
+pnpm --dir .ai setup:codex
 ```
 
-It creates this ignored workspace-root file:
-
-```md
-# Local Project AI Instructions
-
-Read and follow `.ai/AGENTS.md` before starting work.
-Use `.ai/instructions/index.md` to load only instructions relevant to the request.
-```
-
-Setup uses the parent's repository-local Git exclude. It refuses conflicting
-parent `AGENTS.md`, legacy `.codex/AGENTS.md`, fallback, or hook configurations.
-In an unversioned coordination root, the utility intentionally stops before
-mutation because no parent Git exclude exists; use an existing operator-managed
-`AGENTS.override.md` with the exact content above. See
-[Codex Agent Setup](docs/codex-agent.md).
+The ignored workspace-root `AGENTS.override.md` directs Codex to read
+`.ai/AGENTS.md` and `.ai/instructions/index.md`. The `.ai` authority then loads
+the nested change-workflow skill only when planning, Goal mode, or a controlled
+boundary requires it. See [Codex Agent Setup](docs/codex-agent.md).
 
 ## Workflow
 
-Each arrow is a separate explicit invocation:
+Use the smallest execution shape that fits the request:
 
 ```text
-LOW:    intake -> saved plan -> execute
-MEDIUM: intake -> finalized spec -> saved plan -> execute
-HIGH:   intake -> finalized spec -> saved plan + handoff -> /goal
+Direct:      request -> implement -> validate -> self-review -> report
+Planned:     one living plan -> /goal -> validate -> self-review -> report
+Controlled:  one living plan -> /goal -> validate -> independent review -> report
 ```
 
-Planning may create missing flow artifacts. Delivery remains an optional later
-invocation. Copy-ready inputs are in [Workflow Usage](docs/workflow-usage.md).
+- Direct work creates no workflow artifact.
+- Planned work uses one living Markdown plan.
+- Controlled work applies only when a named authentication, authorization,
+  payment, secret, migration, destructive, security, or trust contract changes.
+- No path creates a status sidecar, flow map, review state, fingerprint, or plan
+  revision archive.
 
-## Current Contracts
+The canonical workflow is
+[change-workflow](.agents/skills/change-workflow/SKILL.md). Detailed plan and
+review guidance is loaded from its references only when needed. See
+[How the Workflow Works](docs/workflow-usage.md), including how to start the
+next plan.
 
-- Specs: `feature-spec@1`, `bugfix-spec@1`
-- Flow artifacts: `user-journey@1`, `implementation-map@1`
-- Plan: `plan-manifest@3` with backward-compatible lineage,
-  `review-strategy@2`, and a saved review budget
-- MEDIUM review: `implementation-review@2`
-- HIGH handoff: `goal-handoff@2`
-- Worktree preparation report: `worktree-setup@1`, tied to its current plan
+## Repository Instructions
 
-Contract owners:
+`.ai/instructions/index.md` routes application work to the smallest applicable
+set of project and shared instructions. Security, testing, accessibility,
+delivery, and area conventions remain independent of workflow choice.
 
-- [Global invariants](AGENTS.md)
-- [Stage sequence](instructions/shared/workflow-state.md)
-- [Plan structure](templates/plan.template.md)
-- [Formal and manual review loops](prompts/workflow/review-changes.md)
-- [HIGH progress and commit evidence](prompts/workflow/goal-checkpoint.md)
-- [Portable worktree setup](prompts/utilities/prepare-worktree.md)
+## Independent Utilities
 
-Legacy generated artifacts remain untouched and cannot authorize execution or
-resume; create a new plan under the current contracts.
+Utilities under `prompts/utilities/` remain explicitly invoked actions rather
+than workflow stages:
 
-Only root-level files under `.ai/plans/` are active. A replan keeps the stable
-work-item identity, creates the next deterministic `-rN` plan, and archives its
-predecessor as `.ai/artifacts/<predecessor>/superseded-plan.md`. Archived plans
-remain evidence but cannot execute or resume. Existing plans without lineage
-remain compatible revision-1 plans and are not migrated automatically.
+- AGENTS override setup
+- agent-skill discovery
+- instruction management
+- worktree preparation
+- commit organization
+- pull-request preparation
 
-## Repository Boundaries
+None of these utilities authorizes implementation or delivery beyond the
+user's request.
 
-Tracked reusable source is allowlisted by the nested `.ai/.gitignore`.
-Project-local instructions, specs, plans, artifacts, logs, state, dependencies,
-and historical generated files remain ignored and untracked. When a Git parent
-checkout exists, it must not track `.ai/` paths.
+## Legacy Local Records
 
-## Local Cleanup
+Ignored content under `artifacts/`, `logs/`, `plans/`, `specs/`, `state/`, and
+`tmp/` may have been produced by the retired workflow. It is preserved and
+cannot authorize new execution.
 
-Preview before explicitly deleting ignored workflow records only:
+Preview explicit cleanup with:
 
 ```bash
 pnpm cleanup:local
+```
+
+Apply cleanup only when the user has explicitly authorized deletion:
+
+```bash
 pnpm cleanup:local --apply
 ```
 
-Use the canonical utility when cleanup must also remove task worktrees. It
-lists dirty, locked, orphaned, or otherwise questionable task roots and waits
-for an explicit `yes` or `no` before any deletion:
-
-```text
-Run `.ai/prompts/utilities/cleanup-workflow.md`.
-
-Mode: apply
-```
-
-Git branches are retained. Use `Mode: preview` for a read-only inventory.
-
 ## Checks
 
-The package requires Node `>=20.20.2` and pins its pnpm and test toolchain.
+The package requires Node `>=20.20.2` and pins pnpm and the test toolchain.
 
 ```bash
-# From .ai
 pnpm health
 pnpm health:full
+pnpm test:focused
+```
 
-# From any other directory
+The health check can also run by absolute path from another directory:
+
+```bash
 node /absolute/path/to/.ai/scripts/maintenance/health-check.mjs
 node /absolute/path/to/.ai/scripts/maintenance/health-check.mjs --full
 ```
+
+## Repository Boundary
+
+The nested `.ai/.gitignore` allowlists reusable source. Project-local
+instructions and living plans plus legacy local records remain ignored and
+untracked. A Git parent checkout must not track `.ai` paths.

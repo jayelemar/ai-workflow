@@ -1,5 +1,5 @@
-Version: 1.3
-Last Updated: 2026-07-09
+Version: 1.6
+Last Updated: 2026-09-23
 
 # Testing Instructions
 
@@ -27,6 +27,20 @@ Set a shared testing standard that provides high release confidence while minimi
 - Validate observable behavior and business outcomes; avoid tests that mainly assert implementation details, call counts, mock behavior, or framework internals.
 - Treat flaky tests as defects; fix, quarantine, or remove tests that randomly fail, depend on arbitrary waits, depend on unstable external systems, or rely on timing.
 - Classify merge-required validation as fast unit tests, core integration tests, and the smallest critical E2E set.
+- Treat the validation venue as part of the evidence decision: distinguish a
+  focused local command, an existing compatible development runtime, a shared
+  development or staging environment, a fresh application build, and a
+  release pipeline. Recommend the least costly venue that can exercise the
+  same observable invariant with equivalent confidence.
+- Do not introduce a generic operator-confirmation gate for validation. Ask for
+  a decision only when venue choices materially differ in evidence or residual
+  risk and the request or finalized spec does not resolve that choice. Name
+  required operator authority when a venue entails a new deployment,
+  credential use, privileged action, or mutation of shared environment data.
+- Evidence needed to prove a specification acceptance criterion is required,
+  regardless of whether it comes from an automated command, device, operator,
+  deployment, external service, or environment inspection. Only evidence that
+  proves no acceptance criterion or completion invariant may be optional.
 - Move expensive validation to scheduled or dedicated pipelines: full regression suites, browser matrices, visual regression, performance testing, and long-running E2E suites.
 - Before adding a test, state the risk mitigated, whether coverage already exists, the cheapest valid layer, and why future developers will understand the test.
 - Delete obsolete, duplicate, low-signal, removed-feature, or high-maintenance tests instead of preserving test count.
@@ -41,12 +55,41 @@ Set a shared testing standard that provides high release confidence while minimi
 
 ## Validation
 
+- When selecting required validation for a living plan, choose the smallest
+  sufficient set that covers every changed-boundary risk.
+- A broader repository-wide validation command may be a required completion
+  gate only when the request or plan states the distinct risk that focused validation
+  cannot cover; otherwise omit it from required validation.
+- Before saving a validation command, state its observable invariant and
+  expected result, then verify that the exact command can exercise that
+  condition after accounting for relevant environment, configuration, fixture,
+  and external-input sources.
+- For environment-dependent behavior, validate the effective configuration in
+  every required environment at the boundary that consumes it. Mocked or local
+  evidence cannot establish DNS, TLS, operating-system association, deployed
+  configuration, or external-service behavior.
 - Prefer the smallest targeted test command that covers the changed behavior first, then broaden to package-level or workspace-level validation only when the risk requires it.
+- Reuse an existing development runtime or deployed environment instead of
+  creating a fresh build only after verifying that its application version,
+  native/runtime dependencies, effective configuration, and connected
+  services are compatible with the boundary under test. Record that
+  compatibility evidence and the selected venue in the validation result.
+- Do not treat a fresh build and a deployed-environment check as
+  interchangeable: a build proves compilation and packaged configuration,
+  while development or staging evidence proves only the behavior and
+  effective environment boundaries it actually exercises.
 - Use browser or full end-to-end validation only when the change affects a user workflow that cannot be trusted from lower-level tests alone.
+- Require a direct check in a compatible native runtime or on a physical device
+  when acceptance depends on native rendering, frame timing, application
+  lifecycle, platform file URIs, or native upload transport. Mocked,
+  source-only, browser-only, and non-native tests are supplemental; they cannot
+  replace that native evidence.
 - In the Codex sandbox, local E2E that needs Node/Playwright local network access or browser automation may fail for environment reasons before application behavior is exercised; use command-level escalation for those runs instead of broadening validation scope.
 - Do not use `yolo` for local E2E or browser-validation commands; request command-level escalation only for the specific command that needs sandbox bypass.
 - Use full workspace test, build, or lint commands only when changes cross package boundaries or narrower validation cannot cover the risk.
-- If validation is skipped, state the reason, the risk left unverified, and the smallest command that should be run later.
+- If optional validation is skipped, state the reason, the risk left
+  unverified, and the smallest check that should be run later. Missing required
+  evidence is a blocker, not a deferral.
 
 ## Anti-Patterns
 

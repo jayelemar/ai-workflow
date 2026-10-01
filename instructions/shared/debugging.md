@@ -5,28 +5,27 @@ Last Updated: 2026-07-29
 
 ## Purpose
 
-Define the shared debugging baseline for workflow prompts and implementation
-work.
+Define the shared debugging baseline for repository investigation and
+implementation work.
 
 ## Applies To
 
-- Bugfix plans
-- Failed workflow stages
+- Bug investigations and living plans
 - Failed tests, lint, formatting, build, or validation commands
 - Review remediation
-- Prompt behavior that differs from the documented workflow contract
+- Instruction or skill behavior that differs from documented expectations
 
 ## Rules
 
 - Identify the failing observable behavior before changing code.
-- Compare against known-good behavior from the spec, tests, current prompt
-  contract, existing implementation, or prior passing validation.
+- Compare against known-good behavior from the request, living plan, tests,
+  current implementation, or prior passing validation.
 - Form one concrete hypothesis at a time and choose the smallest check that can
   confirm or reject it.
 - Change one cause at a time when practical, then rerun the smallest relevant
   validation.
-- Preserve failure evidence in the plan, required review artifact, or final summary when
-  the workflow prompt requires it.
+- Preserve material failure evidence in the living plan when present or in the
+  final summary.
 - After three consecutive failed fix attempts for the same symptom, STOP and
   report the repeated symptom, attempted fixes, current evidence, and the next
   information needed.

@@ -142,9 +142,9 @@ export const runCleanup = async ({
   const options = parseCleanupArgs(args);
   if (options.help) {
     output("Usage: pnpm cleanup:local [--apply]");
-    output("Without --apply, inspect local workflow records without mutation.");
+    output("Without --apply, inspect legacy local records without mutation.");
     output(
-      "--apply removes every entry under artifacts/, logs/, plans/, specs/, state/, and tmp/.",
+      "--apply removes every legacy entry under artifacts/, logs/, plans/, specs/, state/, and tmp/.",
     );
     return { ok: true };
   }
@@ -165,15 +165,11 @@ export const runCleanup = async ({
     printTargets({ entries: preflight.entries, output, verb: "Would remove" });
     output(`Cleanup preview target count: ${preflight.entries.length}`);
     output("No mutation occurred.");
-    output(
-      "WARNING: --apply removes active specs, plans, and artifacts as well as completed records.",
-    );
+    output("WARNING: --apply permanently removes legacy local records.");
     return { entries: preflight.entries, ok: true };
   }
 
-  output(
-    "WARNING: --apply removes active specs, plans, and artifacts as well as completed records.",
-  );
+  output("WARNING: --apply permanently removes legacy local records.");
   const deletionOrder = [...preflight.entries].sort((left, right) => {
     const depthDifference =
       right.relativePath.split("/").length -

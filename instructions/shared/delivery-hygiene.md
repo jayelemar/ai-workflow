@@ -1,5 +1,5 @@
-Version: 1.0
-Last Updated: 2026-07-18
+Version: 1.1
+Last Updated: 2026-09-23
 
 # Delivery Hygiene Instructions
 
@@ -19,6 +19,9 @@ Keep changes easy to review, deploy, revert, and trace.
 - Rebase, squash, or otherwise clean noisy intermediate history before merge while preserving needed review and incident traceability.
 - Record scope, validation performed, migration effect, compatibility, rollout risk, rollback or recovery path, and deferred checks in the pull request or commit description when applicable.
 - State dependency order and validation order for cross-layer delivery.
+- Add repository-specific trailers only when an existing delivery convention
+  or explicit user request requires them. Do not create a workflow ledger for
+  commit metadata.
 
 ## Placement
 

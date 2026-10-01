@@ -20,29 +20,12 @@ const BOOTSTRAP_SOURCE_PATHS = [
 ];
 
 const CANONICAL_SOURCE_ROOTS = [
+  ".agents/skills",
   ".github",
-  "config",
   "docs",
   "instructions/shared",
   "prompts",
   "scripts",
-  "templates",
-  "wrappers",
-];
-
-const EXPECTED_WRAPPER_PATHS = [
-  "wrappers/README.md",
-  "wrappers/bug-intake-rca.md",
-  "wrappers/create-plan.md",
-  "wrappers/create-pull-request.md",
-  "wrappers/execute-plan.md",
-  "wrappers/feature-intake.md",
-  "wrappers/generate-bugfix-spec.md",
-  "wrappers/generate-feature-spec.md",
-  "wrappers/generate-flow-artifacts.md",
-  "wrappers/goal-checkpoint.md",
-  "wrappers/resume-goal.md",
-  "wrappers/select-workflow.md",
 ];
 
 const LOCAL_ONLY_ROOTS = [
@@ -64,55 +47,31 @@ const LOCAL_IGNORE_PROBES = [
   "tmp/.health-check-probe",
 ];
 
-const FORBIDDEN_PATHS = [
-  "changelogs",
-  "instructions/ai-workflow.md",
-  "prompts/generate-user-flow.md",
-  "prompts/manual-preview.md",
-  "prompts/plan-validator.md",
-  "wrappers/generate-user-flow.md",
-  "scripts/workflow/runner",
-  "scripts/workflow/runner.spec.md",
-  "scripts/workflow/telemetry",
-  "tmp/workflow-runner-test.log",
-];
-
 const FORMAT_ROOTS = [
+  ".agents",
   ".github",
   "AGENTS.md",
   "README.md",
-  "docs/codex-agent.md",
+  "docs",
   "instructions",
   "prompts",
-  "templates",
-  "wrappers",
   "scripts",
   "package.json",
   "pnpm-lock.yaml",
 ];
 
 const REFERENCE_ROOTS = [
+  ".agents",
   "AGENTS.md",
   "README.md",
-  "docs/codex-agent.md",
+  "docs",
   "instructions",
   "prompts",
-  "templates",
-  "wrappers",
 ];
 
 const pathExists = async (targetPath) => {
   try {
     await access(targetPath, constants.F_OK);
-    return true;
-  } catch {
-    return false;
-  }
-};
-
-const pathEntryExists = async (targetPath) => {
-  try {
-    await lstat(targetPath);
     return true;
   } catch {
     return false;
@@ -272,18 +231,6 @@ const validateCanonicalSource = async ({ commandExecutor, root, stderr }) => {
   for (const relativePath of discovered) {
     if (!(await pathIsFile(path.join(root, relativePath)))) {
       stderr(`FAIL required source is missing or not a file: ${relativePath}`);
-      return false;
-    }
-  }
-
-  for (const relativePath of EXPECTED_WRAPPER_PATHS) {
-    const wrapperPath = path.join(root, relativePath);
-    if (!(await pathExists(wrapperPath))) {
-      stderr(`FAIL missing expected wrapper: ${relativePath}`);
-      return false;
-    }
-    if (!(await pathIsFile(wrapperPath))) {
-      stderr(`FAIL expected wrapper is not a file: ${relativePath}`);
       return false;
     }
   }
@@ -577,13 +524,6 @@ export const runHealthCheck = async ({
 
   if (!(await validateNestedRepository({ commandExecutor, root, stderr }))) {
     return { ok: false, root };
-  }
-
-  for (const relativePath of FORBIDDEN_PATHS) {
-    if (await pathEntryExists(path.join(root, relativePath))) {
-      stderr(`FAIL retired workflow path still exists: ${relativePath}`);
-      return { ok: false, root };
-    }
   }
 
   if (!(await validateCanonicalSource({ commandExecutor, root, stderr }))) {

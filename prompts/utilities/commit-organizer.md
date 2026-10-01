@@ -50,10 +50,8 @@ Create one coherent, independently reviewable purpose per commit.
   commit boundaries.
 - Keep dependency order explicit. Do not create an intermediate commit that
   leaves the repository unusable when a practical atomic migration is needed.
-- When organizing a HIGH-GOAL, the saved plan's task boundary overrides general
-  grouping: never combine changes from more than one planned task in a commit.
-- Before staging a HIGH task, verify its required delegation outcomes are
-  recorded. A missing or failed required delegation blocks the commit.
+- When a living plan exists, preserve its independently reviewable task and
+  dependency boundaries without treating the plan as delivery authorization.
 
 ## Proposal Before Mutation
 
@@ -78,7 +76,9 @@ After authorization, process each group in dependency order:
 2. Run `git diff --cached --check`.
 3. Run focused validation appropriate to that group.
 4. Reinspect the staged file list and staged diff.
-5. Create one local conventional commit.
+5. Create one local conventional commit. Add repository-specific trailers only
+   when an existing repository convention or the user explicitly requires
+   them.
 6. Confirm the group left no unintended staged changes.
 
 Never use repository-wide staging unless the proposed group explicitly covers
