@@ -113,7 +113,10 @@ test("worktree preparation stays native, safe, and independent", async () => {
   assert.match(prepare, /Preserve unrelated dirty-source changes/);
   assert.match(prepare, /does not authorize secret copying/i);
   assert.match(prepare, /exact ready-to-copy execution prompt/i);
-  assert.match(prepare, /\/goal Implement <exact-plan-path>/);
+  assert.match(
+    prepare,
+    /\/goal Implement <task-root>\/\.ai\/plans\/<plan-name>\.md\. Use the prepared worktrees reported above for all plan-owned edits\./,
+  );
   assert.doesNotMatch(
     prepare,
     /plan-manifest@|work-status@|worktree-setup@|agent-models\.toml/,
