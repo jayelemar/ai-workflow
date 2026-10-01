@@ -10,6 +10,8 @@
 !/.agents/
 !/.agents/skills/
 !/.agents/skills/**
+!/.codex/
+!/.codex/config.toml
 !/.github/
 !/.github/**
 

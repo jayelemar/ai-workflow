@@ -42,6 +42,20 @@ Use `.ai/instructions/index.md` to load only instructions relevant to the reques
 
 Do not add this local override to a child application repository.
 
+## Agent Model
+
+The repository's `.codex/config.toml` sets `gpt-6.1-sol` as the default model
+for trusted Codex sessions started inside `.ai`. Agents inherit the session
+model unless an explicit role configuration or runtime override selects another.
+
+For sessions started from the containing workspace, set the same `model` in
+that workspace's `.codex/config.toml`, or start Codex with
+`codex --model gpt-6.1-sol`. Restart the session after changing configuration.
+The nested configuration does not apply when the working directory is above
+`.ai`.
+
+Reference: <https://learn.chatgpt.com/docs/config-file/config-advanced>
+
 ## Verification
 
 Start a new Codex session from the containing workspace and ask it to list its
