@@ -46,6 +46,35 @@ changed code. A plan never replaces those repository conventions.
 - Do not create workflow runners, transition databases, status sidecars,
   review fingerprints, detailed event ledgers, or automatic delivery actions.
 
+## Subagent Models and Names
+
+Use sub-agents for bounded research or implementation when delegation materially
+helps, and for required independent reviews. Keep small tasks in the parent.
+Use these role defaults unless the user explicitly requests another runtime:
+
+| Role       | Model         | Reasoning effort | Assignment                         |
+| ---------- | ------------- | ---------------- | ---------------------------------- |
+| `scout`    | `gpt-6-luna`  | `high`           | Read-only exploration and research |
+| `builder`  | `gpt-6.1-sol` | `high`           | Implementation and focused fixes   |
+| `reviewer` | `gpt-6.1-sol` | `xhigh`          | Independent review; no edits       |
+
+- Set the full `model` and `reasoning_effort` explicitly on every spawn; do not
+  inherit the parent's model or reasoning effort for these roles. When using
+  `spawn_agent`, set `fork_turns` to `"4"` so runtime overrides are supported.
+- Set `task_name` to `<role>_<model_family>_<reasoning_effort>_<purpose>`.
+  Derive `model_family` from the model ID's final hyphen-delimited component;
+  use a short lowercase snake-case purpose. Examples:
+  `scout_luna_high_auth_map`, `builder_sol_high_auth_fix`, and
+  `reviewer_sol_xhigh_auth_review`.
+- The name must match the actual requested model and effort, including explicit
+  user overrides. Include the name, full model ID, effort, bounded assignment,
+  and exclusive write ownership, when applicable, in the spawn message.
+- Reuse a scout or builder session only for the same bounded assignment and
+  file ownership. Use a new name when the assignment or runtime changes, and a
+  fresh reviewer for a materially changed review scope.
+- If a requested model, effort, or spawn override is unavailable, report the
+  limitation instead of silently inheriting another runtime or mislabeling it.
+
 ## Action Boundaries
 
 - Obtain explicit authority before destructive actions, remote data mutation,
@@ -79,5 +108,5 @@ changed code. A plan never replaces those repository conventions.
   user explicitly requests cleanup.
 - When a Git parent checkout exists, do not stage `.ai` files in it.
 
-Version: 3.0
-Last Updated: 2026-09-23
+Version: 3.1
+Last Updated: 2026-10-07

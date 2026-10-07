@@ -59,7 +59,8 @@ reviewing, or executing a saved plan.
    persistence, services, coordination, dependencies, retries, state, or
    operational gates without a concrete requirement or demonstrated failure.
 4. Prevent concurrent agents from editing the same file. Use isolated
-   worktrees only for genuinely parallel implementation.
+   worktrees only for genuinely parallel implementation. Follow `AGENTS.md`'s
+   Subagent Models and Names rules for explicit runtime settings and names.
 5. Run the smallest sufficient validation that proves the changed behavior.
    Required acceptance evidence cannot be deferred; disclose optional checks
    that were not run and their residual risk.
@@ -79,7 +80,8 @@ or when the user explicitly requests independent review.
 - Use a fresh follow-up reviewer only when remediation materially changes the
   reviewed boundary.
 - Do not maintain review budgets, authorization tokens, custom fingerprints,
-  or model/session identity rules.
+  or legacy review-state machinery. Use the reviewer runtime and naming rules
+  in `AGENTS.md`.
 
 ## Respect action boundaries
 
