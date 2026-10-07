@@ -44,6 +44,13 @@ branch: feat/<plan-name>
    ask the user to choose `fix` or `feat`. Require a safe Git branch name; do not
    accept another prefix or a different suffix. Separate repositories may use
    the same branch name because their refs are independent.
+6. Derive `<project-title>` from the current workspace directory name,
+   normalized to safe kebab-case. Use the safe `<plan-name>` as the task title.
+   Use `<project-title> <plan-name>` as the tmux session name for one repository;
+   for multiple repositories, use
+   `<project-title> <plan-name>-<repository-id>`. Resolve the project title for
+   each invocation; never hard-code a particular project's name. Quote the
+   complete session name in shell commands so the space is preserved.
 
 ## Use one predictable topology
 
@@ -185,13 +192,23 @@ Dependencies: <not requested or result per repository>
 Validation: <checks passed and exact gaps>
 ```
 
-For a ready task, print this optional two-pane launcher with resolved paths and
-the safe plan name. Start both panes from the task root so the copied plan,
-specs, documentation, and instruction router are directly available:
+For a ready task with one repository, print this optional two-pane launcher with
+the resolved native worktree path and session name derived above. Print the
+command without starting tmux; running it creates the named session. Start both
+panes in the repository worktree, not the task root: the task root is a coordination
+directory inside the source checkout, so a shell started there reports the
+source branch and may direct edits to the wrong checkout. The copied plan,
+specs, documentation, and instruction router remain available at the absolute
+task-root paths reported above:
 
 ```bash
-rtk tmux new-session -s '<plan-name>' -c '<task-root>' \; split-window -t '<plan-name>:' -h -p 67 -c '<task-root>'
+rtk tmux new-session -s '<project-title> <plan-name>' -c '<absolute-target>' \; split-window -t '<project-title> <plan-name>:' -h -p 67 -c '<absolute-target>'
 ```
+
+For multiple repositories, print one launcher per repository using that
+repository's absolute target path for both panes and
+`<project-title> <plan-name>-<repository-id>` as its session name. Never choose
+one repository as the implicit working directory for another.
 
 Then print the exact ready-to-copy execution prompt without running it:
 
