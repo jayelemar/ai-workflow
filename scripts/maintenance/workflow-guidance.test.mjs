@@ -115,6 +115,12 @@ test("worktree preparation stays native, safe, and independent", async () => {
   assert.match(prepare, /exact ready-to-copy execution prompt/i);
   assert.match(
     prepare,
+    /tmux new-session -s '<project-title> <plan-name>' -c '<task-root>'.*split-window.*-c '<task-root>'/,
+  );
+  assert.match(prepare, /exactly one optional two-pane launcher/);
+  assert.doesNotMatch(prepare, /<plan-name>-<repository-id>/);
+  assert.match(
+    prepare,
     /\/goal Implement <task-root>\/\.ai\/plans\/<plan-name>\.md\. Use the prepared worktrees reported above for all plan-owned edits\./,
   );
   assert.doesNotMatch(

@@ -46,11 +46,10 @@ branch: feat/<plan-name>
    the same branch name because their refs are independent.
 6. Derive `<project-title>` from the current workspace directory name,
    normalized to safe kebab-case. Use the safe `<plan-name>` as the task title.
-   Use `<project-title> <plan-name>` as the tmux session name for one repository;
-   for multiple repositories, use
-   `<project-title> <plan-name>-<repository-id>`. Resolve the project title for
-   each invocation; never hard-code a particular project's name. Quote the
-   complete session name in shell commands so the space is preserved.
+   Use `<project-title> <plan-name>` as the single tmux session name for the
+   task, regardless of how many repositories it contains. Resolve the project
+   title for each invocation; never hard-code a particular project's name.
+   Quote the complete session name in shell commands so the space is preserved.
 
 ## Use one predictable topology
 
@@ -192,23 +191,21 @@ Dependencies: <not requested or result per repository>
 Validation: <checks passed and exact gaps>
 ```
 
-For a ready task with one repository, print this optional two-pane launcher with
-the resolved native worktree path and session name derived above. Print the
-command without starting tmux; running it creates the named session. Start both
-panes in the repository worktree, not the task root: the task root is a coordination
-directory inside the source checkout, so a shell started there reports the
-source branch and may direct edits to the wrong checkout. The copied plan,
-specs, documentation, and instruction router remain available at the absolute
-task-root paths reported above:
+For every ready task, print exactly one optional two-pane launcher with the
+session name derived above. Print the command without starting tmux; running it
+creates the named session. Start both panes at `<task-root>`, never inside a
+repository child. This keeps the session at the bounded task root instead of
+opening it too deeply in one repository, and makes every prepared repository
+available by its relative repository ID. Repository commands must explicitly
+select or enter the intended child worktree. The copied plan, specs,
+documentation, and instruction router are available directly from this root:
 
 ```bash
-rtk tmux new-session -s '<project-title> <plan-name>' -c '<absolute-target>' \; split-window -t '<project-title> <plan-name>:' -h -p 67 -c '<absolute-target>'
+rtk tmux new-session -s '<project-title> <plan-name>' -c '<task-root>' \; split-window -t '<project-title> <plan-name>:' -h -p 67 -c '<task-root>'
 ```
 
-For multiple repositories, print one launcher per repository using that
-repository's absolute target path for both panes and
-`<project-title> <plan-name>-<repository-id>` as its session name. Never choose
-one repository as the implicit working directory for another.
+Do not emit separate launchers or repository-suffixed session names for a
+multi-repository task.
 
 Then print the exact ready-to-copy execution prompt without running it:
 
