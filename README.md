@@ -59,6 +59,7 @@ than workflow stages:
 - agent-skill discovery
 - instruction management
 - plan worktree setup
+- selected-plan workflow cleanup
 - commit organization
 - pull-request preparation
 
