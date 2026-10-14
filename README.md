@@ -58,7 +58,7 @@ than workflow stages:
 - AGENTS override setup
 - agent-skill discovery
 - instruction management
-- worktree preparation
+- plan worktree setup
 - commit organization
 - pull-request preparation
 

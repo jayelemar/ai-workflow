@@ -1,4 +1,4 @@
-# Prepare Task Worktrees
+# Set Up Plan Worktrees
 
 Create isolated native Git worktrees for one living plan. This utility prepares
 an execution environment only. It does not implement the plan, start `/goal`,
@@ -9,7 +9,7 @@ the plan from the prepared task root.
 Run only when explicitly invoked:
 
 ```text
-Run .ai/prompts/utilities/prepare-worktree.md, plan: .ai/plans/<plan-name>.md
+Run .ai/prompts/utilities/plan-worktree-setup.md, plan: .ai/plans/<plan-name>.md
 ```
 
 Optional inputs may provide repository mappings, local base refs, or a branch

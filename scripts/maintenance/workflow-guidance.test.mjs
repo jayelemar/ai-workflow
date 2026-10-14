@@ -81,7 +81,7 @@ test("root authority routes planned work to the canonical nested skill", async (
 
 test("delivery utilities use repository evidence without workflow metadata", async () => {
   const [organizer, pullRequest, delivery] = await Promise.all([
-    read("prompts/utilities/commit-organizer.md"),
+    read("prompts/utilities/git-commit.md"),
     read("prompts/utilities/pull-request-creation.md"),
     read("instructions/shared/delivery-hygiene.md"),
   ]);
@@ -93,14 +93,17 @@ test("delivery utilities use repository evidence without workflow metadata", asy
   assert.doesNotMatch(source, /Workflow-(Work-Item|Spec|Plan-Revision)/);
 });
 
-test("worktree preparation stays native, safe, and independent", async () => {
+test("plan worktree setup stays native, safe, and independent", async () => {
   const [prepare, usage, promptIndex] = await Promise.all([
-    read("prompts/utilities/prepare-worktree.md"),
+    read("prompts/utilities/plan-worktree-setup.md"),
     read("docs/workflow-usage.md"),
     read("prompts/README.md"),
   ]);
 
-  assert.match(prepare, /Run \.ai\/prompts\/utilities\/prepare-worktree\.md/);
+  assert.match(
+    prepare,
+    /Run \.ai\/prompts\/utilities\/plan-worktree-setup\.md/,
+  );
   assert.match(
     prepare,
     /<workspace>\/\.worktrees\/<plan-name>\/\<repository-id>/,
@@ -127,6 +130,6 @@ test("worktree preparation stays native, safe, and independent", async () => {
     prepare,
     /plan-manifest@|work-status@|worktree-setup@|agent-models\.toml/,
   );
-  assert.match(usage, /prepare-worktree\.md/);
-  assert.match(promptIndex, /Worktree preparation/);
+  assert.match(usage, /plan-worktree-setup\.md/);
+  assert.match(promptIndex, /Plan worktree setup/);
 });

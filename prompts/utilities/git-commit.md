@@ -1,4 +1,4 @@
-# Commit Organizer
+# Git Commit
 
 Prepare the current repository's unstaged changes as a clean, reviewable local
 commit history.
@@ -32,7 +32,7 @@ Immediately after identifying the current branch, stop when it is one of:
 - `staging`
 - `development`
 
-Ask the user for explicit permission to run the commit-organizer workflow on
+Ask the user for explicit permission to run the Git commit workflow on
 that branch before inspecting changes, staging files, or creating commits. Do
 not continue on a protected branch without that permission.
 

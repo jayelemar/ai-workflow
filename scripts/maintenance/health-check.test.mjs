@@ -66,7 +66,7 @@ const createFixture = async () => {
     ".github/workflows/health.yml",
     "docs/workflow-usage.md",
     "instructions/shared/testing.md",
-    "prompts/utilities/commit-organizer.md",
+    "prompts/utilities/git-commit.md",
     "scripts/check.test.mjs",
   ];
   for (const relativePath of sourcePaths) {
@@ -399,7 +399,7 @@ test("health permits references to ignored temporary workflow data", async () =>
   await withFixture(async (fixture) => {
     await writeFixtureFile(
       fixture.root,
-      "prompts/utilities/commit-organizer.md",
+      "prompts/utilities/git-commit.md",
       "# Prompt\n\nRead `.ai/tmp/worktree-setup.json` when it exists.\n",
     );
     const output = [];
