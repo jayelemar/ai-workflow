@@ -119,22 +119,18 @@ Run this preparation after creating the plan and before starting its Goal. Use
 the execution prompt emitted by the preparation result because it directs
 implementation to the prepared worktrees.
 
-Clean up one or more completed or abandoned plans with the independent
-utility:
+Clean up every plan currently present in the source `.ai/plans/` directory with
+the independent utility:
 
 ```text
 Run `.ai/prompts/utilities/plan-worktree-cleanup.md`.
-
-Plans:
-- `.ai/plans/<first-plan>.md`
-- `.ai/plans/<second-plan>.md`
 ```
 
-It inventories only the explicitly selected plans, their task worktrees, and
-their plan-owned records. Nothing is removed until the operator types the exact
-uppercase response `PROCEED`; `CANCEL` stops without mutation. Git branches and
-all unselected plans are retained. See
-[Clean Selected Plans and Task Worktrees](../prompts/utilities/plan-worktree-cleanup.md).
+It discovers every plan automatically, inventories their task worktrees and
+plan-owned records, and stops when no plans exist. Nothing is removed until the
+operator types the exact uppercase response `PROCEED`; `CANCEL` stops without
+mutation. Git branches and unrelated workflow records are retained. See
+[Clean Plan Worktrees and Records](../prompts/utilities/plan-worktree-cleanup.md).
 
 ## Validation
 

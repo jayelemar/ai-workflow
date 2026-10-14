@@ -134,22 +134,24 @@ test("plan worktree setup stays native, safe, and independent", async () => {
   assert.match(promptIndex, /Plan worktree setup/);
 });
 
-test("workflow cleanup is selected, confirmed, and branch preserving", async () => {
+test("workflow cleanup discovers plans, confirms, and preserves branches", async () => {
   const [cleanup, usage, promptIndex] = await Promise.all([
     read("prompts/utilities/plan-worktree-cleanup.md"),
     read("docs/workflow-usage.md"),
     read("prompts/README.md"),
   ]);
 
-  assert.match(cleanup, /Accept one or more plans/);
-  assert.match(cleanup, /Reject a missing or empty `Plans` list/);
+  assert.match(cleanup, /Discover every plan directly under/);
+  assert.match(cleanup, /Require at least one discovered plan/);
+  assert.match(cleanup, /Do not accept or require explicit plan paths/);
+  assert.doesNotMatch(cleanup, /^Plans:/m);
   assert.match(
     cleanup,
     /Type PROCEED to clean up every plan listed above, or CANCEL to stop\./,
   );
   assert.match(cleanup, /exact uppercase response `PROCEED` or `CANCEL`/);
   assert.match(cleanup, /Retain every Git branch/);
-  assert.match(cleanup, /Preserve every unselected plan and its records/);
+  assert.match(cleanup, /Preserve workflow records that are not owned/);
   assert.match(cleanup, /Do not run the global `cleanup:local` utility/);
   assert.match(usage, /plan-worktree-cleanup\.md/);
   assert.match(promptIndex, /Plan worktree cleanup/);
