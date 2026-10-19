@@ -1,11 +1,104 @@
 # Windows handoff: Focus scoring release
 
-Copy the prompt below into your coding agent on the Windows laptop, with the
-`mobii-ph/new-project` repository open. This document lives in the separate
+The Windows helper build and private upload completed on 2026-10-19. The next
+owner is the Mac release owner; use the verified artifacts below rather than
+repeating the Windows build. The original Windows build prompt is retained as
+a reference. This document lives in the separate
 `jayelemar/ai-workflow` repository under `docs/kelno/`; in the application
 workspace its path is `.ai/docs/kelno/windows-focus-native-helper-handoff.md`.
 
-## Prompt
+## Completed Windows handoff — 2026-10-19
+
+- Exact source: `747b1a41851fda83fe8353cdd86973ebf774f9be`.
+- Detached build worktree: `C:\kelno-focus-helper`.
+- Windows x64, build `26300.9711`; Node.js `24.14.1` (`win32/x64`).
+- Visual Studio 2022 Build Tools installation version `17.14.37806.7`;
+  MSVC compiler `19.44.35229` (toolset directory `14.44.35207`);
+  Windows SDK `10.0.26100.0`, including `audioclientactivationparams.h`.
+- The C++ Build Tools workload and recommended SDK components were installed
+  through the existing Windows `winget` channel.
+- The unchanged helper build script completed in the MSVC x64 Native Tools
+  environment. Its automatic `vswhere` launch encountered a quoting error
+  under Windows Node 24; initializing `VsDevCmd.bat -arch=x64 -host_arch=x64`
+  before running the script avoided that launch path. No source fix was needed.
+- `verifyAudioHelper(..., "win32", "x64", true)` passed against both the build
+  output and the separate handoff copy. The verifier ran under WSL Node after
+  PowerShell stripped quotes from an inline JavaScript argument. The helper
+  itself was compiled by native Windows Node/MSVC.
+- Independently computed executable and C++ source SHA-256 values matched the
+  receipt's `sha256` and `sourceSha256` fields.
+
+Both files remain together in this local directory outside the worktree:
+
+```text
+C:\Users\Jay Termulo\AppData\Local\Kelno\private-handoffs\focus-helper-747b1a4-20261019-135136\
+```
+
+The user explicitly approved uploading the pair. Upload to
+`root@168.144.131.54` (reported hostname `gondoor-dev`) completed at these private
+paths:
+
+```text
+/var/lib/mobii-updates/focus-helper-747b1a4-20261019-135136/KelnoAudioHelper.exe
+/var/lib/mobii-updates/focus-helper-747b1a4-20261019-135136/KelnoAudioHelper.exe.json
+```
+
+The remote directory is root-owned with mode `0700`; both files are root-owned
+with mode `0600`. Remote SHA-256 hashes matched the local hashes:
+
+| Bytes hashed | SHA-256 |
+| --- | --- |
+| `KelnoAudioHelper.exe` | `0e325d97cc33dfbc065701f395fc51f98ad49f21c20d636d44fd9b603d15fabe` |
+| `KelnoAudioHelper.exe.json` | `d37636105af2105cc307f543bc12b82ca9aa2ef623c8e7ee4f9f6b276a66c5b2` |
+| `native/WindowsAudioCapture.cpp` | `7d6ffc6e918f8dc85bbc07604cf09695a9cfecb1fa5440b816997cda35a88315` |
+
+The original dirty checkout was preserved. No application source changes,
+binary commits, release allocation, packaging, publication, API redeployment,
+or paid provider tests were performed as part of this helper handoff.
+
+## Resume on the Mac
+
+Use an isolated checkout of the exact source SHA above and read its desktop
+release instructions. In a terminal on the Mac with existing authorized SSH
+access, download both files into a fresh local directory:
+
+```sh
+KELNO_HELPER_DIR="$(rtk proxy mktemp -d /tmp/kelno-focus-helper-747b1a4.XXXXXX)"
+rtk proxy scp -o BatchMode=yes \
+  root@168.144.131.54:/var/lib/mobii-updates/focus-helper-747b1a4-20261019-135136/KelnoAudioHelper.exe \
+  root@168.144.131.54:/var/lib/mobii-updates/focus-helper-747b1a4-20261019-135136/KelnoAudioHelper.exe.json \
+  "$KELNO_HELPER_DIR/"
+rtk proxy chmod 0600 "$KELNO_HELPER_DIR/KelnoAudioHelper.exe" "$KELNO_HELPER_DIR/KelnoAudioHelper.exe.json"
+rtk proxy shasum -a 256 "$KELNO_HELPER_DIR/KelnoAudioHelper.exe" "$KELNO_HELPER_DIR/KelnoAudioHelper.exe.json"
+export KELNO_WINDOWS_AUDIO_HELPER="$KELNO_HELPER_DIR/KelnoAudioHelper.exe"
+```
+
+Compare both printed hashes with the table above; stop on any mismatch. From
+`apps/desktop` in the pinned checkout, with Node.js 24, run:
+
+```sh
+rtk proxy node --input-type=module -e 'import {verifyAudioHelper} from "./scripts/build-audio-helper.mjs"; await verifyAudioHelper(process.env.KELNO_WINDOWS_AUDIO_HELPER, "win32", "x64", true); console.log("Downloaded Windows x64 helper and source receipt verified");'
+```
+
+Stop if verification fails. Keep this terminal environment for the existing
+cross-Windows packaging command so it receives `KELNO_WINDOWS_AUDIO_HELPER`.
+That variable must point to the downloaded local executable, with its receipt
+beside it. The hash receipt checks source and artifact consistency; it is not a
+digital signature or independent proof of the build host/toolchain.
+
+Combined Windows/Mac packaging and publication remain with the Mac release
+owner under the existing release procedure. Re-read both release states and
+hosted versions before allocating a Nightly number; the original `.36` feed
+observation below is historical and does not establish today's next number.
+
+Windows incident acceptance remains outstanding after publication: three real
+provider score results without blackout on the affected machine, background
+scoring, Focus exit/Escape/reselection behavior, and login/access gating. No
+mock native E2E checks or real-provider acceptance checks were run during this
+helper build. Obtain separate approval before new paid provider runs. Do not
+mark the Focus incident resolved based on helper verification alone.
+
+## Original Windows build prompt (reference)
 
 Resume the Kelno Focus scoring release by building its real Windows x64 native
 audio helper and handing the verified artifacts back to the Mac release owner.
@@ -23,9 +116,10 @@ Complete this work on this Windows laptop. Do not use GitHub CLI.
 - At handoff preparation, all desktop feeds still served `0.1.0-nightly.36`.
   No new Nightly number has been allocated. Publication must re-read current
   state; do not assume the next number is still 37.
-- Combined publication is waiting for `KelnoAudioHelper.exe` and its matching
-  `KelnoAudioHelper.exe.json`, built with MSVC on Windows. The retained older
-  helper does not match the current native source.
+- At original handoff preparation, combined publication was waiting for
+  `KelnoAudioHelper.exe` and its matching `KelnoAudioHelper.exe.json`, built
+  with MSVC on Windows. That helper prerequisite is now complete as recorded
+  above; do not substitute the retained older helper.
 - This prompt authorizes the helper build, verification, and private artifact
   upload using existing SSH access. Leave combined Windows/Mac packaging and
   feed publication to the Mac release owner. Do not commit binaries, modify
