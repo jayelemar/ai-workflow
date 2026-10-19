@@ -20,7 +20,15 @@ test("the change skill uses progressive disclosure", async () => {
   assert.match(skill, /^---\nname: change-workflow\ndescription: .+\n---/);
   assert.match(skill, /references\/plan-template\.md/);
   assert.match(skill, /references\/review-checklist\.md/);
+  assert.match(
+    skill,
+    /generated filename stem must contain 2–4 meaningful\s+words/i,
+  );
   assert.match(plan, /## Tasks and Progress/);
+  assert.match(
+    plan,
+    /generated filename stem must contain 2–4 meaningful\s+words/i,
+  );
   assert.match(plan, /Do not create a second status/);
   assert.match(plan, /ready-to-copy\s+execution prompt/i);
   assert.match(plan, /\/goal Implement <exact-plan-path>/);

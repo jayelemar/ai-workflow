@@ -29,7 +29,11 @@ Read [plan-template.md](references/plan-template.md) whenever creating,
 reviewing, or executing a saved plan.
 
 - Use the path supplied by the user. Otherwise save one safe kebab-case file
-  under `.ai/plans/`.
+  under `.ai/plans/`. The generated filename stem must contain 2–4 meaningful
+  words joined by single hyphens, excluding the `.md` suffix (for example,
+  `admin-login-fix.md`). Prefer the shortest name that remains specific; do not
+  pad it with dates or filler words. If the name already exists, choose a more
+  specific 2–4-word name rather than overwriting the existing plan.
 - Keep goal, boundaries, decisions, tasks, discoveries, validation, and outcome
   in that file.
 - Update the same plan during execution. Do not create a spec, work-status file,
