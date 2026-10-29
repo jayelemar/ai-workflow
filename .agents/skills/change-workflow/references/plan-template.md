@@ -45,6 +45,11 @@ Pending.
 
 ## Planning rules
 
+- When the user does not supply the plan path, save it under `.ai/plans/`. The
+  generated filename stem must contain 2–4 meaningful words joined by single
+  hyphens, excluding the `.md` suffix (for example, `admin-login-fix.md`).
+  Prefer the shortest specific name, omit dates and filler words, and resolve a
+  collision with a different 2–4-word name instead of overwriting a plan.
 - Derive desired behavior from the user; use the codebase only for current
   facts and constraints.
 - Map every required outcome to implementation ownership and sufficient

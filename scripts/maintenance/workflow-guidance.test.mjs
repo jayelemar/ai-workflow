@@ -20,7 +20,15 @@ test("the change skill uses progressive disclosure", async () => {
   assert.match(skill, /^---\nname: change-workflow\ndescription: .+\n---/);
   assert.match(skill, /references\/plan-template\.md/);
   assert.match(skill, /references\/review-checklist\.md/);
+  assert.match(
+    skill,
+    /generated filename stem must contain 2–4 meaningful\s+words/i,
+  );
   assert.match(plan, /## Tasks and Progress/);
+  assert.match(
+    plan,
+    /generated filename stem must contain 2–4 meaningful\s+words/i,
+  );
   assert.match(plan, /Do not create a second status/);
   assert.match(plan, /ready-to-copy\s+execution prompt/i);
   assert.match(plan, /\/goal Implement <exact-plan-path>/);
@@ -81,7 +89,7 @@ test("root authority routes planned work to the canonical nested skill", async (
 
 test("delivery utilities use repository evidence without workflow metadata", async () => {
   const [organizer, pullRequest, delivery] = await Promise.all([
-    read("prompts/utilities/commit-organizer.md"),
+    read("prompts/utilities/git-commit.md"),
     read("prompts/utilities/pull-request-creation.md"),
     read("instructions/shared/delivery-hygiene.md"),
   ]);
@@ -93,14 +101,17 @@ test("delivery utilities use repository evidence without workflow metadata", asy
   assert.doesNotMatch(source, /Workflow-(Work-Item|Spec|Plan-Revision)/);
 });
 
-test("worktree preparation stays native, safe, and independent", async () => {
+test("plan worktree setup stays native, safe, and independent", async () => {
   const [prepare, usage, promptIndex] = await Promise.all([
-    read("prompts/utilities/prepare-worktree.md"),
+    read("prompts/utilities/plan-worktree-setup.md"),
     read("docs/workflow-usage.md"),
     read("prompts/README.md"),
   ]);
 
-  assert.match(prepare, /Run \.ai\/prompts\/utilities\/prepare-worktree\.md/);
+  assert.match(
+    prepare,
+    /Run \.ai\/prompts\/utilities\/plan-worktree-setup\.md/,
+  );
   assert.match(
     prepare,
     /<workspace>\/\.worktrees\/<plan-name>\/\<repository-id>/,
@@ -115,12 +126,41 @@ test("worktree preparation stays native, safe, and independent", async () => {
   assert.match(prepare, /exact ready-to-copy execution prompt/i);
   assert.match(
     prepare,
+    /tmux new-session -s '<project-title> <plan-name>' -c '<task-root>'.*split-window.*-c '<task-root>'/,
+  );
+  assert.match(prepare, /exactly one optional two-pane launcher/);
+  assert.doesNotMatch(prepare, /<plan-name>-<repository-id>/);
+  assert.match(
+    prepare,
     /\/goal Implement <task-root>\/\.ai\/plans\/<plan-name>\.md\. Use the prepared worktrees reported above for all plan-owned edits\./,
   );
   assert.doesNotMatch(
     prepare,
     /plan-manifest@|work-status@|worktree-setup@|agent-models\.toml/,
   );
-  assert.match(usage, /prepare-worktree\.md/);
-  assert.match(promptIndex, /Worktree preparation/);
+  assert.match(usage, /plan-worktree-setup\.md/);
+  assert.match(promptIndex, /Plan worktree setup/);
+});
+
+test("workflow cleanup discovers plans, confirms, and preserves branches", async () => {
+  const [cleanup, usage, promptIndex] = await Promise.all([
+    read("prompts/utilities/plan-worktree-cleanup.md"),
+    read("docs/workflow-usage.md"),
+    read("prompts/README.md"),
+  ]);
+
+  assert.match(cleanup, /Discover every plan directly under/);
+  assert.match(cleanup, /Require at least one discovered plan/);
+  assert.match(cleanup, /Do not accept or require explicit plan paths/);
+  assert.doesNotMatch(cleanup, /^Plans:/m);
+  assert.match(
+    cleanup,
+    /Type PROCEED to clean up every plan listed above, or CANCEL to stop\./,
+  );
+  assert.match(cleanup, /exact uppercase response `PROCEED` or `CANCEL`/);
+  assert.match(cleanup, /Retain every Git branch/);
+  assert.match(cleanup, /Preserve workflow records that are not owned/);
+  assert.match(cleanup, /Do not run the global `cleanup:local` utility/);
+  assert.match(usage, /plan-worktree-cleanup\.md/);
+  assert.match(promptIndex, /Plan worktree cleanup/);
 });

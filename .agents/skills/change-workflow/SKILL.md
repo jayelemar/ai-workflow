@@ -29,7 +29,11 @@ Read [plan-template.md](references/plan-template.md) whenever creating,
 reviewing, or executing a saved plan.
 
 - Use the path supplied by the user. Otherwise save one safe kebab-case file
-  under `.ai/plans/`.
+  under `.ai/plans/`. The generated filename stem must contain 2–4 meaningful
+  words joined by single hyphens, excluding the `.md` suffix (for example,
+  `admin-login-fix.md`). Prefer the shortest name that remains specific; do not
+  pad it with dates or filler words. If the name already exists, choose a more
+  specific 2–4-word name rather than overwriting the existing plan.
 - Keep goal, boundaries, decisions, tasks, discoveries, validation, and outcome
   in that file.
 - Update the same plan during execution. Do not create a spec, work-status file,
@@ -59,7 +63,8 @@ reviewing, or executing a saved plan.
    persistence, services, coordination, dependencies, retries, state, or
    operational gates without a concrete requirement or demonstrated failure.
 4. Prevent concurrent agents from editing the same file. Use isolated
-   worktrees only for genuinely parallel implementation.
+   worktrees only for genuinely parallel implementation. Follow `AGENTS.md`'s
+   Subagent Models and Names rules for explicit runtime settings and names.
 5. Run the smallest sufficient validation that proves the changed behavior.
    Required acceptance evidence cannot be deferred; disclose optional checks
    that were not run and their residual risk.
@@ -79,7 +84,8 @@ or when the user explicitly requests independent review.
 - Use a fresh follow-up reviewer only when remediation materially changes the
   reviewed boundary.
 - Do not maintain review budgets, authorization tokens, custom fingerprints,
-  or model/session identity rules.
+  or legacy review-state machinery. Use the reviewer runtime and naming rules
+  in `AGENTS.md`.
 
 ## Respect action boundaries
 

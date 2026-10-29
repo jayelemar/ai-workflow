@@ -107,17 +107,30 @@ single-agent work does not require a worktree.
 Prepare worktrees for a living plan with the independent utility:
 
 ```text
-Run .ai/prompts/utilities/prepare-worktree.md, plan: .ai/plans/<plan-name>.md
+Run .ai/prompts/utilities/plan-worktree-setup.md, plan: .ai/plans/<plan-name>.md
 ```
 
 It creates native Git worktrees under `.worktrees/<plan-name>/`, preserves the
 source checkout, and prints the exact `/goal` prompt to run afterward. It does
 not execute the plan, copy secrets, create workflow state, or authorize
-delivery. See [Prepare Task Worktrees](../prompts/utilities/prepare-worktree.md).
+delivery. See [Set Up Plan Worktrees](../prompts/utilities/plan-worktree-setup.md).
 
 Run this preparation after creating the plan and before starting its Goal. Use
 the execution prompt emitted by the preparation result because it directs
 implementation to the prepared worktrees.
+
+Clean up every plan currently present in the source `.ai/plans/` directory with
+the independent utility:
+
+```text
+Run `.ai/prompts/utilities/plan-worktree-cleanup.md`.
+```
+
+It discovers every plan automatically, inventories their task worktrees and
+plan-owned records, and stops when no plans exist. Nothing is removed until the
+operator types the exact uppercase response `PROCEED`; `CANCEL` stops without
+mutation. Git branches and unrelated workflow records are retained. See
+[Clean Plan Worktrees and Records](../prompts/utilities/plan-worktree-cleanup.md).
 
 ## Validation
 

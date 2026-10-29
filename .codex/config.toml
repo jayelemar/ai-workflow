@@ -1,1 +1,5 @@
 model = "gpt-6.1-sol"
+
+[agents]
+default_subagent_model = "gpt-6.1-sol"
+default_subagent_reasoning_effort = "high"
