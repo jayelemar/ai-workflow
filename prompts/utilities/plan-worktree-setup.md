@@ -200,8 +200,11 @@ available by its relative repository ID. Repository commands must explicitly
 select or enter the intended child worktree. The copied plan, specs,
 documentation, and instruction router are available directly from this root:
 
+Print this launcher as plain `tmux`, without an `rtk` prefix or another wrapper,
+so it also works on machines where RTK is not installed.
+
 ```bash
-rtk tmux new-session -s '<project-title> <plan-name>' -c '<task-root>' \; split-window -t '<project-title> <plan-name>:' -h -p 67 -c '<task-root>'
+tmux new-session -s '<project-title> <plan-name>' -c '<task-root>' \; split-window -t '<project-title> <plan-name>:' -h -p 67 -c '<task-root>'
 ```
 
 Do not emit separate launchers or repository-suffixed session names for a
