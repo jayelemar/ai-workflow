@@ -46,10 +46,10 @@ paths:
 The remote directory is root-owned with mode `0700`; both files are root-owned
 with mode `0600`. Remote SHA-256 hashes matched the local hashes:
 
-| Bytes hashed | SHA-256 |
-| --- | --- |
-| `KelnoAudioHelper.exe` | `0e325d97cc33dfbc065701f395fc51f98ad49f21c20d636d44fd9b603d15fabe` |
-| `KelnoAudioHelper.exe.json` | `d37636105af2105cc307f543bc12b82ca9aa2ef623c8e7ee4f9f6b276a66c5b2` |
+| Bytes hashed                     | SHA-256                                                            |
+| -------------------------------- | ------------------------------------------------------------------ |
+| `KelnoAudioHelper.exe`           | `0e325d97cc33dfbc065701f395fc51f98ad49f21c20d636d44fd9b603d15fabe` |
+| `KelnoAudioHelper.exe.json`      | `d37636105af2105cc307f543bc12b82ca9aa2ef623c8e7ee4f9f6b276a66c5b2` |
 | `native/WindowsAudioCapture.cpp` | `7d6ffc6e918f8dc85bbc07604cf09695a9cfecb1fa5440b816997cda35a88315` |
 
 The original dirty checkout was preserved. No application source changes,
