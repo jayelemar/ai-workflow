@@ -12,11 +12,12 @@
     "health:full": "node scripts/maintenance/health-check.mjs --full",
     "cleanup:local": "node scripts/maintenance/cleanup-local.mjs",
     "setup:codex": "node scripts/setup/agents-override.mjs",
-    "test:focused": "node --import tsx --test scripts/maintenance/cleanup-local.test.mjs scripts/maintenance/health-check.test.mjs scripts/maintenance/workflow-guidance.test.mjs scripts/setup/agents-override.test.mjs",
+    "test:focused": "node --import tsx --test scripts/maintenance/cleanup-local.test.mjs scripts/maintenance/health-check.test.mjs scripts/maintenance/workflow-guidance.test.mjs scripts/maintenance/worktree-context.test.mjs scripts/setup/agents-override.test.mjs",
     "test:all": "pnpm health:full"
   },
   "devDependencies": {
     "prettier": "3.9.6",
+    "smol-toml": "1.9.0",
     "tsx": "4.23.12"
   }
 }

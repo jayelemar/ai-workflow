@@ -1,5 +1,5 @@
-Version: 1.1
-Last Updated: 2026-07-27
+Version: 1.2
+Last Updated: 2026-11-02
 
 # Migration Instructions
 
@@ -32,7 +32,9 @@ Standardize safe, observable, forward-only production data and schema changes.
 
 - Run the smallest migration and database-contract validation that covers the change.
 - Verify upgrade compatibility, backfill behavior, permission effects, and recovery path before claiming completion.
-- Capture query plans for meaningful query, index, or data-access changes under the performance-observability instruction.
+- For backend migrations, apply `server/performance-observability.md` for
+  applicable query-plan and performance evidence. Validate client-only
+  persistence changes with the applicable platform and local instructions.
 
 ## Anti-Patterns
 

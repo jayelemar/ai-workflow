@@ -1,6 +1,7 @@
 # Workflow Usage
 
-The `.ai` workflow uses normal Codex behavior for routine work and one living
+The `ai-build` skill keeps planning and execution together. The `.ai` workflow
+uses normal Codex behavior for routine work and one living
 plan when planning is useful. It has no classification stage, specification
 stage, status sidecar, plan activation, or review state machine.
 
@@ -42,7 +43,7 @@ a ready-to-copy `/goal` execution prompt. Creating the plan does not start its
 execution automatically.
 
 The canonical template is
-[plan-template.md](../.agents/skills/change-workflow/references/plan-template.md).
+[plan-template.md](../.agents/skills/ai-build/references/plan-template.md).
 
 ## Execute With Goal Mode
 
@@ -125,7 +126,7 @@ writers before review. After remediation, rerun affected validation and use a
 fresh reviewer only when the reviewed boundary materially changed.
 
 The canonical checklist is
-[review-checklist.md](../.agents/skills/change-workflow/references/review-checklist.md).
+[review-checklist.md](../.agents/skills/ai-build/references/review-checklist.md).
 
 ## Parallel Work and Worktrees
 
@@ -133,19 +134,30 @@ Do not let multiple agents edit the same file. Use separate Git worktrees when
 independent implementations genuinely need to run in parallel. Ordinary
 single-agent work does not require a worktree.
 
-Prepare worktrees for a living plan with the independent utility:
+Prepare worktrees for a living plan with the independent AI Worktree Setup skill:
 
 ```text
-Run .ai/prompts/utilities/plan-worktree-setup.md, plan: .ai/plans/<plan-name>.md
+$ai-worktree-setup plan: .ai/plans/<plan-name>.md
 ```
 
 For one repository, `.worktrees/<plan-name>/` is the native Git worktree itself.
 For multiple repositories, it is a coordination directory containing one native
-Git worktree per `<repository-id>/`. Both layouts keep the workflow snapshot,
-documentation snapshot when present, and `AGENTS.override.md` at the task root.
+Git worktree per `<repository-id>/`. Both layouts keep an independent workflow
+clone plus selected local instructions, one selected plan, required documentation,
+and `AGENTS.override.md` at the task root. Existing root `AGENTS.md` guidance is
+also retained and explicitly routed. Canonical source includes all five reusable
+instruction roots: `shared/`, `mobile/`, `desktop/`, `web/`, and `server/` under
+`instructions/`. Selected local context includes the index, all its direct local
+routes, and necessary local references, preserving nested `instructions/local/`
+paths such as `local/architecture.md`. Execution still loads only applicable
+guidance. Unrelated plans/records, dependencies,
+caches, build outputs, and credentials are excluded; complete directory mirrors
+are not the default.
 Setup preserves the source checkout and prints the exact `/goal` prompt to run
 afterward. It does not execute the plan, copy secrets, create workflow state, or authorize
-delivery. See [Set Up Plan Worktrees](../prompts/utilities/plan-worktree-setup.md).
+delivery. See [AI Worktree Setup](../.agents/skills/ai-worktree-setup/SKILL.md).
+Both layouts recreate the four discovery links against their independent local
+`.ai` copy and preserve custom skills.
 
 Run this preparation after creating the plan and before starting its Goal. Use
 the execution prompt emitted by the preparation result because it directs
@@ -154,7 +166,7 @@ implementation to the prepared worktrees.
 Select one plan for cleanup with the independent utility:
 
 ```text
-Run `.ai/prompts/utilities/plan-worktree-cleanup.md`.
+Run `.ai/prompts/worktree-cleanup.md`.
 plan: .ai/plans/<plan-name>.md
 ```
 
@@ -170,7 +182,7 @@ mutation. Reinspection requires renewed confirmation if the inventory changes.
 Unselected plans, their worktrees and records, unrelated entries, and every Git
 branch are retained. Legacy `cleanup:local` excludes the entire `plans/` tree.
 See
-[Clean Plan Worktrees and Records](../prompts/utilities/plan-worktree-cleanup.md).
+[Clean Plan Worktrees and Records](../prompts/worktree-cleanup.md).
 
 ## Validation
 
@@ -185,8 +197,16 @@ Implementation does not authorize committing, pushing, opening a pull request,
 deploying, releasing, or mutating shared external state. Request those actions
 explicitly when needed.
 
-Independent utilities remain available for commit organization and pull-request
-preparation after explicit invocation.
+Use `$ai-commit` or a normal request to organize commits, and `$ai-pr` or a normal
+request to prepare a pull request. The skills retain existing approval rules:
+commit authorization does not need redundant approval; protected branches need
+explicit permission, and PR publication needs approval of the exact preview.
+Their former utility prompts have been removed. None automatically chains
+preparation, implementation, commits, publication, and cleanup.
+
+Explicit local setup through `setup:codex` exposes all four skills from the
+project root; it is separate from implementation. See
+[Codex setup](codex-agent.md) and [request examples](../README.md#skills-and-utilities).
 
 ## Legacy Records
 

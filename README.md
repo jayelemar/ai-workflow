@@ -1,12 +1,12 @@
 # AI Repository Guidance
 
 This nested `.ai` Git repository provides reusable Codex instructions, one
-progressive change-workflow skill, independent utilities, and self-contained
+combined planning/execution skill, independent utility skills, and self-contained
 health checks. It intentionally does not maintain a workflow state machine.
 
 ## Installation
 
-For a Git parent checkout, install the local Codex discovery override:
+For a Git parent checkout, explicitly request local setup, then run:
 
 ```bash
 # From .ai
@@ -16,10 +16,22 @@ pnpm setup:codex
 pnpm --dir .ai setup:codex
 ```
 
-The ignored workspace-root `AGENTS.override.md` directs Codex to read
-`.ai/AGENTS.md` and `.ai/instructions/index.md`. The `.ai` authority then loads
-the nested change-workflow skill only when planning, Goal mode, or a controlled
-boundary requires it. See [Codex Agent Setup](docs/codex-agent.md).
+The ignored workspace-root `AGENTS.override.md` explicitly directs Codex to
+read an existing root `AGENTS.md` first, then `.ai/AGENTS.md` and
+`.ai/instructions/index.md`. Root guidance is preserved. Custom overrides with
+the documented active routing block are retained byte-for-byte; incompatible
+custom targets stop setup with a routing explanation. Only the exact previous
+generated template is upgraded automatically. The `.ai` authority then loads
+the nested `ai-build` skill when planning, Goal mode, or a controlled boundary
+requires it. Setup also creates four relative links under project-root
+`.agents/skills/`, pointing to the same project's canonical `.ai` skills.
+It creates a real project-root `.codex/` directory and copies
+`.ai/.codex/config.toml` there so trusted project-root sessions can load the
+same defaults. Identical existing configs are reused; differing configs are
+preserved and stop setup before writes. Only the generated links, override,
+and config file receive exact local Git excludes; custom skills, other
+`.codex/` files, and tracked ignore files are preserved. Restart Codex after
+setup. See [Codex Agent Setup](docs/codex-agent.md).
 
 ## Workflow
 
@@ -39,7 +51,7 @@ Controlled:  one living plan -> /goal -> validate -> independent review -> repor
   revision archive.
 
 The canonical workflow is
-[change-workflow](.agents/skills/change-workflow/SKILL.md). Detailed plan and
+[AI Build](.agents/skills/ai-build/SKILL.md). Detailed plan and
 review guidance is loaded from its references only when needed. See
 [How the Workflow Works](docs/workflow-usage.md), including how to start the
 next plan.
@@ -47,24 +59,45 @@ next plan.
 ## Repository Instructions
 
 `.ai/instructions/index.md` routes application work to the smallest applicable
-set of project and shared instructions. Security, testing, accessibility,
-delivery, and area conventions remain independent of workflow choice.
+set of project, shared, and application-type instructions. Select guidance by
+affected code and capabilities, combining application types when needed.
+Security, testing, accessibility, delivery, and area conventions remain
+independent of workflow choice.
 
-## Independent Utilities
+Reusable guidance lives under `instructions/shared/`, `instructions/mobile/`,
+`instructions/desktop/`, `instructions/web/`, and `instructions/server/`.
+Shared files hold cross-platform principles; application-type files hold their
+specific requirements. Framework guidance nests under its application type,
+including Electron QA and security review under `instructions/desktop/electron/`.
+Load shared policies only when relevant to the task.
 
-Utilities under `prompts/utilities/` remain explicitly invoked actions rather
-than workflow stages:
+The router and everything under `instructions/local/` remain ignored.
+Workspace architecture belongs in `instructions/local/architecture.md`;
+current desktop paths, commands, and harness conventions belong in
+`instructions/local/desktop.md`. These ordinary instructions are loaded through
+the index and have no skill metadata or native discovery links.
 
-- AGENTS override setup
-- agent-skill discovery
-- instruction management
-- plan worktree setup
-- plan worktree cleanup
-- commit organization
-- pull-request preparation
+## Skills and Utilities
 
-None of these utilities authorizes implementation or delivery beyond the
-user's request.
+Skills support normal matching requests and explicit `$skill-name` invocation:
+
+| Skill                                                          | Purpose                                                            | Example request                                        |
+| -------------------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------ |
+| [AI Build](.agents/skills/ai-build/SKILL.md)                   | Create or execute one living plan, implement, validate, and review | `$ai-build Follow .ai/plans/example-change.md`         |
+| [AI Worktree Setup](.agents/skills/ai-worktree-setup/SKILL.md) | Prepare native worktrees with independent local context            | `$ai-worktree-setup plan: .ai/plans/example-change.md` |
+| [AI Commit](.agents/skills/ai-commit/SKILL.md)                 | Propose coherent groups and create authorized local commits        | `$ai-commit Prepare commits for these changes`         |
+| [AI PR](.agents/skills/ai-pr/SKILL.md)                         | Preview a PR and publish after approval                            | `$ai-pr Base: AUTO`                                    |
+
+For example, “save a plan”, “follow this plan”, “prepare worktrees”, “organize
+these commits”, and “prepare a pull request” select the corresponding skill.
+Selection grants no additional staging, commit, publication, dependency
+installation, or cleanup authority. Skills do not automatically chain actions.
+Worktree preparation, commits, and pull requests use the canonical skills
+directly; their former utility prompts have been removed.
+
+Local setup, read-only skill discovery, instruction management, and selected
+worktree cleanup remain [independent prompts](prompts/README.md). Setup is an
+explicit invocation; it never installs global skills or user configuration.
 
 ## Legacy Local Records
 
@@ -90,10 +123,10 @@ pnpm cleanup:local --apply
 ```
 
 For plan deletion, use the separate
-[plan worktree cleanup utility](prompts/utilities/plan-worktree-cleanup.md):
+[plan worktree cleanup utility](prompts/worktree-cleanup.md):
 
 ```text
-Run `.ai/prompts/utilities/plan-worktree-cleanup.md`.
+Run `.ai/prompts/worktree-cleanup.md`.
 plan: .ai/plans/<plan-name>.md
 ```
 
@@ -107,6 +140,11 @@ every Git branch are preserved.
 ## Checks
 
 The package requires Node `>=20.20.2` and pins pnpm and the test toolchain.
+Health checks require the tracked `.codex/config.toml`, validate its TOML syntax
+and documented field types, and check nested instruction routes for existing
+contained files. These are static checks, not proof of model availability,
+account permissions, or client support. The TOML parser is a pinned development
+dependency; parser errors never print configuration excerpts.
 
 ```bash
 pnpm health
@@ -124,5 +162,7 @@ node /absolute/path/to/.ai/scripts/maintenance/health-check.mjs --full
 ## Repository Boundary
 
 The nested `.ai/.gitignore` allowlists reusable source. Project-local
-instructions and living plans plus legacy local records remain ignored and
-untracked. A Git parent checkout must not track `.ai` paths.
+`instructions/index.md`, all of `instructions/local/`, living plans, and legacy
+local records remain ignored and untracked. The five reusable instruction roots
+remain tracked, including nested platform and framework guidance. A Git parent
+checkout must not track `.ai` paths.

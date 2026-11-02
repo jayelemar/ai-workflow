@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import {
   mkdtemp,
   mkdir,
@@ -21,6 +22,7 @@ import {
 } from "./health-check.mjs";
 
 const bootstrapPaths = [
+  ".codex/config.toml",
   ".gitignore",
   "AGENTS.md",
   "README.md",
@@ -30,7 +32,7 @@ const bootstrapPaths = [
 
 const localInstructionPaths = [
   "instructions/admin.md",
-  "instructions/architecture.md",
+  "instructions/local/architecture.md",
   "instructions/auth.md",
   "instructions/backend.md",
   "instructions/i18n.md",
@@ -59,26 +61,42 @@ const createFixture = async () => {
   await mkdir(path.join(temporaryRoot, ".git"), { recursive: true });
   const sourcePaths = [
     ...bootstrapPaths,
-    ".agents/skills/change-workflow/SKILL.md",
-    ".agents/skills/change-workflow/agents/openai.yaml",
-    ".agents/skills/change-workflow/references/plan-template.md",
-    ".agents/skills/change-workflow/references/review-checklist.md",
+    ".agents/skills/ai-build/SKILL.md",
+    ".agents/skills/ai-build/agents/openai.yaml",
+    ".agents/skills/ai-build/references/plan-template.md",
+    ".agents/skills/ai-build/references/review-checklist.md",
+    ...["ai-worktree-setup", "ai-commit", "ai-pr"].flatMap((name) => [
+      `.agents/skills/${name}/SKILL.md`,
+      `.agents/skills/${name}/agents/openai.yaml`,
+    ]),
+    "prompts/setup-local-codex.md",
+    "prompts/worktree-cleanup.md",
+    "prompts/skill-discovery.md",
+    "prompts/manage-instructions.md",
     ".github/workflows/health.yml",
     "docs/workflow-usage.md",
     "instructions/shared/testing.md",
-    "prompts/utilities/git-commit.md",
+    "instructions/mobile/ui.md",
+    "instructions/desktop/electron/qa.md",
+    "instructions/web/wcag.md",
+    "instructions/server/security.md",
     "scripts/check.test.mjs",
   ];
   for (const relativePath of sourcePaths) {
     await writeFixtureFile(root, relativePath);
   }
+  await writeFixtureFile(
+    root,
+    ".codex/config.toml",
+    'model = "fixture-model"\n[agents]\ndefault_subagent_model = "fixture-model"\ndefault_subagent_reasoning_effort = "high"\n',
+  );
   for (const relativePath of localInstructionPaths) {
     await writeFixtureFile(root, relativePath);
   }
   await writeFixtureFile(
     root,
     "instructions/index.md",
-    "# Index Instructions\n\n## Rules\n\n- Load `shared/testing.md` and `architecture.md` for guidance checks.\n",
+    "# Index Instructions\n\n## Rules\n\n- Load `shared/testing.md`, `local/architecture.md`, `mobile/ui.md`, `desktop/electron/qa.md`, `web/wcag.md`, and `server/security.md` for guidance checks.\n",
   );
   return { root, sourcePaths, temporaryRoot };
 };
@@ -111,6 +129,9 @@ const createCommandExecutor = ({
     candidate === pathspec || candidate.startsWith(`${pathspec}/`);
   const isLocalPath = (candidate) =>
     candidate === "instructions/.health-check-probe.md" ||
+    candidate.startsWith("instructions/local/") ||
+    candidate === "instructions/areas" ||
+    candidate.startsWith("instructions/areas/") ||
     localInstructionPathsWithIndex.has(candidate) ||
     localOnlyRoots.some((localRoot) => isInPathspec(candidate, localRoot));
   const result = (exitCode, stdout = "", stderr = "") => ({
@@ -190,6 +211,125 @@ const withFixture = async (callback) => {
   }
 };
 
+const inspectFixture = async (
+  fixture,
+  commandExecutor = createCommandExecutor(fixture),
+) => {
+  const output = [];
+  const result = await runHealthCheck({
+    commandExecutor,
+    stderr: (message) => output.push(message),
+    stdout: (message) => output.push(message),
+    workflowDirectory: fixture.root,
+  });
+  return { result, output: output.join("\n") };
+};
+
+test("nested routes are required, including wrapped Load bullets", async (t) => {
+  for (const kind of [
+    "missing",
+    "directory",
+    "valid",
+    "escape-link",
+    "escape-directory",
+  ]) {
+    await t.test(kind, () =>
+      withFixture(async (fixture) => {
+        const route = "areas/native-qa.md";
+        await writeFixtureFile(
+          fixture.root,
+          "instructions/index.md",
+          `# Index\n\n## Rules\n\n- Load \`local/architecture.md\` and\n  \`${route}\` for native QA.\n`,
+        );
+        const target = path.join(fixture.root, "instructions", route);
+        await mkdir(path.dirname(target), { recursive: true });
+        if (kind === "directory") await mkdir(target);
+        if (kind === "valid") await writeFile(target, "# QA\n");
+        if (kind.startsWith("escape")) {
+          const outside = path.join(fixture.temporaryRoot, "outside");
+          await mkdir(outside);
+          await writeFile(path.join(outside, "native-qa.md"), "# Outside\n");
+          if (kind === "escape-link")
+            await symlink(path.join(outside, "native-qa.md"), target);
+          else {
+            await rm(path.dirname(target), { recursive: true });
+            await symlink(outside, path.dirname(target));
+          }
+        }
+        const { result, output } = await inspectFixture(fixture);
+        assert.equal(result.ok, kind === "valid", output);
+        if (kind !== "valid") assert.match(output, /instruction route/);
+      }),
+    );
+  }
+});
+
+test("unsafe relative and absolute Markdown routes fail closed", async (t) => {
+  for (const route of [
+    "../outside.md",
+    "areas/../../outside.md",
+    "/tmp/outside.md",
+    "C:\\outside.md",
+  ]) {
+    await t.test(route, () =>
+      withFixture(async (fixture) => {
+        await writeFixtureFile(
+          fixture.root,
+          "instructions/index.md",
+          `# Index\n\n## Rules\n\n- Load \`${route}\` for guidance.\n`,
+        );
+        const { result, output } = await inspectFixture(fixture);
+        assert.equal(result.ok, false, output);
+        assert.match(output, /unsafe instruction route/);
+      }),
+    );
+  }
+});
+
+test("configuration presence, syntax, shape, tracking and allowlisting are checked", async (t) => {
+  const cases = [
+    ["missing", null],
+    ["syntax", 'model = "private-fixture-value\n'],
+    ["duplicate", 'model = "private-fixture-value"\nmodel = "other"\n'],
+    ["shape", "model = 17\n"],
+    ["agents-table", 'model = "fixture"\nagents = "private-fixture-value"\n'],
+    [
+      "agent-fields",
+      'model = "fixture"\n[agents]\ndefault_subagent_model = 1\ndefault_subagent_reasoning_effort = "high"\n',
+    ],
+    ["untracked", undefined],
+    ["ignored", undefined],
+    [
+      "valid",
+      '# comment\nmodel = "unverified-runtime-model"\n[agents]\ndefault_subagent_model = "fixture" # comment\ndefault_subagent_reasoning_effort = "high"\n',
+    ],
+  ];
+  for (const [kind, content] of cases) {
+    await t.test(kind, () =>
+      withFixture(async (fixture) => {
+        const target = path.join(fixture.root, ".codex/config.toml");
+        if (content === null) await unlink(target);
+        else if (content !== undefined) await writeFile(target, content);
+        if (kind === "untracked")
+          fixture.sourcePaths = fixture.sourcePaths.filter(
+            (p) => p !== ".codex/config.toml",
+          );
+        const base = createCommandExecutor(fixture);
+        const executor = async (command) =>
+          kind === "ignored" &&
+          command.args[0] === "check-ignore" &&
+          command.args.at(-1) === ".codex/config.toml"
+            ? { exitCode: 0, stdout: "", stderr: "" }
+            : base(command);
+        const { result, output } = await inspectFixture(fixture, executor);
+        assert.equal(result.ok, kind === "valid", output);
+        assert.doesNotMatch(output, /private-fixture-value/);
+        if (kind !== "valid") assert.match(output, /config\.toml/);
+      }),
+    );
+  }
+});
+
 test("health check accepts only default, full, and help modes", () => {
   assert.deepEqual(parseHealthCheckArgs([]), { full: false });
   assert.deepEqual(parseHealthCheckArgs(["--full"]), { full: true });
@@ -258,11 +398,108 @@ test("health fails when a canonical source is not tracked", async () => {
     assert.match(fixture.output.join("\n"), /canonical source is untracked/);
     assert.match(
       fixture.output.join("\n"),
-      /\.agents\/skills\/change-workflow\/SKILL\.md/,
+      /\.agents\/skills\/ai-build\/SKILL\.md/,
     );
   } finally {
     await rm(fixture.temporaryRoot, { force: true, recursive: true });
   }
+});
+
+// Risk: a new platform directory could silently become ignored local context,
+// allowing missing reusable guidance to pass in a consuming workspace or CI.
+test("platform instructions require tracking and allowlisting", async (t) => {
+  for (const sourcePath of [
+    "instructions/mobile/ui.md",
+    "instructions/desktop/electron/qa.md",
+    "instructions/web/wcag.md",
+    "instructions/server/security.md",
+  ]) {
+    for (const failure of ["untracked", "ignored"]) {
+      await t.test(`${sourcePath}: ${failure}`, () =>
+        withFixture(async (fixture) => {
+          if (failure === "untracked")
+            fixture.sourcePaths = fixture.sourcePaths.filter(
+              (p) => p !== sourcePath,
+            );
+          const base = createCommandExecutor(fixture);
+          const executor = async (command) =>
+            failure === "ignored" &&
+            command.args[0] === "check-ignore" &&
+            command.args.at(-1) === sourcePath
+              ? { exitCode: 0, stdout: "", stderr: "" }
+              : base(command);
+          const { result, output } = await inspectFixture(fixture, executor);
+          assert.equal(result.ok, false, output);
+          assert.ok(output.includes(sourcePath), output);
+          assert.match(
+            output,
+            failure === "untracked"
+              ? /canonical source is untracked/
+              : /canonical source is allowlisted/,
+          );
+        }),
+      );
+    }
+  }
+});
+
+test("nested local instructions must remain ignored and untracked", async (t) => {
+  const localPath = "instructions/local/desktop/native-qa.md";
+  for (const failure of ["tracked", "unignored"]) {
+    await t.test(failure, () =>
+      withFixture(async (fixture) => {
+        await writeFixtureFile(fixture.root, localPath);
+        const executor = createCommandExecutor({
+          ...fixture,
+          localTrackedPaths: failure === "tracked" ? [localPath] : [],
+          ignoredPaths: failure === "unignored" ? [localPath] : [],
+        });
+        const { result, output } = await inspectFixture(fixture, executor);
+        assert.equal(result.ok, false, output);
+        assert.ok(output.includes(localPath), output);
+        assert.match(
+          output,
+          failure === "tracked"
+            ? /local path is tracked/
+            : /local path remains ignored/,
+        );
+      }),
+    );
+  }
+});
+
+test("real ignore rules separate portable platform source from nested local context", async () => {
+  await withFixture(async (fixture) => {
+    await writeFixtureFile(
+      fixture.root,
+      ".gitignore",
+      await readFile(path.join(workflowRoot, ".gitignore"), "utf8"),
+    );
+    const init = spawnSync("git", ["init", "--quiet", fixture.root]);
+    assert.equal(init.status, 0, init.stderr?.toString());
+    for (const [target, expected] of [
+      ["instructions/index.md", 0],
+      ["instructions/local/architecture.md", 0],
+      ["instructions/local/desktop/native-qa.md", 0],
+      ["plans/instruction-platform-separation.md", 0],
+      ["instructions/shared/testing.md", 1],
+      ["instructions/mobile/ui.md", 1],
+      ["instructions/desktop/electron/qa.md", 1],
+      ["instructions/web/wcag.md", 1],
+      ["instructions/server/security.md", 1],
+    ]) {
+      const check = spawnSync(
+        "git",
+        ["check-ignore", "--no-index", "-q", "--", target],
+        { cwd: fixture.root },
+      );
+      assert.equal(
+        check.status,
+        expected,
+        `${target}: ${check.stderr?.toString()}`,
+      );
+    }
+  });
 });
 
 test("health fails when a canonical source is replaced by a directory", async () => {
@@ -343,7 +580,7 @@ test("health fails for a missing relative instruction route", async () => {
     await writeFixtureFile(
       fixture.root,
       "instructions/index.md",
-      "# Index Instructions\n\n## Rules\n\n- Load `shared/missing.md` and `architecture.md` for this fixture.\n",
+      "# Index Instructions\n\n## Rules\n\n- Load `shared/missing.md` and `local/architecture.md` for this fixture.\n",
     );
     const output = [];
     const result = await runHealthCheck({
@@ -361,7 +598,7 @@ test("health fails for a missing relative instruction route", async () => {
 
 test("health validates direct instruction routes from the local index", async () => {
   await withFixture(async (fixture) => {
-    await unlink(path.join(fixture.root, "instructions/architecture.md"));
+    await unlink(path.join(fixture.root, "instructions/local/architecture.md"));
     const output = [];
     const result = await runHealthCheck({
       commandExecutor: createCommandExecutor(fixture),
@@ -378,7 +615,10 @@ test("health validates direct instruction routes from the local index", async ()
 
 test("health fails when an instruction route is a directory", async () => {
   await withFixture(async (fixture) => {
-    const routePath = path.join(fixture.root, "instructions/architecture.md");
+    const routePath = path.join(
+      fixture.root,
+      "instructions/local/architecture.md",
+    );
     await unlink(routePath);
     await mkdir(routePath);
     const output = [];
@@ -399,7 +639,7 @@ test("health permits references to ignored temporary workflow data", async () =>
   await withFixture(async (fixture) => {
     await writeFixtureFile(
       fixture.root,
-      "prompts/utilities/git-commit.md",
+      "prompts/manage-instructions.md",
       "# Prompt\n\nRead `.ai/tmp/worktree-setup.json` when it exists.\n",
     );
     const output = [];
@@ -488,7 +728,7 @@ test("health validates instruction routes wrapped across a Load bullet", async (
     await writeFixtureFile(
       fixture.root,
       "instructions/index.md",
-      "# Index Instructions\n\n## Rules\n\n- Load `architecture.md` for local work and\n  `shared/missing.md` for wrapped workflow checks.\n",
+      "# Index Instructions\n\n## Rules\n\n- Load `local/architecture.md` for local work and\n  `shared/missing.md` for wrapped workflow checks.\n",
     );
     const output = [];
     const result = await runHealthCheck({
@@ -608,7 +848,7 @@ test("CI provisions its ignored instruction index before full health", async () 
   const provisionIndexCommand =
     "cp .github/fixtures/instructions-index.md instructions/index.md";
   const provisionArchitectureCommand =
-    "cp .github/fixtures/instructions-architecture.md instructions/architecture.md";
+    "cp .github/fixtures/instructions-architecture.md instructions/local/architecture.md";
 
   assert.match(workflow, /^\s+working-directory: \.ai$/m);
   assert.match(workflow, /^\s+path: \.ai$/m);
@@ -625,22 +865,25 @@ test("CI provisions its ignored instruction index before full health", async () 
       workflow.indexOf("pnpm health:full"),
   );
   assert.match(instructionIndex, /^## Rules$/m);
-  assert.match(instructionIndex, /`architecture\.md`/);
+  assert.match(instructionIndex, /`local\/architecture\.md`/);
   assert.match(architectureInstruction, /^## Rules$/m);
 
-  const sharedInstructions = await readdir(
-    path.join(workflowRoot, "instructions/shared"),
-  );
-  for (const file of sharedInstructions.filter((file) =>
-    file.endsWith(".md"),
-  )) {
-    const route = `shared/${file}`;
-    assert.match(
-      instructionIndex,
-      new RegExp(route.replace(".", "\\.")),
-      route,
-    );
+  // Every portable instruction, including nested Electron guidance, must be
+  // provisioned by the standalone CI index rather than local workspace files.
+  async function assertRoutes(directory, prefix) {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const route = `${prefix}/${entry.name}`;
+      if (entry.isDirectory())
+        await assertRoutes(path.join(directory, entry.name), route);
+      else if (entry.name.endsWith(".md"))
+        assert.ok(instructionIndex.includes(`\`${route}\``), route);
+    }
   }
+  for (const category of ["shared", "mobile", "desktop", "web", "server"])
+    await assertRoutes(
+      path.join(workflowRoot, "instructions", category),
+      category,
+    );
 });
 
 test("health implementation is read-only and checks canonical skill source", async () => {

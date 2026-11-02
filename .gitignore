@@ -21,6 +21,14 @@
 !/instructions/
 !/instructions/shared/
 !/instructions/shared/**
+!/instructions/mobile/
+!/instructions/mobile/**
+!/instructions/desktop/
+!/instructions/desktop/**
+!/instructions/web/
+!/instructions/web/**
+!/instructions/server/
+!/instructions/server/**
 !/prompts/
 !/prompts/**
 !/scripts/
@@ -29,6 +37,7 @@
 # Project-local and generated workflow data
 /instructions/index.md
 /instructions/*.md
+/instructions/local/
 /artifacts/
 /logs/
 /plans/

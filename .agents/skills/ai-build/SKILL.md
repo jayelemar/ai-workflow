@@ -1,9 +1,9 @@
 ---
-name: change-workflow
+name: ai-build
 description: Plan and execute repository changes with proportional validation and review. Use when the user asks to create or follow a saved implementation plan, invokes Goal mode with a plan, requests long-running or cross-cutting work, or changes authentication, authorization, payments, secrets, migrations, destructive behavior, or another named security or trust boundary. Do not use for bounded, understood direct changes unless one of those controlled boundaries changes.
 ---
 
-# Change Workflow
+# AI Build
 
 Choose the smallest workflow that safely delivers the requested outcome. Keep
 application behavior authoritative in the user request and one living plan when

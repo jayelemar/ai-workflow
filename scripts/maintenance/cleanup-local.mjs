@@ -238,7 +238,7 @@ export const runCleanup = async ({
       "--apply removes every legacy entry under artifacts/, logs/, specs/, state/, and tmp/.",
     );
     output(
-      "The entire plans/ tree is excluded. Use plan-worktree-cleanup.md for selected plan cleanup.",
+      "The entire plans/ tree is excluded. Use worktree-cleanup.md for selected plan cleanup.",
     );
     output(
       "Preflight rejects managed roots reachable through plan links before any mutation.",

@@ -7,7 +7,7 @@ This file is the behavioral authority for work that uses the `.ai` repository.
 Ordinary requests use normal Codex behavior: inspect, implement, validate, and
 report without creating workflow artifacts.
 
-Read `.ai/.agents/skills/change-workflow/SKILL.md` when the user asks to create
+Read `.ai/.agents/skills/ai-build/SKILL.md` when the user asks to create
 or follow a saved implementation plan, invokes Goal mode with a plan, requests
 long-running or cross-cutting work, or changes authentication, authorization,
 payments, secrets, migrations, destructive behavior, or another named security
@@ -108,8 +108,10 @@ Use these role defaults unless the user explicitly requests another runtime:
 
 - `.ai/` is its own Git repository. Its containing workspace may be a Git
   parent checkout that ignores `.ai/` or an unversioned coordination root.
-- Keep reusable source tracked in `.ai/`. Keep project-local instructions and
-  living plans under the existing ignored paths.
+- Keep reusable source tracked in `.ai/`, including `instructions/shared/`,
+  `instructions/mobile/`, `instructions/desktop/`, `instructions/web/`, and
+  `instructions/server/`. Keep `instructions/index.md`, everything under
+  `instructions/local/`, and living plans ignored.
 - Existing ignored legacy workflow records must remain untouched unless the
   user explicitly requests cleanup.
 - When a Git parent checkout exists, do not stage `.ai` files in it.

@@ -10,6 +10,9 @@ importers:
       prettier:
         specifier: 3.9.6
         version: 3.9.6
+      smol-toml:
+        specifier: 1.9.0
+        version: 1.9.0
       tsx:
         specifier: 4.23.12
         version: 4.23.12
@@ -273,6 +276,13 @@ packages:
     engines: { node: ">=14" }
     hasBin: true
 
+  smol-toml@1.9.0:
+    resolution:
+      {
+        integrity: sha512-hpd+HLON7HdZXqYchMM/+LaTTbdK0AU3NngIJ4KVyWbY9bfQqdL9cD+4yf6dUoU2Ap4VsU0JkQi6FxAI1B2mXQ==,
+      }
+    engines: { node: ">= 18" }
+
   tsx@4.23.12:
     resolution:
       {
@@ -393,6 +403,8 @@ snapshots:
     optional: true
 
   prettier@3.9.6: {}
+
+  smol-toml@1.9.0: {}
 
   tsx@4.23.12:
     dependencies:

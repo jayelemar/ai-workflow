@@ -1,0 +1,4 @@
+interface:
+  display_name: "AI Build"
+  short_description: "Plan and execute repository changes safely"
+  default_prompt: "Use $ai-build to plan and execute this repository change."
