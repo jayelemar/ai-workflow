@@ -74,7 +74,6 @@ const createFixture = async () => {
     "prompts/skill-discovery.md",
     "prompts/manage-instructions.md",
     ".github/workflows/health.yml",
-    "docs/workflow-usage.md",
     "instructions/shared/testing.md",
     "instructions/mobile/ui.md",
     "instructions/desktop/electron/qa.md",
