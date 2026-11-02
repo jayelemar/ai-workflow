@@ -145,7 +145,12 @@ For multiple repositories, it is a coordination directory containing one native
 Git worktree per `<repository-id>/`. Both layouts keep an independent workflow
 clone plus selected local instructions, one selected plan, required documentation,
 and `AGENTS.override.md` at the task root. Existing root `AGENTS.md` guidance is
-also retained and explicitly routed. Unrelated plans/records, dependencies,
+also retained and explicitly routed. Canonical source includes all five reusable
+instruction roots: `shared/`, `mobile/`, `desktop/`, `web/`, and `server/` under
+`instructions/`. Selected local context includes the index, all its direct local
+routes, and necessary local references, preserving nested `instructions/local/`
+paths such as `local/architecture.md`. Execution still loads only applicable
+guidance. Unrelated plans/records, dependencies,
 caches, build outputs, and credentials are excluded; complete directory mirrors
 are not the default.
 Setup preserves the source checkout and prints the exact `/goal` prompt to run

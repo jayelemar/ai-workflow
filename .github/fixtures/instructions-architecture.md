@@ -12,7 +12,7 @@ checkout.
 ## Placement
 
 - Keep product- and repository-specific architecture rules in the consuming
-  project's ignored `instructions/architecture.md` file.
+  project's ignored `instructions/local/architecture.md` file.
 
 ## Validation
 

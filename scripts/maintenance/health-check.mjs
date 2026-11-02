@@ -28,11 +28,19 @@ const BOOTSTRAP_SOURCE_PATHS = [
   "pnpm-lock.yaml",
 ];
 
+const CANONICAL_INSTRUCTION_ROOTS = [
+  "instructions/shared",
+  "instructions/mobile",
+  "instructions/desktop",
+  "instructions/web",
+  "instructions/server",
+];
+
 const CANONICAL_SOURCE_ROOTS = [
   ".agents/skills",
   ".github",
   "docs",
-  "instructions/shared",
+  ...CANONICAL_INSTRUCTION_ROOTS,
   "prompts",
   "scripts",
 ];
@@ -48,6 +56,8 @@ const LOCAL_ONLY_ROOTS = [
 
 const LOCAL_IGNORE_PROBES = [
   "instructions/.health-check-probe.md",
+  "instructions/local/.health-check-probe.md",
+  "instructions/local/nested/.health-check-probe.md",
   "plans/.health-check-probe",
   "specs/.health-check-probe",
   "artifacts/.health-check-probe",
@@ -347,7 +357,9 @@ const validateCanonicalSource = async ({ commandExecutor, root, stderr }) => {
 
 const isLocalInstructionPath = (relativePath) =>
   relativePath.startsWith("instructions/") &&
-  !relativePath.startsWith("instructions/shared/");
+  !CANONICAL_INSTRUCTION_ROOTS.some((root) =>
+    relativePath.startsWith(`${root}/`),
+  );
 
 const validateLocalPaths = async ({
   commandExecutor,
@@ -362,8 +374,8 @@ const validateLocalPaths = async ({
     isLocalInstructionPath,
   );
   const routedLocalInstructions = instructionRoutes
-    .filter((route) => !route.startsWith("shared/"))
-    .map((route) => path.posix.join("instructions", route));
+    .map((route) => path.posix.join("instructions", route))
+    .filter(isLocalInstructionPath);
   const ignorePaths = [
     ...new Set([
       ...LOCAL_IGNORE_PROBES,

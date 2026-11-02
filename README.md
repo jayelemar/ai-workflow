@@ -55,13 +55,23 @@ next plan.
 ## Repository Instructions
 
 `.ai/instructions/index.md` routes application work to the smallest applicable
-set of project and shared instructions. Security, testing, accessibility,
-delivery, and area conventions remain independent of workflow choice.
+set of project, shared, and application-type instructions. Select guidance by
+affected code and capabilities, combining application types when needed.
+Security, testing, accessibility, delivery, and area conventions remain
+independent of workflow choice.
 
-Project-specific Electron QA and security guidance are ordinary ignored
-instructions at `instructions/electron-qa.md` and
-`instructions/electron-security-review.md`, loaded through that index. They
-have no skill metadata or native discovery links.
+Reusable guidance lives under `instructions/shared/`, `instructions/mobile/`,
+`instructions/desktop/`, `instructions/web/`, and `instructions/server/`.
+Shared files hold cross-platform principles; application-type files hold their
+specific requirements. Framework guidance nests under its application type,
+including Electron QA and security review under `instructions/desktop/electron/`.
+Load shared policies only when relevant to the task.
+
+The router and everything under `instructions/local/` remain ignored.
+Workspace architecture belongs in `instructions/local/architecture.md`;
+current desktop paths, commands, and harness conventions belong in
+`instructions/local/desktop.md`. These ordinary instructions are loaded through
+the index and have no skill metadata or native discovery links.
 
 ## Skills and Utilities
 
@@ -148,5 +158,7 @@ node /absolute/path/to/.ai/scripts/maintenance/health-check.mjs --full
 ## Repository Boundary
 
 The nested `.ai/.gitignore` allowlists reusable source. Project-local
-instructions and living plans plus legacy local records remain ignored and
-untracked. A Git parent checkout must not track `.ai` paths.
+`instructions/index.md`, all of `instructions/local/`, living plans, and legacy
+local records remain ignored and untracked. The five reusable instruction roots
+remain tracked, including nested platform and framework guidance. A Git parent
+checkout must not track `.ai` paths.

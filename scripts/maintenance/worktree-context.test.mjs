@@ -120,11 +120,16 @@ async function fixture(t, count) {
   await init(workflow);
   const canonical = {
     ".gitignore":
-      "*\n!/.gitignore\n!/AGENTS.md\n!/README.md\n!/.codex/\n!/.codex/config.toml\n!/docs/\n!/docs/**\n!/scripts/\n!/scripts/**\n!/.agents/\n!/.agents/**\n",
+      "*\n!/.gitignore\n!/AGENTS.md\n!/README.md\n!/.codex/\n!/.codex/config.toml\n!/docs/\n!/docs/**\n!/scripts/\n!/scripts/**\n!/.agents/\n!/.agents/**\n!/instructions/\n!/instructions/shared/\n!/instructions/shared/**\n!/instructions/mobile/\n!/instructions/mobile/**\n!/instructions/desktop/\n!/instructions/desktop/**\n!/instructions/web/\n!/instructions/web/**\n!/instructions/server/\n!/instructions/server/**\n",
     "AGENTS.md": "Workflow baseline\n",
     "README.md": "Workflow readme\n",
     ".codex/config.toml": 'model = "fixture"\n',
     "docs/removed.md": "Selected canonical deletion\n",
+    "instructions/shared/testing.md": "Shared test principles\n",
+    "instructions/mobile/ui.md": "Mobile guidance\n",
+    "instructions/desktop/electron/qa.md": "Electron guidance\n",
+    "instructions/web/wcag.md": "Browser guidance\n",
+    "instructions/server/security.md": "Server guidance\n",
   };
   for (const skill of managedSkills) {
     canonical[`.agents/skills/${skill}/SKILL.md`] =
@@ -158,10 +163,10 @@ async function fixture(t, count) {
     );
   const local = {
     ".ai/instructions/index.md":
-      "## Rules\n\n- Load `areas/native-qa.md` for this task.\n",
-    ".ai/instructions/areas/native-qa.md":
+      "## Rules\n\n- Load `local/desktop/native-qa.md`, `shared/testing.md`, `mobile/ui.md`, `desktop/electron/qa.md`, `web/wcag.md`, and `server/security.md` for this fixture.\n",
+    ".ai/instructions/local/desktop/native-qa.md":
       "Read [required guidance](reference.md).\n",
-    ".ai/instructions/areas/reference.md": "Required local guidance\n",
+    ".ai/instructions/local/desktop/reference.md": "Required local guidance\n",
     ".ai/plans/selected-fix.md":
       "# Fix selected behavior\n\nRequired: [design](../../docs/required.md).\n",
     "docs/required.md": "Required external documentation\n",
@@ -177,6 +182,7 @@ async function fixture(t, count) {
     ".ai/artifacts/record",
     ".ai/logs/record",
     ".ai/plans/unrelated-plan.md",
+    ".ai/instructions/local/unrelated.md",
     ".ai/specs/unrelated.md",
     "docs/unrelated.md",
   ];

@@ -5,7 +5,12 @@ Last Updated: 2026-08-13
 
 ## Purpose
 
-Set a framework-agnostic WCAG 2.2 AA baseline for user-facing interfaces.
+Set a framework-agnostic WCAG 2.2 AA baseline for browser and HTML interfaces.
+
+## Applies To
+
+- Browser UI and HTML renderers, including Electron renderer interfaces.
+- Changed semantics, visual presentation, forms, and keyboard interaction.
 
 ## Rules
 

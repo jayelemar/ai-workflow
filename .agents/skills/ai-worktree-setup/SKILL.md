@@ -118,7 +118,11 @@ These lists are preparation inputs, not saved workflow state or a new copier.
   plus explicitly inspected new canonical source files needed by this plan.
   Canonical locations are `.gitignore`, `AGENTS.md`, `README.md`, `package.json`,
   `pnpm-lock.yaml`, `.codex/config.toml`, `.agents/skills/`, `.github/`, `docs/`,
-  `instructions/shared/`, `prompts/`, and `scripts/`. Directory entries here
+  `instructions/shared/`, `instructions/mobile/`, `instructions/desktop/`,
+  `instructions/web/`, `instructions/server/`, `prompts/`, and `scripts/`.
+  Include reusable source across all five instruction roots, including nested
+  platform and framework files; task relevance controls loading, not source
+  availability. Directory entries here
   describe allowed source locations; expand them into regular-file paths,
   never recursive copies. Reject unexpected tracked paths before cloning.
   Include source deletions in the inventory so they remain deleted in the copy.
@@ -131,7 +135,10 @@ These lists are preparation inputs, not saved workflow state or a new copier.
   by that index (including nested routes), their necessary local references,
   and exactly the selected `.ai/plans/<plan-name>.md`. Include all direct index
   routes so the unchanged router remains valid; load only applicable guidance
-  during execution. Canonical shared routes are already in `canonical_files`.
+  during execution. Preserve paths under `instructions/local/`, including
+  `local/architecture.md` and any necessary references it requires. Canonical
+  routes in all five reusable roots are already in `canonical_files`. Select
+  local files individually; do not copy the entire `instructions/local/` tree.
 - `workspace_files`: `AGENTS.override.md`, root `AGENTS.md` when present, and
   individual external docs/specs that the plan or applicable guidance explicitly
   requires. References from custom root guidance/overrides must remain usable.
