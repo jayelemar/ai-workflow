@@ -80,38 +80,15 @@ Start with concise outcomes and actual validation evidence:
   section when that helps reviewers; omit inapplicable sections and filler.
 - Do not add commit SHAs, a commit-by-commit narrative, or an automatic checklist.
 
-Simple change example (illustrative evidence, not commands to run blindly):
+Simple change example (illustrative evidence): “Correct the saved-settings
+label.” Validation: settings tests passed and the label was checked locally.
 
-```markdown
-## Summary
-
-- Correct the settings label shown after saving.
-
-## Validation
-
-- Settings component tests passed; checked the changed label in the local UI.
-```
-
-Sensitive change example (illustrative evidence):
-
-```markdown
-## Summary
-
-- Require session ownership before returning a transcript.
-
-## Validation
-
-- Ownership and cross-tenant API regression tests passed.
-- Required staging session-expiry check has not run: staging is unavailable;
-  required acceptance evidence remains outstanding.
-- Optional browser matrix check deferred; run the existing session flow in
-  supported browsers before expanding rollout.
-
-## Risk and recovery
-
-- Clients using expired sessions receive an access error. No schema migration.
-- Revert the change if valid owners are rejected; retain server access controls.
-```
+Sensitive change example (illustrative evidence): “Require transcript session
+ownership.” Ownership and cross-tenant tests passed. Required staging expiry
+check is blocked by unavailable staging, so acceptance remains outstanding.
+Optional browser matrix is deferred until before wider rollout. Expired sessions
+receive an access error; no migration. Revert if valid owners are rejected,
+retaining server access controls.
 
 ## Proposal Before Mutation
 

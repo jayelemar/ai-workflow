@@ -1,96 +1,43 @@
 # Codex Project Instruction Setup
 
-Codex checks `AGENTS.override.md` before `AGENTS.md` in each workspace directory.
-The nested `.ai/AGENTS.md` remains the authority for this repository and routes
-planned or controlled work to the canonical nested skill.
+Codex checks `AGENTS.override.md` before `AGENTS.md` in each workspace
+directory. The nested [AGENTS.md](../AGENTS.md) owns behavior and routes planned
+or controlled work to `.ai/.agents/skills/ai-build/SKILL.md`.
 
-## Git Parent Checkout
+## Setup and Outputs
 
-From `.ai`, run:
-
-```bash
-pnpm setup:codex
-```
-
-Or from the containing workspace:
+Run only after an explicit local setup request, from the containing Git project:
 
 ```bash
-pnpm --dir .ai setup:codex
+rtk proxy corepack pnpm@10.34.4 --dir .ai setup:codex
 ```
 
-The utility creates an ignored workspace-root `AGENTS.override.md` that directs
-Codex to read root `AGENTS.md` when present, then `.ai/AGENTS.md`, then
-`.ai/instructions/index.md`. This explicit order keeps existing root guidance
-reachable even though Codex discovers the override first. The conditional root
-route also covers root guidance added after setup. `.ai/AGENTS.md` loads the
-canonical `.ai/.agents/skills/ai-build/SKILL.md` when applicable.
+From `.ai`, the equivalent is `rtk proxy corepack pnpm@10.34.4 setup:codex`.
+Delegate mutation and preflight to the [setup utility](../scripts/setup/agents-override.mjs).
+It preserves readable regular root `AGENTS.md` bytes and tracking state, and
+installs these project-local outputs:
 
-The setup utility also adds `/AGENTS.override.md` to the parent repository's
-local Git exclude. It creates real `.agents/` and `.agents/skills/` directories
-when absent and manages exactly these relative links:
+| Output                             | Behavior                                                                                                                         |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `AGENTS.override.md`               | Routes root guidance first when present, then `.ai/AGENTS.md` and `instructions/index.md`; also covers root guidance added later |
+| `.agents/skills/ai-build`          | Relative link to `../../.ai/.agents/skills/ai-build`                                                                             |
+| `.agents/skills/ai-worktree-setup` | Relative link to `../../.ai/.agents/skills/ai-worktree-setup`                                                                    |
+| `.agents/skills/ai-commit`         | Relative link to `../../.ai/.agents/skills/ai-commit`                                                                            |
+| `.agents/skills/ai-pr`             | Relative link to `../../.ai/.agents/skills/ai-pr`                                                                                |
+| `.codex/config.toml`               | Byte-exact snapshot of `.ai/.codex/config.toml`, currently the only canonical config content                                     |
 
-| Project-root link                  | Relative target                              |
-| ---------------------------------- | -------------------------------------------- |
-| `.agents/skills/ai-build`          | `../../.ai/.agents/skills/ai-build`          |
-| `.agents/skills/ai-worktree-setup` | `../../.ai/.agents/skills/ai-worktree-setup` |
-| `.agents/skills/ai-commit`         | `../../.ai/.agents/skills/ai-commit`         |
-| `.agents/skills/ai-pr`             | `../../.ai/.agents/skills/ai-pr`             |
+The `.agents/`, `.agents/skills/`, and `.codex/` containers are real directories.
+Only the override, four generated links, and config file receive exact parent
+local Git excludes. Tracked ignore files, custom skills, other `.codex/` files,
+global/user config, authentication files, and runtime state remain untouched.
+Source skills remain in `.ai`; no global skills are installed. Valid outputs
+are reused unchanged on repeated setup. Source config changes do not update an
+installed snapshot automatically: an identical regular file is reused; a
+differing config stops all setup before writes for explicit resolution.
 
-Each generated link has its own exact local exclude. The utility does not
-ignore the entire `.agents/` tree or alter the tracked parent ignore file.
-Existing custom skills remain visible. Skill source stays inside `.ai`.
+## Active Routing Block
 
-Setup also creates a real project-root `.codex/` directory and copies
-`.ai/.codex/config.toml` into `.codex/config.toml` with the same bytes. The
-canonical `.ai/.codex/` currently contains only that config file. An existing
-byte-identical regular config is reused without rewriting it. A differing
-config stops the whole operation before writes, preserving custom settings
-for explicit resolution. The copied config is a snapshot; source changes do
-not automatically update the installed file. A later run reports a conflict
-if the source and installed config differ.
-
-Only `/.codex/config.toml` is added to the local Git exclude; other project
-`.codex/` files remain visible and unchanged. Setup does not copy user/global
-Codex configuration, authentication files, or runtime state.
-
-Existing root `AGENTS.md` must be a readable regular file;
-setup preserves its bytes and tracking state. Tracked overrides, symbolic links,
-non-regular instruction targets, and defined legacy Codex conflicts are rejected
-before managed writes. Before mutation, the utility validates every source,
-managed output, ancestor, routing requirement, and exclude requirement. Missing
-sources, unsafe ancestors, tracked managed outputs, or conflicting files,
-directories, dangling links, and wrong links stop setup. Only a link to the
-exact expected local source is reusable. Repeated setup leaves valid outputs
-unchanged. Unexpected write failures report partial writes; resolve the
-reported conflict and retry without discarding unrelated content. Unrelated
-Codex configuration remains untouched.
-
-Tracked managed paths are checked case-insensitively on every filesystem.
-Tracked case aliases and their tracked contents block setup even when deleted
-locally; a matching link target does not make a tracked alias reusable.
-Existing outputs and their `.agents/skills/` and `.codex/` ancestors must use the exact
-canonical spelling reported by directory listings. Setup refuses filesystem
-case aliases before writes, preserving them for explicit operator resolution;
-it never broadens excludes or changes `core.ignorecase` to hide them.
-Tracked file or submodule entries at `.agents`, `.agents/skills`, or `.codex` block
-setup, including uninitialized submodules and paths deleted locally. Existing
-output ancestors must belong to the parent repository and contain no nested Git
-metadata; setup never writes into another repository. Custom repositories under
-unrelated skill names are preserved.
-Ownership requires the same canonical Git-directory identity as the parent,
-not just the same reported worktree root. Project roots and output containers
-inside Git metadata are refused, including separately configured Git directories.
-Containment covers both the private Git directory and shared common directory
-of linked worktrees; ordinary linked worktrees outside metadata remain supported.
-
-Native skill discovery from project-root `.agents/skills/`, including symlinked
-folders, is documented in [Build skills](https://learn.chatgpt.com/docs/build-skills).
-No global skills or user configuration are installed. Applying setup to a live
-project requires a separate explicit local setup request.
-
-## Existing Overrides
-
-Custom overrides are preserved byte-for-byte when they contain this exact block
+A custom override is preserved byte-for-byte only when this exact block occurs
 once as active Markdown, outside code fences and enclosing HTML comments:
 
 ```md
@@ -102,99 +49,68 @@ Use `.ai/instructions/index.md` to load only instructions relevant to the reques
 <!-- ai-workflow-routing:end -->
 ```
 
-Custom rules may appear before or after the block. LF and CRLF line endings are
-accepted without rewriting the file. Missing, changed, repeated, or inactive
-blocks fail with a routing explanation before managed outputs change;
-add the documented block while preserving existing guidance, then retry.
+Custom rules may surround the block; LF and CRLF are accepted without rewriting.
+Missing, changed, repeated, or inactive blocks fail before writes. Add the block
+while preserving guidance, then retry. Only the exact previous generated
+template is upgraded automatically; similar prose or added custom text is never
+automatically rewritten. Accepted overrides and exact excludes remain unchanged.
 
-The utility recognizes only the exact previous generated template and upgrades
-it to include this block. Similar prose or a previous template with custom text
-is a custom override and is never automatically rewritten. Repeated setup
-preserves accepted overrides and existing exact local exclude rules.
+## Conflicts and Recovery
 
-## Unversioned Coordination Root
+Whole-operation preflight validates sources, outputs, ancestors, routing, and
+excludes before managed writes. Stop and resolve the reported condition without
+discarding root/custom guidance; never force, merge, or overwrite automatically.
 
-When the containing workspace is not a Git checkout, setup stops before
-mutation because no parent Git exclude can own the override. Use an existing
-operator-managed `AGENTS.override.md` with the exact routing block above,
-preserving any existing root and custom instructions.
+- Reject tracked managed outputs, tracked overrides, symlink/non-regular
+  instruction targets, defined legacy Codex conflicts, missing sources, unsafe
+  ancestors, and conflicting files, directories, dangling or wrong links. Only
+  links to the exact expected local source are reusable.
+- Check tracked managed paths case-insensitively on every filesystem, including
+  tracked aliases and contents deleted locally. A matching target does not make
+  a tracked alias reusable. Existing outputs and ancestors must have directory
+  listings' exact canonical spelling. Preserve case aliases for resolution;
+  never broaden excludes or change `core.ignorecase` to hide them.
+- Reject tracked files or submodules at `.agents`, `.agents/skills`, or `.codex`,
+  including uninitialized submodules and entries deleted locally. Output
+  ancestors must belong to the parent's canonical Git-directory identity and
+  contain no nested Git metadata; reported worktree root alone is insufficient.
+  Preserve unrelated skill repositories.
+- Reject project roots and output containers inside private or shared common
+  Git metadata, including separately configured Git directories. Ordinary
+  linked worktrees outside metadata are supported.
+- Unexpected write failures must report partial writes. Preserve unrelated
+  content, resolve the reported conflict, and retry; non-zero exit is no success.
 
-Do not add this local override to a child application repository.
+Without a Git parent, setup stops before mutation because no parent exclude can
+own the override. Use an existing operator-managed `AGENTS.override.md` with the
+exact block above, preserving root/custom instructions. Do not put it in a child
+application repository.
 
-## Agent Model
+## Runtime and Verification
 
-The repository's `.codex/config.toml` sets `gpt-6.1-sol` as the default model
-for trusted Codex sessions started inside `.ai`. Its `[agents]` defaults set
-otherwise unconfigured sub-agents to `gpt-6.1-sol` with `high` reasoning,
-independently of the parent's effort.
+The repository `.codex/config.toml` sets trusted `.ai` sessions' default model
+to `gpt-6.1-sol` and otherwise unconfigured sub-agents to `gpt-6.1-sol` with
+`high` reasoning, independently of parent effort. Setup copies these defaults
+for containing-workspace sessions; nested config alone does not apply above
+`.ai`. Restart Codex from the trusted project root. Higher-priority runtime and
+command-line settings still apply. See [project configuration](https://learn.chatgpt.com/docs/config-file/config-advanced).
 
-Verified on October 7, 2026 against the
-[official OpenAI model documentation](https://learn.chatgpt.com/docs/models).
-OpenAI recommends GPT-6.1 Sol for complex coding and agentic workflows when
-available to the account and client.
+After setup, verify in a fresh client:
 
-For sessions started from the containing workspace, `setup:codex` installs the
-same configuration at that workspace's `.codex/config.toml`. Restart Codex
-after setup; project config loads only for trusted projects and remains subject
-to higher-priority runtime and command-line settings. The nested configuration
-alone does not apply when the working directory is above `.ai`.
+1. Inspect `/skills`, or read-only app-server `skills/list` with the project
+   root in `cwds` and `forceReload: true`. Confirm `ai-build`,
+   `ai-worktree-setup`, `ai-commit`, and `ai-pr` are enabled and resolve to this
+   project's source. File inspection alone does not prove native discovery.
+2. Ask for instruction sources; verify root-first routing and that planned or
+   controlled work loads `.ai/.agents/skills/ai-build/SKILL.md`.
+3. Prepared worktrees must recreate links against their own independent `.ai`
+   copy in both layouts, never the source workspace.
+4. For delegation, follow [Subagent Models and Names](../AGENTS.md#subagent-models-and-names).
+   Compare accepted spawn arguments with the role/name/model/effort and record
+   only exposed runtime metadata. Requested settings alone do not independently
+   prove the execution model or support in another client.
 
-Reference: <https://learn.chatgpt.com/docs/config-file/config-advanced>
-
-## Subagent Models and Tracking
-
-The [Subagent Models and Names rules](../AGENTS.md#subagent-models-and-names)
-define the scout, builder, and reviewer runtimes. Every role spawn supplies an
-explicit model and reasoning effort, overriding the native `[agents]` defaults
-and the parent session's settings. These instruction-driven assignments also
-apply from the containing workspace when it loads `.ai/AGENTS.md`.
-
-Names include the role, model family, actual effort, and purpose, for example:
-
-- `scout_luna_high_auth_map`
-- `builder_sol_high_auth_fix`
-- `reviewer_sol_xhigh_auth_review`
-
-Changing only a name does not change the runtime. Inspect the exposed
-`spawn_agent` schema before each delegation. In the audited runtime, each role
-spawn sets the matching full `model`, `reasoning_effort`, and
-`fork_turns: "none"`; `"all"` inherits the parent runtime and cannot accept
-overrides. Do not use a numeric fork depth or assume these arguments work in
-every client.
-
-A child without inherited history needs explicit context in its spawn message:
-the repository, relevant instruction paths, bounded assignment, expected
-result, and exclusive write ownership (or no edits for read-only work). If the
-requested model, effort, or spawn override is unavailable, stop that delegation
-and report the limitation instead of silently substituting or inheriting
-another runtime. Do not claim verification in an untested client.
-
-Explicit user runtime choices take precedence and must also appear in the name.
-For example, an explicit Luna/low scout uses `scout_luna_low_auth_map` and supplies
-`model: "gpt-6-luna"` with `reasoning_effort: "low"`.
-
-Reference: <https://learn.chatgpt.com/docs/agent-configuration/subagents>
-
-## Verification
-
-After explicit setup, start a fresh Codex client from the containing workspace.
-Use its skill catalog (`/skills`, or the app-server's read-only `skills/list`
-with the project root in `cwds` and `forceReload: true`) to verify that
-`ai-build`, `ai-worktree-setup`, `ai-commit`, and `ai-pr` are enabled and resolve
-to this project's skill source. File inspection alone does not establish native
-discovery. See [app-server skills](https://learn.chatgpt.com/docs/app-server).
-Ask it to list its instruction sources; for planning or controlled work,
-confirm it loads `.ai/.agents/skills/ai-build/SKILL.md`.
-
-Prepared worktrees recreate links against their own independent `.ai` copy in
-both supported layouts. They must not point back to the source workspace.
-See the [skills and request examples](../README.md#skills-and-utilities).
-
-For a delegated task, inspect the spawn arguments and confirm that its name,
-model, and reasoning effort match the role defaults or the user's explicit
-override. Record the accepted arguments and any runtime metadata actually
-exposed; a requested setting alone is not independent proof of the underlying
-execution model. A parent at `xhigh` must still spawn a default scout at `high`
-and a default builder at `high`.
-
-Reference: <https://learn.chatgpt.com/docs/agent-configuration/agents-md>
+Native discovery and configuration references:
+[skills](https://learn.chatgpt.com/docs/build-skills),
+[app-server skills](https://learn.chatgpt.com/docs/app-server),
+[instruction sources](https://learn.chatgpt.com/docs/agent-configuration/agents-md).
