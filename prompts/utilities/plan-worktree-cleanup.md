@@ -59,8 +59,21 @@ Before asking for confirmation:
 Inspect every discovered plan's task root without mutation. A missing task root
 does not block cleanup of that plan's source records; show it as absent. When a
 task root exists, require it to be contained by `<workspace>/.worktrees/`, to
-be a real directory rather than a symlink, and to match the current preparation
-topology:
+be a real directory rather than a symlink, and to match one of these preparation
+topologies:
+
+Single repository: the task root itself is a registered native Git worktree.
+
+```text
+<task-root>/                # native Git worktree
+├── .git                    # linked-worktree metadata file
+├── .ai/
+├── docs/                   # when copied during preparation
+├── AGENTS.override.md
+└── ...                     # repository files
+```
+
+Multiple repositories (also accept the legacy single-repository child layout):
 
 ```text
 <task-root>/
@@ -69,6 +82,11 @@ topology:
 ├── AGENTS.override.md
 └── <repository-id>/         # one or more native Git worktrees
 ```
+
+Detect the layout from exact Git top-level paths and native worktree
+registrations. A task root inside the source checkout is not itself a worktree
+unless Git resolves that exact path as a registered worktree top level. Treat
+the mirrored `.ai/` as control context, not as another task worktree.
 
 For every repository worktree, resolve and retain its primary repository,
 branch, Git registration, and status. Stop without offering confirmation when
@@ -118,9 +136,12 @@ After confirmed revalidation:
    changes already disclosed in the confirmed inventory.
 2. Retain every Git branch. Never delete, rename, reset, merge, rebase, or prune
    a branch.
-3. After a listed plan's registered worktrees are removed, remove its exact
-   task root, including the copied `.ai/`, `docs/`, `AGENTS.override.md`, and
-   other entries shown in the confirmed inventory.
+3. For a single-repository task, `git worktree remove` removes the task root
+   and its copied control context together. For a coordination directory,
+   after its registered child worktrees are removed, remove its exact task
+   root, including the copied `.ai/`, `docs/`, `AGENTS.override.md`, and other
+   entries shown in the confirmed inventory. An already removed task root is
+   not a cleanup failure.
 4. Do not remove source workflow records until worktree removal succeeds for
    every listed plan. If any worktree or task-root removal fails, stop,
    preserve all remaining source plans and records, and report partial task-root

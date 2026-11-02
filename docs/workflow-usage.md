@@ -110,9 +110,12 @@ Prepare worktrees for a living plan with the independent utility:
 Run .ai/prompts/utilities/plan-worktree-setup.md, plan: .ai/plans/<plan-name>.md
 ```
 
-It creates native Git worktrees under `.worktrees/<plan-name>/`, preserves the
-source checkout, and prints the exact `/goal` prompt to run afterward. It does
-not execute the plan, copy secrets, create workflow state, or authorize
+For one repository, `.worktrees/<plan-name>/` is the native Git worktree itself.
+For multiple repositories, it is a coordination directory containing one native
+Git worktree per `<repository-id>/`. Both layouts keep the workflow snapshot,
+documentation snapshot when present, and `AGENTS.override.md` at the task root.
+Setup preserves the source checkout and prints the exact `/goal` prompt to run
+afterward. It does not execute the plan, copy secrets, create workflow state, or authorize
 delivery. See [Set Up Plan Worktrees](../prompts/utilities/plan-worktree-setup.md).
 
 Run this preparation after creating the plan and before starting its Goal. Use

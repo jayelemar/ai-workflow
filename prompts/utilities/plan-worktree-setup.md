@@ -51,19 +51,36 @@ branch: feat/<plan-name>
    title for each invocation; never hard-code a particular project's name.
    Quote the complete session name in shell commands so the space is preserved.
 
-## Use one predictable topology
+## Choose the topology by repository count
 
-Place every prepared repository under:
+Use `<workspace>/.worktrees/<plan-name>/` as the task root in both layouts.
+
+Single repository: the task root is the native Git worktree. Place the
+repository directly at:
+
+```text
+<workspace>/.worktrees/<plan-name>/
+```
+
+```text
+<task-root>/               # native Git worktree
+├── .git                   # linked-worktree metadata file
+├── .ai/                   # complete mirrored workflow context
+├── docs/                  # complete mirrored documentation, when present
+├── AGENTS.override.md     # portable root instruction entrypoint
+└── ...                    # repository files directly in the task root
+```
+
+Multiple repositories: the task root is a coordination directory. Place each
+prepared repository under:
 
 ```text
 <workspace>/.worktrees/<plan-name>/<repository-id>
 ```
 
-The task root is a coordination directory even when the plan has one
-repository. Keep repository IDs unique and safe. Do not copy repository files
-into the task root outside their native Git worktrees.
-
-The prepared task root must have this control-context layout:
+Keep repository IDs unique and safe, and reserve `.ai`, `docs`, and
+`AGENTS.override.md` for control context. Do not copy repository files into the
+coordination directory outside their native Git worktrees:
 
 ```text
 <task-root>/
@@ -107,6 +124,12 @@ Stop before mutation when:
   it or create a different branch; or
 - source changes overlap the plan's scope.
 
+For a single repository, inspect the chosen base tree before mutation. Stop if
+it contains `.ai` or `AGENTS.override.md`. When source `docs/` must be mirrored,
+also stop if the base contains a `docs` entry. Copying control context must
+never overwrite checkout files.
+Do not create the single-repository task root before `git worktree add`.
+
 Preserve unrelated dirty-source changes. They do not appear in a new worktree;
 state that explicitly before continuing. Never stash, clean, reset, switch,
 merge, rebase, delete, prune, or overwrite source state.
@@ -115,8 +138,22 @@ merge, rebase, delete, prune, or overwrite source state.
 
 After every repository passes preflight:
 
-1. Create the task root and no other coordination state.
-2. Mirror the complete source `.ai/` tree into `<task-root>/.ai/`. Include
+Create the native Git worktrees before copying control context:
+
+1. For a single repository, create only the `.worktrees/` parent if needed and
+   use `<task-root>` as `<target>`. For multiple repositories, create the task
+   root and use `<task-root>/<repository-id>` as each `<target>`.
+2. For each repository, run the equivalent of:
+
+   ```bash
+   rtk git -C '<source-root>' worktree add -b '<branch>' '<target>' '<base-commit>'
+   ```
+
+   Never use `-B`, `--force`, detached worktrees, or branch/path reuse. Verify
+   each target's worktree registration, top-level path, branch name, exact base
+   commit, and clean status before copying control context.
+
+3. Mirror the complete source `.ai/` tree into `<task-root>/.ai/`. Include
    ignored, hidden, generated, artifact, log, wrapper, plan, spec, instruction,
    documentation, and nested-Git entries. Preserve safe symlinks, permissions,
    timestamps, and relative paths. Require the destination to be absent and use
@@ -126,35 +163,30 @@ After every repository passes preflight:
    rtk rsync -aH --safe-links '<workspace>/.ai/' '<task-root>/.ai/'
    ```
 
-3. When `<workspace>/docs/` exists, mirror its complete contents into
+4. When `<workspace>/docs/` exists, mirror its complete contents into
    `<task-root>/docs/` with the same archive-preserving semantics. Include
    ignored, hidden, and untracked documentation files, preserve safe symlinks,
    and require the destination to be absent.
-4. Copy `<workspace>/AGENTS.override.md` to
+5. Copy `<workspace>/AGENTS.override.md` to
    `<task-root>/AGENTS.override.md` as a regular file without changing its
    contents, permissions, or timestamp. Require the destination to be absent.
    Verify that its `.ai/AGENTS.md` reference resolves within the task root.
-5. For each repository, run the equivalent of:
-
-   ```bash
-   rtk git -C '<source-root>' worktree add -b '<branch>' '<target>' '<base-commit>'
-   ```
-
-6. Never use `-B`, `--force`, detached worktrees, or branch/path reuse.
-7. Verify each target's worktree registration, top-level path, branch name,
-   exact base commit, and clean status.
-8. Verify the source and task-root `.ai/` trees are identical with an
+6. Verify the source and task-root `.ai/` trees are identical with an
    archive-preserving checksum dry run equivalent to
    `rtk rsync -aHncni --delete --safe-links`. When `docs/` was copied, verify it
    the same way. Verify `AGENTS.override.md` is byte-for-byte identical without
    printing its contents, and verify the copied plan, required specs and
    documentation, `.ai/AGENTS.md`, and `.ai/instructions/index.md` are readable
    from the task root.
-9. Recheck every source checkout and confirm setup did not change it.
+7. Recheck every prepared checkout. In a single-repository task, copied control
+   context may appear as untracked files; report it explicitly and require all
+   tracked files to remain clean with no other untracked additions. Do not
+   change ignore rules implicitly. Multi-repository child worktrees must remain
+   clean. Recheck every source checkout and confirm setup did not change it.
 
-If a later repository fails after an earlier one was created, keep the partial
-state, identify every created branch and path, and stop. Do not perform automatic
-rollback or cleanup.
+If any creation, copy, or verification step fails after mutation begins, keep
+the partial state, identify every created branch and path, and stop. Do not
+perform automatic rollback or cleanup.
 
 ## Optional environment and dependency setup
 
@@ -193,11 +225,10 @@ Validation: <checks passed and exact gaps>
 
 For every ready task, print exactly one optional two-pane launcher with the
 session name derived above. Print the command without starting tmux; running it
-creates the named session. Start both panes at `<task-root>`, never inside a
-repository child. This keeps the session at the bounded task root instead of
-opening it too deeply in one repository, and makes every prepared repository
-available by its relative repository ID. Repository commands must explicitly
-select or enter the intended child worktree. The copied plan, specs,
+creates the named session. Start both panes at `<task-root>`. For a single
+repository, this is already the checkout, so repository commands run directly
+here. For multiple repositories, commands must explicitly select or enter the
+intended child worktree by its relative repository ID. The copied plan, specs,
 documentation, and instruction router are available directly from this root:
 
 Print this launcher as plain `tmux`, without an `rtk` prefix or another wrapper,
