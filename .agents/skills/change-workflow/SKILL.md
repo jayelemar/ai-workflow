@@ -102,3 +102,24 @@ Before claiming completion, compare the actual diff and validation evidence
 with the request and living plan. Update the plan's outcome when one exists.
 Report changed scope, required validation, deferred optional checks, preserved
 unrelated work, and known limitations.
+
+After successfully implementing a saved plan, end the completion response with
+an optional manual review handoff:
+
+- Provide one ready-to-copy fenced text block beginning with `/review ` followed
+  by the full natural-language review instructions. Include the exact
+  repository/worktree path, the plan path, and the target supported by Git state:
+  uncommitted changes, a specific commit, or changes against a known base.
+  Account for both committed and uncommitted plan-owned work when present.
+- In that same block, instruct the reviewer to check correctness,
+  regressions, plan acceptance criteria, and validation gaps; exclude unrelated
+  pre-existing changes and report actionable findings without editing files.
+- Provide one self-contained prompt per affected repository. Keep the command,
+  target, paths, and review instructions together so one copy and paste supplies
+  the complete request. Do not invent slash-command flags or start the review
+  automatically.
+- This optional follow-up does not replace controlled work's required
+  independent final review, which must be complete before claiming completion.
+- Do not emit this handoff for plan creation, blocked or incomplete
+  implementation, or ordinary direct requests. Keep it in the response; do not
+  create review-state files or add an approval gate.
