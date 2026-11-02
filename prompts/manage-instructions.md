@@ -111,7 +111,7 @@ Bootstrap mode creates a useful local instruction set in one run:
   local instruction, including applicable debugging, maintainability, and
   documentation/runbook baselines.
 - Keep canonical implementation workflow guidance in
-  `.ai/.agents/skills/change-workflow/`. Do not duplicate it in shared
+  `.ai/.agents/skills/ai-build/`. Do not duplicate it in shared
   instructions or root-level prompt files.
 - Git history is the instruction history. Do not create or update instruction
   changelogs.

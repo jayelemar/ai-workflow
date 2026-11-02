@@ -1,21 +1,28 @@
 #!/usr/bin/env node
 
 import { spawn } from "node:child_process";
-import { writeSync } from "node:fs";
+import { constants, writeSync } from "node:fs";
 import {
+  access,
   appendFile,
   lstat,
+  mkdir,
   readdir,
   readFile,
-  stat,
+  readlink,
+  realpath,
+  symlink,
   writeFile,
 } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const OVERRIDE_NAME = "AGENTS.override.md";
-const EXCLUDE_RULE = `/${OVERRIDE_NAME}`;
-const OVERRIDE_CONTENT = `# Local Project AI Instructions
+const SKILL_NAMES = ["ai-build", "ai-worktree-setup", "ai-commit", "ai-pr"];
+const SKILL_PATHS = SKILL_NAMES.map((name) => `.agents/skills/${name}`);
+const MANAGED_PATHS = [OVERRIDE_NAME, ...SKILL_PATHS];
+const EXCLUDE_RULES = MANAGED_PATHS.map((name) => `/${name}`);
+const PREVIOUS_OVERRIDE_CONTENT = `# Local Project AI Instructions
 
 Read and follow \`.ai/AGENTS.md\` before starting work.
 Use \`.ai/instructions/index.md\` to load only instructions relevant to the request.
@@ -31,6 +38,16 @@ Use \`.ai/instructions/index.md\` to load only instructions relevant to the requ
 - Agents may research or review in parallel.
 - Never have more than one agent edit the same file at the same time.
 `;
+const ROUTING_BLOCK = `<!-- ai-workflow-routing:start -->
+
+Read and follow \`AGENTS.md\` first when it exists in this workspace root.
+Then read and follow \`.ai/AGENTS.md\` before starting work.
+Use \`.ai/instructions/index.md\` to load only instructions relevant to the request.
+<!-- ai-workflow-routing:end -->`;
+const OVERRIDE_CONTENT = PREVIOUS_OVERRIDE_CONTENT.replace(
+  "Read and follow `.ai/AGENTS.md` before starting work.\nUse `.ai/instructions/index.md` to load only instructions relevant to the request.",
+  ROUTING_BLOCK,
+);
 const REQUIRED_WORKFLOW_FILES = ["AGENTS.md", "instructions/index.md"];
 
 const workflowRoot = path.resolve(
@@ -39,6 +56,8 @@ const workflowRoot = path.resolve(
 );
 const projectRoot = path.dirname(workflowRoot);
 const overridePath = path.join(projectRoot, OVERRIDE_NAME);
+const completedWrites = [];
+let attemptedWrite;
 const gitEnvironment = Object.fromEntries(
   Object.entries(process.env).filter(
     ([name]) => !name.toUpperCase().startsWith("GIT_"),
@@ -53,12 +72,12 @@ const describeCommandFailure = (result) => {
   return detail || `Git exited with status ${result.exitCode}`;
 };
 
-const runCommand = (command, args, cwd, env) =>
+const runCommand = (command, args, cwd, env, input) =>
   new Promise((resolve) => {
     const child = spawn(command, args, {
       cwd,
       env,
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"],
     });
     let stdout = "";
     let stderr = "";
@@ -72,9 +91,15 @@ const runCommand = (command, args, cwd, env) =>
     child.on("close", (exitCode) =>
       resolve({ exitCode: exitCode ?? 1, stderr, stdout }),
     );
+    if (input !== undefined) {
+      // Early command failures are reported through their exit status.
+      child.stdin.on("error", () => {});
+      child.stdin.end(input);
+    }
   });
 
-const runGit = (args) => runCommand("git", args, projectRoot, gitEnvironment);
+const runGit = (args, input) =>
+  runCommand("git", args, projectRoot, gitEnvironment, input);
 
 const readOptionalFile = async (targetPath, label) => {
   try {
@@ -92,6 +117,18 @@ const entryExists = async (targetPath) => {
   } catch (error) {
     if (error.code === "ENOENT") return false;
     throw error;
+  }
+};
+
+const requireCanonicalSpelling = async (targetPath, label) => {
+  if (!(await entryExists(targetPath))) return;
+  // lstat can resolve a case alias. The directory listing exposes the spelling
+  // Git actually sees, which must match the exact local exclude rules.
+  const entries = await readdir(path.dirname(targetPath));
+  if (!entries.includes(path.basename(targetPath))) {
+    throw new Error(
+      `${label} has a noncanonical filesystem spelling; resolve its case alias explicitly before setup`,
+    );
   }
 };
 
@@ -164,10 +201,6 @@ const fallbackReferencesLegacyAgents = (config) => {
 
 const detectLegacyConflicts = async () => {
   const conflicts = [];
-  const rootAgentsPath = path.join(projectRoot, "AGENTS.md");
-  if (await entryExists(rootAgentsPath))
-    conflicts.push("parent-root AGENTS.md exists");
-
   const codexAgentsPath = path.join(projectRoot, ".codex", "AGENTS.md");
   if (await entryExists(codexAgentsPath))
     conflicts.push(".codex/AGENTS.md exists");
@@ -210,12 +243,73 @@ const detectLegacyConflicts = async () => {
   return conflicts.sort();
 };
 
+const inspectRootInstructions = async () => {
+  const targetPath = path.join(projectRoot, "AGENTS.md");
+  let metadata;
+  try {
+    metadata = await lstat(targetPath);
+  } catch (error) {
+    if (error.code === "ENOENT") return;
+    throw new Error(
+      `could not inspect parent-root AGENTS.md: ${error.message}`,
+    );
+  }
+  if (metadata.isSymbolicLink() || !metadata.isFile()) {
+    throw new Error(
+      "parent-root AGENTS.md must be a readable regular file, not a symbolic link or non-file; resolve it explicitly before setup",
+    );
+  }
+  await readOptionalFile(targetPath, "parent-root AGENTS.md");
+};
+
+const hasExplicitRouting = (content) => {
+  // CRLF is accepted for custom files without rewriting their original bytes.
+  const normalized = content.replaceAll("\r\n", "\n");
+  const lines = normalized.split("\n");
+  const blockLines = ROUTING_BLOCK.split("\n");
+  const start = lines.indexOf(blockLines[0]);
+  if (
+    start < 0 ||
+    normalized.split(blockLines[0]).length !== 2 ||
+    normalized.split(blockLines.at(-1)).length !== 2 ||
+    lines.slice(start, start + blockLines.length).join("\n") !== ROUTING_BLOCK
+  )
+    return false;
+
+  // An example in a fenced code block or comment is not an instruction route.
+  let fence;
+  let inComment = false;
+  for (const line of lines.slice(0, start)) {
+    if (!inComment) {
+      const marker = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
+      if (marker) {
+        if (!fence) fence = marker[1];
+        else if (
+          marker[1][0] === fence[0] &&
+          marker[1].length >= fence.length &&
+          marker[2].trim() === ""
+        )
+          fence = undefined;
+      }
+    }
+    if (!fence) {
+      for (const marker of line.matchAll(/<!--|-->/g)) {
+        inComment = marker[0] === "<!--";
+      }
+    }
+  }
+  return !fence && !inComment;
+};
+
 const inspectOverride = async () => {
+  await requireCanonicalSpelling(overridePath, OVERRIDE_NAME);
   let metadata;
   try {
     metadata = await lstat(overridePath);
   } catch (error) {
-    if (error.code === "ENOENT") return { exists: false };
+    if (error.code === "ENOENT") {
+      return { content: OVERRIDE_CONTENT, status: "created", write: "create" };
+    }
     throw new Error(`could not inspect ${OVERRIDE_NAME}: ${error.message}`);
   }
 
@@ -231,10 +325,22 @@ const inspectOverride = async () => {
   }
 
   const content = await readOptionalFile(overridePath, OVERRIDE_NAME);
-  if (content !== OVERRIDE_CONTENT) {
-    throw new Error(`${OVERRIDE_NAME} has different content; it was preserved`);
+  if (content === PREVIOUS_OVERRIDE_CONTENT) {
+    return {
+      content: OVERRIDE_CONTENT,
+      status: "upgraded previous generated template",
+      write: "upgrade",
+    };
   }
-  return { exists: true };
+  if (content === OVERRIDE_CONTENT) {
+    return { content, status: "already correct" };
+  }
+  if (!hasExplicitRouting(content)) {
+    throw new Error(
+      `${OVERRIDE_NAME} needs one exact active routing block from .ai/docs/codex-agent.md (root AGENTS.md, then .ai/AGENTS.md, then the instruction index); it was preserved. Add the documented block outside code fences and comments, then retry`,
+    );
+  }
+  return { content, status: "custom routing preserved" };
 };
 
 const requireWorkflowFiles = async () => {
@@ -244,11 +350,30 @@ const requireWorkflowFiles = async () => {
     );
   }
 
+  // Node resolves the module URL through symlinks. Inspect the invoked .ai path
+  // too, so a linked checkout cannot silently select another project's setup.
+  const invokedWorkflowRoot = path.resolve(
+    path.dirname(process.argv[1]),
+    "../..",
+  );
+  await requireRealDirectory(invokedWorkflowRoot, "invoked .ai directory");
+  if (
+    (await realpath(invokedWorkflowRoot)) !== (await realpath(workflowRoot))
+  ) {
+    throw new Error(
+      "invoked setup utility resolves outside its local .ai directory",
+    );
+  }
+  await requireRealDirectory(workflowRoot, ".ai");
+  await requireRealDirectory(
+    path.join(workflowRoot, "instructions"),
+    ".ai/instructions",
+  );
   for (const relativePath of REQUIRED_WORKFLOW_FILES) {
     const targetPath = path.join(workflowRoot, relativePath);
     let metadata;
     try {
-      metadata = await stat(targetPath);
+      metadata = await lstat(targetPath);
     } catch (error) {
       if (error.code === "ENOENT") {
         throw new Error(
@@ -259,7 +384,7 @@ const requireWorkflowFiles = async () => {
         `could not inspect required workflow file .ai/${relativePath}: ${error.message}`,
       );
     }
-    if (!metadata.isFile()) {
+    if (metadata.isSymbolicLink() || !metadata.isFile()) {
       throw new Error(
         `required workflow file is not a regular file: .ai/${relativePath}`,
       );
@@ -267,7 +392,163 @@ const requireWorkflowFiles = async () => {
     if (metadata.size === 0) {
       throw new Error(`required workflow file is empty: .ai/${relativePath}`);
     }
+    await readOptionalFile(
+      targetPath,
+      `required workflow file .ai/${relativePath}`,
+    );
   }
+};
+
+const requireRealDirectory = async (targetPath, label) => {
+  let metadata;
+  try {
+    metadata = await lstat(targetPath);
+  } catch (error) {
+    throw new Error(`could not inspect ${label}: ${error.message}`);
+  }
+  if (metadata.isSymbolicLink() || !metadata.isDirectory()) {
+    throw new Error(
+      `${label} must be a real directory, not a symbolic link or non-directory`,
+    );
+  }
+};
+
+const requireOutsideGitDirectory = (directory, gitDirectory, label) => {
+  const relative = path.relative(gitDirectory, directory);
+  if (
+    relative === "" ||
+    (relative !== ".." &&
+      !relative.startsWith(`..${path.sep}`) &&
+      !path.isAbsolute(relative))
+  ) {
+    throw new Error(
+      `${label} is inside Git metadata; resolve this repository boundary explicitly before setup`,
+    );
+  }
+};
+
+const requireProjectRepository = async (targetPath, label, repository) => {
+  // A gitfile can point back to the parent while Git still treats this folder
+  // as a nested repository during status/ignore traversal.
+  if (await entryExists(path.join(targetPath, ".git"))) {
+    throw new Error(
+      `${label} contains nested Git metadata; resolve this repository boundary explicitly before setup`,
+    );
+  }
+  const directory = await realpath(targetPath);
+  for (const metadataRoot of [repository.gitDirectory, repository.commonRoot]) {
+    requireOutsideGitDirectory(directory, metadataRoot, label);
+  }
+  const result = await runCommand(
+    "git",
+    ["rev-parse", "--show-toplevel"],
+    targetPath,
+    gitEnvironment,
+  );
+  if (result.exitCode !== 0 || !result.stdout.trim()) {
+    throw new Error(`could not verify repository ownership for ${label}`);
+  }
+  if (path.resolve(result.stdout.trim()) !== projectRoot) {
+    throw new Error(
+      `${label} belongs to a different Git repository; resolve it explicitly before setup`,
+    );
+  }
+  const gitDirResult = await runCommand(
+    "git",
+    ["rev-parse", "--absolute-git-dir"],
+    targetPath,
+    gitEnvironment,
+  );
+  if (gitDirResult.exitCode !== 0 || !gitDirResult.stdout.trim()) {
+    throw new Error(`could not verify repository ownership for ${label}`);
+  }
+  if (
+    (await realpath(gitDirResult.stdout.trim())) !== repository.gitDirectory
+  ) {
+    throw new Error(
+      `${label} belongs to a different Git repository; resolve it explicitly before setup`,
+    );
+  }
+};
+
+const inspectSkills = async (repository) => {
+  for (const relativePath of [".agents", ".agents/skills"]) {
+    await requireRealDirectory(
+      path.join(workflowRoot, relativePath),
+      `.ai/${relativePath}`,
+    );
+  }
+  const sourceRoot = await realpath(workflowRoot);
+  for (const name of SKILL_NAMES) {
+    const source = path.join(workflowRoot, ".agents/skills", name);
+    await requireRealDirectory(
+      source,
+      `required skill source .ai/.agents/skills/${name}`,
+    );
+    const entry = path.join(source, "SKILL.md");
+    let metadata;
+    try {
+      metadata = await lstat(entry);
+    } catch (error) {
+      throw new Error(
+        `could not inspect required skill source ${name}/SKILL.md: ${error.message}`,
+      );
+    }
+    if (
+      metadata.isSymbolicLink() ||
+      !metadata.isFile() ||
+      metadata.size === 0
+    ) {
+      throw new Error(
+        `required skill source .ai/.agents/skills/${name}/SKILL.md must be a nonempty regular file`,
+      );
+    }
+    const resolved = await realpath(entry);
+    if (!resolved.startsWith(`${sourceRoot}${path.sep}`)) {
+      throw new Error(
+        `required skill source ${name} escapes this project's .ai directory`,
+      );
+    }
+    await readOptionalFile(entry, `required skill source ${name}/SKILL.md`);
+  }
+
+  const directories = [];
+  for (const relativePath of [".agents", ".agents/skills"]) {
+    const target = path.join(projectRoot, relativePath);
+    await requireCanonicalSpelling(target, relativePath);
+    if (await entryExists(target)) {
+      await requireRealDirectory(target, relativePath);
+      await requireProjectRepository(target, relativePath, repository);
+    } else directories.push(relativePath);
+  }
+  const links = [];
+  for (const relativePath of SKILL_PATHS) {
+    const target = path.join(projectRoot, relativePath);
+    await requireCanonicalSpelling(target, relativePath);
+    const expected = path.relative(
+      path.dirname(target),
+      path.join(workflowRoot, relativePath),
+    );
+    if (await entryExists(target)) {
+      if (
+        !(await lstat(target)).isSymbolicLink() ||
+        (await readlink(target)) !== expected
+      ) {
+        throw new Error(
+          `${relativePath} conflicts with its expected local relative skill link; it was preserved`,
+        );
+      }
+      if (
+        (await realpath(target)) !==
+        (await realpath(path.join(workflowRoot, relativePath)))
+      ) {
+        throw new Error(
+          `${relativePath} does not resolve to its expected local skill source`,
+        );
+      }
+    } else links.push({ relativePath, expected });
+  }
+  return { directories, links };
 };
 
 const resolveParentGit = async () => {
@@ -284,6 +565,17 @@ const resolveParentGit = async () => {
     );
   }
 
+  const gitDirResult = await runGit(["rev-parse", "--absolute-git-dir"]);
+  if (gitDirResult.exitCode !== 0 || !gitDirResult.stdout.trim()) {
+    throw new Error("could not resolve the parent Git directory identity");
+  }
+  const gitDirectory = await realpath(gitDirResult.stdout.trim());
+  requireOutsideGitDirectory(
+    await realpath(projectRoot),
+    gitDirectory,
+    "project root",
+  );
+
   const excludeResult = await runGit([
     "rev-parse",
     "--path-format=absolute",
@@ -295,55 +587,255 @@ const resolveParentGit = async () => {
       `could not resolve the repository-local Git exclude: ${describeCommandFailure(excludeResult)}`,
     );
   }
-  return path.resolve(projectRoot, excludeResult.stdout.trim());
-};
-
-const requireUntrackedOverride = async () => {
-  const trackedResult = await runGit([
-    "ls-files",
-    "--stage",
-    "--",
-    `:(literal)${OVERRIDE_NAME}`,
+  const excludePath = path.resolve(projectRoot, excludeResult.stdout.trim());
+  const commonResult = await runGit([
+    "rev-parse",
+    "--path-format=absolute",
+    "--git-common-dir",
   ]);
-  if (trackedResult.exitCode !== 0) {
+  if (commonResult.exitCode !== 0 || !commonResult.stdout.trim()) {
     throw new Error(
-      `could not inspect whether ${OVERRIDE_NAME} is tracked: ${describeCommandFailure(trackedResult)}`,
+      `could not resolve repository-local Git metadata: ${describeCommandFailure(commonResult)}`,
     );
   }
-  if (trackedResult.stdout.trim()) {
+  const commonRoot = await realpath(
+    path.resolve(projectRoot, commonResult.stdout.trim()),
+  );
+  requireOutsideGitDirectory(
+    await realpath(projectRoot),
+    commonRoot,
+    "project root",
+  );
+  const infoDirectory = path.join(commonRoot, "info");
+  await requireRealDirectory(
+    infoDirectory,
+    "repository-local Git info directory",
+  );
+  if ((await realpath(path.dirname(excludePath))) !== infoDirectory) {
     throw new Error(
-      `${OVERRIDE_NAME} is tracked by Git; an exclude rule cannot make a tracked file local`,
+      "repository-local Git exclude escapes the Git info directory",
     );
+  }
+  return { excludePath, gitDirectory, commonRoot };
+};
+
+const requireUntrackedOutputs = async () => {
+  const ancestors = [".agents", ".agents/skills"];
+  for (const relativePath of [...ancestors, ...MANAGED_PATHS]) {
+    const trackedResult = await runGit([
+      "ls-files",
+      "--stage",
+      "-z",
+      "--",
+      // Reserve managed names case-insensitively, including tracked contents
+      // deleted locally. Git's literal pathspec ignores filesystem casing.
+      `:(icase,literal)${relativePath}`,
+    ]);
+    if (trackedResult.exitCode !== 0) {
+      throw new Error(
+        `could not inspect whether ${relativePath} is tracked: ${describeCommandFailure(trackedResult)}`,
+      );
+    }
+    const records = trackedResult.stdout.split("\0").filter(Boolean);
+    // A gitlink (mode 160000) is tracked at the ancestor itself, never at a
+    // managed leaf. Ignore unrelated tracked descendants of ordinary folders.
+    const tracked = ancestors.includes(relativePath)
+      ? records.some(
+          (record) =>
+            record.slice(record.indexOf("\t") + 1).toLowerCase() ===
+            relativePath,
+        )
+      : records.length > 0;
+    if (tracked) {
+      throw new Error(
+        `${relativePath} is tracked by Git; managed outputs must not overwrite tracked paths or cross tracked file/submodule ancestors`,
+      );
+    }
   }
 };
 
-const containsExcludeRule = (content) =>
-  content
-    .split("\n")
-    .some((line) => line === EXCLUDE_RULE || line === `${EXCLUDE_RULE}\r`);
+const containsExcludeRule = (content, rule) =>
+  content.split("\n").some((line) => line === rule || line === `${rule}\r`);
 
-const appendExcludeRule = async (excludePath, excludeContent) => {
+const appendExcludeRules = async (excludePath, excludeContent, rules) => {
   const separator =
     excludeContent && !excludeContent.endsWith("\n") ? "\n" : "";
   try {
-    await appendFile(excludePath, `${separator}${EXCLUDE_RULE}\n`, "utf8");
+    await appendFile(excludePath, `${separator}${rules.join("\n")}\n`, "utf8");
   } catch (error) {
     throw new Error(`could not append Git exclude rule: ${error.message}`);
   }
 };
 
-const createOverride = async () => {
+const inspectExclude = async (excludePath) => {
+  if (await entryExists(excludePath)) {
+    const metadata = await lstat(excludePath);
+    if (metadata.isSymbolicLink() || !metadata.isFile()) {
+      throw new Error(
+        "could not read repository-local Git exclude: expected a regular file, not a symbolic link or non-file",
+      );
+    }
+  }
+  return (
+    (await readOptionalFile(excludePath, "repository-local Git exclude")) ?? ""
+  );
+};
+
+const inspectEffectiveExcludes = async (excludeContent) => {
+  const globalConfig = await runGit([
+    "config",
+    "--null",
+    "--path",
+    "--get",
+    "core.excludesFile",
+  ]);
+  const globalOptions = [];
+  if (globalConfig.exitCode === 0) {
+    const values = globalConfig.stdout.split("\0");
+    if (values.length !== 2 || values[1] !== "") {
+      throw new Error(
+        "could not resolve global Git exclude configuration: unexpected Git response",
+      );
+    }
+    if (values[0]) {
+      // An absolute source label distinguishes a global file from the same
+      // file evaluated as a per-directory .gitignore. Configuration stays local
+      // to this read-only invocation; its contents and value are not printed.
+      globalOptions.push(
+        "-c",
+        `core.excludesFile=${path.resolve(projectRoot, values[0])}`,
+      );
+    }
+  } else if (globalConfig.exitCode !== 1) {
+    throw new Error("could not resolve global Git exclude configuration");
+  }
+  const result = await runGit(
+    [
+      ...globalOptions,
+      "check-ignore",
+      "--verbose",
+      "--non-matching",
+      "--no-index",
+      "-z",
+      "--stdin",
+    ],
+    `${MANAGED_PATHS.join("\0")}\0`,
+  );
+  if (result.exitCode !== 0 && result.exitCode !== 1) {
+    throw new Error(
+      `could not inspect effective Git ignore rules: ${describeCommandFailure(result)}`,
+    );
+  }
+  const fields = result.stdout.split("\0");
+  if (fields.pop() !== "" || fields.length !== MANAGED_PATHS.length * 4) {
+    throw new Error(
+      "could not inspect effective Git ignore rules: incomplete Git response",
+    );
+  }
+  const missingRules = [];
+  for (let index = 0; index < MANAGED_PATHS.length; index += 1) {
+    const [source, line, pattern, relativePath] = fields.slice(
+      index * 4,
+      index * 4 + 4,
+    );
+    if (
+      relativePath !== MANAGED_PATHS[index] ||
+      (source ? !/^\d+$/.test(line) || !pattern : line || pattern)
+    ) {
+      throw new Error(
+        "could not inspect effective Git ignore rules: unexpected Git response",
+      );
+    }
+    // Per-directory rules outrank info/exclude. Git evaluates their patterns
+    // against the eventual file/symlink paths, including ignored ancestors.
+    const perDirectorySources = [".gitignore"];
+    for (
+      let ancestor = path.posix.dirname(relativePath);
+      ancestor !== ".";
+      ancestor = path.posix.dirname(ancestor)
+    ) {
+      perDirectorySources.push(`${ancestor}/.gitignore`);
+    }
+    const perDirectorySource = perDirectorySources.includes(source);
+    if (pattern.startsWith("!") && perDirectorySource) {
+      throw new Error(
+        `${relativePath} is re-included by ${source}:${line}; resolve this Git ignore conflict before setup`,
+      );
+    }
+    const rule = EXCLUDE_RULES[index];
+    if (!containsExcludeRule(excludeContent, rule) || pattern.startsWith("!")) {
+      // Appending also repairs an exact local rule overridden by a later local
+      // negation; global rules have lower priority than these local rules.
+      missingRules.push(rule);
+    }
+  }
+  return missingRules;
+};
+
+const requireWritable = async (targetPath, label, directory = false) => {
   try {
-    await writeFile(overridePath, OVERRIDE_CONTENT, {
-      encoding: "utf8",
-      flag: "wx",
-    });
+    await access(targetPath, constants.W_OK | (directory ? constants.X_OK : 0));
   } catch (error) {
-    throw new Error(`could not create ${OVERRIDE_NAME}: ${error.message}`);
+    throw new Error(
+      `could not write ${label} during preflight: ${error.message}`,
+    );
   }
 };
 
-const verifyResult = async (excludePath) => {
+const preflightWrites = async (
+  overrideState,
+  skillState,
+  excludePath,
+  missingRules,
+) => {
+  if (overrideState.write) {
+    await requireWritable(
+      overrideState.write === "create" ? projectRoot : overridePath,
+      OVERRIDE_NAME,
+      overrideState.write === "create",
+    );
+  }
+  for (const relativePath of [
+    ...skillState.directories,
+    ...skillState.links.map(({ relativePath }) => relativePath),
+  ]) {
+    let ancestor = path.dirname(path.join(projectRoot, relativePath));
+    while (!(await entryExists(ancestor))) ancestor = path.dirname(ancestor);
+    await requireWritable(ancestor, relativePath, true);
+  }
+  if (missingRules.length > 0) {
+    const exists = await entryExists(excludePath);
+    await requireWritable(
+      exists ? excludePath : path.dirname(excludePath),
+      "repository-local Git exclude",
+      !exists,
+    );
+  }
+};
+
+const performWrite = async (label, operation) => {
+  attemptedWrite = label;
+  await operation();
+  completedWrites.push(label);
+  attemptedWrite = undefined;
+};
+
+const writeOverride = async (operation) => {
+  try {
+    await writeFile(overridePath, OVERRIDE_CONTENT, {
+      encoding: "utf8",
+      flag: operation === "create" ? "wx" : "w",
+    });
+  } catch (error) {
+    throw new Error(
+      `could not ${operation} ${OVERRIDE_NAME}: ${error.message}`,
+    );
+  }
+};
+
+const verifyResult = async (repository, expectedContent) => {
+  const { excludePath } = repository;
+  await requireCanonicalSpelling(overridePath, OVERRIDE_NAME);
   let metadata;
   try {
     metadata = await lstat(overridePath);
@@ -356,35 +848,38 @@ const verifyResult = async (excludePath) => {
     );
   }
   const content = await readOptionalFile(overridePath, OVERRIDE_NAME);
-  if (content !== OVERRIDE_CONTENT) {
+  if (content !== expectedContent) {
     throw new Error(`could not verify the exact ${OVERRIDE_NAME} content`);
   }
 
-  const excludeContent = await readOptionalFile(
-    excludePath,
-    "repository-local Git exclude",
-  );
-  if (excludeContent === null || !containsExcludeRule(excludeContent)) {
-    throw new Error(
-      `could not verify the exact ${EXCLUDE_RULE} Git exclude rule`,
-    );
+  const excludeContent = await inspectExclude(excludePath);
+  for (const rule of EXCLUDE_RULES) {
+    if (!containsExcludeRule(excludeContent, rule)) {
+      throw new Error(`could not verify the exact ${rule} Git exclude rule`);
+    }
   }
 
-  await requireUntrackedOverride();
-  const ignoredResult = await runGit([
-    "check-ignore",
-    "-q",
-    "--",
-    OVERRIDE_NAME,
-  ]);
-  if (ignoredResult.exitCode !== 0) {
-    const detail =
-      ignoredResult.exitCode === 1
-        ? "Git did not report it as ignored"
-        : describeCommandFailure(ignoredResult);
-    throw new Error(
-      `could not verify that ${OVERRIDE_NAME} is ignored: ${detail}`,
-    );
+  const skillState = await inspectSkills(repository);
+  if (skillState.directories.length || skillState.links.length) {
+    throw new Error("could not verify all expected local skill links");
+  }
+  await requireUntrackedOutputs();
+  for (const relativePath of MANAGED_PATHS) {
+    const ignoredResult = await runGit([
+      "check-ignore",
+      "-q",
+      "--",
+      relativePath,
+    ]);
+    if (ignoredResult.exitCode !== 0) {
+      const detail =
+        ignoredResult.exitCode === 1
+          ? "Git did not report it as ignored"
+          : describeCommandFailure(ignoredResult);
+      throw new Error(
+        `could not verify that ${relativePath} is ignored: ${detail}`,
+      );
+    }
   }
 };
 
@@ -396,8 +891,10 @@ const setupAgentsOverride = async () => {
   }
 
   await requireWorkflowFiles();
-  const excludePath = await resolveParentGit();
-  await requireUntrackedOverride();
+  const repository = await resolveParentGit();
+  const { excludePath } = repository;
+  await requireUntrackedOutputs();
+  await inspectRootInstructions();
   const conflicts = await detectLegacyConflicts();
   if (conflicts.length > 0) {
     throw new Error(
@@ -405,27 +902,42 @@ const setupAgentsOverride = async () => {
     );
   }
   const overrideState = await inspectOverride();
-  const excludeContent = await readOptionalFile(
-    excludePath,
-    "repository-local Git exclude",
-  );
-  const excludeRuleExists =
-    excludeContent !== null && containsExcludeRule(excludeContent);
+  const skillState = await inspectSkills(repository);
+  const excludeContent = await inspectExclude(excludePath);
+  const missingRules = await inspectEffectiveExcludes(excludeContent);
+  await preflightWrites(overrideState, skillState, excludePath, missingRules);
 
-  if (!overrideState.exists) {
-    await createOverride();
+  if (overrideState.write) {
+    await performWrite(OVERRIDE_NAME, () => writeOverride(overrideState.write));
   }
-  if (!excludeRuleExists) {
-    await appendExcludeRule(excludePath, excludeContent ?? "");
+  for (const relativePath of skillState.directories) {
+    await performWrite(relativePath, () =>
+      mkdir(path.join(projectRoot, relativePath)),
+    );
+  }
+  for (const { relativePath, expected } of skillState.links) {
+    await performWrite(relativePath, () =>
+      symlink(expected, path.join(projectRoot, relativePath), "dir"),
+    );
+  }
+  if (missingRules.length > 0) {
+    await performWrite("repository-local Git exclude", () =>
+      appendExcludeRules(excludePath, excludeContent, missingRules),
+    );
   }
 
-  await verifyResult(excludePath);
-  writeOutput(
-    `${OVERRIDE_NAME}: ${overrideState.exists ? "already correct" : "created"}`,
-  );
-  writeOutput(
-    `${EXCLUDE_RULE} exclude rule: ${excludeRuleExists ? "already present" : "added"}`,
-  );
+  await verifyResult(repository, overrideState.content);
+  writeOutput(`${OVERRIDE_NAME}: ${overrideState.status}`);
+  for (const relativePath of SKILL_PATHS) {
+    writeOutput(
+      `${relativePath}: ${skillState.links.some((link) => link.relativePath === relativePath) ? "created" : "already correct"}`,
+    );
+  }
+  for (const rule of EXCLUDE_RULES) {
+    writeOutput(
+      `${rule} exclude rule: ${missingRules.includes(rule) ? "added" : "already present"}`,
+    );
+  }
   writeOutput("Local AGENTS override setup verified.");
 };
 
@@ -433,5 +945,10 @@ try {
   await setupAgentsOverride();
 } catch (error) {
   writeError(`Setup failed: ${error.message}`);
+  if (completedWrites.length > 0 || attemptedWrite) {
+    writeError(
+      `Partial setup: completed writes: ${completedWrites.join(", ") || "none"}.${attemptedWrite ? ` Failed write may be incomplete: ${attemptedWrite}.` : ""} Existing unrelated state was preserved; inspect these outputs before retrying.`,
+    );
+  }
   process.exitCode = 1;
 }

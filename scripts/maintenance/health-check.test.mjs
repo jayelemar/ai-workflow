@@ -60,14 +60,21 @@ const createFixture = async () => {
   await mkdir(path.join(temporaryRoot, ".git"), { recursive: true });
   const sourcePaths = [
     ...bootstrapPaths,
-    ".agents/skills/change-workflow/SKILL.md",
-    ".agents/skills/change-workflow/agents/openai.yaml",
-    ".agents/skills/change-workflow/references/plan-template.md",
-    ".agents/skills/change-workflow/references/review-checklist.md",
+    ".agents/skills/ai-build/SKILL.md",
+    ".agents/skills/ai-build/agents/openai.yaml",
+    ".agents/skills/ai-build/references/plan-template.md",
+    ".agents/skills/ai-build/references/review-checklist.md",
+    ...["ai-worktree-setup", "ai-commit", "ai-pr"].flatMap((name) => [
+      `.agents/skills/${name}/SKILL.md`,
+      `.agents/skills/${name}/agents/openai.yaml`,
+    ]),
+    "prompts/setup-local-codex.md",
+    "prompts/worktree-cleanup.md",
+    "prompts/skill-discovery.md",
+    "prompts/manage-instructions.md",
     ".github/workflows/health.yml",
     "docs/workflow-usage.md",
     "instructions/shared/testing.md",
-    "prompts/utilities/git-commit.md",
     "scripts/check.test.mjs",
   ];
   for (const relativePath of sourcePaths) {
@@ -385,7 +392,7 @@ test("health fails when a canonical source is not tracked", async () => {
     assert.match(fixture.output.join("\n"), /canonical source is untracked/);
     assert.match(
       fixture.output.join("\n"),
-      /\.agents\/skills\/change-workflow\/SKILL\.md/,
+      /\.agents\/skills\/ai-build\/SKILL\.md/,
     );
   } finally {
     await rm(fixture.temporaryRoot, { force: true, recursive: true });
@@ -526,7 +533,7 @@ test("health permits references to ignored temporary workflow data", async () =>
   await withFixture(async (fixture) => {
     await writeFixtureFile(
       fixture.root,
-      "prompts/utilities/git-commit.md",
+      "prompts/manage-instructions.md",
       "# Prompt\n\nRead `.ai/tmp/worktree-setup.json` when it exists.\n",
     );
     const output = [];

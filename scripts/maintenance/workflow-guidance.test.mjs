@@ -11,13 +11,13 @@ const root = path.resolve(
 const read = (relativePath) => readFile(path.join(root, relativePath), "utf8");
 test("the change skill uses progressive disclosure", async () => {
   const [skill, plan, review, metadata] = await Promise.all([
-    read(".agents/skills/change-workflow/SKILL.md"),
-    read(".agents/skills/change-workflow/references/plan-template.md"),
-    read(".agents/skills/change-workflow/references/review-checklist.md"),
-    read(".agents/skills/change-workflow/agents/openai.yaml"),
+    read(".agents/skills/ai-build/SKILL.md"),
+    read(".agents/skills/ai-build/references/plan-template.md"),
+    read(".agents/skills/ai-build/references/review-checklist.md"),
+    read(".agents/skills/ai-build/agents/openai.yaml"),
   ]);
 
-  assert.match(skill, /^---\nname: change-workflow\ndescription: .+\n---/);
+  assert.match(skill, /^---\nname: ai-build\ndescription: .+\n---/);
   assert.match(skill, /references\/plan-template\.md/);
   assert.match(skill, /references\/review-checklist\.md/);
   assert.match(
@@ -33,13 +33,13 @@ test("the change skill uses progressive disclosure", async () => {
   assert.match(plan, /ready-to-copy\s+execution prompt/i);
   assert.match(plan, /\/goal Implement <exact-plan-path>/);
   assert.match(review, /Review the actual Git diff/);
-  assert.match(metadata, /\$change-workflow/);
+  assert.match(metadata, /\$ai-build/);
 });
 
 test("routine, planned, and controlled work stay proportional", async () => {
   const [agents, skill, usage] = await Promise.all([
     read("AGENTS.md"),
-    read(".agents/skills/change-workflow/SKILL.md"),
+    read(".agents/skills/ai-build/SKILL.md"),
     read("docs/workflow-usage.md"),
   ]);
   const source = `${agents}\n${skill}\n${usage}`;
@@ -59,8 +59,8 @@ test("routine, planned, and controlled work stay proportional", async () => {
 test("safety and delivery boundaries remain explicit", async () => {
   const [agents, skill, review] = await Promise.all([
     read("AGENTS.md"),
-    read(".agents/skills/change-workflow/SKILL.md"),
-    read(".agents/skills/change-workflow/references/review-checklist.md"),
+    read(".agents/skills/ai-build/SKILL.md"),
+    read(".agents/skills/ai-build/references/review-checklist.md"),
   ]);
   const source = `${agents}\n${skill}\n${review}`;
 
@@ -82,15 +82,15 @@ test("root authority routes planned work to the canonical nested skill", async (
     read("docs/codex-agent.md"),
   ]);
 
-  assert.match(agents, /\.ai\/\.agents\/skills\/change-workflow\/SKILL\.md/);
-  assert.match(setupDoc, /does not copy\s+the workflow skill/);
-  assert.match(setupDoc, /canonical `\.ai\/\.agents\/skills\/change-workflow/);
+  assert.match(agents, /\.ai\/\.agents\/skills\/ai-build\/SKILL\.md/);
+  assert.match(setupDoc, /relative links/);
+  assert.match(setupDoc, /canonical `\.ai\/\.agents\/skills\/ai-build/);
 });
 
 test("delivery utilities use repository evidence without workflow metadata", async () => {
   const [organizer, pullRequest, delivery] = await Promise.all([
-    read("prompts/utilities/git-commit.md"),
-    read("prompts/utilities/pull-request-creation.md"),
+    read(".agents/skills/ai-commit/SKILL.md"),
+    read(".agents/skills/ai-pr/SKILL.md"),
     read("instructions/shared/delivery-hygiene.md"),
   ]);
   const source = `${organizer}\n${pullRequest}\n${delivery}`;
@@ -98,20 +98,23 @@ test("delivery utilities use repository evidence without workflow metadata", asy
   assert.match(source, /git diff --cached --check/);
   assert.match(source, /complete\s+diff from the merge base/);
   assert.match(source, /explicit validation evidence/);
+  assert.match(pullRequest, /## Validation/);
+  assert.match(pullRequest, /Simple change example/);
+  assert.match(pullRequest, /Sensitive change example/);
+  assert.match(pullRequest, /missing required evidence/);
+  assert.match(delivery, /Missing required evidence blocks completion/);
+  assert.doesNotMatch(pullRequest, /Do not add commit SHAs, validation, risk/);
   assert.doesNotMatch(source, /Workflow-(Work-Item|Spec|Plan-Revision)/);
 });
 
 test("plan worktree setup stays native, safe, and independent", async () => {
   const [prepare, usage, promptIndex] = await Promise.all([
-    read("prompts/utilities/plan-worktree-setup.md"),
+    read(".agents/skills/ai-worktree-setup/SKILL.md"),
     read("docs/workflow-usage.md"),
     read("prompts/README.md"),
   ]);
 
-  assert.match(
-    prepare,
-    /Run \.ai\/prompts\/utilities\/plan-worktree-setup\.md/,
-  );
+  assert.match(prepare, /\$ai-worktree-setup/);
   assert.match(
     prepare,
     /<workspace>\/\.worktrees\/<plan-name>\/\<repository-id>/,
@@ -138,13 +141,13 @@ test("plan worktree setup stays native, safe, and independent", async () => {
     prepare,
     /plan-manifest@|work-status@|worktree-setup@|agent-models\.toml/,
   );
-  assert.match(usage, /plan-worktree-setup\.md/);
-  assert.match(promptIndex, /Plan worktree setup/);
+  assert.match(usage, /\$ai-worktree-setup/);
+  assert.match(promptIndex, /AI Worktree Setup/);
 });
 
 test("workflow cleanup requires explicit scope, confirms, and preserves branches", async () => {
   const [cleanup, usage, promptIndex] = await Promise.all([
-    read("prompts/utilities/plan-worktree-cleanup.md"),
+    read("prompts/worktree-cleanup.md"),
     read("docs/workflow-usage.md"),
     read("prompts/README.md"),
   ]);
@@ -175,7 +178,7 @@ test("workflow cleanup requires explicit scope, confirms, and preserves branches
   assert.match(cleanup, /Preserve workflow records that are not owned/);
   assert.match(cleanup, /Do not run the global `cleanup:local` utility/);
   for (const source of [usage, promptIndex]) {
-    assert.match(source, /plan-worktree-cleanup\.md/);
+    assert.match(source, /worktree-cleanup\.md/);
     assert.match(source, /plan: \.ai\/plans\/<plan-name>\.md/);
     assert.match(source, /all-plans: true/);
   }
@@ -196,5 +199,15 @@ test("role guidance uses supported explicit runtime settings with context", asyn
       source,
       /Do not silently substitute|instead of silently substituting/,
     );
+  }
+});
+
+test("canonical skills declare matching metadata and enable normal matching", async () => {
+  for (const name of ["ai-build", "ai-worktree-setup", "ai-commit", "ai-pr"]) {
+    const skill = await read(`.agents/skills/${name}/SKILL.md`);
+    const metadata = await read(`.agents/skills/${name}/agents/openai.yaml`);
+    assert.ok(skill.startsWith(`---\nname: ${name}\n`));
+    assert.ok(metadata.includes(`$${name}`));
+    assert.doesNotMatch(metadata, /allow_implicit_invocation:\s*false/);
   }
 });

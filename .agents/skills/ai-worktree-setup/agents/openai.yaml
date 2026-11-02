@@ -1,0 +1,4 @@
+interface:
+  display_name: "AI Worktree Setup"
+  short_description: "Prepare isolated worktrees for a living plan"
+  default_prompt: "Use $ai-worktree-setup to prepare isolated worktrees for .ai/plans/<plan-name>.md."

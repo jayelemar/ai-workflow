@@ -10,12 +10,12 @@ Without a selector, show a read-only plan inventory and these invocation
 examples, then stop with no confirmation and no mutation:
 
 ```text
-Run `.ai/prompts/utilities/plan-worktree-cleanup.md`.
+Run `.ai/prompts/worktree-cleanup.md`.
 plan: .ai/plans/<plan-name>.md
 ```
 
 ```text
-Run `.ai/prompts/utilities/plan-worktree-cleanup.md`.
+Run `.ai/prompts/worktree-cleanup.md`.
 all-plans: true
 ```
 

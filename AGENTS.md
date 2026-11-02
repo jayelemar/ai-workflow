@@ -7,7 +7,7 @@ This file is the behavioral authority for work that uses the `.ai` repository.
 Ordinary requests use normal Codex behavior: inspect, implement, validate, and
 report without creating workflow artifacts.
 
-Read `.ai/.agents/skills/change-workflow/SKILL.md` when the user asks to create
+Read `.ai/.agents/skills/ai-build/SKILL.md` when the user asks to create
 or follow a saved implementation plan, invokes Goal mode with a plan, requests
 long-running or cross-cutting work, or changes authentication, authorization,
 payments, secrets, migrations, destructive behavior, or another named security
