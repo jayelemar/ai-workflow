@@ -21,6 +21,7 @@ import {
 } from "./health-check.mjs";
 
 const bootstrapPaths = [
+  ".codex/config.toml",
   ".gitignore",
   "AGENTS.md",
   "README.md",
@@ -72,6 +73,11 @@ const createFixture = async () => {
   for (const relativePath of sourcePaths) {
     await writeFixtureFile(root, relativePath);
   }
+  await writeFixtureFile(
+    root,
+    ".codex/config.toml",
+    'model = "fixture-model"\n[agents]\ndefault_subagent_model = "fixture-model"\ndefault_subagent_reasoning_effort = "high"\n',
+  );
   for (const relativePath of localInstructionPaths) {
     await writeFixtureFile(root, relativePath);
   }
@@ -111,6 +117,8 @@ const createCommandExecutor = ({
     candidate === pathspec || candidate.startsWith(`${pathspec}/`);
   const isLocalPath = (candidate) =>
     candidate === "instructions/.health-check-probe.md" ||
+    candidate === "instructions/areas" ||
+    candidate.startsWith("instructions/areas/") ||
     localInstructionPathsWithIndex.has(candidate) ||
     localOnlyRoots.some((localRoot) => isInPathspec(candidate, localRoot));
   const result = (exitCode, stdout = "", stderr = "") => ({
@@ -189,6 +197,125 @@ const withFixture = async (callback) => {
     await rm(fixture.temporaryRoot, { force: true, recursive: true });
   }
 };
+
+const inspectFixture = async (
+  fixture,
+  commandExecutor = createCommandExecutor(fixture),
+) => {
+  const output = [];
+  const result = await runHealthCheck({
+    commandExecutor,
+    stderr: (message) => output.push(message),
+    stdout: (message) => output.push(message),
+    workflowDirectory: fixture.root,
+  });
+  return { result, output: output.join("\n") };
+};
+
+test("nested routes are required, including wrapped Load bullets", async (t) => {
+  for (const kind of [
+    "missing",
+    "directory",
+    "valid",
+    "escape-link",
+    "escape-directory",
+  ]) {
+    await t.test(kind, () =>
+      withFixture(async (fixture) => {
+        const route = "areas/native-qa.md";
+        await writeFixtureFile(
+          fixture.root,
+          "instructions/index.md",
+          `# Index\n\n## Rules\n\n- Load \`architecture.md\` and\n  \`${route}\` for native QA.\n`,
+        );
+        const target = path.join(fixture.root, "instructions", route);
+        await mkdir(path.dirname(target), { recursive: true });
+        if (kind === "directory") await mkdir(target);
+        if (kind === "valid") await writeFile(target, "# QA\n");
+        if (kind.startsWith("escape")) {
+          const outside = path.join(fixture.temporaryRoot, "outside");
+          await mkdir(outside);
+          await writeFile(path.join(outside, "native-qa.md"), "# Outside\n");
+          if (kind === "escape-link")
+            await symlink(path.join(outside, "native-qa.md"), target);
+          else {
+            await rm(path.dirname(target), { recursive: true });
+            await symlink(outside, path.dirname(target));
+          }
+        }
+        const { result, output } = await inspectFixture(fixture);
+        assert.equal(result.ok, kind === "valid", output);
+        if (kind !== "valid") assert.match(output, /instruction route/);
+      }),
+    );
+  }
+});
+
+test("unsafe relative and absolute Markdown routes fail closed", async (t) => {
+  for (const route of [
+    "../outside.md",
+    "areas/../../outside.md",
+    "/tmp/outside.md",
+    "C:\\outside.md",
+  ]) {
+    await t.test(route, () =>
+      withFixture(async (fixture) => {
+        await writeFixtureFile(
+          fixture.root,
+          "instructions/index.md",
+          `# Index\n\n## Rules\n\n- Load \`${route}\` for guidance.\n`,
+        );
+        const { result, output } = await inspectFixture(fixture);
+        assert.equal(result.ok, false, output);
+        assert.match(output, /unsafe instruction route/);
+      }),
+    );
+  }
+});
+
+test("configuration presence, syntax, shape, tracking and allowlisting are checked", async (t) => {
+  const cases = [
+    ["missing", null],
+    ["syntax", 'model = "private-fixture-value\n'],
+    ["duplicate", 'model = "private-fixture-value"\nmodel = "other"\n'],
+    ["shape", "model = 17\n"],
+    ["agents-table", 'model = "fixture"\nagents = "private-fixture-value"\n'],
+    [
+      "agent-fields",
+      'model = "fixture"\n[agents]\ndefault_subagent_model = 1\ndefault_subagent_reasoning_effort = "high"\n',
+    ],
+    ["untracked", undefined],
+    ["ignored", undefined],
+    [
+      "valid",
+      '# comment\nmodel = "unverified-runtime-model"\n[agents]\ndefault_subagent_model = "fixture" # comment\ndefault_subagent_reasoning_effort = "high"\n',
+    ],
+  ];
+  for (const [kind, content] of cases) {
+    await t.test(kind, () =>
+      withFixture(async (fixture) => {
+        const target = path.join(fixture.root, ".codex/config.toml");
+        if (content === null) await unlink(target);
+        else if (content !== undefined) await writeFile(target, content);
+        if (kind === "untracked")
+          fixture.sourcePaths = fixture.sourcePaths.filter(
+            (p) => p !== ".codex/config.toml",
+          );
+        const base = createCommandExecutor(fixture);
+        const executor = async (command) =>
+          kind === "ignored" &&
+          command.args[0] === "check-ignore" &&
+          command.args.at(-1) === ".codex/config.toml"
+            ? { exitCode: 0, stdout: "", stderr: "" }
+            : base(command);
+        const { result, output } = await inspectFixture(fixture, executor);
+        assert.equal(result.ok, kind === "valid", output);
+        assert.doesNotMatch(output, /private-fixture-value/);
+        if (kind !== "valid") assert.match(output, /config\.toml/);
+      }),
+    );
+  }
+});
 
 test("health check accepts only default, full, and help modes", () => {
   assert.deepEqual(parseHealthCheckArgs([]), { full: false });

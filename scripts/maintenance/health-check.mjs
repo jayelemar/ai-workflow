@@ -2,9 +2,17 @@
 
 import { spawn } from "node:child_process";
 import { constants } from "node:fs";
-import { access, lstat, readdir, readFile, stat } from "node:fs/promises";
+import {
+  access,
+  lstat,
+  readdir,
+  readFile,
+  realpath,
+  stat,
+} from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { parse as parseToml } from "smol-toml";
 
 export const workflowRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -12,6 +20,7 @@ export const workflowRoot = path.resolve(
 );
 
 const BOOTSTRAP_SOURCE_PATHS = [
+  ".codex/config.toml",
   ".gitignore",
   "AGENTS.md",
   "README.md",
@@ -92,6 +101,56 @@ const pathIsFile = async (targetPath) => {
   } catch {
     return false;
   }
+};
+
+const isContainedFile = async (directory, target) => {
+  try {
+    const base = await realpath(directory);
+    const resolved = await realpath(target);
+    const relative = path.relative(base, resolved);
+    return (
+      relative !== "" &&
+      !relative.startsWith(`..${path.sep}`) &&
+      relative !== ".." &&
+      !path.isAbsolute(relative) &&
+      (await pathIsFile(resolved))
+    );
+  } catch {
+    return false;
+  }
+};
+
+const validateConfiguration = async ({ root, stderr }) => {
+  const target = path.join(root, ".codex/config.toml");
+  if (!(await isContainedFile(root, target))) {
+    stderr("FAIL unsafe or missing .codex/config.toml");
+    return false;
+  }
+  let config;
+  try {
+    config = parseToml(await readFile(target, "utf8"));
+  } catch {
+    // Parser errors can contain source excerpts and credential-bearing values.
+    stderr("FAIL .codex/config.toml is unreadable or malformed TOML");
+    return false;
+  }
+  const string = (value) =>
+    typeof value === "string" && value.trim().length > 0;
+  const agents = config.agents;
+  if (
+    !string(config.model) ||
+    !agents ||
+    Array.isArray(agents) ||
+    typeof agents !== "object" ||
+    !string(agents.default_subagent_model) ||
+    !string(agents.default_subagent_reasoning_effort)
+  ) {
+    stderr(
+      "FAIL .codex/config.toml requires model and an agents table with nonempty default_subagent_model and default_subagent_reasoning_effort strings",
+    );
+    return false;
+  }
+  return true;
 };
 
 const collectFiles = async (root, targetPath, predicate) => {
@@ -387,7 +446,10 @@ const validateLiteralReferences = async ({ root, stderr }) => {
 
 const readInstructionRoutes = async ({ root, stderr }) => {
   const indexPath = path.join(root, "instructions/index.md");
-  if (!(await pathExists(indexPath))) {
+  if (
+    !(await isContainedFile(root, indexPath)) ||
+    !(await isContainedFile(path.join(root, "instructions"), indexPath))
+  ) {
     stderr("FAIL missing local instruction index: instructions/index.md");
     return null;
   }
@@ -418,7 +480,15 @@ const readInstructionRoutes = async ({ root, stderr }) => {
 
   const routes = new Set();
   for (const bullet of loadBullets) {
-    for (const match of bullet.matchAll(/`((?:shared\/)?[a-z0-9-]+\.md)`/g)) {
+    for (const match of bullet.matchAll(/`([^`\r\n]+\.md)`/g)) {
+      const route = match[1];
+      if (
+        !/^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)*\.md$/.test(route) ||
+        route.split("/").some((part) => part === "." || part === "..")
+      ) {
+        stderr("FAIL unsafe instruction route in local index");
+        return null;
+      }
       routes.add(match[1]);
     }
   }
@@ -432,7 +502,11 @@ const validateInstructionRoutes = async ({
 }) => {
   const missing = new Set();
   for (const route of instructionRoutes) {
-    if (!(await pathIsFile(path.join(root, "instructions", route)))) {
+    const target = path.join(root, "instructions", route);
+    if (
+      !(await isContainedFile(path.join(root, "instructions"), target)) ||
+      !(await isContainedFile(root, target))
+    ) {
       missing.add(route);
     }
   }
@@ -529,6 +603,9 @@ export const runHealthCheck = async ({
   if (!(await validateCanonicalSource({ commandExecutor, root, stderr }))) {
     return { ok: false, root };
   }
+  if (!(await validateConfiguration({ root, stderr }))) {
+    return { ok: false, root };
+  }
 
   const instructionRoutes = await readInstructionRoutes({ root, stderr });
   if (!instructionRoutes) return { ok: false, root };
@@ -543,10 +620,10 @@ export const runHealthCheck = async ({
   ) {
     return { ok: false, root };
   }
-  if (!(await validateLiteralReferences({ root, stderr }))) {
+  if (!(await validateInstructionRoutes({ instructionRoutes, root, stderr }))) {
     return { ok: false, root };
   }
-  if (!(await validateInstructionRoutes({ instructionRoutes, root, stderr }))) {
+  if (!(await validateLiteralReferences({ root, stderr }))) {
     return { ok: false, root };
   }
   if (!(await validateParentIndex({ commandExecutor, root, stdout, stderr }))) {

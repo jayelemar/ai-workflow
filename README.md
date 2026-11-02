@@ -107,6 +107,11 @@ every Git branch are preserved.
 ## Checks
 
 The package requires Node `>=20.20.2` and pins pnpm and the test toolchain.
+Health checks require the tracked `.codex/config.toml`, validate its TOML syntax
+and documented field types, and check nested instruction routes for existing
+contained files. These are static checks, not proof of model availability,
+account permissions, or client support. The TOML parser is a pinned development
+dependency; parser errors never print configuration excerpts.
 
 ```bash
 pnpm health
