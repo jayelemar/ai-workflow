@@ -72,9 +72,9 @@ for (const args of [[], ["--apply"]]) {
         } else {
           await symlink("LOGS", plans);
         }
-        const { output, result } = await run(fixture, { args });
         // An actual LOGS directory is unmanaged on case-sensitive volumes;
         // cleanup may succeed, but its linked plans must remain readable.
+        // Inspect before apply creates the separate lowercase managed roots.
         const managedAlias =
           alias !== "uppercase-root" ||
           (await lstat(path.join(fixture.workflowDirectory, "logs")).then(
@@ -84,8 +84,13 @@ for (const args of [[], ["--apply"]]) {
               throw error;
             },
           ));
-        if (managedAlias || !result.ok) {
-          assert.equal(result.ok, false, `${alias}: ${output.join("\n")}`);
+        const { output, result } = await run(fixture, { args });
+        assert.equal(
+          result.ok,
+          !managedAlias,
+          `${alias}: ${output.join("\n")}`,
+        );
+        if (managedAlias) {
           assert.match(output.join("\n"), /preflight:.*overlaps a living plan/);
         }
         if (dangling) {
