@@ -5,7 +5,8 @@ skill discovery, instruction management, and cleanup require explicit invocation
 Read `.ai/AGENTS.md` plus relevant routed instructions.
 
 - [Local Codex setup](setup-local-codex.md): install the safe
-  local project override and four relative project-root skill links.
+  local project override, canonical `.codex/config.toml`, and four relative
+  project-root skill links.
 - [Agent skills discovery](skill-discovery.md): research and
   assess repository-relevant skills.
 - [Instructions management](manage-instructions.md): create,

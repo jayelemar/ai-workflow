@@ -57,10 +57,14 @@ const overrideContent = oldOverrideContent.replace(
   routingBlock,
 );
 const excludeRule = "/AGENTS.override.md";
+const configContent = Buffer.from(
+  '# Fixture project configuration\r\nmodel = "fixture"\r\n',
+);
 const skillNames = ["ai-build", "ai-worktree-setup", "ai-commit", "ai-pr"];
 const managedPaths = [
   "AGENTS.override.md",
   ...skillNames.map((name) => `.agents/skills/${name}`),
+  ".codex/config.toml",
 ];
 const excludeRules = managedPaths.map((name) => `/${name}`);
 
@@ -118,6 +122,8 @@ const installWorkflow = async (projectRoot, { nestedGit = true } = {}) => {
   );
   await mkdir(path.dirname(utilityPath), { recursive: true });
   await mkdir(path.join(workflowRoot, "instructions"), { recursive: true });
+  await mkdir(path.join(workflowRoot, ".codex"));
+  await writeFile(path.join(workflowRoot, ".codex/config.toml"), configContent);
   await writeFile(
     path.join(workflowRoot, "AGENTS.md"),
     "# Fixture workflow instructions\n",
@@ -203,6 +209,9 @@ const readManagedState = async (fixture) => {
     excludePath,
     override: await readFile(overridePath, "utf8"),
     overridePath,
+    config: await readFile(
+      path.join(fixture.projectRoot, ".codex/config.toml"),
+    ),
     skills: await Promise.all(
       skillNames.map(async (name) => {
         const target = path.join(fixture.projectRoot, ".agents/skills", name);
@@ -271,6 +280,62 @@ const withFixture = async (callback, options) => {
   }
 };
 
+test("setup creates a real project Codex directory and exact config copy", async () => {
+  await withFixture(async (fixture) => {
+    const source = path.join(fixture.workflowRoot, ".codex/config.toml");
+    await chmod(source, 0o640);
+    const result = await invokeNode(fixture);
+    assert.equal(result.exitCode, 0, result.stderr);
+    const directory = path.join(fixture.projectRoot, ".codex");
+    const config = path.join(directory, "config.toml");
+    assert.equal((await lstat(directory)).isDirectory(), true);
+    assert.equal((await lstat(directory)).isSymbolicLink(), false);
+    assert.equal((await lstat(config)).isFile(), true);
+    assert.equal((await lstat(config)).isSymbolicLink(), false);
+    assert.deepEqual(await readFile(config), configContent);
+    assert.equal((await stat(config)).mode & 0o777, 0o640);
+    assert.match(result.stdout, /\.codex\/config\.toml: created/);
+    assert.match(result.stdout, /\/\.codex\/config\.toml exclude rule: added/);
+    const custom = path.join(fixture.projectRoot, ".codex/custom.toml");
+    await writeFile(custom, "# Keep custom project configuration\n");
+    await git(fixture.projectRoot, "add", ".codex/custom.toml");
+    const indexBefore = await git(fixture.projectRoot, "ls-files", "--stage");
+    await chmod(config, 0o444);
+    const before = await stat(config);
+    const state = await readManagedState(fixture);
+    const second = await invokeNode(fixture);
+    assert.equal(second.exitCode, 0, second.stderr);
+    assert.match(second.stdout, /\.codex\/config\.toml: already correct/);
+    assert.deepEqual(await readManagedState(fixture), state);
+    assert.equal((await stat(config)).mtimeMs, before.mtimeMs);
+    assert.equal((await stat(config)).mode & 0o777, 0o444);
+    assert.equal(
+      await readFile(custom, "utf8"),
+      "# Keep custom project configuration\n",
+    );
+    assert.equal(
+      await git(fixture.projectRoot, "ls-files", "--stage"),
+      indexBefore,
+    );
+    assert.equal(state.exclude.includes("/.codex\n"), false);
+    assert.equal(state.exclude.includes("/.codex/\n"), false);
+    await writeFile(
+      path.join(fixture.projectRoot, ".codex/untracked.toml"),
+      "# Visible custom file\n",
+    );
+    assert.match(
+      await git(
+        fixture.projectRoot,
+        "status",
+        "--short",
+        "--untracked-files=all",
+      ),
+      /\.codex\/untracked\.toml/,
+    );
+    await assertIgnored(fixture.projectRoot);
+  });
+});
+
 test("nested package command creates the exact regular override and local exclude rule", async () => {
   await withFixture(async (fixture) => {
     const result = await invokePnpm(
@@ -302,7 +367,7 @@ test("nested package command creates the exact regular override and local exclud
     }
     assert.deepEqual(
       state.exclude.split("\n").filter((line) => line.startsWith("/.agents")),
-      excludeRules.slice(1),
+      skillNames.map((name) => `/.agents/skills/${name}`),
     );
     assert.equal(
       state.exclude.split("\n").filter((line) => line === excludeRule).length,
@@ -314,7 +379,14 @@ test("nested package command creates the exact regular override and local exclud
 
 const snapshotManagedOutputs = async (fixture) => {
   const snapshot = {};
-  for (const relativePath of [".agents", ".agents/skills", ...managedPaths]) {
+  for (const relativePath of [
+    ".agents",
+    ".agents/skills",
+    ".codex",
+    ...managedPaths,
+    ".ai/.codex",
+    ".ai/.codex/config.toml",
+  ]) {
     const target = path.join(fixture.projectRoot, relativePath);
     try {
       const metadata = await lstat(target);
@@ -335,6 +407,198 @@ const snapshotManagedOutputs = async (fixture) => {
   snapshot.index = await git(fixture.projectRoot, "ls-files", "--stage");
   return snapshot;
 };
+
+test("a different project config refuses all writes and preserves exact source, destination, and index bytes", async () => {
+  await withFixture(async (fixture) => {
+    const config = path.join(fixture.projectRoot, ".codex/config.toml");
+    const custom = Buffer.from(
+      '# Keep local preferences\r\nmodel = "custom"\r\n',
+    );
+    await mkdir(path.dirname(config));
+    await writeFile(config, custom);
+    await writeFile(
+      path.join(fixture.projectRoot, "AGENTS.override.md"),
+      oldOverrideContent,
+    );
+    await writeFile(
+      path.join(fixture.projectRoot, "AGENTS.md"),
+      "# Preserve root instructions\n",
+    );
+    await git(fixture.projectRoot, "add", "AGENTS.md");
+    const indexPath = await git(
+      fixture.projectRoot,
+      "rev-parse",
+      "--path-format=absolute",
+      "--git-path",
+      "index",
+    );
+    const indexBefore = await readFile(indexPath);
+    const before = await snapshotManagedOutputs(fixture);
+    const result = await invokeNode(fixture);
+    assert.notEqual(result.exitCode, 0);
+    assert.match(
+      result.stderr,
+      /\.codex\/config\.toml differs.*custom configuration was preserved/,
+    );
+    assert.doesNotMatch(result.stderr, /Partial setup:/);
+    assert.deepEqual(await snapshotManagedOutputs(fixture), before);
+    assert.deepEqual(await readFile(config), custom);
+    assert.deepEqual(
+      await readFile(path.join(fixture.workflowRoot, ".codex/config.toml")),
+      configContent,
+    );
+    assert.deepEqual(await readFile(indexPath), indexBefore);
+  });
+});
+
+// File and directory trust boundaries differ from skill links. Exercise their
+// refusal paths through disposable real files; shared alias and ignore tests
+// cover the common Git protection machinery separately.
+test("unsafe or missing config sources and unsafe destinations refuse setup before writes", async (t) => {
+  const cases = [
+    ["missing source directory", ".ai/.codex", "missing", /\.ai\/\.codex/],
+    [
+      "linked source directory",
+      ".ai/.codex",
+      "directory link",
+      /\.ai\/\.codex.*real directory/,
+    ],
+    [
+      "non-directory source",
+      ".ai/.codex",
+      "file",
+      /\.ai\/\.codex.*real directory/,
+    ],
+    [
+      "missing source file",
+      ".ai/.codex/config.toml",
+      "missing",
+      /required config source/,
+    ],
+    [
+      "linked source file",
+      ".ai/.codex/config.toml",
+      "file link",
+      /required config source.*regular file/,
+    ],
+    [
+      "non-file source",
+      ".ai/.codex/config.toml",
+      "directory",
+      /required config source.*regular file/,
+    ],
+    [
+      "linked destination directory",
+      ".codex",
+      "directory link",
+      /\.codex.*real directory/,
+    ],
+    ["non-directory destination", ".codex", "file", /\.codex.*real directory/],
+    [
+      "linked destination config",
+      ".codex/config.toml",
+      "file link",
+      /config\.toml.*regular file/,
+    ],
+    [
+      "non-file destination config",
+      ".codex/config.toml",
+      "directory",
+      /config\.toml.*regular file/,
+    ],
+    [
+      "tracked identical destination config",
+      ".codex/config.toml",
+      "tracked",
+      /config\.toml is tracked by Git/,
+    ],
+  ];
+  for (const [name, relativePath, kind, message] of cases) {
+    await t.test(name, async () => {
+      await withFixture(async (fixture) => {
+        const externalDirectory = path.join(
+          fixture.temporaryRoot,
+          "preserved-config",
+        );
+        const externalConfig = path.join(externalDirectory, "config.toml");
+        await mkdir(externalDirectory);
+        await writeFile(externalConfig, configContent);
+        const target = path.join(fixture.projectRoot, relativePath);
+        await rm(target, { recursive: true, force: true });
+        await mkdir(path.dirname(target), { recursive: true });
+        if (kind === "directory link")
+          await symlink(externalDirectory, target, "dir");
+        else if (kind === "file link") await symlink(externalConfig, target);
+        else if (kind === "directory") await mkdir(target);
+        else if (kind !== "missing") await writeFile(target, configContent);
+        if (kind === "tracked")
+          await git(fixture.projectRoot, "add", relativePath);
+        await writeFile(
+          path.join(fixture.projectRoot, "AGENTS.override.md"),
+          oldOverrideContent,
+        );
+        const before = await snapshotManagedOutputs(fixture);
+        const result = await invokeNode(fixture);
+        assert.notEqual(result.exitCode, 0);
+        assert.match(result.stderr, message);
+        assert.doesNotMatch(result.stderr, /Partial setup:/);
+        assert.deepEqual(await snapshotManagedOutputs(fixture), before);
+        assert.deepEqual(await readFile(externalConfig), configContent);
+      });
+    });
+  }
+});
+
+test("config readability and destination writability failures leave all setup outputs untouched", async (t) => {
+  for (const kind of [
+    "unreadable source",
+    "unreadable destination",
+    "unwritable destination directory",
+  ]) {
+    await t.test(kind, async () => {
+      await withFixture(async (fixture) => {
+        const directory = path.join(fixture.projectRoot, ".codex");
+        const config = path.join(directory, "config.toml");
+        await mkdir(directory);
+        if (kind === "unreadable destination")
+          await writeFile(config, configContent);
+        const target =
+          kind === "unreadable source"
+            ? path.join(fixture.workflowRoot, ".codex/config.toml")
+            : kind === "unreadable destination"
+              ? config
+              : directory;
+        await writeFile(
+          path.join(fixture.projectRoot, "AGENTS.override.md"),
+          oldOverrideContent,
+        );
+        const before = await snapshotManagedOutputs(fixture);
+        let result;
+        await chmod(
+          target,
+          kind === "unwritable destination directory" ? 0o555 : 0o000,
+        );
+        try {
+          result = await invokeNode(fixture);
+        } finally {
+          await chmod(
+            target,
+            kind === "unwritable destination directory" ? 0o755 : 0o644,
+          );
+        }
+        assert.notEqual(result.exitCode, 0);
+        assert.match(
+          result.stderr,
+          kind === "unwritable destination directory"
+            ? /write \.codex\/config\.toml during preflight/
+            : /(?:required config source|EACCES)/,
+        );
+        assert.doesNotMatch(result.stderr, /Partial setup:/);
+        assert.deepEqual(await snapshotManagedOutputs(fixture), before);
+      });
+    });
+  }
+});
 
 // A leaf-only query misses tracked gitlink ancestors. Snapshot the entire
 // disposable parent/submodule state to prove refusal precedes every write.
@@ -391,6 +655,11 @@ test("repository and tracked ancestors refuse setup before writes", async (t) =>
     { ancestor: ".AGENTS", kind: "index-only gitlink" },
     { ancestor: ".agents", kind: "deleted tracked file" },
     { ancestor: ".agents/skills", kind: "deleted tracked symlink" },
+    { ancestor: ".CODEX", kind: "index-only gitlink" },
+    { ancestor: ".codex", kind: "deleted tracked file" },
+    { ancestor: ".codex", kind: "nested repository" },
+    { ancestor: ".codex", kind: "parent gitdir alias" },
+    { ancestor: ".codex", kind: "parent metadata directory" },
     { ancestor: ".", kind: "parent metadata root" },
     { ancestor: ".", kind: "linked worktree in common metadata" },
     {
@@ -586,6 +855,8 @@ test("noncanonical output spellings refuse setup before writes", async (t) => {
     { path: ".agents/SKILLS" },
     { path: ".AGENTS/SKILLS" },
     { path: "agents.OVERRIDE.md", override: true },
+    { path: ".CODEX" },
+    { path: ".codex/CONFIG.TOML", config: true },
   ];
   for (const alias of cases) {
     await t.test(alias.path, async (t) => {
@@ -608,6 +879,7 @@ test("noncanonical output spellings refuse setup before writes", async (t) => {
             target,
             "dir",
           );
+        else if (alias.config) await writeFile(target, configContent);
         else if (!alias.override) await mkdir(target, { recursive: true });
         await writeFile(
           path.join(
@@ -752,6 +1024,7 @@ test("tracked case aliases refuse setup before writes regardless of core.ignorec
   for (const relativePath of [
     "agents.OVERRIDE.md",
     ".AGENTS/SKILLS/ai-pr/SKILL.md",
+    ".CODEX/CONFIG.TOML",
   ]) {
     await t.test(`deleted alias ${relativePath}`, async () => {
       await withFixture(async (fixture) => {
@@ -824,6 +1097,18 @@ test("higher-priority Git ignore negations refuse setup before any managed outpu
       "!ai-pr\n",
       ".agents/skills/ai-pr",
     ],
+    [
+      "root config negation",
+      ".gitignore",
+      "!/.codex/config.toml\n",
+      ".codex/config.toml",
+    ],
+    [
+      "nested config negation",
+      ".codex/.gitignore",
+      "!config.toml\n",
+      ".codex/config.toml",
+    ],
   ];
   for (const [name, ignorePath, ignoreContent, managedPath] of cases) {
     await t.test(name, async () => {
@@ -836,6 +1121,7 @@ test("higher-priority Git ignore negations refuse setup before any managed outpu
         await mkdir(path.dirname(customPath), { recursive: true });
         await writeFile(customPath, customContent);
         const ignoreTarget = path.join(fixture.projectRoot, ignorePath);
+        await mkdir(path.dirname(ignoreTarget), { recursive: true });
         await writeFile(ignoreTarget, ignoreContent);
         await git(
           fixture.projectRoot,
@@ -1506,6 +1792,46 @@ syncBuiltinESMExports();`;
   });
 });
 
+test("unexpected config write failure reports its partial output and can recover", async () => {
+  await withFixture(async (fixture) => {
+    const preload = `import fs from 'node:fs/promises';
+import { syncBuiltinESMExports } from 'node:module';
+const original = fs.writeFile;
+fs.writeFile = (...args) => {
+  if (args[0].endsWith('/.codex/config.toml')) throw new Error('fixture config write failure');
+  return original(...args);
+};
+syncBuiltinESMExports();`;
+    const excludePath = await excludePathFor(fixture.projectRoot);
+    const excludeBefore = await readFile(excludePath);
+    const failed = await invokeNode(fixture, {
+      env: {
+        NODE_OPTIONS: `--import=data:text/javascript,${encodeURIComponent(preload)}`,
+      },
+    });
+    assert.notEqual(failed.exitCode, 0);
+    assert.match(failed.stderr, /fixture config write failure/);
+    assert.match(failed.stderr, /Partial setup: completed writes: .*\.codex\./);
+    assert.match(
+      failed.stderr,
+      /Failed write may be incomplete: \.codex\/config\.toml/,
+    );
+    assert.doesNotMatch(failed.stdout, /setup verified/i);
+    assert.deepEqual(await readFile(excludePath), excludeBefore);
+    assert.equal(
+      (await lstat(path.join(fixture.projectRoot, ".codex"))).isDirectory(),
+      true,
+    );
+    await assert.rejects(
+      lstat(path.join(fixture.projectRoot, ".codex/config.toml")),
+    );
+    const recovered = await invokeNode(fixture);
+    assert.equal(recovered.exitCode, 0, recovered.stderr);
+    assert.deepEqual((await readManagedState(fixture)).config, configContent);
+    await assertIgnored(fixture.projectRoot);
+  });
+});
+
 test("an unreadable resolved exclude target fails before creating the override", async () => {
   await withFixture(async (fixture) => {
     const excludePath = await excludePathFor(fixture.projectRoot);
@@ -1740,6 +2066,7 @@ process.exit(result.status ?? 1);
       result.stderr,
       /Partial setup: completed writes: AGENTS\.override\.md, \.agents, \.agents\/skills/,
     );
+    assert.match(result.stderr, /\.codex, \.codex\/config\.toml/);
     assert.doesNotMatch(result.stdout, /setup verified/i);
     assert.equal((await readManagedState(fixture)).override, overrideContent);
   });
@@ -1784,6 +2111,7 @@ test("linked worktrees use Git-resolved exclude metadata and remain idempotent",
     assert.equal(first.exitCode, 0, first.stderr);
     const firstState = await readManagedState(fixture);
     assert.equal(firstState.override, overrideContent);
+    assert.deepEqual(firstState.config, configContent);
     const second = await invokeNode(fixture, { cwd: mainRoot });
     assert.equal(second.exitCode, 0, second.stderr);
     assert.deepEqual(await readManagedState(fixture), firstState);
@@ -2035,7 +2363,7 @@ test("exclude preflight failure leaves the exact old generated template unchange
   });
 });
 
-test("unrelated fallback and hook configuration do not block clean setup", async () => {
+test("custom fallback configuration refuses setup while unrelated hooks remain preserved", async () => {
   await withFixture(async (fixture) => {
     await mkdir(path.join(fixture.projectRoot, ".codex"), { recursive: true });
     await writeFile(
@@ -2047,9 +2375,20 @@ test("unrelated fallback and hook configuration do not block clean setup", async
       '{"hooks":{"Stop":["unrelated.py"]}}\n',
     );
 
+    const before = await snapshotManagedOutputs(fixture);
     const result = await invokeNode(fixture);
 
-    assert.equal(result.exitCode, 0, result.stderr);
+    assert.notEqual(result.exitCode, 0);
+    assert.match(result.stderr, /config\.toml differs/);
+    assert.doesNotMatch(result.stderr, /legacy Codex conflicts/);
+    assert.deepEqual(await snapshotManagedOutputs(fixture), before);
+    assert.equal(
+      await readFile(
+        path.join(fixture.projectRoot, ".codex/hooks.json"),
+        "utf8",
+      ),
+      '{"hooks":{"Stop":["unrelated.py"]}}\n',
+    );
     assert.equal(
       await readFile(
         path.join(fixture.projectRoot, ".codex/config.toml"),
@@ -2060,7 +2399,7 @@ test("unrelated fallback and hook configuration do not block clean setup", async
   });
 });
 
-test("commented and unrelated later fallback arrays do not block clean setup", async () => {
+test("commented and unrelated later fallback arrays produce only the custom-config conflict", async () => {
   await withFixture(async (fixture) => {
     await mkdir(path.join(fixture.projectRoot, ".codex"), { recursive: true });
     await writeFile(
@@ -2073,9 +2412,16 @@ test("commented and unrelated later fallback arrays do not block clean setup", a
       ].join("\n"),
     );
 
+    const before = await snapshotManagedOutputs(fixture);
     const result = await invokeNode(fixture);
 
-    assert.equal(result.exitCode, 0, result.stderr);
+    assert.notEqual(result.exitCode, 0);
+    assert.match(result.stderr, /config\.toml differs/);
+    assert.doesNotMatch(
+      result.stderr,
+      /fallback references \.codex\/AGENTS\.md/,
+    );
+    assert.deepEqual(await snapshotManagedOutputs(fixture), before);
   });
 });
 
@@ -2088,7 +2434,12 @@ test("comments inside a fallback array are ignored while quoted brackets preserv
       'project_doc_fallback_filenames = ["TEAM.md", # ".codex/AGENTS.md"\n"OTHER.md"]\n',
     );
     const commented = await invokeNode(fixture);
-    assert.equal(commented.exitCode, 0, commented.stderr);
+    assert.notEqual(commented.exitCode, 0);
+    assert.match(commented.stderr, /config\.toml differs/);
+    assert.doesNotMatch(
+      commented.stderr,
+      /fallback references \.codex\/AGENTS\.md/,
+    );
 
     await writeFile(
       configPath,

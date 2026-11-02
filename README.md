@@ -25,9 +25,13 @@ generated template is upgraded automatically. The `.ai` authority then loads
 the nested `ai-build` skill when planning, Goal mode, or a controlled boundary
 requires it. Setup also creates four relative links under project-root
 `.agents/skills/`, pointing to the same project's canonical `.ai` skills.
-Only generated links and the override receive exact local Git excludes;
-custom skills and tracked ignore files are preserved. Conflicts stop the whole
-operation before writes. See [Codex Agent Setup](docs/codex-agent.md).
+It creates a real project-root `.codex/` directory and copies
+`.ai/.codex/config.toml` there so trusted project-root sessions can load the
+same defaults. Identical existing configs are reused; differing configs are
+preserved and stop setup before writes. Only the generated links, override,
+and config file receive exact local Git excludes; custom skills, other
+`.codex/` files, and tracked ignore files are preserved. Restart Codex after
+setup. See [Codex Agent Setup](docs/codex-agent.md).
 
 ## Workflow
 

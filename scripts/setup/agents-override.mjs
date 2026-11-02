@@ -5,6 +5,7 @@ import { constants, writeSync } from "node:fs";
 import {
   access,
   appendFile,
+  chmod,
   lstat,
   mkdir,
   readdir,
@@ -20,7 +21,9 @@ import { fileURLToPath } from "node:url";
 const OVERRIDE_NAME = "AGENTS.override.md";
 const SKILL_NAMES = ["ai-build", "ai-worktree-setup", "ai-commit", "ai-pr"];
 const SKILL_PATHS = SKILL_NAMES.map((name) => `.agents/skills/${name}`);
-const MANAGED_PATHS = [OVERRIDE_NAME, ...SKILL_PATHS];
+const CONFIG_PATH = ".codex/config.toml";
+const MANAGED_ANCESTORS = [".agents", ".agents/skills", ".codex"];
+const MANAGED_PATHS = [OVERRIDE_NAME, ...SKILL_PATHS, CONFIG_PATH];
 const EXCLUDE_RULES = MANAGED_PATHS.map((name) => `/${name}`);
 const PREVIOUS_OVERRIDE_CONTENT = `# Local Project AI Instructions
 
@@ -471,6 +474,57 @@ const requireProjectRepository = async (targetPath, label, repository) => {
   }
 };
 
+const inspectConfig = async (repository) => {
+  const sourceDirectory = path.join(workflowRoot, ".codex");
+  await requireCanonicalSpelling(sourceDirectory, ".ai/.codex");
+  await requireRealDirectory(sourceDirectory, ".ai/.codex");
+  const source = path.join(workflowRoot, CONFIG_PATH);
+  await requireCanonicalSpelling(source, `.ai/${CONFIG_PATH}`);
+  let sourceMetadata;
+  let content;
+  try {
+    sourceMetadata = await lstat(source);
+    if (sourceMetadata.isSymbolicLink() || !sourceMetadata.isFile()) {
+      throw new Error(
+        "expected a readable regular file, not a symbolic link or non-file",
+      );
+    }
+    content = await readFile(source);
+  } catch (error) {
+    throw new Error(
+      `could not read required config source .ai/${CONFIG_PATH}: ${error.message}`,
+    );
+  }
+
+  const directory = path.join(projectRoot, ".codex");
+  await requireCanonicalSpelling(directory, ".codex");
+  const createDirectory = !(await entryExists(directory));
+  if (!createDirectory) {
+    await requireRealDirectory(directory, ".codex");
+    await requireProjectRepository(directory, ".codex", repository);
+  }
+  const target = path.join(projectRoot, CONFIG_PATH);
+  await requireCanonicalSpelling(target, CONFIG_PATH);
+  const createFile = !(await entryExists(target));
+  let conflict = false;
+  if (!createFile) {
+    const metadata = await lstat(target);
+    if (metadata.isSymbolicLink() || !metadata.isFile()) {
+      throw new Error(
+        `${CONFIG_PATH} must be a readable regular file, not a symbolic link or non-file; it was preserved`,
+      );
+    }
+    conflict = !(await readFile(target)).equals(content);
+  }
+  return {
+    content,
+    mode: sourceMetadata.mode & 0o777,
+    createDirectory,
+    createFile,
+    conflict,
+  };
+};
+
 const inspectSkills = async (repository) => {
   for (const relativePath of [".agents", ".agents/skills"]) {
     await requireRealDirectory(
@@ -620,7 +674,7 @@ const resolveParentGit = async () => {
 };
 
 const requireUntrackedOutputs = async () => {
-  const ancestors = [".agents", ".agents/skills"];
+  const ancestors = MANAGED_ANCESTORS;
   for (const relativePath of [...ancestors, ...MANAGED_PATHS]) {
     const trackedResult = await runGit([
       "ls-files",
@@ -785,6 +839,7 @@ const requireWritable = async (targetPath, label, directory = false) => {
 const preflightWrites = async (
   overrideState,
   skillState,
+  configState,
   excludePath,
   missingRules,
 ) => {
@@ -798,6 +853,8 @@ const preflightWrites = async (
   for (const relativePath of [
     ...skillState.directories,
     ...skillState.links.map(({ relativePath }) => relativePath),
+    ...(configState.createDirectory ? [".codex"] : []),
+    ...(configState.createFile ? [CONFIG_PATH] : []),
   ]) {
     let ancestor = path.dirname(path.join(projectRoot, relativePath));
     while (!(await entryExists(ancestor))) ancestor = path.dirname(ancestor);
@@ -833,7 +890,7 @@ const writeOverride = async (operation) => {
   }
 };
 
-const verifyResult = async (repository, expectedContent) => {
+const verifyResult = async (repository, expectedContent, expectedConfig) => {
   const { excludePath } = repository;
   await requireCanonicalSpelling(overridePath, OVERRIDE_NAME);
   let metadata;
@@ -862,6 +919,15 @@ const verifyResult = async (repository, expectedContent) => {
   const skillState = await inspectSkills(repository);
   if (skillState.directories.length || skillState.links.length) {
     throw new Error("could not verify all expected local skill links");
+  }
+  const configState = await inspectConfig(repository);
+  if (
+    configState.createDirectory ||
+    configState.createFile ||
+    configState.conflict ||
+    !configState.content.equals(expectedConfig)
+  ) {
+    throw new Error(`could not verify the exact regular ${CONFIG_PATH} copy`);
   }
   await requireUntrackedOutputs();
   for (const relativePath of MANAGED_PATHS) {
@@ -895,17 +961,29 @@ const setupAgentsOverride = async () => {
   const { excludePath } = repository;
   await requireUntrackedOutputs();
   await inspectRootInstructions();
+  const configState = await inspectConfig(repository);
   const conflicts = await detectLegacyConflicts();
   if (conflicts.length > 0) {
     throw new Error(
       `resolve all instruction and legacy Codex conflicts before setup:\n${conflicts.join("\n")}`,
     );
   }
+  if (configState.conflict) {
+    throw new Error(
+      `${CONFIG_PATH} differs from .ai/${CONFIG_PATH}; custom configuration was preserved. Resolve it explicitly before setup; no automatic merge or overwrite is performed`,
+    );
+  }
   const overrideState = await inspectOverride();
   const skillState = await inspectSkills(repository);
   const excludeContent = await inspectExclude(excludePath);
   const missingRules = await inspectEffectiveExcludes(excludeContent);
-  await preflightWrites(overrideState, skillState, excludePath, missingRules);
+  await preflightWrites(
+    overrideState,
+    skillState,
+    configState,
+    excludePath,
+    missingRules,
+  );
 
   if (overrideState.write) {
     await performWrite(OVERRIDE_NAME, () => writeOverride(overrideState.write));
@@ -920,19 +998,35 @@ const setupAgentsOverride = async () => {
       symlink(expected, path.join(projectRoot, relativePath), "dir"),
     );
   }
+  if (configState.createDirectory) {
+    await performWrite(".codex", () => mkdir(path.join(projectRoot, ".codex")));
+  }
+  if (configState.createFile) {
+    await performWrite(CONFIG_PATH, async () => {
+      const target = path.join(projectRoot, CONFIG_PATH);
+      await writeFile(target, configState.content, {
+        flag: "wx",
+        mode: configState.mode,
+      });
+      await chmod(target, configState.mode);
+    });
+  }
   if (missingRules.length > 0) {
     await performWrite("repository-local Git exclude", () =>
       appendExcludeRules(excludePath, excludeContent, missingRules),
     );
   }
 
-  await verifyResult(repository, overrideState.content);
+  await verifyResult(repository, overrideState.content, configState.content);
   writeOutput(`${OVERRIDE_NAME}: ${overrideState.status}`);
   for (const relativePath of SKILL_PATHS) {
     writeOutput(
       `${relativePath}: ${skillState.links.some((link) => link.relativePath === relativePath) ? "created" : "already correct"}`,
     );
   }
+  writeOutput(
+    `${CONFIG_PATH}: ${configState.createFile ? "created" : "already correct"}`,
+  );
   for (const rule of EXCLUDE_RULES) {
     writeOutput(
       `${rule} exclude rule: ${missingRules.includes(rule) ? "added" : "already present"}`,

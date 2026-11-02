@@ -40,6 +40,19 @@ Each generated link has its own exact local exclude. The utility does not
 ignore the entire `.agents/` tree or alter the tracked parent ignore file.
 Existing custom skills remain visible. Skill source stays inside `.ai`.
 
+Setup also creates a real project-root `.codex/` directory and copies
+`.ai/.codex/config.toml` into `.codex/config.toml` with the same bytes. The
+canonical `.ai/.codex/` currently contains only that config file. An existing
+byte-identical regular config is reused without rewriting it. A differing
+config stops the whole operation before writes, preserving custom settings
+for explicit resolution. The copied config is a snapshot; source changes do
+not automatically update the installed file. A later run reports a conflict
+if the source and installed config differ.
+
+Only `/.codex/config.toml` is added to the local Git exclude; other project
+`.codex/` files remain visible and unchanged. Setup does not copy user/global
+Codex configuration, authentication files, or runtime state.
+
 Existing root `AGENTS.md` must be a readable regular file;
 setup preserves its bytes and tracking state. Tracked overrides, symbolic links,
 non-regular instruction targets, and defined legacy Codex conflicts are rejected
@@ -55,11 +68,11 @@ Codex configuration remains untouched.
 Tracked managed paths are checked case-insensitively on every filesystem.
 Tracked case aliases and their tracked contents block setup even when deleted
 locally; a matching link target does not make a tracked alias reusable.
-Existing outputs and their `.agents/skills/` ancestors must also use the exact
+Existing outputs and their `.agents/skills/` and `.codex/` ancestors must use the exact
 canonical spelling reported by directory listings. Setup refuses filesystem
 case aliases before writes, preserving them for explicit operator resolution;
 it never broadens excludes or changes `core.ignorecase` to hide them.
-Tracked file or submodule entries at `.agents` or `.agents/skills` also block
+Tracked file or submodule entries at `.agents`, `.agents/skills`, or `.codex` block
 setup, including uninitialized submodules and paths deleted locally. Existing
 output ancestors must belong to the parent repository and contain no nested Git
 metadata; setup never writes into another repository. Custom repositories under
@@ -91,7 +104,7 @@ Use `.ai/instructions/index.md` to load only instructions relevant to the reques
 
 Custom rules may appear before or after the block. LF and CRLF line endings are
 accepted without rewriting the file. Missing, changed, repeated, or inactive
-blocks fail with a routing explanation before either managed target changes;
+blocks fail with a routing explanation before managed outputs change;
 add the documented block while preserving existing guidance, then retry.
 
 The utility recognizes only the exact previous generated template and upgrades
@@ -120,11 +133,11 @@ Verified on October 7, 2026 against the
 OpenAI recommends GPT-6.1 Sol for complex coding and agentic workflows when
 available to the account and client.
 
-For sessions started from the containing workspace, set the same `model` in
-that workspace's `.codex/config.toml`, or start Codex with
-`codex --model gpt-6.1-sol`. Restart the session after changing configuration.
-The nested configuration does not apply when the working directory is above
-`.ai`.
+For sessions started from the containing workspace, `setup:codex` installs the
+same configuration at that workspace's `.codex/config.toml`. Restart Codex
+after setup; project config loads only for trusted projects and remains subject
+to higher-priority runtime and command-line settings. The nested configuration
+alone does not apply when the working directory is above `.ai`.
 
 Reference: <https://learn.chatgpt.com/docs/config-file/config-advanced>
 
