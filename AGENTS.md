@@ -58,9 +58,14 @@ Use these role defaults unless the user explicitly requests another runtime:
 | `builder`  | `gpt-6.1-sol` | `high`           | Implementation and focused fixes   |
 | `reviewer` | `gpt-6.1-sol` | `xhigh`          | Independent review; no edits       |
 
-- Set the full `model` and `reasoning_effort` explicitly on every spawn; do not
-  inherit the parent's model or reasoning effort for these roles. When using
-  `spawn_agent`, set `fork_turns` to `"4"` so runtime overrides are supported.
+- Inspect the exposed `spawn_agent` schema before spawning. Set the full
+  `model` and `reasoning_effort` explicitly on every role spawn. In the audited
+  runtime, use `fork_turns: "none"` for these overrides; `"all"` inherits the
+  parent's runtime and cannot accept overrides. Do not prescribe a numeric
+  fork depth or assume another client exposes the same interface.
+- With no inherited history, supply the repository, relevant instruction paths,
+  bounded assignment, expected result, and exclusive write ownership (or
+  explicitly no edits) in the spawn message.
 - Set `task_name` to `<role>_<model_family>_<reasoning_effort>_<purpose>`.
   Derive `model_family` from the model ID's final hyphen-delimited component;
   use a short lowercase snake-case purpose. Examples:
@@ -72,8 +77,9 @@ Use these role defaults unless the user explicitly requests another runtime:
 - Reuse a scout or builder session only for the same bounded assignment and
   file ownership. Use a new name when the assignment or runtime changes, and a
   fresh reviewer for a materially changed review scope.
-- If a requested model, effort, or spawn override is unavailable, report the
-  limitation instead of silently inheriting another runtime or mislabeling it.
+- If a requested model, effort, or spawn override is unavailable, stop that
+  delegation and report the limitation. Do not silently substitute or inherit
+  another runtime, mislabel it, or claim verification in an untested client.
 
 ## Action Boundaries
 

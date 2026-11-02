@@ -142,25 +142,59 @@ test("plan worktree setup stays native, safe, and independent", async () => {
   assert.match(promptIndex, /Plan worktree setup/);
 });
 
-test("workflow cleanup discovers plans, confirms, and preserves branches", async () => {
+test("workflow cleanup requires explicit scope, confirms, and preserves branches", async () => {
   const [cleanup, usage, promptIndex] = await Promise.all([
     read("prompts/utilities/plan-worktree-cleanup.md"),
     read("docs/workflow-usage.md"),
     read("prompts/README.md"),
   ]);
 
-  assert.match(cleanup, /Discover every plan directly under/);
-  assert.match(cleanup, /Require at least one discovered plan/);
-  assert.match(cleanup, /Do not accept or require explicit plan paths/);
-  assert.doesNotMatch(cleanup, /^Plans:/m);
+  assert.match(cleanup, /plan: \.ai\/plans\/<plan-name>\.md/);
+  assert.match(cleanup, /all-plans: true/);
+  assert.match(cleanup, /Reject simultaneous selectors/);
   assert.match(
     cleanup,
-    /Type PROCEED to clean up every plan listed above, or CANCEL to stop\./,
+    /Without a selector[\s\S]+read-only plan inventory[\s\S]+no confirmation/,
+  );
+  assert.match(cleanup, /Never infer completion or\s+permission/);
+  assert.match(cleanup, /including active\s+plans/);
+  assert.match(cleanup, /Reject missing explicit plans/);
+  assert.match(cleanup, /symlink|symbolic link/);
+  assert.match(cleanup, /shared or ambiguous ownership/);
+  assert.match(cleanup, /unselected plans[\s\S]+explicit references/);
+  assert.match(
+    cleanup,
+    /Type PROCEED to clean up only the selected plans listed above, or CANCEL to stop\./,
   );
   assert.match(cleanup, /exact uppercase response `PROCEED` or `CANCEL`/);
+  assert.match(cleanup, /On `CANCEL`, stop without mutation/);
+  assert.match(cleanup, /On any other response, make no changes/);
+  assert.match(cleanup, /require a new\s+`PROCEED` or `CANCEL` response/);
+  assert.match(cleanup, /missing task root\s+does not block cleanup/);
   assert.match(cleanup, /Retain every Git branch/);
   assert.match(cleanup, /Preserve workflow records that are not owned/);
   assert.match(cleanup, /Do not run the global `cleanup:local` utility/);
-  assert.match(usage, /plan-worktree-cleanup\.md/);
-  assert.match(promptIndex, /Plan worktree cleanup/);
+  for (const source of [usage, promptIndex]) {
+    assert.match(source, /plan-worktree-cleanup\.md/);
+    assert.match(source, /plan: \.ai\/plans\/<plan-name>\.md/);
+    assert.match(source, /all-plans: true/);
+  }
+});
+
+test("role guidance uses supported explicit runtime settings with context", async () => {
+  for (const source of await Promise.all([
+    read("AGENTS.md"),
+    read("docs/codex-agent.md"),
+  ])) {
+    assert.match(source, /fork_turns: "none"/);
+    assert.doesNotMatch(source, /fork_turns[^\n]*"4"/);
+    assert.match(source, /schema before/);
+    assert.match(source, /repository, relevant instruction paths/);
+    assert.match(source, /bounded assignment, expected\s+result/);
+    assert.match(source, /unavailable/);
+    assert.match(
+      source,
+      /Do not silently substitute|instead of silently substituting/,
+    );
+  }
 });
