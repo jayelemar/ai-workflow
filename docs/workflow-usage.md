@@ -64,6 +64,35 @@ progress, validates the actual changes, and completes the plan outcome. The
 plan describes the work; it does not become an execution engine or permission
 token.
 
+## Review After Implementation
+
+The planned-work flow is:
+
+```text
+/plan -> save one living plan -> /goal -> implement and validate -> suggest /review
+```
+
+After a saved plan is successfully implemented and its required validation and
+reviews are complete, the completion response reports the result and ends with
+an optional manual review handoff. You run the review yourself. It is not a new
+completion gate and does not replace controlled work's mandatory independent
+final review.
+
+End with one fenced text block containing the command and all review context
+together. Replace the placeholders with the actual repository/worktree and
+plan paths so the entire prompt can be copied and pasted in one action:
+
+```text
+/review Review the uncommitted changes in <exact-repository/worktree-path> implementing <exact-plan-path>. Check correctness, regressions, plan acceptance criteria, and validation gaps. Exclude unrelated pre-existing changes. Report actionable findings without editing files.
+```
+
+The target follows actual Git state: uncommitted changes, a specific commit,
+or changes against a known base. Include both committed and uncommitted
+plan-owned work when applicable, and provide one self-contained prompt per affected
+repository. Do not invent `/review` flags or launch the review automatically.
+Plan creation, blocked or incomplete implementation, and ordinary direct
+requests do not receive this completion handoff. No review-state file is added.
+
 ## Start the Next Plan
 
 Each planned outcome gets its own living plan. Do not overwrite a completed
