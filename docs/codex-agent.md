@@ -76,9 +76,20 @@ Names include the role, model family, actual effort, and purpose, for example:
 - `builder_sol_high_auth_fix`
 - `reviewer_sol_xhigh_auth_review`
 
-Changing only a name does not change the runtime. Each `spawn_agent` call must
-set the matching full model ID, reasoning effort, and `fork_turns: "4"`;
-a full-history fork inherits the parent runtime and cannot accept overrides.
+Changing only a name does not change the runtime. Inspect the exposed
+`spawn_agent` schema before each delegation. In the audited runtime, each role
+spawn sets the matching full `model`, `reasoning_effort`, and
+`fork_turns: "none"`; `"all"` inherits the parent runtime and cannot accept
+overrides. Do not use a numeric fork depth or assume these arguments work in
+every client.
+
+A child without inherited history needs explicit context in its spawn message:
+the repository, relevant instruction paths, bounded assignment, expected
+result, and exclusive write ownership (or no edits for read-only work). If the
+requested model, effort, or spawn override is unavailable, stop that delegation
+and report the limitation instead of silently substituting or inheriting
+another runtime. Do not claim verification in an untested client.
+
 Explicit user runtime choices take precedence and must also appear in the name.
 For example, an explicit Luna/low scout uses `scout_luna_low_auth_map` and supplies
 `model: "gpt-6-luna"` with `reasoning_effort: "low"`.
@@ -93,7 +104,9 @@ loads `.ai/.agents/skills/change-workflow/SKILL.md`.
 
 For a delegated task, inspect the spawn arguments and confirm that its name,
 model, and reasoning effort match the role defaults or the user's explicit
-override. A parent at `xhigh` must still spawn a default scout at `high` and a
-default builder at `high`.
+override. Record the accepted arguments and any runtime metadata actually
+exposed; a requested setting alone is not independent proof of the underlying
+execution model. A parent at `xhigh` must still spawn a default scout at `high`
+and a default builder at `high`.
 
 Reference: <https://learn.chatgpt.com/docs/agent-configuration/agents-md>

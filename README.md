@@ -68,9 +68,14 @@ user's request.
 
 ## Legacy Local Records
 
-Ignored content under `artifacts/`, `logs/`, `plans/`, `specs/`, `state/`, and
-`tmp/` may have been produced by the retired workflow. It is preserved and
-cannot authorize new execution.
+Ignored content under `artifacts/`, `logs/`, `specs/`, `state/`, and `tmp/` may
+have been produced by the retired workflow. It is preserved and cannot
+authorize new execution. Legacy cleanup excludes the entire `plans/` tree,
+including hidden, nested, and linked entries, regardless of plan status.
+Preflight rejects managed roots reachable through plan links before any
+mutation, including root aliases and links through external directories.
+Case-variant aliases to missing managed roots are also rejected conservatively
+so applying cleanup cannot turn a dangling plan link into a managed directory.
 
 Preview explicit cleanup with:
 
@@ -83,6 +88,21 @@ Apply cleanup only when the user has explicitly authorized deletion:
 ```bash
 pnpm cleanup:local --apply
 ```
+
+For plan deletion, use the separate
+[plan worktree cleanup utility](prompts/utilities/plan-worktree-cleanup.md):
+
+```text
+Run `.ai/prompts/utilities/plan-worktree-cleanup.md`.
+plan: .ai/plans/<plan-name>.md
+```
+
+Replace the selector with `all-plans: true` only for deliberately requested
+bulk cleanup, including active plans. With no selector, the utility only
+inventories plans and shows examples; it offers no deletion confirmation.
+Selected cleanup requires complete inspection and exact `PROCEED` confirmation;
+`CANCEL` preserves data. Unselected plans, their worktrees and records, and
+every Git branch are preserved.
 
 ## Checks
 

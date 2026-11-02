@@ -12,9 +12,11 @@ instructions required by that utility.
   update, route, or retire instruction guidance.
 - [Plan worktree setup](utilities/plan-worktree-setup.md): safely create native
   Git worktrees for one living plan and output its execution prompt.
-- [Plan worktree cleanup](utilities/plan-worktree-cleanup.md): discover and
-  permanently remove all source plans, their task worktrees, and plan-owned
-  records after exact operator confirmation.
+- [Plan worktree cleanup](utilities/plan-worktree-cleanup.md): inventory only
+  without a selector; select `plan: .ai/plans/<plan-name>.md` or explicitly
+  request bulk cleanup with `all-plans: true` (including active plans). Remove
+  only selected plans, task worktrees, and owned records after inspection and
+  exact operator confirmation; preserve unselected plans and all branches.
 - [Git commit](utilities/git-commit.md): propose and, after explicit
   authorization, organize focused local commits.
 - [Pull request creation](utilities/pull-request-creation.md): prepare and,
