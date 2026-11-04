@@ -25,6 +25,9 @@ usable by operators, implementers, and reviewers.
   owner instead of repeating its procedure.
 - Write in plain language with actionable bullets: name the action, condition,
   and evidence needed. Remove filler and obsolete examples.
+- Use Rules for requirements, Validation for verification steps, and
+  Anti-Patterns only for concrete failure examples that add useful detail.
+  Remove restatements and empty sections; retain applicability and exceptions.
 - Keep entrypoints short. Move substantial detail to focused references and
   explicitly require reading them before the relevant action; moving a safeguard
   must not make it optional or unreachable.
@@ -47,6 +50,3 @@ usable by operators, implementers, and reviewers.
 ## Anti-Patterns
 
 - Recording decisions only in ephemeral chat, commit messages, or incident threads.
-- Calling a high-level narrative a runbook when it has no executable recovery steps.
-- Leaving threat models or authorization matrices unchanged after a trust-boundary change.
-- Duplicating implementation details across documents without one maintained source of truth.

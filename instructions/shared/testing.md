@@ -40,13 +40,12 @@ scripts, and sandboxed browser or network validation.
 
 ## Required evidence
 
+Follow [Validation and Completion](../../AGENTS.md#validation-and-completion)
+for required versus optional evidence, completion blocking, and deferred checks.
+
 - Before saving a validation command, name its observable invariant and expected
   result. Verify the exact command exercises it with the relevant configuration,
   fixtures, environment, and external inputs.
-- Evidence for any acceptance criterion or completion invariant is required,
-  whether automated, native, physical-device, operator, deployment, external
-  service, or environment inspection. Missing required evidence blocks
-  completion. Only checks proving none of these may be optional.
 - Choose the least costly venue with equivalent confidence in the same invariant:
   focused local command, compatible development runtime, shared development or
   staging environment, fresh application build, or release pipeline.
@@ -56,8 +55,6 @@ scripts, and sandboxed browser or network validation.
 - A fresh build proves compilation and packaged configuration. A development
   or staging check proves only the behavior and environment boundaries it
   exercises; these venues are not interchangeable.
-- If optional validation is skipped, report why, the unverified risk, and the
-  smallest follow-up check. Required evidence cannot be deferred.
 
 ## Environment requirements
 
@@ -88,5 +85,3 @@ scripts, and sandboxed browser or network validation.
 ## Anti-Patterns
 
 - Duplicating behavior across layers without a distinct risk.
-- Preserving flaky tests because they sometimes catch failures.
-- Running the slowest suite by default when focused evidence is equivalent.

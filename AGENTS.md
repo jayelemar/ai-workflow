@@ -112,11 +112,14 @@ Use these role defaults unless the user explicitly requests another runtime:
 ## Validation and Completion
 
 - Run the smallest sufficient validation that proves the changed behavior.
+- Evidence for every acceptance criterion or completion invariant is required,
+  including automated, native, physical-device, operator, deployment, external
+  service, and environment checks. Only checks proving none of these may be optional.
 - Required acceptance evidence cannot be downgraded, skipped, or called
   optional. Unavailable required evidence blocks completion.
-- Optional environment, service, device, or operator checks may be deferred
-  only when the final report names the unverified behavior, risk, reason, and
-  smallest follow-up check.
+- For unavailable checks, report the unverified behavior, risk, blocker, and
+  smallest follow-up check. Optional environment, service, device, or operator
+  checks may be deferred only with this reporting.
 - Validate the actual changed diff against the request, living plan when
   present, routed instructions, and preserved unrelated work.
 - Never claim completion without reporting changed scope, validation results,

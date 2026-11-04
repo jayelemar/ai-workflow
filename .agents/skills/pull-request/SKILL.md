@@ -39,15 +39,9 @@ to the branch changes.
 
 ## Title
 
-Use conventional-commit format:
+Before drafting, follow
+[Commit Subjects and PR Titles](../../../instructions/shared/delivery-hygiene.md#commit-subjects-and-pr-titles).
 
-```text
-<type>(<scope>): <imperative summary>
-```
-
-- Use `feat`, `fix`, `refactor`, `perf`, `chore`, `docs`, `test`, `build`,
-  `ci`, `style`, or `revert`.
-- Make the title specific and imperative; never exceed 72 characters.
 - For one commit, reuse its subject when it accurately represents the complete
   diff.
 - For multiple commits, synthesize one title for their combined outcome.
@@ -71,13 +65,10 @@ Start with concise outcomes and actual validation evidence:
   complete diff; do not impose a fixed bullet count.
 - Summarize the complete diff's user-visible or operational outcomes, not the
   commit list.
-- Include explicit validation evidence in every PR. Distinguish completed
-  checks from missing required evidence and optional deferred checks; do not
-  imply that a deferred check passed or that missing required evidence permits
-  completion.
-- Add concise risk, compatibility, migration, recovery, or deferred-check
-  information when the change needs it. Use a short paragraph or additional
-  section when that helps reviewers; omit inapplicable sections and filler.
+- Follow [Delivery Hygiene](../../../instructions/shared/delivery-hygiene.md)
+  for validation evidence, missing required evidence, risk, compatibility,
+  migration, recovery, and deferred-check reporting. Use a short paragraph or
+  additional section when it helps reviewers.
 - Do not add commit SHAs, a commit-by-commit narrative, or an automatic checklist.
 
 Simple change example (illustrative evidence): “Correct the saved-settings

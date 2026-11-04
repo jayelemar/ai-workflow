@@ -10,7 +10,8 @@ MCP server, or persistent JavaScript REPL is required.
 
 Read the repository authority, applicable instruction routes, local desktop
 guidance, current package scripts, changed code, and existing native harness.
-Identify the smallest checks that establish the requested behavior. Separate
+Follow [Testing Instructions](../../shared/testing.md) for test selection,
+runtime compatibility, native evidence, and validation access requirements. Separate
 renderer layout, native window state, and OS behavior. Establish a reproducible
 failure before proposing a fix; QA alone does not authorize changes.
 
@@ -18,12 +19,11 @@ failure before proposing a fix; QA alone does not authorize changes.
 
 Select relevant type, lint, unit, and native checks from current package scripts
 rather than running every command automatically. Determine which command builds
-or launches Electron; avoid building twice without a reason. Typecheck, lint,
-unit tests, and browser-only checks cannot prove native behavior.
+or launches Electron; avoid building twice without a reason.
 
-If the harness accepts an external unpacked or packaged executable, verify its
-version, build, runtime dependencies, and effective configuration first. Record
-which executable was actually exercised, even if a test script also builds source.
+If the harness accepts an external unpacked or packaged executable, apply the
+shared runtime-compatibility checks and record which executable was exercised,
+even if a test script also builds source.
 
 ## Native and visual checks
 
@@ -55,10 +55,9 @@ which executable was actually exercised, even if a test script also builds sourc
 ## Environment and completion
 
 A graphical session is required; Linux needs a display such as Xvfb. Preserve
-Electron's renderer sandbox and isolation. If execution restrictions block launch
-or local networking, request access for the specific validation command rather
-than a global sandbox change. Report blocked required native checks; browser-only
-evidence cannot replace them.
+Electron's renderer sandbox and isolation. Follow
+[Validation and Completion](../../../AGENTS.md#validation-and-completion)
+when native checks are blocked.
 
 Close only test-owned processes and remove only data created by the run, including
 after failed launches. Report app/build, platform, commands/results, exercised

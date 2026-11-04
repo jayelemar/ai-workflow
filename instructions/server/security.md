@@ -51,6 +51,4 @@ query safety, database access, and public endpoint abuse controls.
 
 ## Anti-Patterns
 
-- Trusting client-provided identity, roles, ownership, or validation results.
 - Bypassing server authorization because a UI hides an action.
-- Shipping public or expensive endpoints without applicable abuse protection.

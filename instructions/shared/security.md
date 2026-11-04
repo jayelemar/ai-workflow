@@ -84,7 +84,6 @@ approval boundaries, safe diagnostics, and supply-chain protection on any platfo
 - Trusting caller-provided roles, IDs, ownership claims, or validation results.
 - Returning internal errors, stack traces, tokens, or privileged metadata to
   unauthorized callers, or logging private data to demonstrate a finding.
-- Using broad privileged access when a narrower capability would work.
 - Treating setup as approval to mutate remote data, repoint an existing URI,
   or rely on an implicit first write to create a database.
 - Treating security review as optional because a path appears internal.

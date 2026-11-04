@@ -55,12 +55,11 @@ Set a framework-agnostic WCAG 2.2 AA baseline for browser and HTML interfaces.
 - Run available automated accessibility and focused regression checks, while
   recognizing that automation does not establish full WCAG conformance.
 - Verify contrast after visual-token or state-color changes.
-- When optional accessibility validation depends on unavailable tooling or a
-  device, disclose the unverified behavior, risk, and smallest follow-up check.
+- For optional accessibility checks blocked by unavailable tooling or devices,
+  follow [Validation and Completion](../../AGENTS.md#validation-and-completion).
 
 ## Anti-Patterns
 
 - Claiming conformance from a framework or component library alone.
-- Replacing accessible primitives without preserving semantics and interaction.
 - Clickable generic elements, hidden focus, unlabeled icon controls, color-only
   state, or inaccessible custom composite widgets.

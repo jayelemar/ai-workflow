@@ -92,16 +92,10 @@ changes unless the user explicitly requests it.
 
 ## Commit Message Rules
 
-Use conventional commits:
+Before drafting, follow
+[Commit Subjects and PR Titles](../../../instructions/shared/delivery-hygiene.md#commit-subjects-and-pr-titles).
 
-```text
-<type>(<scope>): <imperative summary>
-```
-
-- Use `feat`, `fix`, `refactor`, `perf`, `chore`, `docs`, `test`, `build`,
-  `ci`, `style`, or `revert`.
-- Make the subject specific and imperative; target 50 characters and never
-  exceed 72.
+- Target 50 characters for the commit subject.
 - Add a body only when the reason, compatibility effect, migration, security,
   rollout risk, or deferred validation is not obvious.
 - Use concise `-` bullets in bodies, wrapped at 72 characters.
