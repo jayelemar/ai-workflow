@@ -79,54 +79,77 @@ Before drafting, follow
 
 ## Description
 
-Start with concise outcomes and actual validation evidence:
+Keep the description short, specific, and easy to scan. State concrete outcomes
+under Summary:
 
 ```markdown
 ## Summary
 
 - <outcome-focused summary>
-
-## Validation
-
-- <completed check and result, or explicitly state checks not run and why>
 ```
 
-- Use as many concise bullets as needed to cover the distinct outcomes in the
-  complete diff; do not impose a fixed bullet count.
+- For a simple change, prefer one short Summary bullet. Add bullets only for
+  distinct outcomes; do not impose a fixed count or pad the description.
 - Summarize the complete diff's user-visible or operational outcomes, not the
   commit list.
+- Omit the Validation section and routine check results from both the PR
+  description and chat preview. Continue inspecting validation evidence as
+  required above; the compact output does not waive checks.
 - Follow [Delivery Hygiene](../../../instructions/shared/delivery-hygiene.md)
-  for validation evidence, missing required evidence, risk, compatibility,
-  migration, recovery, and deferred-check reporting. Use a short paragraph or
-  additional section when it helps reviewers.
-- Do not add commit SHAs, a commit-by-commit narrative, or an automatic checklist.
+  for missing required evidence, risk, compatibility, migration, recovery, and
+  deferred-check reporting. Surface material exceptions in a brief Notes
+  paragraph inside the description when needed.
+- Omit background, implementation detail, and repeated explanations unless they
+  help reviewers assess the change. Do not add commit SHAs, a commit-by-commit
+  narrative, or an automatic checklist. Brevity must not hide failed or deferred
+  checks or material risks.
 
-Simple change example (illustrative evidence): “Correct the saved-settings
-label.” Validation: settings tests passed and the label was checked locally.
+Simple change example: “Correct the saved-settings label.”
 
-Sensitive change example (illustrative evidence): “Require transcript session
-ownership.” Ownership and cross-tenant tests passed. Required staging expiry
-check is blocked by unavailable staging, so acceptance remains outstanding.
-Optional browser matrix is deferred until before wider rollout. Expired sessions
-receive an access error; no migration. Revert if valid owners are rejected,
-retaining server access controls.
+Sensitive change example: “Require transcript session ownership.” Notes: required
+staging expiry check is blocked by unavailable staging; acceptance remains
+outstanding. Revert if valid owners are rejected, retaining server access controls.
 
 ## Proposal Before Mutation
 
-Show the operator:
+Use this compact preview with the exact proposed title and description:
 
-1. absolute local repository root and destination GitHub `owner/repository`;
-2. branch direction as `<sub-branch> → <parent-branch>` (head → base), including
-   the head's owner when it comes from a fork;
-3. whether a push is needed and its exact remote, repository, and branch;
-4. proposed title; and
-5. exact proposed description.
+````text
+**Branches:** `<sub-branch>` → `<parent-branch>`
 
-With that full preview, ask: “Create this PR from `<sub-branch>` →
-`<parent-branch>`?” Wait for explicit approval before pushing or creating the
-pull request. Approval covers only the displayed push and PR creation; the
-initial invocation is not authorization to publish. Do not require a separate
-branch-only approval before this preview.
+**Proposed PR** · `<owner/repository>`
+**Push:** Upload this branch’s changes to GitHub (`<remote>`).
+
+**Title:** `<type(scope): title>`
+
+**Description:**
+
+```
+## Summary
+
+- <short, specific outcome>
+```
+
+**Create this PR?**
+````
+
+- Show the destination GitHub repository and head → base direction once. Include
+  the head's owner when it comes from a fork. Verify the local repository as
+  required above, but omit its path and link from the output.
+- Use the displayed Push shorthand only when the push destination matches the
+  displayed repository and head branch. Otherwise show the exact remote,
+  repository, and branch. If a push is unnecessary, show **Push:** Not needed.
+- Keep Summary and any necessary Notes inside the exact description code block.
+  Omit routine validation output. Put required uncommitted-file disclosures or
+  other publication exceptions outside the description in a concise separate
+  note before the question; do not repeat notes.
+- Keep any required approval-rule explanation short and separate after the
+  question.
+
+Wait for explicit approval before pushing or creating the pull request. Approval
+covers only the displayed push and PR creation; the initial invocation is not
+authorization to publish. Do not require a separate branch-only approval before
+this preview.
 
 ## Create
 
@@ -153,7 +176,7 @@ pull request as part of this workflow.
 Report:
 
 - pull request URL;
-- local repository, destination GitHub repository, title, and sub-branch → parent-branch;
+- destination GitHub repository, title, and sub-branch → parent-branch;
 - push result;
 - remaining staged, unstaged, or untracked files; and
 - any failure or metadata difference found during verification.
