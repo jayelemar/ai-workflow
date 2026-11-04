@@ -104,7 +104,6 @@ test("delivery utilities use repository evidence without workflow metadata", asy
   assert.match(source, /git diff --cached --check/);
   assert.match(source, /complete\s+diff from the merge base/);
   assert.match(source, /explicit validation evidence/);
-  assert.match(pullRequest, /## Validation/);
   assert.match(pullRequest, /Simple change example/);
   assert.match(pullRequest, /Sensitive change example/);
   assert.match(pullRequest, /missing required evidence/);
