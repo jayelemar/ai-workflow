@@ -14,7 +14,7 @@ rtk proxy corepack pnpm@10.34.4 --dir .ai setup:codex
 ```
 
 Restart Codex from the trusted project root afterward. The utility preserves
-root guidance, installs project-local routing, four skill links, and a config
+root guidance, installs project-local routing, six skill links, and a config
 snapshot. See [Codex Agent Setup](docs/codex-agent.md) for exact paths, conflict
 handling, active routing, and native discovery verification. No global skills
 or user configuration are installed.
@@ -49,6 +49,10 @@ $worktree-setup plan: .ai/plans/example-change.md
 $git-commit Prepare commits for these changes.
 
 $pull-request Base: AUTO
+
+$show-summary
+
+$show-qa-checklist
 ```
 
 Use native Execute plan, `/goal`, or a normal request to implement a saved plan.
@@ -60,12 +64,14 @@ restate still-applicable decisions, and reference that new plan explicitly.
 
 ## Skills and Utilities
 
-| Skill                                                    | Purpose                                               |
-| -------------------------------------------------------- | ----------------------------------------------------- |
-| [Create Plan](.agents/skills/create-plan/SKILL.md)       | Create, revise, and review implementation plans       |
-| [Worktree Setup](.agents/skills/worktree-setup/SKILL.md) | Prepare native worktrees and independent task context |
-| [Git Commit](.agents/skills/git-commit/SKILL.md)         | Organize and create authorized local commits          |
-| [Pull Request](.agents/skills/pull-request/SKILL.md)     | Preview a PR and publish after exact-preview approval |
+| Skill                                                          | Purpose                                               |
+| -------------------------------------------------------------- | ----------------------------------------------------- |
+| [Create Plan](.agents/skills/create-plan/SKILL.md)             | Create, revise, and review implementation plans       |
+| [Worktree Setup](.agents/skills/worktree-setup/SKILL.md)       | Prepare native worktrees and independent task context |
+| [Git Commit](.agents/skills/git-commit/SKILL.md)               | Organize and create authorized local commits          |
+| [Pull Request](.agents/skills/pull-request/SKILL.md)           | Preview a PR and publish after exact-preview approval |
+| [Show Summary](.agents/skills/show-summary/SKILL.md)           | Show a short, nontechnical summary in chat            |
+| [Show QA Checklist](.agents/skills/show-qa-checklist/SKILL.md) | Show numbered manual test steps and expected results  |
 
 Skills match ordinary requests and explicit `$skill-name` invocation. Local
 setup, read-only skill discovery, instruction management, and selected worktree

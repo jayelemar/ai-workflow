@@ -65,6 +65,8 @@ const skillNames = [
   "worktree-setup",
   "git-commit",
   "pull-request",
+  "show-summary",
+  "show-qa-checklist",
 ];
 const legacySkillNames = [
   "ai-build",
