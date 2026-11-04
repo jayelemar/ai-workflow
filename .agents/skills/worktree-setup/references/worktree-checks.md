@@ -33,7 +33,7 @@ against the base: an existing regular checkout file is acceptable only when
 its bytes already equal the selected source file. Otherwise stop for a checkout
 collision. Inspect `.agents/` and `.agents/skills/` in the base tree: existing
 ancestors must be real directories, and none of the four managed skill paths
-(`ai-build`, `ai-worktree-setup`, `ai-commit`, `ai-pr`) may exist, including
+(`create-plan`, `worktree-setup`, `git-commit`, `pull-request`) may exist, including
 tracked links. Preserve unrelated custom files and skills. A tracked `docs/`
 directory alone is not a collision. Context copying must never overwrite
 differing checkout files or non-file entries.

@@ -13,14 +13,29 @@ import {
   readlink,
   realpath,
   symlink,
+  unlink,
   writeFile,
 } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const OVERRIDE_NAME = "AGENTS.override.md";
-const SKILL_NAMES = ["ai-build", "ai-worktree-setup", "ai-commit", "ai-pr"];
+const SKILL_NAMES = [
+  "create-plan",
+  "worktree-setup",
+  "git-commit",
+  "pull-request",
+];
 const SKILL_PATHS = SKILL_NAMES.map((name) => `.agents/skills/${name}`);
+const LEGACY_SKILL_NAMES = [
+  "ai-build",
+  "ai-worktree-setup",
+  "ai-commit",
+  "ai-pr",
+];
+const LEGACY_SKILL_PATHS = LEGACY_SKILL_NAMES.map(
+  (name) => `.agents/skills/${name}`,
+);
 const CONFIG_PATH = ".codex/config.toml";
 const MANAGED_ANCESTORS = [".agents", ".agents/skills", ".codex"];
 const MANAGED_PATHS = [OVERRIDE_NAME, ...SKILL_PATHS, CONFIG_PATH];
@@ -124,11 +139,21 @@ const entryExists = async (targetPath) => {
 };
 
 const requireCanonicalSpelling = async (targetPath, label) => {
-  if (!(await entryExists(targetPath))) return;
-  // lstat can resolve a case alias. The directory listing exposes the spelling
-  // Git actually sees, which must match the exact local exclude rules.
-  const entries = await readdir(path.dirname(targetPath));
-  if (!entries.includes(path.basename(targetPath))) {
+  let entries;
+  try {
+    entries = await readdir(path.dirname(targetPath));
+  } catch (error) {
+    if (error.code === "ENOENT") return;
+    throw error;
+  }
+  // Reserve the name even on case-sensitive filesystems, including a sibling
+  // alias beside a correctly spelled entry. Exact excludes cannot hide aliases.
+  const name = path.basename(targetPath);
+  if (
+    entries.some(
+      (entry) => entry !== name && entry.toLowerCase() === name.toLowerCase(),
+    )
+  ) {
     throw new Error(
       `${label} has a noncanonical filesystem spelling; resolve its case alias explicitly before setup`,
     );
@@ -602,7 +627,25 @@ const inspectSkills = async (repository) => {
       }
     } else links.push({ relativePath, expected });
   }
-  return { directories, links };
+  const legacyLinks = [];
+  for (const relativePath of LEGACY_SKILL_PATHS) {
+    const target = path.join(projectRoot, relativePath);
+    await requireCanonicalSpelling(target, relativePath);
+    if (!(await entryExists(target))) continue;
+    // Do not resolve these links: removing the old source directories makes
+    // generated legacy links dangling before setup migrates them.
+    const expected = `../../.ai/${relativePath}`;
+    if (
+      !(await lstat(target)).isSymbolicLink() ||
+      (await readlink(target)) !== expected
+    ) {
+      throw new Error(
+        `${relativePath} conflicts with its exact generated legacy skill link; it was preserved`,
+      );
+    }
+    legacyLinks.push({ relativePath, expected });
+  }
+  return { directories, links, legacyLinks };
 };
 
 const resolveParentGit = async () => {
@@ -675,7 +718,11 @@ const resolveParentGit = async () => {
 
 const requireUntrackedOutputs = async () => {
   const ancestors = MANAGED_ANCESTORS;
-  for (const relativePath of [...ancestors, ...MANAGED_PATHS]) {
+  for (const relativePath of [
+    ...ancestors,
+    ...MANAGED_PATHS,
+    ...LEGACY_SKILL_PATHS,
+  ]) {
     const trackedResult = await runGit([
       "ls-files",
       "--stage",
@@ -853,6 +900,7 @@ const preflightWrites = async (
   for (const relativePath of [
     ...skillState.directories,
     ...skillState.links.map(({ relativePath }) => relativePath),
+    ...skillState.legacyLinks.map(({ relativePath }) => relativePath),
     ...(configState.createDirectory ? [".codex"] : []),
     ...(configState.createFile ? [CONFIG_PATH] : []),
   ]) {
@@ -1018,11 +1066,36 @@ const setupAgentsOverride = async () => {
   }
 
   await verifyResult(repository, overrideState.content, configState.content);
+  // Establish every replacement before removing a legacy entry. Reinspect
+  // ownership, index state, spelling, and literal link targets before each
+  // unlink so a changed entry is preserved and a partial run can be retried.
+  for (const { relativePath } of skillState.legacyLinks) {
+    await requireUntrackedOutputs();
+    const current = await inspectSkills(repository);
+    if (
+      current.legacyLinks.some((link) => link.relativePath === relativePath)
+    ) {
+      await performWrite(`${relativePath} (removed legacy link)`, () =>
+        unlink(path.join(projectRoot, relativePath)),
+      );
+    }
+  }
+  const finalSkills = await inspectSkills(repository);
+  if (
+    finalSkills.directories.length ||
+    finalSkills.links.length ||
+    finalSkills.legacyLinks.length
+  ) {
+    throw new Error("could not verify the completed local skill migration");
+  }
   writeOutput(`${OVERRIDE_NAME}: ${overrideState.status}`);
   for (const relativePath of SKILL_PATHS) {
     writeOutput(
       `${relativePath}: ${skillState.links.some((link) => link.relativePath === relativePath) ? "created" : "already correct"}`,
     );
+  }
+  for (const { relativePath } of skillState.legacyLinks) {
+    writeOutput(`${relativePath}: removed generated legacy link`);
   }
   writeOutput(
     `${CONFIG_PATH}: ${configState.createFile ? "created" : "already correct"}`,

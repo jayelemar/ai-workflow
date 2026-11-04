@@ -17,11 +17,11 @@ Read `.ai/AGENTS.md` plus relevant routed instructions.
   only selected plans, task worktrees, and owned records after inspection and
   exact operator confirmation; preserve unselected plans and all branches.
 
-The canonical combined planning and execution workflow is
-[AI Build](../.agents/skills/ai-build/SKILL.md), invoked by normal planning or
-existing-plan requests and `$ai-build`. Use the canonical skills directly for
-[AI Worktree Setup](../.agents/skills/ai-worktree-setup/SKILL.md)
-(`$ai-worktree-setup`), [AI Commit](../.agents/skills/ai-commit/SKILL.md)
-(`$ai-commit`), and [AI PR](../.agents/skills/ai-pr/SKILL.md) (`$ai-pr`).
+Plan creation is owned by
+[Create Plan](../.agents/skills/create-plan/SKILL.md), invoked by plan creation or revision
+requests and `$create-plan`. Execution follows [AGENTS.md](../AGENTS.md). Use the canonical skills directly for
+[Worktree Setup](../.agents/skills/worktree-setup/SKILL.md)
+(`$worktree-setup`), [Git Commit](../.agents/skills/git-commit/SKILL.md)
+(`$git-commit`), and [Pull Request](../.agents/skills/pull-request/SKILL.md) (`$pull-request`).
 Normal matching remains enabled; selection grants no extra mutation authority.
 See [setup and request examples](../README.md#skills-and-utilities).

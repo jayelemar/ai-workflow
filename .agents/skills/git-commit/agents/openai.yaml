@@ -1,0 +1,4 @@
+interface:
+  display_name: "Git Commit"
+  short_description: "Organize and create focused local commits"
+  default_prompt: "Use $git-commit to prepare focused local commits for these changes."

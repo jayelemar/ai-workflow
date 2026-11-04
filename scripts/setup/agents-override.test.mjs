@@ -60,7 +60,21 @@ const excludeRule = "/AGENTS.override.md";
 const configContent = Buffer.from(
   '# Fixture project configuration\r\nmodel = "fixture"\r\n',
 );
-const skillNames = ["ai-build", "ai-worktree-setup", "ai-commit", "ai-pr"];
+const skillNames = [
+  "create-plan",
+  "worktree-setup",
+  "git-commit",
+  "pull-request",
+];
+const legacySkillNames = [
+  "ai-build",
+  "ai-worktree-setup",
+  "ai-commit",
+  "ai-pr",
+];
+const legacySkillPaths = legacySkillNames.map(
+  (name) => `.agents/skills/${name}`,
+);
 const managedPaths = [
   "AGENTS.override.md",
   ...skillNames.map((name) => `.agents/skills/${name}`),
@@ -280,6 +294,282 @@ const withFixture = async (callback, options) => {
   }
 };
 
+const installLegacyLinks = async (fixture, names = legacySkillNames) => {
+  const directory = path.join(fixture.projectRoot, ".agents/skills");
+  await mkdir(directory, { recursive: true });
+  for (const name of names) {
+    await symlink(
+      `../../.ai/.agents/skills/${name}`,
+      path.join(directory, name),
+    );
+  }
+};
+
+const assertLegacyAbsent = async (fixture) => {
+  for (const relativePath of legacySkillPaths) {
+    await assert.rejects(lstat(path.join(fixture.projectRoot, relativePath)), {
+      code: "ENOENT",
+    });
+  }
+};
+
+// Real files and Git index entries exercise deletion safety at the public CLI
+// boundary. Snapshots make the before-writes guarantee visible to maintainers.
+test("fresh setup excludes only the renamed skills", async () => {
+  await withFixture(async (fixture) => {
+    const result = await invokeNode(fixture);
+    assert.equal(result.exitCode, 0, result.stderr);
+    const state = await readManagedState(fixture);
+    for (const relativePath of legacySkillPaths) {
+      assert.equal(state.exclude.includes(`/${relativePath}`), false);
+    }
+    await assertLegacyAbsent(fixture);
+    await assertIgnored(fixture.projectRoot);
+  });
+});
+
+test("old and mixed installations migrate exact generated links and preserve old excludes", async (t) => {
+  for (const kind of [
+    "dangling old links",
+    "resolving old links",
+    "mixed links",
+  ]) {
+    await t.test(kind, async () => {
+      await withFixture(async (fixture) => {
+        const oldNames =
+          kind === "mixed links" ? legacySkillNames.slice(1) : legacySkillNames;
+        await installLegacyLinks(fixture, oldNames);
+        if (kind === "resolving old links") {
+          for (const name of oldNames) {
+            await mkdir(
+              path.join(fixture.workflowRoot, ".agents/skills", name),
+            );
+          }
+        }
+        if (kind === "mixed links") {
+          for (const name of skillNames.slice(0, 2)) {
+            await symlink(
+              `../../.ai/.agents/skills/${name}`,
+              path.join(fixture.projectRoot, ".agents/skills", name),
+            );
+          }
+        }
+        const custom = path.join(fixture.projectRoot, ".agents/skills/custom");
+        await mkdir(custom);
+        await writeFile(path.join(custom, "SKILL.md"), "# Keep custom skill\n");
+        const excludePath = await excludePathFor(fixture.projectRoot);
+        const oldExcludes = `# Preserve old rules exactly\r\n${legacySkillPaths.map((name) => `/${name}`).join("\r\n")}\r\n# Keep final comment`;
+        await writeFile(excludePath, oldExcludes);
+
+        const result = await invokeNode(fixture);
+        assert.equal(result.exitCode, 0, result.stderr);
+        assert.match(result.stdout, /removed generated legacy link/);
+        await assertLegacyAbsent(fixture);
+        const state = await readManagedState(fixture);
+        assert.equal(state.exclude.startsWith(`${oldExcludes}\n`), true);
+        assert.equal(
+          await readFile(path.join(custom, "SKILL.md"), "utf8"),
+          "# Keep custom skill\n",
+        );
+        await assertIgnored(fixture.projectRoot);
+        const repeated = await invokeNode(fixture);
+        assert.equal(repeated.exitCode, 0, repeated.stderr);
+        assert.deepEqual(await readManagedState(fixture), state);
+        assert.doesNotMatch(repeated.stdout, /removed generated legacy link/);
+      });
+    });
+  }
+});
+
+test("legacy conflicts and tracked destinations refuse every managed write", async (t) => {
+  const kinds = [
+    "file",
+    "directory",
+    "wrong dangling link",
+    "normalized target",
+    "absolute target",
+    "new source target",
+    "tracked link",
+    "deleted tracked link",
+    "tracked directory",
+  ];
+  for (const kind of kinds) {
+    await t.test(kind, async () => {
+      await withFixture(async (fixture) => {
+        // A safe earlier entry must also survive a later conflict.
+        await installLegacyLinks(fixture, legacySkillNames.slice(0, 1));
+        const relativePath = legacySkillPaths[1];
+        const target = path.join(fixture.projectRoot, relativePath);
+        if (kind === "file") await writeFile(target, "Keep my custom skill\n");
+        else if (kind === "directory" || kind === "tracked directory") {
+          await mkdir(target);
+          await writeFile(path.join(target, "SKILL.md"), "# Custom skill\n");
+        } else {
+          const link =
+            kind === "wrong dangling link"
+              ? "missing-custom-skill"
+              : kind === "normalized target"
+                ? "../../.ai/.agents/skills/./ai-worktree-setup"
+                : kind === "absolute target"
+                  ? path.join(
+                      fixture.workflowRoot,
+                      ".agents/skills/ai-worktree-setup",
+                    )
+                  : kind === "new source target"
+                    ? "../../.ai/.agents/skills/worktree-setup"
+                    : "../../.ai/.agents/skills/ai-worktree-setup";
+          await symlink(link, target);
+        }
+        if (kind.includes("tracked")) {
+          await git(fixture.projectRoot, "add", "--", relativePath);
+          if (kind === "deleted tracked link") await rm(target);
+        }
+        await writeFile(
+          path.join(fixture.projectRoot, "AGENTS.override.md"),
+          oldOverrideContent,
+        );
+        const before = await snapshotManagedOutputs(fixture);
+        const result = await invokeNode(fixture);
+        assert.notEqual(result.exitCode, 0);
+        assert.match(result.stderr, /legacy skill link|tracked by Git/);
+        assert.doesNotMatch(result.stderr, /Partial setup:/);
+        assert.deepEqual(await snapshotManagedOutputs(fixture), before);
+      });
+    });
+  }
+});
+
+const installGitWrapper = async (fixture, body) => {
+  const directory = path.join(fixture.temporaryRoot, "bin");
+  await mkdir(directory);
+  const wrapper = path.join(directory, "git");
+  await writeFile(
+    wrapper,
+    `#!/usr/bin/env node
+const fs = require('node:fs');
+const path = require('node:path');
+const { spawnSync } = require('node:child_process');
+const args = process.argv.slice(2);
+${body}
+const result = spawnSync('git', args, {
+  env: { ...process.env, PATH: process.env.ORIGINAL_PATH },
+  stdio: 'inherit',
+});
+process.exit(result.status ?? 1);
+`,
+  );
+  await chmod(wrapper, 0o755);
+  return {
+    ORIGINAL_PATH: process.env.PATH,
+    PATH: `${directory}${path.delimiter}${process.env.PATH}`,
+  };
+};
+
+test("replacement verification failure retains every old link and retries safely", async () => {
+  await withFixture(async (fixture) => {
+    await installLegacyLinks(fixture);
+    const env = await installGitWrapper(
+      fixture,
+      `
+if (args.includes('check-ignore') && args.includes('-q')) process.exit(1);`,
+    );
+    const failed = await invokeNode(fixture, { env });
+    assert.notEqual(failed.exitCode, 0);
+    assert.match(failed.stderr, /Partial setup:/);
+    assert.doesNotMatch(failed.stdout, /setup verified/i);
+    for (const relativePath of legacySkillPaths) {
+      assert.equal(
+        await readlink(path.join(fixture.projectRoot, relativePath)),
+        `../../.ai/${relativePath}`,
+      );
+    }
+    // Every replacement was created even though final ignored-status failed.
+    await readManagedState(fixture);
+    const retry = await invokeNode(fixture);
+    assert.equal(retry.exitCode, 0, retry.stderr);
+    await assertLegacyAbsent(fixture);
+    await assertIgnored(fixture.projectRoot);
+  });
+});
+
+test("a partial legacy unlink failure reports progress and retries the remaining links", async () => {
+  await withFixture(async (fixture) => {
+    await installLegacyLinks(fixture);
+    const directory = path.join(fixture.projectRoot, ".agents/skills");
+    // During the next index check after the first unlink, remove directory
+    // write permission. Replacements are already verified; deletion two fails.
+    const env = await installGitWrapper(
+      fixture,
+      `
+const directory = path.join(process.cwd(), '.agents/skills');
+if (!fs.lstatSync(path.join(directory, 'ai-build'), { throwIfNoEntry: false }) &&
+    fs.lstatSync(path.join(directory, 'ai-worktree-setup'), { throwIfNoEntry: false })) {
+  fs.chmodSync(directory, 0o555);
+}`,
+    );
+    let failed;
+    try {
+      failed = await invokeNode(fixture, { env });
+    } finally {
+      await chmod(directory, 0o755);
+    }
+    assert.notEqual(failed.exitCode, 0);
+    assert.match(
+      failed.stderr,
+      /completed writes:.*ai-build \(removed legacy link\)/,
+    );
+    assert.match(
+      failed.stderr,
+      /Failed write may be incomplete:.*ai-worktree-setup/,
+    );
+    assert.doesNotMatch(failed.stdout, /setup verified/i);
+    await assert.rejects(lstat(path.join(directory, "ai-build")), {
+      code: "ENOENT",
+    });
+    for (const name of legacySkillNames.slice(1)) {
+      assert.equal(
+        await readlink(path.join(directory, name)),
+        `../../.ai/.agents/skills/${name}`,
+      );
+    }
+    const replacements = await readManagedState(fixture);
+    const retry = await invokeNode(fixture);
+    assert.equal(retry.exitCode, 0, retry.stderr);
+    await assertLegacyAbsent(fixture);
+    assert.deepEqual(await readManagedState(fixture), replacements);
+  });
+});
+
+test("changed legacy links are rechecked and preserved before unlink", async () => {
+  await withFixture(async (fixture) => {
+    await installLegacyLinks(fixture);
+    const env = await installGitWrapper(
+      fixture,
+      `
+if (args.includes('check-ignore') && args.includes('-q') && args.includes('.codex/config.toml')) {
+  const target = path.join(process.cwd(), '.agents/skills/ai-build');
+  fs.unlinkSync(target);
+  fs.symlinkSync('custom-replacement', target);
+}`,
+    );
+    const failed = await invokeNode(fixture, { env });
+    assert.notEqual(failed.exitCode, 0);
+    assert.match(failed.stderr, /exact generated legacy skill link/);
+    assert.match(failed.stderr, /Partial setup:/);
+    assert.equal(
+      await readlink(path.join(fixture.projectRoot, legacySkillPaths[0])),
+      "custom-replacement",
+    );
+    for (const relativePath of legacySkillPaths.slice(1)) {
+      assert.equal(
+        await readlink(path.join(fixture.projectRoot, relativePath)),
+        `../../.ai/${relativePath}`,
+      );
+    }
+    await readManagedState(fixture);
+  });
+});
+
 test("setup creates a real project Codex directory and exact config copy", async () => {
   await withFixture(async (fixture) => {
     const source = path.join(fixture.workflowRoot, ".codex/config.toml");
@@ -384,6 +674,7 @@ const snapshotManagedOutputs = async (fixture) => {
     ".agents/skills",
     ".codex",
     ...managedPaths,
+    ...legacySkillPaths,
     ".ai/.codex",
     ".ai/.codex/config.toml",
   ]) {
@@ -847,7 +1138,7 @@ test("repository and tracked ancestors refuse setup before writes", async (t) =>
 // and unfiltered Git status are required to reproduce this filesystem boundary.
 test("noncanonical output spellings refuse setup before writes", async (t) => {
   const cases = [
-    ...skillNames.map((name) => ({
+    ...[...skillNames, ...legacySkillNames].map((name) => ({
       path: `.agents/skills/${name.toUpperCase()}`,
       skill: name,
     })),
@@ -859,17 +1150,8 @@ test("noncanonical output spellings refuse setup before writes", async (t) => {
     { path: ".codex/CONFIG.TOML", config: true },
   ];
   for (const alias of cases) {
-    await t.test(alias.path, async (t) => {
+    await t.test(alias.path, async () => {
       await withFixture(async (fixture) => {
-        // The production code needs no filesystem probe. Only the regression
-        // requires a real filesystem that resolves differently cased lookups.
-        try {
-          await lstat(path.join(fixture.projectRoot, "PACKAGE.JSON"));
-        } catch (error) {
-          if (error.code !== "ENOENT") throw error;
-          t.skip("requires a case-insensitive filesystem");
-          return;
-        }
         await git(fixture.projectRoot, "config", "core.ignorecase", "false");
         const target = path.join(fixture.projectRoot, alias.path);
         await mkdir(path.dirname(target), { recursive: true });
@@ -965,7 +1247,7 @@ test("noncanonical output spellings refuse setup before writes", async (t) => {
 // case-insensitive filesystem. Exercise the public utility with real Git,
 // including deleted tracked content; neither the index nor local setup may change.
 test("tracked case aliases refuse setup before writes regardless of core.ignorecase", async (t) => {
-  for (const name of skillNames) {
+  for (const name of [...skillNames, ...legacySkillNames]) {
     for (const kind of ["existing link", "deleted content"]) {
       await t.test(`${name}: ${kind}`, async () => {
         await withFixture(async (fixture) => {
@@ -1023,7 +1305,7 @@ test("tracked case aliases refuse setup before writes regardless of core.ignorec
   }
   for (const relativePath of [
     "agents.OVERRIDE.md",
-    ".AGENTS/SKILLS/ai-pr/SKILL.md",
+    ".AGENTS/SKILLS/pull-request/SKILL.md",
     ".CODEX/CONFIG.TOML",
   ]) {
     await t.test(`deleted alias ${relativePath}`, async () => {
@@ -1082,20 +1364,20 @@ test("higher-priority Git ignore negations refuse setup before any managed outpu
     [
       "root skill negation",
       ".gitignore",
-      "!/.agents/skills/ai-pr\n",
-      ".agents/skills/ai-pr",
+      "!/.agents/skills/pull-request\n",
+      ".agents/skills/pull-request",
     ],
     [
       "ancestor skill negation",
       ".agents/.gitignore",
-      "!skills/ai-pr\n",
-      ".agents/skills/ai-pr",
+      "!skills/pull-request\n",
+      ".agents/skills/pull-request",
     ],
     [
       "nested skill negation",
       ".agents/skills/.gitignore",
-      "!ai-pr\n",
-      ".agents/skills/ai-pr",
+      "!pull-request\n",
+      ".agents/skills/pull-request",
     ],
     [
       "root config negation",
@@ -1130,8 +1412,8 @@ test("higher-priority Git ignore negations refuse setup before any managed outpu
           ".agents/skills/custom-skill/SKILL.md",
         );
         await symlink(
-          "../../.ai/.agents/skills/ai-build",
-          path.join(fixture.projectRoot, ".agents/skills/ai-build"),
+          "../../.ai/.agents/skills/create-plan",
+          path.join(fixture.projectRoot, ".agents/skills/create-plan"),
           "dir",
         );
         const override =
@@ -1166,7 +1448,7 @@ test("relative global ignore sources remain overridable and preserve custom cont
     ["source outside output ancestry", "!AGENTS.override.md\n"],
     [
       "ancestor source with globally rooted pattern",
-      "!/.agents/skills/ai-pr\n",
+      "!/.agents/skills/pull-request\n",
     ],
   ]) {
     await t.test(name, async () => {
@@ -1274,7 +1556,7 @@ test("exact local excludes override lower-priority negations and preserve positi
             });
             await writeFile(
               path.join(fixture.projectRoot, ".agents/skills/.gitignore"),
-              "!ai-pr\n",
+              "!pull-request\n",
             );
           }
         } else if (kind === "positive parent ignore") {
@@ -1286,7 +1568,7 @@ test("exact local excludes override lower-priority negations and preserve positi
           });
           await writeFile(
             path.join(fixture.projectRoot, ".agents/skills/.gitignore"),
-            "!ai-pr\n",
+            "!pull-request\n",
           );
         } else if (kind === "parent-only negation") {
           ignoreTarget = path.join(fixture.projectRoot, ".gitignore");
@@ -1297,7 +1579,7 @@ test("exact local excludes override lower-priority negations and preserve positi
             fixture.projectRoot,
             ".agents/skills/.gitignore",
           );
-          ignoreContent = "!ai-pr/\n";
+          ignoreContent = "!pull-request/\n";
           await mkdir(path.dirname(ignoreTarget), { recursive: true });
           await writeFile(ignoreTarget, ignoreContent);
         }
@@ -1333,7 +1615,7 @@ test("skill sources, destination ancestors, and conflicts all fail before any ma
       prepare: async (fixture) => {
         const target = path.join(
           fixture.workflowRoot,
-          ".agents/skills/ai-pr/SKILL.md",
+          ".agents/skills/pull-request/SKILL.md",
         );
         await rm(target);
         if (kind === "empty") await writeFile(target, "");
@@ -1351,7 +1633,7 @@ test("skill sources, destination ancestors, and conflicts all fail before any ma
         },
       })),
     ),
-    ...[".agents", ".agents/skills", ".agents/skills/ai-pr"].map(
+    ...[".agents", ".agents/skills", ".agents/skills/pull-request"].map(
       (relativePath) => ({
         name: `source ${relativePath} escapes through a symlink`,
         prepare: async (fixture) => {
@@ -1367,7 +1649,7 @@ test("skill sources, destination ancestors, and conflicts all fail before any ma
       prepare: async (fixture) => {
         const target = path.join(
           fixture.workflowRoot,
-          ".agents/skills/ai-pr/SKILL.md",
+          ".agents/skills/pull-request/SKILL.md",
         );
         const external = path.join(fixture.temporaryRoot, "external-skill.md");
         await rename(target, external);
@@ -1383,7 +1665,10 @@ test("skill sources, destination ancestors, and conflicts all fail before any ma
     ].map((kind) => ({
       name: `managed skill is a ${kind}`,
       prepare: async (fixture) => {
-        const target = path.join(fixture.projectRoot, ".agents/skills/ai-pr");
+        const target = path.join(
+          fixture.projectRoot,
+          ".agents/skills/pull-request",
+        );
         await mkdir(path.dirname(target), { recursive: true });
         if (kind === "file") await writeFile(target, "custom skill\n");
         else if (kind === "directory") await mkdir(target);
@@ -1392,8 +1677,11 @@ test("skill sources, destination ancestors, and conflicts all fail before any ma
             kind === "dangling link"
               ? "missing-skill"
               : kind === "wrong link"
-                ? "../../.ai/.agents/skills/ai-build"
-                : path.join(fixture.workflowRoot, ".agents/skills/ai-pr"),
+                ? "../../.ai/.agents/skills/create-plan"
+                : path.join(
+                    fixture.workflowRoot,
+                    ".agents/skills/pull-request",
+                  ),
             target,
             "dir",
           );
@@ -1412,7 +1700,7 @@ test("skill sources, destination ancestors, and conflicts all fail before any ma
     {
       name: "tracked managed content deleted from disk",
       prepare: async (fixture) => {
-        const relativePath = ".agents/skills/ai-pr/SKILL.md";
+        const relativePath = ".agents/skills/pull-request/SKILL.md";
         const target = path.join(fixture.projectRoot, relativePath);
         await mkdir(path.dirname(target), { recursive: true });
         await writeFile(target, "tracked custom skill\n");
@@ -1758,7 +2046,7 @@ test("unexpected link write failure reports completed and possibly incomplete ou
 import { syncBuiltinESMExports } from 'node:module';
 const original = fs.symlink;
 fs.symlink = (...args) => {
-  if (args[1].endsWith('/ai-commit')) throw new Error('fixture link write failure');
+  if (args[1].endsWith('/git-commit')) throw new Error('fixture link write failure');
   return original(...args);
 };
 syncBuiltinESMExports();`;
@@ -1773,11 +2061,11 @@ syncBuiltinESMExports();`;
     assert.match(failed.stderr, /fixture link write failure/);
     assert.match(
       failed.stderr,
-      /Partial setup: completed writes: AGENTS\.override\.md, \.agents, \.agents\/skills, \.agents\/skills\/ai-build, \.agents\/skills\/ai-worktree-setup\./,
+      /Partial setup: completed writes: AGENTS\.override\.md, \.agents, \.agents\/skills, \.agents\/skills\/create-plan, \.agents\/skills\/worktree-setup\./,
     );
     assert.match(
       failed.stderr,
-      /Failed write may be incomplete: \.agents\/skills\/ai-commit/,
+      /Failed write may be incomplete: \.agents\/skills\/git-commit/,
     );
     assert.doesNotMatch(failed.stdout, /setup verified/i);
     assert.equal(await readFile(excludePath, "utf8"), excludeBefore);
@@ -1785,9 +2073,9 @@ syncBuiltinESMExports();`;
     assert.equal(recovered.exitCode, 0, recovered.stderr);
     assert.match(
       recovered.stdout,
-      /\.agents\/skills\/ai-build: already correct/,
+      /\.agents\/skills\/create-plan: already correct/,
     );
-    assert.match(recovered.stdout, /\.agents\/skills\/ai-commit: created/);
+    assert.match(recovered.stdout, /\.agents\/skills\/git-commit: created/);
     await assertIgnored(fixture.projectRoot);
   });
 });
@@ -1995,7 +2283,7 @@ test("skill destination permission failure prevents the override upgrade and eve
       assert.notEqual(result.exitCode, 0);
       assert.match(
         result.stderr,
-        /write \.agents\/skills\/ai-build during preflight/,
+        /write \.agents\/skills\/create-plan during preflight/,
       );
       assert.deepEqual(await snapshotManagedOutputs(fixture), before);
       assert.doesNotMatch(result.stderr, /Partial setup:/);

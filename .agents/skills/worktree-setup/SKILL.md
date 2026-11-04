@@ -1,9 +1,9 @@
 ---
-name: ai-worktree-setup
+name: worktree-setup
 description: Prepare isolated native Git worktrees and task-local plan context for a living implementation plan. Use when the user asks to prepare a worktree execution environment for a plan; do not use for implementation, worktree cleanup, commits, or publication.
 ---
 
-# AI Worktree Setup
+# Worktree Setup
 
 Create isolated native Git worktrees for one living plan. This utility prepares
 an execution environment only. It does not implement the plan, start `/goal`,
@@ -14,7 +14,7 @@ the plan from the prepared task root.
 Use for a request to prepare worktrees, including a direct invocation:
 
 ```text
-Use $ai-worktree-setup, plan: .ai/plans/<plan-name>.md
+Use $worktree-setup, plan: .ai/plans/<plan-name>.md
 ```
 
 Selecting this skill grants no authority for implementation, dependency or

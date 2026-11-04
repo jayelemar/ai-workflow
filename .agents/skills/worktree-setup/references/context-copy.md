@@ -1,6 +1,6 @@
 # Task-local context copy
 
-Read this procedure during AI Worktree Setup's Create safely step, after all
+Read this procedure during Worktree Setup's Create safely step, after all
 repositories and selected files pass its preflight. Execute this single block
 in Bash with absolute, canonical `workspace`, `task_root`, `workflow_head`, and
 preflighted `canonical_files`, `local_files`, and `workspace_files` arrays.
@@ -19,7 +19,7 @@ skill's required report; it performs no rollback or cleanup.
 set -euo pipefail
 workflow_source="$workspace/.ai"
 workflow_target="$task_root/.ai"
-managed_skills=(ai-build ai-worktree-setup ai-commit ai-pr)
+managed_skills=(create-plan worktree-setup git-commit pull-request)
 # Resolve the roots without following an unexpected workspace/task-root alias.
 test "$(cd -- "$workspace" && pwd -P)" = "$workspace"
 test "$(cd -- "$task_root" && pwd -P)" = "$task_root"

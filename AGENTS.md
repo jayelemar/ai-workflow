@@ -7,11 +7,13 @@ This file is the behavioral authority for work that uses the `.ai` repository.
 Ordinary requests use normal Codex behavior: inspect, implement, validate, and
 report without creating workflow artifacts.
 
-Read `.ai/.agents/skills/ai-build/SKILL.md` when the user asks to create
-or follow a saved implementation plan, invokes Goal mode with a plan, requests
-long-running or cross-cutting work, or changes authentication, authorization,
-payments, secrets, migrations, destructive behavior, or another named security
-or trust boundary.
+Use `.ai/.agents/skills/create-plan/SKILL.md` to create, revise, or review a
+plan before execution. Bounded, understood requests need no workflow artifact.
+Complex, ambiguous, cross-cutting, or long-running work uses one living plan.
+Changes to authentication, authorization, payments, secrets, migrations,
+destructive behavior, or another named security or trust boundary require a
+controlled plan and independent final review. Name the changed contract;
+proximity to sensitive code alone does not make work controlled.
 
 Read `.ai/instructions/index.md`, then only the area instructions routed for the
 changed code. A plan never replaces those repository conventions.
@@ -45,6 +47,22 @@ changed code. A plan never replaces those repository conventions.
   for genuinely parallel implementation.
 - Do not create workflow runners, transition databases, status sidecars,
   review fingerprints, detailed event ledgers, or automatic delivery actions.
+
+## Executing Saved Plans
+
+These rules apply to native Execute plan, `/goal`, and ordinary requests to
+implement a plan; execution does not require invoking `create-plan`.
+
+- Read the selected plan before editing. Keep its progress, decisions,
+  discoveries, validation, and outcome in that same file, without sidecars.
+- Record material discoveries; ask only for unresolved behavior, permission,
+  destructive, external-action, or repository-ownership decisions.
+- Goal mode is available for long-running execution, not required. Do not start
+  a Goal without a user request or duplicate its runtime progress elsewhere.
+- Before controlled review, explicitly requested independent review, or a
+  successful plan completion's manual review handoff, read and follow
+  [Plan Review](instructions/shared/plan-review.md). Controlled review must
+  finish before claiming completion; the optional manual handoff cannot replace it.
 
 ## Subagent Models and Names
 
@@ -116,5 +134,5 @@ Use these role defaults unless the user explicitly requests another runtime:
   user explicitly requests cleanup.
 - When a Git parent checkout exists, do not stage `.ai` files in it.
 
-Version: 3.1
-Last Updated: 2026-10-07
+Version: 3.2
+Last Updated: 2026-11-04

@@ -1,9 +1,9 @@
 ---
-name: ai-commit
+name: git-commit
 description: Prepare coherent local Git commits from repository changes. Use when the user asks to organize, stage, or commit changes; preserve approval and protected-branch rules. Does not publish or push.
 ---
 
-# AI Commit
+# Git Commit
 
 Prepare the current repository's unstaged changes as a clean, reviewable local
 commit history.

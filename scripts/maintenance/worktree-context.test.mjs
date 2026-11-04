@@ -27,10 +27,7 @@ const root = path.resolve(
   "../..",
 );
 const procedure = await readFile(
-  path.join(
-    root,
-    ".agents/skills/ai-worktree-setup/references/context-copy.md",
-  ),
+  path.join(root, ".agents/skills/worktree-setup/references/context-copy.md"),
   "utf8",
 );
 const copyCommands = procedure.match(
@@ -38,7 +35,12 @@ const copyCommands = procedure.match(
 )?.[1];
 assert.ok(copyCommands, "the documented copy operations must be executable");
 
-const managedSkills = ["ai-build", "ai-worktree-setup", "ai-commit", "ai-pr"];
+const managedSkills = [
+  "create-plan",
+  "worktree-setup",
+  "git-commit",
+  "pull-request",
+];
 
 const run = (cwd, ...args) =>
   execFileSync(args[0], args.slice(1), {
@@ -540,12 +542,15 @@ test("canonical copy refuses managed collisions and unsafe ancestors before writ
   const scenarios = [
     [
       "managed regular file",
-      async () => put(taskRoot, ".agents/skills/ai-pr", "custom collision\n"),
+      async () =>
+        put(taskRoot, ".agents/skills/pull-request", "custom collision\n"),
     ],
     [
       "managed directory",
       async () =>
-        mkdir(path.join(taskRoot, ".agents/skills/ai-pr"), { recursive: true }),
+        mkdir(path.join(taskRoot, ".agents/skills/pull-request"), {
+          recursive: true,
+        }),
     ],
     [
       "managed dangling link",
@@ -553,7 +558,7 @@ test("canonical copy refuses managed collisions and unsafe ancestors before writ
         await mkdir(path.join(taskRoot, ".agents/skills"), { recursive: true });
         await symlink(
           "missing-target",
-          path.join(taskRoot, ".agents/skills/ai-pr"),
+          path.join(taskRoot, ".agents/skills/pull-request"),
         );
       },
     ],
@@ -562,8 +567,8 @@ test("canonical copy refuses managed collisions and unsafe ancestors before writ
       async () => {
         await mkdir(path.join(taskRoot, ".agents/skills"), { recursive: true });
         await symlink(
-          path.join(f.workflow, ".agents/skills/ai-pr"),
-          path.join(taskRoot, ".agents/skills/ai-pr"),
+          path.join(f.workflow, ".agents/skills/pull-request"),
+          path.join(taskRoot, ".agents/skills/pull-request"),
         );
       },
     ],
@@ -612,7 +617,7 @@ test("canonical copy refuses managed collisions and unsafe ancestors before writ
 
 test("canonical copy requires all real local skill sources before writes", async (t) => {
   const f = await fixture(t, 1);
-  const source = path.join(f.workflow, ".agents/skills/ai-pr/SKILL.md");
+  const source = path.join(f.workflow, ".agents/skills/pull-request/SKILL.md");
   const content = await readFile(source);
   const taskRoot = path.join(f.workspace, ".worktrees/missing-source");
   await mkdir(taskRoot, { recursive: true });
@@ -630,7 +635,7 @@ test("base-tree preflight refuses tracked skill outputs and unsafe ancestors", a
   const f = await fixture(t, 1);
   // The source links are normally untracked setup outputs. A base containing
   // one must fail even if its text resembles the intended task-local link.
-  git(f.workspace, "add", ".agents/skills/ai-pr");
+  git(f.workspace, "add", ".agents/skills/pull-request");
   git(f.workspace, "commit", "-m", "fixture tracked managed link");
   const before = await sourceState(f);
   await assert.rejects(preflight(f), /managed skill collision in base tree/);

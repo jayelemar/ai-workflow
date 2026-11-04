@@ -11,7 +11,7 @@ approval, logging, and supply-chain requirements.
 
 Read the repository authority, applicable security/testing routes, local desktop
 guidance, current security contracts, and relevant source or diff. Existing
-`ai-build` requirements remain the authority for controlled implementation.
+`.ai/AGENTS.md` requirements remain the authority for controlled implementation.
 
 Separate implemented behavior from roadmap claims and report material
 contradictions. For each changed capability, identify the caller, untrusted
