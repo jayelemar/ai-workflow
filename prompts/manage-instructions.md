@@ -22,12 +22,13 @@ unresolved destructive retirement/shared-policy authority, or ambiguity that
 changes the file set, ownership, routing, or behavior after inspection. Group
 questions, putting the recommended answer and brief evidence/tradeoff first.
 Resolve material ambiguity before preview; follow conventions for minor details
-or defer optional guidance to Recommendations. Ask no discovery questions when
-no material ambiguity remains.
+or defer optional guidance to Recommendations.
 
 ## Inspect
 
-- Read `.ai/AGENTS.md` and ignored `.ai/instructions/index.md` if present.
+- Read `.ai/AGENTS.md`, ignored `.ai/instructions/index.md` if present, and
+  [Documentation and Runbook Instructions](../instructions/shared/documentation-runbooks.md)
+  before editing; follow its authoring and section-purpose rules.
 - Inventory relevant `.ai/instructions/**/*.md` with ignored-file-aware search.
   Search every instruction root, including ignored index/local files, for rules,
   commands, and validation covering the intended guidance before proposing or
@@ -84,11 +85,9 @@ justify extra discovery or per-file approval questions.
   `.ai/instructions/shared/plan-review.md`, and plan creation in
   `.ai/.agents/skills/create-plan/`; link to these owners rather than copying them. Git history owns
   instruction history; never create/update instruction changelogs.
-- Preserve `Purpose`, `Rules`, `Placement`, `Validation`, and `Anti-Patterns`
-  sections when they fit. Consolidate equivalent rules and repeated command
-  lists under one owner, replacing copies with references/routes. Preserve
-  applicability, exclusions, platform constraints, and local facts; references
-  and narrower specializations are not themselves duplication.
+- Consolidate repeated command lists under their owner. Preserve platform
+  constraints and local facts; references and narrower specializations are
+  not themselves duplication.
 - Optional local areas require repeated evidence and an index route. Retire
   dead routes/references together; never route to missing instructions.
 

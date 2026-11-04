@@ -38,7 +38,5 @@ Standardize safe, observable, forward-only production data and schema changes.
 
 ## Anti-Patterns
 
-- Rewriting deployed history to correct production state.
 - Combining unrelated schema, policy, and backfill changes in one irreversible migration.
 - Requiring simultaneous deployment of incompatible application and database versions.
-- Calling a destructive database reversal a rollback without a verified recovery path.

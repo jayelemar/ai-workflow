@@ -13,7 +13,7 @@ Keep changes easy to review, deploy, revert, and trace.
 
 ## Rules
 
-- Use focused conventional commits with one coherent purpose and a descriptive subject.
+- Keep each commit focused on one coherent purpose.
 - Do not use `wip`, vague, conflict-only, or mixed-purpose commits for reviewable delivery history.
 - Split independently deployable or reversible outcomes into separate commits or staged pull requests when practical.
 - Rebase, squash, or otherwise clean noisy intermediate history before merge while preserving needed review and incident traceability.
@@ -24,13 +24,20 @@ Keep changes easy to review, deploy, revert, and trace.
   change; omit inapplicable sections and filler. Commit evidence does not
   replace the PR's self-contained validation handoff.
 - Distinguish completed checks, missing required acceptance evidence, and
-  optional deferred checks. Missing required evidence blocks completion even
-  when the description records it accurately. Examples in the PR creation
-  utility illustrate simple and sensitive changes without prescribing boilerplate.
+  optional deferred checks, following
+  [Validation and Completion](../../AGENTS.md#validation-and-completion).
+  Examples in the PR skill illustrate simple and sensitive changes without
+  prescribing boilerplate.
 - State dependency order and validation order for cross-layer delivery.
 - Add repository-specific trailers only when an existing delivery convention
   or explicit user request requires them. Do not create a workflow ledger for
   commit metadata.
+
+## Commit Subjects and PR Titles
+
+Use `<type>(<scope>): <imperative summary>` with a specific, imperative subject or title
+no longer than 72 characters. Allowed types: `feat`, `fix`, `refactor`, `perf`,
+`chore`, `docs`, `test`, `build`, `ci`, `style`, and `revert`.
 
 ## Placement
 
@@ -46,6 +53,4 @@ Keep changes easy to review, deploy, revert, and trace.
 ## Anti-Patterns
 
 - Combining cleanup, refactoring, feature behavior, and generated output without a stated dependency.
-- Claiming a change is safe to merge without validation evidence.
 - Hiding migration or rollout risk in an issue comment instead of delivery metadata.
-- Retaining noisy fixup history when it prevents clear review or revert.

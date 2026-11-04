@@ -90,11 +90,15 @@ test("root authority separates planning from saved-plan execution", async () => 
 });
 
 test("delivery utilities use repository evidence without workflow metadata", async () => {
-  const [organizer, pullRequest, delivery] = await Promise.all([
-    read(".agents/skills/git-commit/SKILL.md"),
-    read(".agents/skills/pull-request/SKILL.md"),
-    read("instructions/shared/delivery-hygiene.md"),
-  ]);
+  const [organizer, pullRequest, delivery, agents, testing] = await Promise.all(
+    [
+      read(".agents/skills/git-commit/SKILL.md"),
+      read(".agents/skills/pull-request/SKILL.md"),
+      read("instructions/shared/delivery-hygiene.md"),
+      read("AGENTS.md"),
+      read("instructions/shared/testing.md"),
+    ],
+  );
   const source = `${organizer}\n${pullRequest}\n${delivery}`;
 
   assert.match(source, /git diff --cached --check/);
@@ -104,7 +108,21 @@ test("delivery utilities use repository evidence without workflow metadata", asy
   assert.match(pullRequest, /Simple change example/);
   assert.match(pullRequest, /Sensitive change example/);
   assert.match(pullRequest, /missing required evidence/);
-  assert.match(delivery, /Missing required evidence blocks completion/);
+  assert.match(agents, /Unavailable required evidence blocks completion/);
+  for (const reference of [delivery, testing]) {
+    assert.match(
+      reference,
+      /\[Validation and Completion\]\(\.\.\/\.\.\/AGENTS\.md#validation-and-completion\)/,
+    );
+  }
+  for (const skill of [organizer, pullRequest]) {
+    assert.match(
+      skill,
+      /\[Commit Subjects and PR Titles\]\(\.\.\/\.\.\/\.\.\/instructions\/shared\/delivery-hygiene\.md#commit-subjects-and-pr-titles\)/,
+    );
+  }
+  assert.match(delivery, /<type>\(<scope>\): <imperative summary>/);
+  assert.match(delivery, /no longer than 72 characters/);
   assert.doesNotMatch(pullRequest, /Do not add commit SHAs, validation, risk/);
   assert.doesNotMatch(source, /Workflow-(Work-Item|Spec|Plan-Revision)/);
 });

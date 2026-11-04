@@ -46,10 +46,7 @@ Keep production changes understandable, reviewable, and safe to evolve.
 
 ## Anti-Patterns
 
-- Adding another responsibility to an already broad route, page, service, or component without an explicit coupling rationale.
 - Hiding unrelated refactors inside feature work.
-- Creating generic shared modules with no clear ownership.
 - Treating file size alone as the only reason to split code.
-- Building reusable infrastructure for a single hypothetical future consumer.
 - Replacing a correct spec-compliant design solely because a reviewer prefers
   another architecture.

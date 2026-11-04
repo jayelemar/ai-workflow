@@ -35,14 +35,9 @@ implementation work.
 - Follow `shared/testing.md` for regression-test policy and test-layer
   selection before implementation.
 - Verify the original failure mode is covered by the final validation command.
-- If validation cannot run, state the environment blocker, residual risk, and
-  the smallest command that should be run later.
+- For blocked validation, follow
+  [Validation and Completion](../../AGENTS.md#validation-and-completion).
 
 ## Anti-Patterns
 
-- Editing first and searching for a theory afterward.
-- Fixing multiple independent causes in one pass without isolating the failing
-  signal.
 - Treating a different failure as proof that the original issue is fixed.
-- Continuing speculative fixes after repeated failures without stopping for
-  better evidence.

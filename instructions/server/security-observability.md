@@ -43,5 +43,3 @@ recoverable using the safe logging requirements in `shared/security.md`.
 
 - Logging only successful privileged actions while omitting denial evidence.
 - Treating raw application logs as an audit trail without event structure, access control, or retention.
-- Alerting without an owner or response procedure.
-- Treating client-only work as requiring backend audit infrastructure.

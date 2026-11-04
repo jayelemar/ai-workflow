@@ -66,17 +66,13 @@ remain visible, reachable, and usable across supported device sizes.
   behaviors.
 - Check accessibility text scaling when changed text or controls are near a
   layout boundary.
-- If required compact-device validation cannot run, do not claim the affected
-  layout is complete. Report the missing evidence, residual risk, and smallest
-  follow-up check.
+- For blocked compact-device validation, follow
+  [Validation and Completion](../../AGENTS.md#validation-and-completion).
 
 ## Anti-Patterns
 
 - Testing only on the developer's default or largest simulator.
 - Validating phone width while ignoring available height and safe-area insets.
 - Fixed-height containers around variable text, dynamic content, or actions.
-- Hiding overflow around interactive content.
-- Treating a query, role match, snapshot, or accessibility-tree entry as proof
-  that a control is visible and tappable.
 - Adding headers, banners, copy, or actions without rechecking the remaining
   content height.

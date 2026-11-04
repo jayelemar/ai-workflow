@@ -39,6 +39,4 @@ Require measurable evidence for performance-sensitive changes on any platform.
 
 ## Anti-Patterns
 
-- Treating an optimization hypothesis as a measured result.
-- Using only local timing for a production claim without stating its limits.
 - Adding expensive load tests to every change regardless of risk.
