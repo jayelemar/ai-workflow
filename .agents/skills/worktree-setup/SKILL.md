@@ -104,7 +104,7 @@ After context selection and every repository preflight pass:
    `workspace`, `task_root`, `workflow_head`, and the three preflighted arrays.
    Recheck containment, types, exclusions, and source stability immediately
    before running. It owns independent cloning, the exact-file overlay,
-   source-deletion handling, and all four relative task-local skill links.
+   source-deletion handling, and all six relative task-local skill links.
    Do not duplicate its mechanics or copy source project-root skill links.
 4. Complete destination verification in `worktree-checks.md`, including actual
    default and full health after separately authorized dependency provisioning,

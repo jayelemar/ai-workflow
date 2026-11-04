@@ -8,7 +8,7 @@ Canonical paths are relative to `.ai`; the other paths are workspace-relative.
 The task root must already exist from native worktree creation. Do not run this
 on an existing prepared task or copy source `.agents/skills/` links.
 
-The block checks the four skill sources and every managed link destination
+The block checks the six skill sources and every managed link destination
 before writing context. Real `.agents/` ancestors and unrelated custom entries
 are allowed. Any failure after mutation begins leaves partial state for the
 skill's required report; it performs no rollback or cleanup.
@@ -19,7 +19,7 @@ skill's required report; it performs no rollback or cleanup.
 set -euo pipefail
 workflow_source="$workspace/.ai"
 workflow_target="$task_root/.ai"
-managed_skills=(create-plan worktree-setup git-commit pull-request)
+managed_skills=(create-plan worktree-setup git-commit pull-request show-summary show-qa-checklist)
 # Resolve the roots without following an unexpected workspace/task-root alias.
 test "$(cd -- "$workspace" && pwd -P)" = "$workspace"
 test "$(cd -- "$task_root" && pwd -P)" = "$task_root"

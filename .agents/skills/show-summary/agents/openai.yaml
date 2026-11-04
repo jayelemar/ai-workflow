@@ -1,0 +1,4 @@
+interface:
+  display_name: "Show Summary"
+  short_description: "Show a short, nontechnical change summary"
+  default_prompt: "Use $show-summary to summarize the current changes in chat."

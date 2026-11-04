@@ -17,23 +17,28 @@ Delegate mutation and preflight to the [setup utility](../scripts/setup/agents-o
 It preserves readable regular root `AGENTS.md` bytes and tracking state, and
 installs these project-local outputs:
 
-| Output                          | Behavior                                                                                                                         |
-| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `AGENTS.override.md`            | Routes root guidance first when present, then `.ai/AGENTS.md` and `instructions/index.md`; also covers root guidance added later |
-| `.agents/skills/create-plan`    | Relative link to `../../.ai/.agents/skills/create-plan`                                                                          |
-| `.agents/skills/worktree-setup` | Relative link to `../../.ai/.agents/skills/worktree-setup`                                                                       |
-| `.agents/skills/git-commit`     | Relative link to `../../.ai/.agents/skills/git-commit`                                                                           |
-| `.agents/skills/pull-request`   | Relative link to `../../.ai/.agents/skills/pull-request`                                                                         |
-| `.codex/config.toml`            | Byte-exact snapshot of `.ai/.codex/config.toml`, currently the only canonical config content                                     |
+| Output                             | Behavior                                                                                                                         |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `AGENTS.override.md`               | Routes root guidance first when present, then `.ai/AGENTS.md` and `instructions/index.md`; also covers root guidance added later |
+| `.agents/skills/create-plan`       | Relative link to `../../.ai/.agents/skills/create-plan`                                                                          |
+| `.agents/skills/worktree-setup`    | Relative link to `../../.ai/.agents/skills/worktree-setup`                                                                       |
+| `.agents/skills/git-commit`        | Relative link to `../../.ai/.agents/skills/git-commit`                                                                           |
+| `.agents/skills/pull-request`      | Relative link to `../../.ai/.agents/skills/pull-request`                                                                         |
+| `.agents/skills/show-summary`      | Relative link to `../../.ai/.agents/skills/show-summary`                                                                         |
+| `.agents/skills/show-qa-checklist` | Relative link to `../../.ai/.agents/skills/show-qa-checklist`                                                                    |
+| `.codex/config.toml`               | Byte-exact snapshot of `.ai/.codex/config.toml`, currently the only canonical config content                                     |
 
 The `.agents/`, `.agents/skills/`, and `.codex/` containers are real directories.
-Only the override, four generated links, and config file receive exact parent
+Only the override, six generated links, and config file receive exact parent
 local Git excludes. Tracked ignore files, custom skills, other `.codex/` files,
 global/user config, authentication files, and runtime state remain untouched.
 Source skills remain in `.ai`; no global skills are installed. Valid outputs
 are reused unchanged on repeated setup. Source config changes do not update an
 installed snapshot automatically: an identical regular file is reused; a
 differing config stops all setup before writes for explicit resolution.
+
+Rerun setup after adding these skills to an existing installation. It adds
+`show-summary` and `show-qa-checklist` links while reusing valid existing outputs.
 
 ## Renamed skills and existing installations
 
@@ -111,7 +116,8 @@ After setup, verify in a fresh client:
 
 1. Inspect `/skills`, or read-only app-server `skills/list` with the project
    root in `cwds` and `forceReload: true`. Confirm `create-plan`,
-   `worktree-setup`, `git-commit`, and `pull-request` are enabled and resolve to this
+   `worktree-setup`, `git-commit`, `pull-request`, `show-summary`, and
+   `show-qa-checklist` are enabled and resolve to this
    project's source. File inspection alone does not prove native discovery.
 2. Ask for instruction sources; verify root-first routing. Plan creation loads
    `.ai/.agents/skills/create-plan/SKILL.md`; saved-plan execution follows

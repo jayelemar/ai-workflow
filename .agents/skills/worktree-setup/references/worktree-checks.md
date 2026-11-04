@@ -32,8 +32,9 @@ it contains `.ai` or `AGENTS.override.md`. Inspect every selected workspace file
 against the base: an existing regular checkout file is acceptable only when
 its bytes already equal the selected source file. Otherwise stop for a checkout
 collision. Inspect `.agents/` and `.agents/skills/` in the base tree: existing
-ancestors must be real directories, and none of the four managed skill paths
-(`create-plan`, `worktree-setup`, `git-commit`, `pull-request`) may exist, including
+ancestors must be real directories, and none of the six managed skill paths
+(`create-plan`, `worktree-setup`, `git-commit`, `pull-request`, `show-summary`,
+`show-qa-checklist`) may exist, including
 tracked links. Preserve unrelated custom files and skills. A tracked `docs/`
 directory alone is not a collision. Context copying must never overwrite
 differing checkout files or non-file entries.
@@ -66,7 +67,7 @@ Verify selected-file fidelity without printing contents: byte comparison,
 modes, selected deletions still absent, and all required files readable.
 Enumerate the destination outside its fresh `.git` to prove every file is
 either canonical or explicitly selected; verify excluded files are absent.
-Verify root/custom routing still resolves within the task root. Verify all four
+Verify root/custom routing still resolves within the task root. Verify all six
 `.agents/skills/` entries are relative links to
 `../../.ai/.agents/skills/<skill-name>` and resolve within the task-local
 `.ai/.agents/skills/`. Preserve unrelated `.agents/` files and custom skills.
