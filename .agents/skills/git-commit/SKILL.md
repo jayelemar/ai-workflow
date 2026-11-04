@@ -60,15 +60,46 @@ Create one coherent, independently reviewable purpose per commit.
 
 ## Proposal Before Mutation
 
-Before staging, show a commit plan with:
+Before staging, use this compact proposal format for one or multiple commits:
 
-1. commit order;
-2. conventional-commit subject;
-3. exact files or file hunks in each group;
-4. dependency order;
-5. validation for each group;
-6. deferred checks, migration effects, compatibility, rollout risk, and
-   recovery or revert notes when applicable.
+- Start with the proposed commit count and branch.
+- Show each commit in execution order with its conventional-commit subject
+  and file count. Keep implementation and related tests together according
+  to the grouping rules; the display format does not determine grouping.
+- List every exact file path in a plain-text code block under its commit.
+  When paths share a directory prefix, state that prefix once above the
+  groups and list paths relative to it. For partial staging, identify the
+  included hunks beside the path.
+- Show one shared **Checks** line after all groups. Summarize actual validation
+  results; qualify checks that cover only part of the proposal. Do not add
+  per-commit test-status lines or repeat command logs.
+- Add a concise **Notes** line only when needed for warnings, failed or deferred
+  checks, unrelated changes, dependencies, migration or compatibility effects,
+  meaningful rollout risks, or recovery/revert instructions. Keep exceptions
+  visible rather than describing routine safeguards or absent risks.
+- End with one approval question covering all proposed commits, unless
+  creation is already explicitly authorized. Keep any required explanation
+  of the approval rule short and separate after the question.
+
+Use this layout, repeating the numbered subject and file block for each commit
+and using singular wording for one commit:
+
+````text
+**<N> proposed commits** · `<branch>`
+All file paths relative to `<shared prefix>/`.
+
+**1.** `<type(scope): subject>` · **<file count> files**
+
+```text
+<exact relative path>
+<exact relative path>
+```
+
+**Checks:** <validation summary>
+**Notes:** <exceptions, only when applicable>
+
+**Create these <N> local commits?**
+````
 
 Wait for approval before staging or committing unless the user explicitly
 authorizes creating the commits.
@@ -103,9 +134,10 @@ Before drafting, follow
 
 ## Final Report
 
-Report:
+Keep the completion report compact:
 
-- created commit SHAs and subjects, in dependency order;
-- validation passed and validation deferred;
-- remaining unstaged or untracked files, if any;
-- practical revert or recovery order when relevant.
+- List one `SHA · subject` line per created commit, in dependency order.
+- Summarize validation once under **Checks**, with exceptions under **Notes**.
+- State whether the working tree is clean; otherwise list remaining unstaged
+  or untracked files. Include staged leftovers or incomplete groups if any.
+- Include practical revert or recovery order only when relevant.
