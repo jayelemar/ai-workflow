@@ -5,7 +5,8 @@ description: Prepare a GitHub pull request from the complete branch diff. Use wh
 
 # Pull Request
 
-Prepare and create one GitHub pull request for the current branch.
+Prepare and create one GitHub pull request from the task's current sub-branch
+into its parent branch, after approval of the complete preview.
 
 Read before acting:
 
@@ -17,21 +18,50 @@ Read before acting:
 
 ## Inputs
 
-- Base: an explicit branch or `AUTO`
+- Repository (optional): a local repository path or an established task repository name.
+- Parent branch (optional, also called base): the branch that should receive the
+  sub-branch's changes.
+
+## Resolve Destination
+
+Before drafting or mutating anything:
+
+1. Use the explicitly named repository; otherwise use the single repository
+   clearly established by the task's work. If multiple repositories are involved
+   or ownership is unclear, ask which one. Neither the skill's storage location
+   nor the shell's working directory selects the repository. In particular,
+   `.ai` and its containing project are separate repositories.
+2. Verify the selected Git top level and current branch, then read its local
+   instructions. Scope all Git operations to that checkout explicitly.
+3. Use the parent branch explicitly named by the user, including earlier in the
+   task; otherwise use the branch clearly recorded in task context when the
+   sub-branch was created. If unknown, ask the user to name it before drafting.
+   Do not guess from Git history, branch names, or a tracking branch. `AUTO` is
+   not supported; never substitute the repository's default branch.
+4. Resolve the destination GitHub repository and, if needed, the push remote
+   and branch from explicit instructions or unambiguous Git configuration.
+   The repository receiving the PR may differ from the fork receiving the push.
+   Ask when multiple remotes or forks leave either destination unclear; do not
+   assume `origin` identifies the intended destination.
+5. Verify the parent branch exists in the destination repository. If unavailable,
+   report the problem and ask for a correction; do not create or substitute it.
+
+Resolving missing information does not approve publication. Confirm the resolved
+project and branch direction once, with the complete preview below.
 
 ## Inspect First
 
-Before proposing or mutating anything:
+In the resolved repository:
 
-1. Identify the repository root, current branch, remote, and default branch.
-2. Resolve `AUTO` to the remote's default branch.
-3. Stop if the current branch is detached or matches the resolved base.
-4. Inspect working-tree status, commits unique to the branch, and the complete
+1. Stop if the current branch is detached or matches the parent branch.
+2. Inspect working-tree status, commits unique to the branch, and the complete
    diff from the merge base through `HEAD`.
-5. Inspect available validation evidence and applicable repository
+   Use the resolved parent branch for the merge base.
+3. Inspect available validation evidence and applicable repository
    instructions.
-6. Check whether the branch already has an open pull request. If it does,
-   report its URL and stop without creating a duplicate.
+4. Check the resolved GitHub repository for an open pull request from this head,
+   including its owner for a fork. If one exists, report its URL and stop without
+   creating a duplicate, even if its base differs from the intended parent.
 
 Do not include uncommitted changes in the proposed pull request. Disclose any
 remaining staged, unstaged, or untracked files and whether they appear related
@@ -85,23 +115,35 @@ retaining server access controls.
 
 Show the operator:
 
-1. resolved base and head branches;
-2. whether the branch must be pushed or its remote updated;
-3. proposed title; and
-4. exact proposed description.
+1. absolute local repository root and destination GitHub `owner/repository`;
+2. branch direction as `<sub-branch> → <parent-branch>` (head → base), including
+   the head's owner when it comes from a fork;
+3. whether a push is needed and its exact remote, repository, and branch;
+4. proposed title; and
+5. exact proposed description.
 
-Wait for explicit approval before pushing or creating the pull request. The
-initial invocation is not authorization to publish.
+With that full preview, ask: “Create this PR from `<sub-branch>` →
+`<parent-branch>`?” Wait for explicit approval before pushing or creating the
+pull request. Approval covers only the displayed push and PR creation; the
+initial invocation is not authorization to publish. Do not require a separate
+branch-only approval before this preview.
 
 ## Create
 
 After approval:
 
-1. Recheck the current branch, `HEAD`, working-tree status, and existing pull
-   requests. Stop if the proposed branch or commit changed materially.
-2. Push the current branch normally when its remote is missing or behind.
-3. Create the pull request with the approved base, head, title, and description.
-4. Re-read the created pull request to confirm its metadata and URL.
+1. Recheck the local repository root, GitHub destination, push destination,
+   current sub-branch, parent branch, `HEAD`, working-tree status, and existing
+   pull requests. If an approved repository, destination, branch, or commit
+   changed materially, stop and obtain approval of a revised full preview.
+   If a pull request now exists, report its URL and stop without a duplicate.
+2. Push the current sub-branch normally to the approved remote and branch when
+   needed. Never push the parent branch as part of this workflow.
+3. Create the pull request with the approved repository, base, head (qualified
+   by owner for a fork), title, and description. Pass the repository and branches
+   explicitly rather than relying on working-directory or CLI defaults.
+4. Re-read the created pull request to confirm its repository, branch direction,
+   title, description, and URL.
 
 Never commit, amend, rebase, squash, force-push, merge, close, or modify another
 pull request as part of this workflow.
@@ -111,7 +153,7 @@ pull request as part of this workflow.
 Report:
 
 - pull request URL;
-- title and base/head branches;
+- local repository, destination GitHub repository, title, and sub-branch → parent-branch;
 - push result;
 - remaining staged, unstaged, or untracked files; and
 - any failure or metadata difference found during verification.
