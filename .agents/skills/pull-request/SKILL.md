@@ -1,9 +1,9 @@
 ---
-name: ai-pr
+name: pull-request
 description: Prepare a GitHub pull request from the complete branch diff. Use when the user asks to draft, prepare, or create a PR; require explicit approval of the exact preview before publication.
 ---
 
-# AI PR
+# Pull Request
 
 Prepare and create one GitHub pull request for the current branch.
 

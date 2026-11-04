@@ -80,8 +80,9 @@ justify extra discovery or per-file approval questions.
   accessibility. Load shared rules only when relevant; persisted-data changes
   on any platform select migrations. Exclude unrelated native-device/backend
   operations requirements.
-- Keep implementation workflow canonical in `.ai/.agents/skills/ai-build/`,
-  without copies in shared instructions or root prompts. Git history owns
+- Keep execution rules canonical in `.ai/AGENTS.md`, detailed review guidance in
+  `.ai/instructions/shared/plan-review.md`, and plan creation in
+  `.ai/.agents/skills/create-plan/`; link to these owners rather than copying them. Git history owns
   instruction history; never create/update instruction changelogs.
 - Preserve `Purpose`, `Rules`, `Placement`, `Validation`, and `Anti-Patterns`
   sections when they fit. Consolidate equivalent rules and repeated command

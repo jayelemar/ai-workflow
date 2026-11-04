@@ -1,4 +1,0 @@
-interface:
-  display_name: "AI Commit"
-  short_description: "Organize and create focused local commits"
-  default_prompt: "Use $ai-commit to prepare focused local commits for these changes."

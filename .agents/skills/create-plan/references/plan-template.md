@@ -57,13 +57,9 @@ Pending.
 - Add environment, migration, rollback, security, or cross-repository detail
   only when the changed boundary requires it.
 - Keep tasks independently understandable and ordered by dependency.
-- Update progress, discoveries, decisions, validation, and outcome in this file
-  during execution.
-- Ask before proceeding when a discovery changes user-visible behavior,
-  permissions, destructive scope, external mutation, or repository ownership.
-- Do not create a second status or review-state artifact.
-- After saving the plan, report its exact path and output this ready-to-copy
-  execution prompt without starting it:
+- When saving is permitted, report the exact path and offer this ready-to-copy
+  execution prompt without starting it. Native Execute plan and ordinary
+  implementation requests follow the same repository execution rules:
 
   ```text
   /goal Implement <exact-plan-path>. Preserve its boundaries, keep the plan updated, run every required validation, and finish only when its definition of done is proven.

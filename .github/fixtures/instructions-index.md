@@ -7,7 +7,7 @@ coverage without turning project-local instructions into canonical source.
 
 - Load `local/architecture.md`, `shared/debugging.md`,
   `shared/delivery-hygiene.md`, `shared/documentation-runbooks.md`,
-  `shared/maintainability.md`, `shared/migrations.md`,
+  `shared/maintainability.md`, `shared/plan-review.md`, `shared/migrations.md`,
   `shared/performance-observability.md`, `shared/security.md`,
   `shared/testing.md`, `mobile/ui.md`, `web/wcag.md`,
   `desktop/electron/qa.md`, `desktop/electron/security-review.md`,

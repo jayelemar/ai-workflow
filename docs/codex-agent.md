@@ -1,8 +1,8 @@
 # Codex Project Instruction Setup
 
 Codex checks `AGENTS.override.md` before `AGENTS.md` in each workspace
-directory. The nested [AGENTS.md](../AGENTS.md) owns behavior and routes planned
-or controlled work to `.ai/.agents/skills/ai-build/SKILL.md`.
+directory. The nested [AGENTS.md](../AGENTS.md) owns execution behavior for native Execute plan, `/goal`, and ordinary
+requests. It routes plan creation to `.ai/.agents/skills/create-plan/SKILL.md`.
 
 ## Setup and Outputs
 
@@ -17,14 +17,14 @@ Delegate mutation and preflight to the [setup utility](../scripts/setup/agents-o
 It preserves readable regular root `AGENTS.md` bytes and tracking state, and
 installs these project-local outputs:
 
-| Output                             | Behavior                                                                                                                         |
-| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `AGENTS.override.md`               | Routes root guidance first when present, then `.ai/AGENTS.md` and `instructions/index.md`; also covers root guidance added later |
-| `.agents/skills/ai-build`          | Relative link to `../../.ai/.agents/skills/ai-build`                                                                             |
-| `.agents/skills/ai-worktree-setup` | Relative link to `../../.ai/.agents/skills/ai-worktree-setup`                                                                    |
-| `.agents/skills/ai-commit`         | Relative link to `../../.ai/.agents/skills/ai-commit`                                                                            |
-| `.agents/skills/ai-pr`             | Relative link to `../../.ai/.agents/skills/ai-pr`                                                                                |
-| `.codex/config.toml`               | Byte-exact snapshot of `.ai/.codex/config.toml`, currently the only canonical config content                                     |
+| Output                          | Behavior                                                                                                                         |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `AGENTS.override.md`            | Routes root guidance first when present, then `.ai/AGENTS.md` and `instructions/index.md`; also covers root guidance added later |
+| `.agents/skills/create-plan`    | Relative link to `../../.ai/.agents/skills/create-plan`                                                                          |
+| `.agents/skills/worktree-setup` | Relative link to `../../.ai/.agents/skills/worktree-setup`                                                                       |
+| `.agents/skills/git-commit`     | Relative link to `../../.ai/.agents/skills/git-commit`                                                                           |
+| `.agents/skills/pull-request`   | Relative link to `../../.ai/.agents/skills/pull-request`                                                                         |
+| `.codex/config.toml`            | Byte-exact snapshot of `.ai/.codex/config.toml`, currently the only canonical config content                                     |
 
 The `.agents/`, `.agents/skills/`, and `.codex/` containers are real directories.
 Only the override, four generated links, and config file receive exact parent
@@ -34,6 +34,18 @@ Source skills remain in `.ai`; no global skills are installed. Valid outputs
 are reused unchanged on repeated setup. Source config changes do not update an
 installed snapshot automatically: an identical regular file is reused; a
 differing config stops all setup before writes for explicit resolution.
+
+## Renamed skills and existing installations
+
+Run the setup command above to migrate the four previously managed skill links
+to the new names. Only untracked symlinks with the exact old generated relative
+target are removed, even if dangling after source renaming. Setup verifies new
+outputs before removing old links. Custom entries, wrong links, tracked paths,
+and case aliases stop setup before writes; resolve them explicitly. Existing
+Git excludes remain intact, and only exact new excludes are appended.
+Retries reuse valid new links and finish any remaining legacy-link removal.
+Historical plans and prepared task roots are not rewritten. Recreate prepared
+execution environments when they need the renamed workflow.
 
 ## Active Routing Block
 
@@ -98,11 +110,12 @@ command-line settings still apply. See [project configuration](https://learn.cha
 After setup, verify in a fresh client:
 
 1. Inspect `/skills`, or read-only app-server `skills/list` with the project
-   root in `cwds` and `forceReload: true`. Confirm `ai-build`,
-   `ai-worktree-setup`, `ai-commit`, and `ai-pr` are enabled and resolve to this
+   root in `cwds` and `forceReload: true`. Confirm `create-plan`,
+   `worktree-setup`, `git-commit`, and `pull-request` are enabled and resolve to this
    project's source. File inspection alone does not prove native discovery.
-2. Ask for instruction sources; verify root-first routing and that planned or
-   controlled work loads `.ai/.agents/skills/ai-build/SKILL.md`.
+2. Ask for instruction sources; verify root-first routing. Plan creation loads
+   `.ai/.agents/skills/create-plan/SKILL.md`; saved-plan execution follows
+   `.ai/AGENTS.md` without invoking the planning skill.
 3. Prepared worktrees must recreate links against their own independent `.ai`
    copy in both layouts, never the source workspace.
 4. For delegation, follow [Subagent Models and Names](../AGENTS.md#subagent-models-and-names).

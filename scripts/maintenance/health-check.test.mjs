@@ -61,11 +61,11 @@ const createFixture = async () => {
   await mkdir(path.join(temporaryRoot, ".git"), { recursive: true });
   const sourcePaths = [
     ...bootstrapPaths,
-    ".agents/skills/ai-build/SKILL.md",
-    ".agents/skills/ai-build/agents/openai.yaml",
-    ".agents/skills/ai-build/references/plan-template.md",
-    ".agents/skills/ai-build/references/review-checklist.md",
-    ...["ai-worktree-setup", "ai-commit", "ai-pr"].flatMap((name) => [
+    ".agents/skills/create-plan/SKILL.md",
+    ".agents/skills/create-plan/agents/openai.yaml",
+    ".agents/skills/create-plan/references/plan-template.md",
+    "instructions/shared/plan-review.md",
+    ...["worktree-setup", "git-commit", "pull-request"].flatMap((name) => [
       `.agents/skills/${name}/SKILL.md`,
       `.agents/skills/${name}/agents/openai.yaml`,
     ]),
@@ -397,7 +397,7 @@ test("health fails when a canonical source is not tracked", async () => {
     assert.match(fixture.output.join("\n"), /canonical source is untracked/);
     assert.match(
       fixture.output.join("\n"),
-      /\.agents\/skills\/ai-build\/SKILL\.md/,
+      /\.agents\/skills\/create-plan\/SKILL\.md/,
     );
   } finally {
     await rm(fixture.temporaryRoot, { force: true, recursive: true });

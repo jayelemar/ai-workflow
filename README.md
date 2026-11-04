@@ -27,31 +27,32 @@ or user configuration are installed.
 | Standard planned   | Work is complex, ambiguous, cross-cutting, or lengthy                                                                                   | One living plan | Self-review              |
 | Controlled planned | Authentication, authorization, payments, secrets, migrations, destructive behavior, or another named security or trust boundary changes | One living plan | Independent final review |
 
-All paths inspect, implement, validate, and report. The canonical
-[AI Build skill](.agents/skills/ai-build/SKILL.md) owns execution, required
-evidence, and completion. Its [plan reference](.agents/skills/ai-build/references/plan-template.md)
-owns plan creation; its [review checklist](.agents/skills/ai-build/references/review-checklist.md)
-owns controlled review. No workflow state machine or companion status artifacts
-are maintained. Skills do not automatically chain actions or grant delivery,
-installation, or cleanup authority.
+[AGENTS.md](AGENTS.md) owns execution, required evidence, and completion for
+native Execute plan, `/goal`, and ordinary implementation requests. The
+[Create Plan skill](.agents/skills/create-plan/SKILL.md) creates and refines plans;
+[Plan Review](instructions/shared/plan-review.md) owns detailed review procedures.
+No workflow state machine or companion status artifacts are maintained. Skills
+do not automatically chain actions or grant delivery, installation, or cleanup
+authority.
 
 Useful invocations:
 
 ```text
 Fix the duplicate receipt import. Preserve existing authorization and run the focused receipt tests.
 
-$ai-build Save a plan for the requested change.
+$create-plan Save a plan for the requested change.
 
 /goal Implement .ai/plans/example-change.md. Preserve its boundaries, keep the plan updated, run every required validation, and finish only when its definition of done is proven.
 
-$ai-worktree-setup plan: .ai/plans/example-change.md
+$worktree-setup plan: .ai/plans/example-change.md
 
-$ai-commit Prepare commits for these changes.
+$git-commit Prepare commits for these changes.
 
-$ai-pr Base: AUTO
+$pull-request Base: AUTO
 ```
 
-For controlled work, require independent final review in the Goal prompt.
+Use native Execute plan, `/goal`, or a normal request to implement a saved plan.
+All follow the same execution rules; controlled work requires independent final review.
 Prepare worktrees after saving the plan and before starting its Goal; use the
 preparation result's prompt with its explicit worktree paths. Finish or stop the
 current Goal before starting another. Give each new outcome its own plan,
@@ -59,12 +60,12 @@ restate still-applicable decisions, and reference that new plan explicitly.
 
 ## Skills and Utilities
 
-| Skill                                                          | Purpose                                               |
-| -------------------------------------------------------------- | ----------------------------------------------------- |
-| [AI Build](.agents/skills/ai-build/SKILL.md)                   | Plan, implement, validate, and review                 |
-| [AI Worktree Setup](.agents/skills/ai-worktree-setup/SKILL.md) | Prepare native worktrees and independent task context |
-| [AI Commit](.agents/skills/ai-commit/SKILL.md)                 | Organize and create authorized local commits          |
-| [AI PR](.agents/skills/ai-pr/SKILL.md)                         | Preview a PR and publish after exact-preview approval |
+| Skill                                                    | Purpose                                               |
+| -------------------------------------------------------- | ----------------------------------------------------- |
+| [Create Plan](.agents/skills/create-plan/SKILL.md)       | Create, revise, and review implementation plans       |
+| [Worktree Setup](.agents/skills/worktree-setup/SKILL.md) | Prepare native worktrees and independent task context |
+| [Git Commit](.agents/skills/git-commit/SKILL.md)         | Organize and create authorized local commits          |
+| [Pull Request](.agents/skills/pull-request/SKILL.md)     | Preview a PR and publish after exact-preview approval |
 
 Skills match ordinary requests and explicit `$skill-name` invocation. Local
 setup, read-only skill discovery, instruction management, and selected worktree
