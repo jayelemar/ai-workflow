@@ -6,7 +6,7 @@ requests. It routes plan creation to `.ai/.agents/skills/create-plan/SKILL.md`.
 
 ## Setup and Outputs
 
-Run only after an explicit local setup request, from the containing Git project:
+Run only after an explicit local setup request, from the containing project root (Git or unversioned):
 
 ```bash
 rtk proxy corepack pnpm@10.34.4 --dir .ai setup:codex
@@ -30,8 +30,10 @@ installs these project-local outputs:
 | `instructions/local/github.md` inside `.ai` | Ignored account-mapping template with generic placeholders; existing local content is preserved                                  |
 
 The `.agents/`, `.agents/skills/`, and `.codex/` containers are real directories.
-Only the override, six generated links, and config file receive exact parent
-local Git excludes. Tracked ignore files, custom skills, other `.codex/` files,
+When the parent is a Git repository, only the override, six generated links,
+and config file receive exact parent local Git excludes. Unversioned parents
+install the same outputs without creating Git metadata or ignore files.
+Tracked ignore files, custom skills, other `.codex/` files,
 global/user config, authentication files, and runtime state remain untouched.
 Source skills remain in `.ai`; no global skills are installed. Valid outputs
 are reused unchanged on repeated setup. Source config changes do not update an
@@ -110,10 +112,13 @@ discarding root/custom guidance; never force, merge, or overwrite automatically.
 - Unexpected write failures must report partial writes. Preserve unrelated
   content, resolve the reported conflict, and retry; non-zero exit is no success.
 
-Without a Git parent, setup stops before mutation because no parent exclude can
-own the override. Use an existing operator-managed `AGENTS.override.md` with the
-exact block above, preserving root/custom instructions. Do not put it in a child
-application repository.
+Without a Git parent, setup installs and verifies the same outputs while skipping
+parent tracking and exclude operations. The independent `.ai` Git repository
+and its private account ignore checks remain required. Existing output containers
+must remain real directories without nested Git metadata. Broken Git metadata,
+Git metadata directories, and a parent inside another worktree still stop setup
+before writes. Run setup at the coordination root, not in a child application
+repository.
 
 ## Runtime and Verification
 
