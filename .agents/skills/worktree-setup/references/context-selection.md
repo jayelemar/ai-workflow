@@ -2,9 +2,11 @@
 
 Read before selecting context or creating worktrees. Keep the source workspace
 authoritative: select a bounded snapshot; never mirror `.ai/` or workspace
-`docs/`, or refresh an existing task root.
+`docs/`, or refresh arbitrary existing context. Matching interrupted setup follows the
+retry rules in [worktree-checks.md](worktree-checks.md).
 
-Inventory exact relative filenames in these three in-memory lists.
+Inventory exact relative filenames in these three in-memory lists. Use NUL-separated
+Git inventories so spaces, Unicode, and newlines remain literal filenames.
 These lists are preparation inputs, not saved workflow state or a new copier.
 
 - `canonical_files`: the union of committed and indexed canonical `.ai` files,
@@ -42,9 +44,13 @@ These lists are preparation inputs, not saved workflow state or a new copier.
 Inspect the selected plan, router, applicable instructions, root guidance, and
 required docs/specs for necessary file references. Resolve each relative to its
 document, verify containment in the workspace (and `.ai` for `.ai` entries),
-and reject absolute paths, `..` traversal, symbolic links in any component,
+and reject absolute paths, normalized boundary escapes, symbolic links in any component,
 directories in place of files, and missing/unreadable required context. Reject
-escaping links without reading their targets. Classify incidental historical
+escaping links without reading their targets. Parent components are valid when
+the document-relative path normalizes inside the applicable boundary. Check
+symlinks in the original path components as well as the normalized result; do
+not let normalization hide a symlink before a parent component. Store normalized
+workspace-relative filenames in the arrays. Plan input itself still forbids traversal. Classify incidental historical
 links as references rather than recursively collecting them. Stop for a missing
 scope decision when a required reference points to unrelated plans or records;
 do not quietly copy them or drop required context.
