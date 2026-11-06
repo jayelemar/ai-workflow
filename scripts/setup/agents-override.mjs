@@ -77,7 +77,7 @@ const PRIVATE_ACCOUNT_CONTENT = [
   "",
   "- This file is local and ignored by Git. Keep account mappings here, never in public instructions.",
   "- Replace the placeholders below with one mapping per Git repository, including any independent nested workflow repository.",
-  "- Placeholder rows are unconfigured. Ask for the intended account and profile before publishing when no complete mapping exists.",
+  "- Placeholder rows are unconfigured. Follow instructions/shared/delivery-hygiene.md before asking for an account or profile.",
   "- Verify the effective login and repository access before publishing. A CLI profile does not select Git push credentials.",
   "- Store credentials in the GitHub CLI credential store, never in this file.",
   "",
