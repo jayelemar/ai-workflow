@@ -5,7 +5,7 @@ description: Prepare isolated native Git worktrees and task-local plan context f
 
 # Worktree Setup
 
-Create isolated native Git worktrees for one living plan. This utility prepares
+Create or safely resume isolated native Git worktrees for one living plan. This utility prepares
 an execution environment only. It does not implement the plan, start `/goal`,
 stage or commit changes, copy secrets, or create workflow state. It also creates
 a task-local copy of the workflow and documentation context needed to execute
@@ -41,20 +41,18 @@ branch: feat/<plan-name>
    traversal, and symlink escapes, and derive a safe kebab-case plan name from
    its filename.
 3. Resolve each repository from an explicit invocation mapping or a repository
-   root clearly named by the plan. Each root must be relative to the workspace,
+   root clearly named by the plan. Infer the workspace Git top level when every
+   plan-owned path clearly belongs to it. Each root must be relative to the workspace,
    contained by it, and resolve to a distinct Git top level. Stop and ask for
    the smallest missing mapping when ownership is ambiguous; never guess a
    repository from a task description alone.
 4. Use an explicitly supplied local base ref for a repository. Otherwise use
    that repository's current `HEAD`. Record the exact base commit internally.
    Do not fetch, pull, or silently substitute another ref.
-5. Use the supplied branch name when it is exactly `fix/<plan-name>` or
-   `feat/<plan-name>`. Otherwise, use `fix/<plan-name>` when the plan clearly
-   describes a bug fix or `feat/<plan-name>` when it clearly describes feature
-   work. If the plan does not establish the branch type unambiguously, stop and
-   ask the user to choose `fix` or `feat`. Require a safe Git branch name; do not
-   accept another prefix or a different suffix. Separate repositories may use
-   the same branch name because their refs are independent.
+5. Accept any explicitly supplied safe Git branch name validated with
+   `git check-ref-format --branch`. Otherwise use `fix/<plan-name>` for clear bug fixes and
+   `feat/<plan-name>` for other work. Separate repositories may use the same
+   branch name because their refs are independent.
 6. Derive `<project-title>` from the current workspace directory name,
    normalized to safe kebab-case. Use the safe `<plan-name>` as the task title.
    Use `<project-title> <plan-name>` as the single tmux session name for the
@@ -84,18 +82,21 @@ and destination evidence. Keep checks and inventories internal on success.
 
 ## Prepare in order
 
-After context selection and every repository preflight pass:
+After context selection and every repository and context preflight pass:
 
-1. For one repository, create only the `.worktrees/` parent if needed; do not
+1. Reuse only existing targets proven compatible by `worktree-checks.md`.
+   For a missing single-repository target, create only the `.worktrees/` parent if needed; do not
    create the task root before `git worktree add`. For multiple repositories,
    create the coordination task root first.
-2. For each repository, run the equivalent of:
+2. For each missing repository target, run the equivalent of:
 
    ```bash
    rtk git -C '<source-root>' worktree add -b '<branch>' '<target>' '<base-commit>'
    ```
 
-   Never use `-B`, `--force`, detached worktrees, or branch/path reuse. Verify
+   Never use `-B`, `--force`, or detached application worktrees. Reuse branches
+   only through the verified matching worktree; never attach an existing branch
+   to a missing target. Verify
    registration, top-level path, branch, exact base commit, and clean status
    before copying control context.
 
@@ -107,10 +108,11 @@ After context selection and every repository preflight pass:
    source-deletion handling, and all six relative task-local skill links.
    Do not duplicate its mechanics or copy source project-root skill links.
 4. Complete destination verification in `worktree-checks.md`, including actual
-   default and full health after separately authorized dependency provisioning,
-   and recheck every source and prepared checkout. Creating worktrees does not
-   authorize secret copying or dependency installation; follow that reference
-   for any separately requested environment setup.
+   structural fidelity and isolation, and recheck every source and prepared
+   checkout. Routine setup requires no dependency installation, package manager,
+   network access, or default/full workflow health. Implementation handles
+   dependency setup and application validation. Creating worktrees does not
+   authorize secret copying or dependency installation.
 
 If any creation, copy, or verification fails after mutation begins, preserve
 partial state and stop. Do not roll back, mutate sources, or clean up.
@@ -124,11 +126,12 @@ execution. Resolve every placeholder to a concrete value; quote shell values.
 The first block is one exact ready-to-copy execution prompt. Include the
 absolute task-local plan path and an explicit repository-ID-to-absolute-worktree-
 path mapping for every repository, even for one repository. Never refer to paths
-"reported above." Include relevant source-work limitations from verification.
+"reported above." Include relevant source-work limitations from verification. State that implementation
+handles dependency setup and application validation.
 For controlled work, require the plan's independent final review before finishing:
 
 ```text
-/goal Implement <task-root>/.ai/plans/<plan-name>.md. Use these prepared worktrees for all plan-owned edits: <repository-id>=<absolute-worktree-path> (repeat for every repository). Preserve its boundaries, keep the task-local plan updated, run every required validation, and finish only when its definition of done is proven. Implementation and Goal execution have not started; delivery requires separate explicit authorization.
+/goal Implement <task-root>/.ai/plans/<plan-name>.md. Use these prepared worktrees for all plan-owned edits: <repository-id>=<absolute-worktree-path> (repeat for every repository). Preserve its boundaries, keep the task-local plan updated, run every required validation, and finish only when its definition of done is proven. Implementation handles dependency setup and application validation. Implementation and Goal execution have not started; delivery requires separate explicit authorization.
 ```
 
 The second block is the single two-pane launcher below, printed without starting
@@ -141,8 +144,8 @@ must explicitly select or enter the intended child by repository ID.
 tmux new-session -s '<project-title> <plan-name>' -c '<task-root>' \; split-window -t '<project-title> <plan-name>:' -h -p 67 -c '<task-root>'
 ```
 
-Blocked or partial setup returns only `Error:` with the concrete blocker and
-`Fix:` with the smallest corrective action. Add `Created:` listing paths and
+Blocked or partial setup returns only `Error:` with every independently discoverable
+concrete blocker and `Fix:` with its smallest corrective action. Add `Created:` listing paths and
 branches only when partial creation occurred. Emit neither the `/goal` prompt nor
 the tmux launch command. Required scope or authorization questions remain allowed
 when the request does not resolve them.

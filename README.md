@@ -58,7 +58,10 @@ $show-qa-checklist
 Use native Execute plan, `/goal`, or a normal request to implement a saved plan.
 All follow the same execution rules; controlled work requires independent final review.
 Prepare worktrees after saving the plan and before starting its Goal; use the
-preparation result's prompt with its explicit worktree paths. Finish or stop the
+preparation result's prompt with its explicit worktree paths. Matching interrupted
+setups can be resumed after Git and context verification. Setup finishes with
+verified isolation and selected context, without workflow health or dependency
+installation; implementation handles dependencies and application validation. Finish or stop the
 current Goal before starting another. Give each new outcome its own plan,
 restate still-applicable decisions, and reference that new plan explicitly.
 
