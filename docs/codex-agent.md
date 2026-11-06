@@ -17,16 +17,17 @@ Delegate mutation and preflight to the [setup utility](../scripts/setup/agents-o
 It preserves readable regular root `AGENTS.md` bytes and tracking state, and
 installs these project-local outputs:
 
-| Output                             | Behavior                                                                                                                         |
-| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `AGENTS.override.md`               | Routes root guidance first when present, then `.ai/AGENTS.md` and `instructions/index.md`; also covers root guidance added later |
-| `.agents/skills/create-plan`       | Relative link to `../../.ai/.agents/skills/create-plan`                                                                          |
-| `.agents/skills/worktree-setup`    | Relative link to `../../.ai/.agents/skills/worktree-setup`                                                                       |
-| `.agents/skills/git-commit`        | Relative link to `../../.ai/.agents/skills/git-commit`                                                                           |
-| `.agents/skills/pull-request`      | Relative link to `../../.ai/.agents/skills/pull-request`                                                                         |
-| `.agents/skills/show-summary`      | Relative link to `../../.ai/.agents/skills/show-summary`                                                                         |
-| `.agents/skills/show-qa-checklist` | Relative link to `../../.ai/.agents/skills/show-qa-checklist`                                                                    |
-| `.codex/config.toml`               | Byte-exact snapshot of `.ai/.codex/config.toml`, currently the only canonical config content                                     |
+| Output                                      | Behavior                                                                                                                         |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `AGENTS.override.md`                        | Routes root guidance first when present, then `.ai/AGENTS.md` and `instructions/index.md`; also covers root guidance added later |
+| `.agents/skills/create-plan`                | Relative link to `../../.ai/.agents/skills/create-plan`                                                                          |
+| `.agents/skills/worktree-setup`             | Relative link to `../../.ai/.agents/skills/worktree-setup`                                                                       |
+| `.agents/skills/git-commit`                 | Relative link to `../../.ai/.agents/skills/git-commit`                                                                           |
+| `.agents/skills/pull-request`               | Relative link to `../../.ai/.agents/skills/pull-request`                                                                         |
+| `.agents/skills/show-summary`               | Relative link to `../../.ai/.agents/skills/show-summary`                                                                         |
+| `.agents/skills/show-qa-checklist`          | Relative link to `../../.ai/.agents/skills/show-qa-checklist`                                                                    |
+| `.codex/config.toml`                        | Byte-exact snapshot of `.ai/.codex/config.toml`, currently the only canonical config content                                     |
+| `instructions/local/github.md` inside `.ai` | Ignored account-mapping template with generic placeholders; existing local content is preserved                                  |
 
 The `.agents/`, `.agents/skills/`, and `.codex/` containers are real directories.
 Only the override, six generated links, and config file receive exact parent
@@ -37,8 +38,14 @@ are reused unchanged on repeated setup. Source config changes do not update an
 installed snapshot automatically: an identical regular file is reused; a
 differing config stops all setup before writes for explicit resolution.
 
-Rerun setup after adding these skills to an existing installation. It adds
-`show-summary` and `show-qa-checklist` links while reusing valid existing outputs.
+Rerun setup after adding these outputs to an existing installation. It adds
+missing skill links and the private account template while reusing valid outputs.
+The template is created with owner-only file permissions and contains no account
+names, credentials, or detected machine configuration. Fill in its repository,
+GitHub login, and CLI profile mappings locally; existing bytes, modes, and
+timestamps are preserved on reruns. Account authentication and CLI profile
+configuration remain separate operator steps. Both delivery skills read the
+local file through the shared delivery instructions, without changing the index.
 
 ## Renamed skills and existing installations
 
@@ -82,6 +89,11 @@ discarding root/custom guidance; never force, merge, or overwrite automatically.
   instruction targets, defined legacy Codex conflicts, missing sources, unsafe
   ancestors, and conflicting files, directories, dangling or wrong links. Only
   links to the exact expected local source are reusable.
+- Require the private account path to be ignored and untracked in the workflow
+  repository, and untracked in the parent. Its ancestors must remain real local
+  directories in the workflow repository. Unsafe paths, case aliases, shared
+  files, and tracked entries deleted locally stop setup before writes. Setup
+  never broadens workflow ignore rules or prints existing account mappings.
 - Check tracked managed paths case-insensitively on every filesystem, including
   tracked aliases and contents deleted locally. A matching target does not make
   a tracked alias reusable. Existing outputs and ancestors must have directory

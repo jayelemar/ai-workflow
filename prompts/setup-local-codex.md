@@ -21,3 +21,8 @@ After successful setup, restart Codex from the trusted project root and follow
 the setup reference's native discovery and instruction-source verification.
 Report actual command output and exit status. Never claim success after a
 non-zero result.
+
+Report the ignored `instructions/local/github.md` account template inside the
+workflow checkout and ask the operator to complete its mappings once. Setup
+preserves an existing file and does not sign in, create CLI profiles, or copy
+credentials.

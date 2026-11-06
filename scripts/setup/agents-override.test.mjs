@@ -176,6 +176,10 @@ const installWorkflow = async (projectRoot, { nestedGit = true } = {}) => {
   if (nestedGit) {
     await git(workflowRoot, "init", "-q");
   }
+  await writeFile(
+    path.join(workflowRoot, ".gitignore"),
+    "/instructions/local/\n",
+  );
   return { utilityPath, workflowRoot };
 };
 
@@ -679,6 +683,8 @@ const snapshotManagedOutputs = async (fixture) => {
     ...legacySkillPaths,
     ".ai/.codex",
     ".ai/.codex/config.toml",
+    ".ai/instructions/local",
+    ".ai/instructions/local/github.md",
   ]) {
     const target = path.join(fixture.projectRoot, relativePath);
     try {
@@ -700,6 +706,195 @@ const snapshotManagedOutputs = async (fixture) => {
   snapshot.index = await git(fixture.projectRoot, "ls-files", "--stage");
   return snapshot;
 };
+
+// Exercise the real setup command: account instructions must be private,
+// discoverable, and user-owned after creation, without changing source indexes.
+test("setup creates a private GitHub account template and preserves local mappings on rerun", async () => {
+  await withFixture(async (fixture) => {
+    const relative = "instructions/local/github.md";
+    const target = path.join(fixture.workflowRoot, relative);
+    const index = path.join(fixture.workflowRoot, "instructions/index.md");
+    const indexBefore = await readFile(index);
+    await git(fixture.workflowRoot, "add", "AGENTS.md");
+    const sourceIndex = path.join(fixture.workflowRoot, ".git/index");
+    const sourceIndexBefore = await readFile(sourceIndex);
+
+    const first = await invokeNode(fixture);
+    assert.equal(first.exitCode, 0, first.stderr);
+    const template = await readFile(target, "utf8");
+    assert.match(template, /<owner\/repository>/);
+    assert.match(template, /<github-login>/);
+    assert.match(template, /GH_CONFIG_DIR/);
+    assert.match(template, /unconfigured/i);
+    assert.equal((await stat(target)).mode & 0o777, 0o600);
+    assert.equal(
+      await git(fixture.workflowRoot, "ls-files", "--", relative),
+      "",
+    );
+    assert.equal(
+      (
+        await run("git", ["check-ignore", "-q", "--", relative], {
+          cwd: fixture.workflowRoot,
+        })
+      ).exitCode,
+      0,
+    );
+    assert.equal(
+      await git(fixture.projectRoot, "ls-files", "--", ".ai/" + relative),
+      "",
+    );
+    assert.deepEqual(await readFile(index), indexBefore);
+    assert.deepEqual(await readFile(sourceIndex), sourceIndexBefore);
+
+    const firstStat = await stat(target);
+    const second = await invokeNode(fixture);
+    assert.equal(second.exitCode, 0, second.stderr);
+    assert.equal(await readFile(target, "utf8"), template);
+    assert.equal((await stat(target)).mtimeMs, firstStat.mtimeMs);
+
+    const custom = "# Private fixture mappings\r\n\r\nfixture-login\r\n";
+    await writeFile(target, custom);
+    await chmod(target, 0o640);
+    const customStat = await stat(target);
+    const repeated = await invokeNode(fixture);
+    assert.equal(repeated.exitCode, 0, repeated.stderr);
+    assert.equal(await readFile(target, "utf8"), custom);
+    assert.equal((await stat(target)).mtimeMs, customStat.mtimeMs);
+    assert.equal((await stat(target)).mode & 0o777, 0o640);
+    assert.doesNotMatch(repeated.stdout + repeated.stderr, /fixture-login/);
+    assert.deepEqual(await readFile(index), indexBefore);
+    assert.deepEqual(await readFile(sourceIndex), sourceIndexBefore);
+  });
+});
+
+test("unsafe or publishable private GitHub instructions block setup before any writes", async (t) => {
+  for (const kind of [
+    "not ignored",
+    "workflow tracked deletion",
+    "workflow tracked case alias",
+    "parent tracked deletion",
+    "file symlink",
+    "file directory",
+    "local symlink",
+    "nested local repository",
+    "nested instructions repository",
+  ]) {
+    await t.test(kind, async () => {
+      await withFixture(async (fixture) => {
+        const relative = "instructions/local/github.md";
+        const local = path.join(fixture.workflowRoot, "instructions/local");
+        const target = path.join(fixture.workflowRoot, relative);
+        if (kind === "not ignored") {
+          await writeFile(path.join(fixture.workflowRoot, ".gitignore"), "");
+        } else if (kind === "nested instructions repository") {
+          await git(
+            path.join(fixture.workflowRoot, "instructions"),
+            "init",
+            "-q",
+          );
+        } else if (kind === "local symlink") {
+          const outside = path.join(fixture.temporaryRoot, "outside");
+          await mkdir(outside);
+          await symlink(outside, local, "dir");
+        } else {
+          await mkdir(local, { recursive: true });
+          if (kind === "file symlink") {
+            const outside = path.join(fixture.temporaryRoot, "outside.md");
+            await writeFile(outside, "preserve outside content\n");
+            await symlink(outside, target);
+          } else if (kind === "file directory") {
+            await mkdir(target);
+          } else if (kind === "nested local repository") {
+            await git(local, "init", "-q");
+          } else {
+            const tracked =
+              kind === "workflow tracked case alias"
+                ? path.join(local, "GitHub.md")
+                : target;
+            await writeFile(tracked, "preserve private fixture mapping\n");
+            if (kind === "parent tracked deletion") {
+              const blob = await git(
+                fixture.projectRoot,
+                "hash-object",
+                "-w",
+                tracked,
+              );
+              await git(
+                fixture.projectRoot,
+                "update-index",
+                "--add",
+                "--cacheinfo",
+                "100644",
+                blob,
+                ".ai/" + relative,
+              );
+            } else {
+              await git(
+                fixture.workflowRoot,
+                "add",
+                "-f",
+                "--",
+                path.relative(fixture.workflowRoot, tracked),
+              );
+            }
+            await rm(tracked);
+          }
+        }
+        const before = await snapshotManagedOutputs(fixture);
+        const sourceIndexBefore = await git(
+          fixture.workflowRoot,
+          "ls-files",
+          "--stage",
+        );
+        const result = await invokeNode(fixture);
+        assert.notEqual(result.exitCode, 0);
+        assert.match(result.stderr, /private GitHub|instructions\/local/i);
+        assert.deepEqual(await snapshotManagedOutputs(fixture), before);
+        assert.equal(
+          await git(fixture.workflowRoot, "ls-files", "--stage"),
+          sourceIndexBefore,
+        );
+      });
+    });
+  }
+});
+
+test("private GitHub template write failures report partial setup and resume safely", async () => {
+  await withFixture(async (fixture) => {
+    const preload = [
+      "import fs from 'node:fs/promises';",
+      "import { syncBuiltinESMExports } from 'node:module';",
+      "const original = fs.writeFile;",
+      "fs.writeFile = (...args) => {",
+      "if (args[0].endsWith('/instructions/local/github.md')) throw new Error('fixture private file failure');",
+      "return original(...args);",
+      "};",
+      "syncBuiltinESMExports();",
+    ].join("\n");
+    const failed = await invokeNode(fixture, {
+      env: {
+        NODE_OPTIONS:
+          "--import=data:text/javascript," + encodeURIComponent(preload),
+      },
+    });
+    assert.notEqual(failed.exitCode, 0);
+    assert.match(failed.stderr, /Partial setup/);
+    assert.match(
+      failed.stderr,
+      /Failed write may be incomplete: \.ai\/instructions\/local\/github\.md/,
+    );
+    const recovered = await invokeNode(fixture);
+    assert.equal(recovered.exitCode, 0, recovered.stderr);
+    assert.equal(
+      (
+        await stat(
+          path.join(fixture.workflowRoot, "instructions/local/github.md"),
+        )
+      ).mode & 0o777,
+      0o600,
+    );
+  });
+});
 
 test("a different project config refuses all writes and preserves exact source, destination, and index bytes", async () => {
   await withFixture(async (fixture) => {

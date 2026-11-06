@@ -19,6 +19,12 @@ snapshot. See [Codex Agent Setup](docs/codex-agent.md) for exact paths, conflict
 handling, active routing, and native discovery verification. No global skills
 or user configuration are installed.
 
+Setup also creates ignored `instructions/local/github.md` inside `.ai` with
+generic account-mapping placeholders. Complete the mappings locally once;
+rerunning setup preserves existing private instructions and fills in a missing
+template. Account names and machine-specific profile paths stay out of the
+public workflow source.
+
 ## Workflow
 
 | Work type          | Use when                                                                                                                                | Artifact        | Review                   |
