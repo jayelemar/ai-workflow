@@ -69,6 +69,25 @@ const OVERRIDE_CONTENT = PREVIOUS_OVERRIDE_CONTENT.replace(
   ROUTING_BLOCK,
 );
 const REQUIRED_WORKFLOW_FILES = ["AGENTS.md", "instructions/index.md"];
+const PRIVATE_ACCOUNT_PATH = "instructions/local/github.md";
+const PRIVATE_ACCOUNT_CONTENT = [
+  "# Local GitHub Accounts",
+  "",
+  "## Rules",
+  "",
+  "- This file is local and ignored by Git. Keep account mappings here, never in public instructions.",
+  "- Replace the placeholders below with one mapping per Git repository, including any independent nested workflow repository.",
+  "- Placeholder rows are unconfigured. Ask for the intended account and profile before publishing when no complete mapping exists.",
+  "- Verify the effective login and repository access before publishing. A CLI profile does not select Git push credentials.",
+  "- Store credentials in the GitHub CLI credential store, never in this file.",
+  "",
+  "## Repository Mappings",
+  "",
+  "| Repository         | GitHub login   | GitHub CLI profile (GH_CONFIG_DIR) |",
+  "| ------------------ | -------------- | ---------------------------------- |",
+  "| <owner/repository> | <github-login> | <absolute-profile-directory>       |",
+  "",
+].join("\n");
 
 const workflowRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -885,13 +904,146 @@ const requireWritable = async (targetPath, label, directory = false) => {
   }
 };
 
+const inspectPrivateAccounts = async () => {
+  const label = ".ai/" + PRIVATE_ACCOUNT_PATH;
+  const instructions = path.join(workflowRoot, "instructions");
+  const local = path.join(workflowRoot, "instructions/local");
+  const target = path.join(workflowRoot, PRIVATE_ACCOUNT_PATH);
+  await requireCanonicalSpelling(
+    path.join(workflowRoot, "instructions"),
+    ".ai/instructions",
+  );
+  await requireCanonicalSpelling(local, ".ai/instructions/local");
+  const createDirectory = !(await entryExists(local));
+  if (!createDirectory) {
+    await requireRealDirectory(local, ".ai/instructions/local");
+  }
+  await requireCanonicalSpelling(target, label);
+
+  const root = await runGit([
+    "-C",
+    workflowRoot,
+    "rev-parse",
+    "--show-toplevel",
+  ]);
+  if (
+    root.exitCode !== 0 ||
+    path.resolve(root.stdout.trim()) !== workflowRoot
+  ) {
+    throw new Error(
+      "private GitHub instructions require an independent workflow Git repository",
+    );
+  }
+  for (const directory of [instructions, ...(createDirectory ? [] : [local])]) {
+    if (await entryExists(path.join(directory, ".git"))) {
+      throw new Error(
+        "private GitHub instructions directory contains nested Git metadata",
+      );
+    }
+    const owner = await runGit([
+      "-C",
+      directory,
+      "rev-parse",
+      "--show-toplevel",
+    ]);
+    if (
+      owner.exitCode !== 0 ||
+      path.resolve(owner.stdout.trim()) !== workflowRoot
+    ) {
+      throw new Error(
+        "private GitHub instructions directory belongs to another repository",
+      );
+    }
+  }
+  for (const [directory, relative, ancestors] of [
+    [
+      workflowRoot,
+      PRIVATE_ACCOUNT_PATH,
+      ["instructions", "instructions/local"],
+    ],
+    [projectRoot, ".ai/" + PRIVATE_ACCOUNT_PATH, []],
+  ]) {
+    const tracked = await runGit([
+      "-C",
+      directory,
+      "ls-files",
+      "--stage",
+      "-z",
+      "--",
+      ...[...ancestors, relative].map((name) => ":(icase,literal)" + name),
+    ]);
+    if (tracked.exitCode !== 0) {
+      throw new Error(
+        "could not inspect tracking of private GitHub instructions",
+      );
+    }
+    const names = tracked.stdout
+      .split("\0")
+      .filter(Boolean)
+      .map((record) => record.slice(record.indexOf("\t") + 1).toLowerCase());
+    if (
+      names.some(
+        (name) =>
+          ancestors.includes(name) ||
+          name === relative ||
+          name.startsWith(relative + "/"),
+      )
+    ) {
+      throw new Error(
+        "private GitHub instructions or their ancestors are tracked; resolve them before setup",
+      );
+    }
+  }
+  const ignored = await runGit([
+    "-C",
+    workflowRoot,
+    "check-ignore",
+    "--quiet",
+    "--no-index",
+    "--",
+    PRIVATE_ACCOUNT_PATH,
+  ]);
+  if (ignored.exitCode !== 0) {
+    throw new Error(
+      "private GitHub instructions must already be ignored by the workflow repository; resolve its local ignore rules before setup",
+    );
+  }
+  const createFile = !(await entryExists(target));
+  let content = Buffer.from(PRIVATE_ACCOUNT_CONTENT);
+  if (!createFile) {
+    const metadata = await lstat(target);
+    if (
+      metadata.isSymbolicLink() ||
+      !metadata.isFile() ||
+      metadata.nlink !== 1
+    ) {
+      throw new Error(
+        label + " must be an independent regular file; it was preserved",
+      );
+    }
+    content = await readFile(target);
+  }
+  return { createDirectory, createFile, content };
+};
+
 const preflightWrites = async (
   overrideState,
   skillState,
   configState,
   excludePath,
   missingRules,
+  accountState,
 ) => {
+  if (accountState.createFile) {
+    await requireWritable(
+      path.join(
+        workflowRoot,
+        accountState.createDirectory ? "instructions" : "instructions/local",
+      ),
+      "private GitHub instructions",
+      true,
+    );
+  }
   if (overrideState.write) {
     await requireWritable(
       overrideState.write === "create" ? projectRoot : overridePath,
@@ -940,7 +1092,12 @@ const writeOverride = async (operation) => {
   }
 };
 
-const verifyResult = async (repository, expectedContent, expectedConfig) => {
+const verifyResult = async (
+  repository,
+  expectedContent,
+  expectedConfig,
+  expectedAccounts,
+) => {
   const { excludePath } = repository;
   await requireCanonicalSpelling(overridePath, OVERRIDE_NAME);
   let metadata;
@@ -978,6 +1135,16 @@ const verifyResult = async (repository, expectedContent, expectedConfig) => {
     !configState.content.equals(expectedConfig)
   ) {
     throw new Error(`could not verify the exact regular ${CONFIG_PATH} copy`);
+  }
+  const accounts = await inspectPrivateAccounts();
+  if (
+    accounts.createDirectory ||
+    accounts.createFile ||
+    !accounts.content.equals(expectedAccounts)
+  ) {
+    throw new Error(
+      "could not verify the preserved private GitHub instructions",
+    );
   }
   await requireUntrackedOutputs();
   for (const relativePath of MANAGED_PATHS) {
@@ -1025,6 +1192,7 @@ const setupAgentsOverride = async () => {
   }
   const overrideState = await inspectOverride();
   const skillState = await inspectSkills(repository);
+  const accountState = await inspectPrivateAccounts();
   const excludeContent = await inspectExclude(excludePath);
   const missingRules = await inspectEffectiveExcludes(excludeContent);
   await preflightWrites(
@@ -1033,6 +1201,7 @@ const setupAgentsOverride = async () => {
     configState,
     excludePath,
     missingRules,
+    accountState,
   );
 
   if (overrideState.write) {
@@ -1067,7 +1236,27 @@ const setupAgentsOverride = async () => {
     );
   }
 
-  await verifyResult(repository, overrideState.content, configState.content);
+  if (accountState.createDirectory) {
+    await performWrite(".ai/instructions/local", () =>
+      mkdir(path.join(workflowRoot, "instructions/local"), { mode: 0o700 }),
+    );
+  }
+  if (accountState.createFile) {
+    await performWrite(".ai/" + PRIVATE_ACCOUNT_PATH, async () => {
+      const target = path.join(workflowRoot, PRIVATE_ACCOUNT_PATH);
+      await writeFile(target, accountState.content, {
+        flag: "wx",
+        mode: 0o600,
+      });
+      await chmod(target, 0o600);
+    });
+  }
+  await verifyResult(
+    repository,
+    overrideState.content,
+    configState.content,
+    accountState.content,
+  );
   // Establish every replacement before removing a legacy entry. Reinspect
   // ownership, index state, spelling, and literal link targets before each
   // unlink so a changed entry is preserved and a partial run can be retried.
@@ -1107,6 +1296,14 @@ const setupAgentsOverride = async () => {
       `${rule} exclude rule: ${missingRules.includes(rule) ? "added" : "already present"}`,
     );
   }
+  writeOutput(
+    ".ai/" +
+      PRIVATE_ACCOUNT_PATH +
+      ": " +
+      (accountState.createFile
+        ? "created (fill in local account mappings)"
+        : "already present (preserved)"),
+  );
   writeOutput("Local AGENTS override setup verified.");
 };
 

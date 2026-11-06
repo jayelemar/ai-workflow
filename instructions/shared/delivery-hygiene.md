@@ -33,6 +33,32 @@ Keep changes easy to review, deploy, revert, and trace.
   or explicit user request requires them. Do not create a workflow ledger for
   commit metadata.
 
+## GitHub Accounts
+
+- Before GitHub delivery work, read `instructions/local/github.md` from this
+  workflow checkout when present. Resolve it from the workflow repository even
+  when working in its containing project. Setup creates an ignored template;
+  complete its mappings once. Placeholders are unconfigured and do not select an account.
+- Select the account for the actual Git repository and remote destination.
+  Nested repositories may use a different account from their containing project.
+- Keep repository-to-account mappings and profile paths in ignored local
+  instructions. Verify those files are ignored and untracked before adding
+  personal details. Public instructions and examples must use placeholders,
+  without real account names, email addresses, or machine-specific paths.
+- For local workflows with multiple accounts, use the GitHub CLI with the
+  repository's configured profile for pull request actions. Scope separate
+  profiles with `GH_CONFIG_DIR` when projects run concurrently; do not switch a
+  shared active account underneath another project.
+- Before publishing, verify the effective authenticated account and its access
+  to the intended repository. A repository argument, remote owner, or Git author
+  identity does not select the authenticated account. Git pushes use separately
+  configured SSH or HTTPS credentials; a connector can use another identity.
+  If the intended account is unclear, ask for that mapping before writing.
+- Keep commit author name and email settings separate from authentication.
+  Follow the repository's local identity and email privacy preferences without
+  changing existing history. Keeping account mappings private does not hide
+  commit or pull request authorship.
+
 ## Commit Subjects and PR Titles
 
 Use `<type>(<scope>): <imperative summary>` with a specific, imperative subject or title
