@@ -138,3 +138,26 @@ Health can also run anywhere with
 instruction routes, and `.codex/config.toml` syntax and documented field types
 using a pinned TOML parser; errors omit config excerpts. Static checks do not
 prove model availability, account permission, or client support.
+
+### Skill authoring validation
+
+The skill-creator Python validator requires PyYAML. To recreate its local
+environment, run from the containing workspace with Python 3 and pip available:
+
+```bash
+python3 -m venv .ai/.venv-skill-validator
+.ai/.venv-skill-validator/bin/python -m pip install -r .ai/scripts/maintenance/requirements-skill-validator.txt
+```
+
+Then use that environment's Python to run `scripts/quick_validate.py` from the
+installed `skill-creator` skill, passing the skill directory to validate. For
+example, replace `<skill-creator-directory>` with its installed location:
+
+```bash
+.ai/.venv-skill-validator/bin/python "<skill-creator-directory>/scripts/quick_validate.py" .agents/skills/manual-qa-checklist
+```
+
+The pinned [dependency file](scripts/maintenance/requirements-skill-validator.txt)
+is reusable source. `.venv-skill-validator/` remains ignored local data and is
+recreated on each machine. PyYAML is needed only for this validator; normal skill
+use and the Node health checks do not require it.
