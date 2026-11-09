@@ -38,7 +38,7 @@ const local = files.slice(Number(canonicalCount), Number(canonicalCount) + Numbe
 const external = files.slice(Number(canonicalCount) + Number(localCount));
 const source = path.join(workspace, '.ai');
 const target = path.join(taskRoot, '.ai');
-const skills = ['create-plan', 'worktree-setup', 'git-commit', 'pull-request', 'show-summary', 'show-qa-checklist'];
+const skills = ['create-plan', 'worktree-setup', 'git-commit', 'pull-request', 'show-summary', 'manual-qa-checklist'];
 const run = (...args) => execFileSync('rtk', args, {
   encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
   env: { ...process.env, GIT_OPTIONAL_LOCKS: '0', GIT_NO_REPLACE_OBJECTS: '1' },

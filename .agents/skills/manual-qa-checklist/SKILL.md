@@ -1,9 +1,9 @@
 ---
-name: show-qa-checklist
+name: manual-qa-checklist
 description: Show a simple manual QA checklist for current changes or a specified feature in chat. Use when the user requests a nontechnical, numbered manual test checklist; does not run tests or save a report.
 ---
 
-# Show QA Checklist
+# Manual QA Checklist
 
 Create manual test steps for the user's requested scope, using the current
 conversation and read-only inspection of relevant changes when needed.

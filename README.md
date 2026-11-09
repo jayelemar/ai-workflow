@@ -58,7 +58,7 @@ $pull-request Base: AUTO
 
 $show-summary
 
-$show-qa-checklist
+$manual-qa-checklist
 ```
 
 Use native Execute plan, `/goal`, or a normal request to implement a saved plan.
@@ -73,14 +73,14 @@ restate still-applicable decisions, and reference that new plan explicitly.
 
 ## Skills and Utilities
 
-| Skill                                                          | Purpose                                               |
-| -------------------------------------------------------------- | ----------------------------------------------------- |
-| [Create Plan](.agents/skills/create-plan/SKILL.md)             | Create, revise, and review implementation plans       |
-| [Worktree Setup](.agents/skills/worktree-setup/SKILL.md)       | Prepare native worktrees and independent task context |
-| [Git Commit](.agents/skills/git-commit/SKILL.md)               | Organize and create authorized local commits          |
-| [Pull Request](.agents/skills/pull-request/SKILL.md)           | Preview a PR and publish after exact-preview approval |
-| [Show Summary](.agents/skills/show-summary/SKILL.md)           | Show a short, nontechnical summary in chat            |
-| [Show QA Checklist](.agents/skills/show-qa-checklist/SKILL.md) | Show numbered manual test steps and expected results  |
+| Skill                                                              | Purpose                                               |
+| ------------------------------------------------------------------ | ----------------------------------------------------- |
+| [Create Plan](.agents/skills/create-plan/SKILL.md)                 | Create, revise, and review implementation plans       |
+| [Worktree Setup](.agents/skills/worktree-setup/SKILL.md)           | Prepare native worktrees and independent task context |
+| [Git Commit](.agents/skills/git-commit/SKILL.md)                   | Organize and create authorized local commits          |
+| [Pull Request](.agents/skills/pull-request/SKILL.md)               | Preview a PR and publish after exact-preview approval |
+| [Show Summary](.agents/skills/show-summary/SKILL.md)               | Show a short, nontechnical summary in chat            |
+| [Manual QA Checklist](.agents/skills/manual-qa-checklist/SKILL.md) | Show numbered manual test steps and expected results  |
 
 Skills match ordinary requests and explicit `$skill-name` invocation. Local
 setup, read-only skill discovery, instruction management, and selected worktree
@@ -138,3 +138,26 @@ Health can also run anywhere with
 instruction routes, and `.codex/config.toml` syntax and documented field types
 using a pinned TOML parser; errors omit config excerpts. Static checks do not
 prove model availability, account permission, or client support.
+
+### Skill authoring validation
+
+The skill-creator Python validator requires PyYAML. To recreate its local
+environment, run from the `.ai` directory with Python 3 and pip available:
+
+```bash
+python3 -m venv .venv-skill-validator
+.venv-skill-validator/bin/python -m pip install -r scripts/maintenance/requirements-skill-validator.txt
+```
+
+Then use that environment's Python to run `scripts/quick_validate.py` from the
+installed `skill-creator` skill, passing the skill directory to validate. For
+example, replace `<skill-creator-directory>` with its installed location:
+
+```bash
+.venv-skill-validator/bin/python "<skill-creator-directory>/scripts/quick_validate.py" .agents/skills/manual-qa-checklist
+```
+
+The pinned [dependency file](scripts/maintenance/requirements-skill-validator.txt)
+is reusable source. `.venv-skill-validator/` remains ignored local data and is
+recreated on each machine. PyYAML is needed only for this validator; normal skill
+use and the Node health checks do not require it.

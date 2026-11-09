@@ -25,7 +25,7 @@ installs these project-local outputs:
 | `.agents/skills/git-commit`                 | Relative link to `../../.ai/.agents/skills/git-commit`                                                                           |
 | `.agents/skills/pull-request`               | Relative link to `../../.ai/.agents/skills/pull-request`                                                                         |
 | `.agents/skills/show-summary`               | Relative link to `../../.ai/.agents/skills/show-summary`                                                                         |
-| `.agents/skills/show-qa-checklist`          | Relative link to `../../.ai/.agents/skills/show-qa-checklist`                                                                    |
+| `.agents/skills/manual-qa-checklist`        | Relative link to `../../.ai/.agents/skills/manual-qa-checklist`                                                                  |
 | `.codex/config.toml`                        | Byte-exact snapshot of `.ai/.codex/config.toml`, currently the only canonical config content                                     |
 | `instructions/local/github.md` inside `.ai` | Ignored account-mapping template with generic placeholders; existing local content is preserved                                  |
 
@@ -134,7 +134,7 @@ After setup, verify in a fresh client:
 1. Inspect `/skills`, or read-only app-server `skills/list` with the project
    root in `cwds` and `forceReload: true`. Confirm `create-plan`,
    `worktree-setup`, `git-commit`, `pull-request`, `show-summary`, and
-   `show-qa-checklist` are enabled and resolve to this
+   `manual-qa-checklist` are enabled and resolve to this
    project's source. File inspection alone does not prove native discovery.
 2. Ask for instruction sources; verify root-first routing. Plan creation loads
    `.ai/.agents/skills/create-plan/SKILL.md`; saved-plan execution follows

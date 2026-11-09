@@ -66,13 +66,14 @@ const skillNames = [
   "git-commit",
   "pull-request",
   "show-summary",
-  "show-qa-checklist",
+  "manual-qa-checklist",
 ];
 const legacySkillNames = [
   "ai-build",
   "ai-worktree-setup",
   "ai-commit",
   "ai-pr",
+  "show-qa-checklist",
 ];
 const legacySkillPaths = legacySkillNames.map(
   (name) => `.agents/skills/${name}`,
