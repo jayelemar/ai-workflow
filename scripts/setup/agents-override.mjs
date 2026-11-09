@@ -98,11 +98,15 @@ const projectRoot = path.dirname(workflowRoot);
 const overridePath = path.join(projectRoot, OVERRIDE_NAME);
 const completedWrites = [];
 let attemptedWrite;
-const gitEnvironment = Object.fromEntries(
-  Object.entries(process.env).filter(
-    ([name]) => !name.toUpperCase().startsWith("GIT_"),
+const gitEnvironment = {
+  ...Object.fromEntries(
+    Object.entries(process.env).filter(
+      ([name]) => !name.toUpperCase().startsWith("GIT_"),
+    ),
   ),
-);
+  // Non-repository detection must not depend on the operator's Git locale.
+  LC_ALL: "C",
+};
 
 const writeOutput = (message) => writeSync(process.stdout.fd, `${message}\n`);
 const writeError = (message) => writeSync(process.stderr.fd, `${message}\n`);
@@ -485,6 +489,23 @@ const requireProjectRepository = async (targetPath, label, repository) => {
       `${label} contains nested Git metadata; resolve this repository boundary explicitly before setup`,
     );
   }
+  if (!repository) {
+    const result = await runCommand(
+      "git",
+      ["rev-parse", "--absolute-git-dir"],
+      targetPath,
+      gitEnvironment,
+    );
+    if (
+      result.exitCode !== 128 ||
+      !/not a git repository/i.test(result.stderr)
+    ) {
+      throw new Error(
+        `${label} contains Git metadata or has unverifiable repository ownership; resolve it explicitly before setup`,
+      );
+    }
+    return;
+  }
   const directory = await realpath(targetPath);
   for (const metadataRoot of [repository.gitDirectory, repository.commonRoot]) {
     requireOutsideGitDirectory(directory, metadataRoot, label);
@@ -673,6 +694,25 @@ const inspectSkills = async (repository) => {
 const resolveParentGit = async () => {
   const rootResult = await runGit(["rev-parse", "--show-toplevel"]);
   if (rootResult.exitCode !== 0) {
+    // Only an ordinary unversioned directory may skip parent Git operations.
+    // Broken gitfiles, unsafe ownership, and metadata directories still fail.
+    const probe = await runGit(["rev-parse", "--is-inside-git-dir"]);
+    let ancestor = projectRoot;
+    let hasMetadata = false;
+    while (true) {
+      if (await entryExists(path.join(ancestor, ".git"))) hasMetadata = true;
+      const parent = path.dirname(ancestor);
+      if (parent === ancestor) break;
+      ancestor = parent;
+    }
+    if (
+      rootResult.exitCode === 128 &&
+      /not a git repository/i.test(rootResult.stderr) &&
+      probe.exitCode === 128 &&
+      /not a git repository/i.test(probe.stderr) &&
+      !hasMetadata
+    )
+      return null;
     throw new Error(
       `direct parent is not a Git worktree root: ${describeCommandFailure(rootResult)}`,
     );
@@ -905,7 +945,7 @@ const requireWritable = async (targetPath, label, directory = false) => {
   }
 };
 
-const inspectPrivateAccounts = async () => {
+const inspectPrivateAccounts = async (repository) => {
   const label = ".ai/" + PRIVATE_ACCOUNT_PATH;
   const instructions = path.join(workflowRoot, "instructions");
   const local = path.join(workflowRoot, "instructions/local");
@@ -962,7 +1002,7 @@ const inspectPrivateAccounts = async () => {
       PRIVATE_ACCOUNT_PATH,
       ["instructions", "instructions/local"],
     ],
-    [projectRoot, ".ai/" + PRIVATE_ACCOUNT_PATH, []],
+    ...(repository ? [[projectRoot, ".ai/" + PRIVATE_ACCOUNT_PATH, []]] : []),
   ]) {
     const tracked = await runGit([
       "-C",
@@ -1099,7 +1139,7 @@ const verifyResult = async (
   expectedConfig,
   expectedAccounts,
 ) => {
-  const { excludePath } = repository;
+  const excludePath = repository?.excludePath;
   await requireCanonicalSpelling(overridePath, OVERRIDE_NAME);
   let metadata;
   try {
@@ -1117,8 +1157,8 @@ const verifyResult = async (
     throw new Error(`could not verify the exact ${OVERRIDE_NAME} content`);
   }
 
-  const excludeContent = await inspectExclude(excludePath);
-  for (const rule of EXCLUDE_RULES) {
+  const excludeContent = repository ? await inspectExclude(excludePath) : "";
+  for (const rule of repository ? EXCLUDE_RULES : []) {
     if (!containsExcludeRule(excludeContent, rule)) {
       throw new Error(`could not verify the exact ${rule} Git exclude rule`);
     }
@@ -1137,7 +1177,7 @@ const verifyResult = async (
   ) {
     throw new Error(`could not verify the exact regular ${CONFIG_PATH} copy`);
   }
-  const accounts = await inspectPrivateAccounts();
+  const accounts = await inspectPrivateAccounts(repository);
   if (
     accounts.createDirectory ||
     accounts.createFile ||
@@ -1147,8 +1187,8 @@ const verifyResult = async (
       "could not verify the preserved private GitHub instructions",
     );
   }
-  await requireUntrackedOutputs();
-  for (const relativePath of MANAGED_PATHS) {
+  if (repository) await requireUntrackedOutputs();
+  for (const relativePath of repository ? MANAGED_PATHS : []) {
     const ignoredResult = await runGit([
       "check-ignore",
       "-q",
@@ -1176,8 +1216,8 @@ const setupAgentsOverride = async () => {
 
   await requireWorkflowFiles();
   const repository = await resolveParentGit();
-  const { excludePath } = repository;
-  await requireUntrackedOutputs();
+  const excludePath = repository?.excludePath;
+  if (repository) await requireUntrackedOutputs();
   await inspectRootInstructions();
   const configState = await inspectConfig(repository);
   const conflicts = await detectLegacyConflicts();
@@ -1193,9 +1233,11 @@ const setupAgentsOverride = async () => {
   }
   const overrideState = await inspectOverride();
   const skillState = await inspectSkills(repository);
-  const accountState = await inspectPrivateAccounts();
-  const excludeContent = await inspectExclude(excludePath);
-  const missingRules = await inspectEffectiveExcludes(excludeContent);
+  const accountState = await inspectPrivateAccounts(repository);
+  const excludeContent = repository ? await inspectExclude(excludePath) : "";
+  const missingRules = repository
+    ? await inspectEffectiveExcludes(excludeContent)
+    : [];
   await preflightWrites(
     overrideState,
     skillState,
@@ -1262,7 +1304,7 @@ const setupAgentsOverride = async () => {
   // ownership, index state, spelling, and literal link targets before each
   // unlink so a changed entry is preserved and a partial run can be retried.
   for (const { relativePath } of skillState.legacyLinks) {
-    await requireUntrackedOutputs();
+    if (repository) await requireUntrackedOutputs();
     const current = await inspectSkills(repository);
     if (
       current.legacyLinks.some((link) => link.relativePath === relativePath)
@@ -1292,7 +1334,11 @@ const setupAgentsOverride = async () => {
   writeOutput(
     `${CONFIG_PATH}: ${configState.createFile ? "created" : "already correct"}`,
   );
-  for (const rule of EXCLUDE_RULES) {
+  if (!repository)
+    writeOutput(
+      "Git excludes: skipped (parent workspace is not a Git repository)",
+    );
+  for (const rule of repository ? EXCLUDE_RULES : []) {
     writeOutput(
       `${rule} exclude rule: ${missingRules.includes(rule) ? "added" : "already present"}`,
     );

@@ -2359,18 +2359,111 @@ test("a direct parent below the Git root is rejected without mutation", async ()
   }
 });
 
-test("a non-repository direct parent is rejected before mutation", async () => {
+test("a non-repository parent installs outputs and reruns without creating Git metadata", async () => {
   await withFixture(
     async (fixture) => {
-      const result = await invokeNode(fixture);
-      assert.notEqual(result.exitCode, 0);
-      assert.match(result.stderr, /Git worktree root/i);
-      await assert.rejects(
-        readFile(path.join(fixture.projectRoot, "AGENTS.override.md")),
-      );
+      const root = path.join(fixture.projectRoot, "AGENTS.md");
+      await writeFile(root, "# Preserve root guidance\n");
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const result = await invokeNode(fixture);
+        assert.equal(result.exitCode, 0, result.stderr);
+        assert.match(result.stdout, /Git excludes: skipped/);
+        assert.equal(
+          await readFile(root, "utf8"),
+          "# Preserve root guidance\n",
+        );
+        assert.equal(
+          await readFile(
+            path.join(fixture.projectRoot, "AGENTS.override.md"),
+            "utf8",
+          ),
+          overrideContent,
+        );
+        assert.deepEqual(
+          await readFile(path.join(fixture.projectRoot, ".codex/config.toml")),
+          configContent,
+        );
+        for (const name of skillNames) {
+          assert.equal(
+            await readlink(
+              path.join(fixture.projectRoot, ".agents/skills", name),
+            ),
+            `../../.ai/.agents/skills/${name}`,
+          );
+        }
+        await assert.rejects(lstat(path.join(fixture.projectRoot, ".git")), {
+          code: "ENOENT",
+        });
+        await assert.rejects(
+          lstat(path.join(fixture.projectRoot, ".gitignore")),
+          { code: "ENOENT" },
+        );
+        assert.equal(
+          (
+            await stat(
+              path.join(fixture.workflowRoot, "instructions/local/github.md"),
+            )
+          ).mode & 0o777,
+          0o600,
+        );
+      }
     },
     { initializeParent: false },
   );
+});
+
+test("non-Git parent still preserves config conflicts and nested output repositories before writes", async (t) => {
+  for (const kind of ["config", "nested repository", "bare repository"]) {
+    await t.test(kind, async () => {
+      await withFixture(
+        async (fixture) => {
+          const directory = path.join(fixture.projectRoot, ".codex");
+          await mkdir(directory);
+          if (kind === "config")
+            await writeFile(
+              path.join(directory, "config.toml"),
+              "# Custom config\n",
+            );
+          else
+            await git(
+              directory,
+              "init",
+              "-q",
+              ...(kind === "bare repository" ? ["--bare"] : []),
+            );
+
+          const result = await invokeNode(fixture);
+          assert.notEqual(result.exitCode, 0);
+          assert.match(
+            result.stderr,
+            kind === "config" ? /differs/ : /Git metadata/,
+          );
+          await assert.rejects(
+            lstat(path.join(fixture.projectRoot, "AGENTS.override.md")),
+            { code: "ENOENT" },
+          );
+          if (kind === "config")
+            assert.equal(
+              await readFile(path.join(directory, "config.toml"), "utf8"),
+              "# Custom config\n",
+            );
+          else
+            assert.equal(
+              (
+                await lstat(
+                  path.join(
+                    directory,
+                    kind === "bare repository" ? "objects" : ".git",
+                  ),
+                )
+              ).isDirectory(),
+              true,
+            );
+        },
+        { initializeParent: false },
+      );
+    });
+  }
 });
 
 test("tracked, different, symbolic-link, and non-regular targets are preserved", async (t) => {
