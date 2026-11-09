@@ -43,7 +43,7 @@ const managedSkills = [
   "git-commit",
   "pull-request",
   "show-summary",
-  "show-qa-checklist",
+  "manual-qa-checklist",
 ];
 
 const run = (cwd, ...args) =>

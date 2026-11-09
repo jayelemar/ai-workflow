@@ -299,7 +299,7 @@ test("canonical skills declare matching metadata and enable normal matching", as
     "git-commit",
     "pull-request",
     "show-summary",
-    "show-qa-checklist",
+    "manual-qa-checklist",
   ]) {
     const skill = await read(`.agents/skills/${name}/SKILL.md`);
     const metadata = await read(`.agents/skills/${name}/agents/openai.yaml`);

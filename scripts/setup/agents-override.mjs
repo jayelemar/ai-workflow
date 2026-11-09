@@ -26,7 +26,7 @@ const SKILL_NAMES = [
   "git-commit",
   "pull-request",
   "show-summary",
-  "show-qa-checklist",
+  "manual-qa-checklist",
 ];
 const SKILL_PATHS = SKILL_NAMES.map((name) => `.agents/skills/${name}`);
 const LEGACY_SKILL_NAMES = [
@@ -34,6 +34,7 @@ const LEGACY_SKILL_NAMES = [
   "ai-worktree-setup",
   "ai-commit",
   "ai-pr",
+  "show-qa-checklist",
 ];
 const LEGACY_SKILL_PATHS = LEGACY_SKILL_NAMES.map(
   (name) => `.agents/skills/${name}`,

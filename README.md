@@ -58,7 +58,7 @@ $pull-request Base: AUTO
 
 $show-summary
 
-$show-qa-checklist
+$manual-qa-checklist
 ```
 
 Use native Execute plan, `/goal`, or a normal request to implement a saved plan.
@@ -73,14 +73,14 @@ restate still-applicable decisions, and reference that new plan explicitly.
 
 ## Skills and Utilities
 
-| Skill                                                          | Purpose                                               |
-| -------------------------------------------------------------- | ----------------------------------------------------- |
-| [Create Plan](.agents/skills/create-plan/SKILL.md)             | Create, revise, and review implementation plans       |
-| [Worktree Setup](.agents/skills/worktree-setup/SKILL.md)       | Prepare native worktrees and independent task context |
-| [Git Commit](.agents/skills/git-commit/SKILL.md)               | Organize and create authorized local commits          |
-| [Pull Request](.agents/skills/pull-request/SKILL.md)           | Preview a PR and publish after exact-preview approval |
-| [Show Summary](.agents/skills/show-summary/SKILL.md)           | Show a short, nontechnical summary in chat            |
-| [Show QA Checklist](.agents/skills/show-qa-checklist/SKILL.md) | Show numbered manual test steps and expected results  |
+| Skill                                                              | Purpose                                               |
+| ------------------------------------------------------------------ | ----------------------------------------------------- |
+| [Create Plan](.agents/skills/create-plan/SKILL.md)                 | Create, revise, and review implementation plans       |
+| [Worktree Setup](.agents/skills/worktree-setup/SKILL.md)           | Prepare native worktrees and independent task context |
+| [Git Commit](.agents/skills/git-commit/SKILL.md)                   | Organize and create authorized local commits          |
+| [Pull Request](.agents/skills/pull-request/SKILL.md)               | Preview a PR and publish after exact-preview approval |
+| [Show Summary](.agents/skills/show-summary/SKILL.md)               | Show a short, nontechnical summary in chat            |
+| [Manual QA Checklist](.agents/skills/manual-qa-checklist/SKILL.md) | Show numbered manual test steps and expected results  |
 
 Skills match ordinary requests and explicit `$skill-name` invocation. Local
 setup, read-only skill discovery, instruction management, and selected worktree
