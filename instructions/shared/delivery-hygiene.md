@@ -41,6 +41,8 @@ Keep changes easy to review, deploy, revert, and trace.
   complete its mappings once. Placeholders are unconfigured and do not select an account.
 - Select the account for the actual Git repository and remote destination.
   Nested repositories may use a different account from their containing project.
+- Check existing access before asking for authentication setup; follow local
+  GitHub instructions.
 - Keep repository-to-account mappings and profile paths in ignored local
   instructions. Verify those files are ignored and untracked before adding
   personal details. Public instructions and examples must use placeholders,

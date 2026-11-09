@@ -1,0 +1,4 @@
+interface:
+  display_name: "Manual QA Checklist"
+  short_description: "Show simple manual test steps and expected results"
+  default_prompt: "Use $manual-qa-checklist to show a manual QA checklist for the current changes in chat."
