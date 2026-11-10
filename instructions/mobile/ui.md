@@ -1,5 +1,5 @@
-Version: 1.0
-Last Updated: 2026-10-30
+Version: 1.1
+Last Updated: 2026-11-10
 
 # Mobile UI Instructions
 
@@ -13,6 +13,7 @@ remain visible, reachable, and usable across supported device sizes.
 - Native, cross-platform, and hybrid mobile application screens.
 - Layout, scrolling, safe-area, keyboard, modal, gesture, text-scaling, and
   viewport-dependent interaction changes.
+- Screen-state presentation, transitions, and recovery actions.
 
 ## Rules
 
@@ -42,8 +43,12 @@ remain visible, reachable, and usable across supported device sizes.
 - When horizontal gestures contain vertically growing content, preserve
   vertical scrolling and verify that both interactions work in a native
   runtime.
-- Apply the same reachability rules to loading, empty, error, populated,
-  permission-dependent, and maximum-content states.
+- Apply consistent presentation and the same reachability rules to loading,
+  empty, populated, offline, error/retry, expired-session, permission-dependent,
+  and maximum-content states. Preserve entered data across recoverable failures
+  and provide clear recovery actions where applicable.
+- Distinguish initial loading from background refresh. Keep authorized populated
+  content visible during refresh and show an appropriate progress indicator.
 
 ## Placement
 
@@ -66,6 +71,9 @@ remain visible, reachable, and usable across supported device sizes.
   behaviors.
 - Check accessibility text scaling when changed text or controls are near a
   layout boundary.
+- Exercise changed states and transitions, checking input preservation and
+  recovery actions. For background-refresh changes, verify populated content
+  stays visible while progress is indicated.
 - For blocked compact-device validation, follow
   [Validation and Completion](../../AGENTS.md#validation-and-completion).
 
