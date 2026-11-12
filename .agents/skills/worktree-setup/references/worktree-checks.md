@@ -45,8 +45,13 @@ modifications, additions, and deletions, regardless of staging. A deleted requir
 file blocks preparation. Never stash, clean, reset, switch, merge, rebase, delete,
 prune, or overwrite source state. Record source branch/HEAD, status, index bytes,
 and selected-file bytes/modes/timestamps before mutation; compare again afterward
-without printing sensitive data. Worktree registrations and newly created task
-branches are the only expected source Git administration changes.
+without printing sensitive data. Expected source Git administration changes are
+worktree registrations, newly created task branches, and local context excludes.
+The context-copy procedure may append its three managed root rules to
+the application repository's shared `info/exclude`. This can hide previously
+untracked control context in source status; preserve its bytes and every other
+source status entry. Inspect that exclude path before worktree creation: require
+safe real ancestors and an absent or regular, non-symlink, single-link file.
 
 ## Matching interrupted setup
 
@@ -139,11 +144,14 @@ workflow source. Implementation owns dependency setup and application validation
 separately requested environment setup remains subject to its own authority.
 
 Recheck every prepared checkout against the retry invariants above. In a
-single-repository task, control context may be untracked; include that fact in
-the `/goal` handoff and require tracked application files clean with no other
-additions. Multi-repository children must remain clean. Recheck every source
+single-repository task, require `.ai/`, untracked `.agents/` entries, and
+`AGENTS.override.md` to be effectively ignored through the context-copy
+procedure's local excludes. Verify with `git ls-files --others --exclude-standard`
+for those paths and inventory ignored context separately; ignoring must never
+replace structural verification. Require tracked application files clean with
+no other additions. Multi-repository children must remain clean. Recheck every source
 checkout and source `.ai` files, index, branches, and HEAD; confirm only requested
-worktree registrations and branches were added.
+worktree registrations, branches, and managed local exclude rules were added.
 
 If creation, copy, or verification fails after mutation begins, keep partial state
 and identify every created branch and path. Stop without automatic rollback,

@@ -16,6 +16,13 @@ All Git children in this procedure disable replacement lookup so recorded
 commits, trees, and attribute blobs retain their stored meaning. Replacement
 refs, including alternate namespaces, are preserved without influencing proof.
 
+For a native single-repository task root, append missing root rules for `.ai/`,
+`.agents/`, and `AGENTS.override.md` to Git's resolved `info/exclude`. Git shares
+this file across the repository's worktrees, including the source checkout.
+Preserve existing rules and tracked files; never edit tracked `.gitignore` files.
+Coordination roots have no application Git metadata to update. Verify effective
+ignoring after copying; conflicting higher-priority ignore rules block completion.
+
 The block checks all context conflicts before copying. Invalid Git metadata is
 reported alongside independent link/file conflicts; skip reads through unsafe
 workflow roots and Git probes that depend on invalid administration. It resumes a compatible
@@ -102,6 +109,22 @@ const sourceGitSafe = sourceSafe && check(() => {
 const sourceSkillsSafe = sourceSafe && check(() => {
   directory(path.join(source, '.agents'));
   directory(path.join(source, '.agents/skills'));
+});
+let applicationExclude = null;
+let applicationExcludeContent = '';
+const contextRules = ['/.ai/', '/.agents/', '/AGENTS.override.md'];
+if (taskSafe && info(path.join(taskRoot, '.git'))) check(() => {
+  assert(git(taskRoot, 'rev-parse', '--show-toplevel') === taskRoot, 'context exclude requires the native task root');
+  const common = git(taskRoot, 'rev-parse', '--path-format=absolute', '--git-common-dir');
+  assert(checkRoot(common), 'unsafe application common Git directory');
+  const infoDirectory = path.join(common, 'info');
+  if (info(infoDirectory)) directory(infoDirectory);
+  const stat = info(path.join(infoDirectory, 'exclude'));
+  assert(!stat || (stat.isFile() && !stat.isSymbolicLink() && stat.nlink === 1), 'unsafe application Git exclude');
+  const resolved = git(taskRoot, 'rev-parse', '--path-format=absolute', '--git-path', 'info/exclude');
+  assert(resolved === path.join(infoDirectory, 'exclude'), 'unexpected application exclude path');
+  applicationExclude = resolved;
+  applicationExcludeContent = stat ? fs.readFileSync(resolved, 'utf8') : '';
 });
 if (sourceSkillsSafe) for (const skill of skills) check(() => {
   directory(path.join(source, '.agents/skills', skill));
@@ -285,6 +308,17 @@ fs.mkdirSync(path.join(taskRoot, '.agents/skills'), { recursive: true });
 for (const skill of skills) {
   const link = path.join(taskRoot, '.agents/skills', skill);
   if (!info(link)) fs.symlinkSync(`../../.ai/.agents/skills/${skill}`, link);
+}
+if (applicationExclude) {
+  const existing = applicationExcludeContent.split(/\r?\n/);
+  const missing = contextRules.filter(rule => !existing.includes(rule));
+  if (missing.length) {
+    fs.mkdirSync(path.dirname(applicationExclude), { recursive: true });
+    const separator = applicationExcludeContent && !applicationExcludeContent.endsWith('\n') ? '\n' : '';
+    fs.appendFileSync(applicationExclude, `${separator}${missing.join('\n')}\n`);
+  }
+  assert(!git(taskRoot, 'ls-files', '--others', '--exclude-standard', '--', '.ai', '.agents', 'AGENTS.override.md'),
+    'control context is still visible to Git; inspect higher-priority ignore rules');
 }
 NODE
 ```
