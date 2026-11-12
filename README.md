@@ -66,6 +66,9 @@ All follow the same execution rules; controlled work requires independent final 
 Prepare worktrees after saving the plan and before starting its Goal; use the
 preparation result's prompt with its explicit worktree paths. Matching interrupted
 setups can be resumed after Git and context verification. Setup finishes with
+copied `.ai/`, `.agents/`, and `AGENTS.override.md` excluded from application Git
+status through repository-local rules shared by its worktrees. Tracked files
+remain visible, and the nested `.ai` keeps its own Git status. Setup provides
 verified isolation and selected context, without workflow health or dependency
 installation; implementation handles dependencies and application validation. Finish or stop the
 current Goal before starting another. Give each new outcome its own plan,

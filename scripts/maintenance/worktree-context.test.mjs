@@ -377,7 +377,9 @@ async function sourceState(f) {
     [f.workflow, ...f.sources].map(async (source) => ({
       head: git(source, "rev-parse", "HEAD"),
       branch: git(source, "branch", "--show-current"),
-      status: git(source, "status", "--porcelain=v1", "--untracked-files=all"),
+      // Shared local excludes may hide managed context in the source checkout.
+      // The complete file snapshot below still proves untracked bytes unchanged.
+      status: git(source, "status", "--porcelain=v1", "--untracked-files=no"),
       index: await readFile(path.join(source, ".git/index")),
     })),
   );
@@ -566,6 +568,97 @@ for (const count of [1, 2]) {
     assert.equal(git(f.sources[0], "ls-files", "--", ".ai"), "");
   });
 }
+
+// Risk: copied control context clutters application status and can be staged
+// accidentally. Run the real copy procedure against a native worktree whose
+// tracked ignore file has no context rules; retain visibility of application work.
+test("context stays locally ignored while application and workflow edits remain visible", async (t) => {
+  const f = await fixture(t, 1);
+  await put(f.workspace, ".gitignore", ".worktrees/\n");
+  git(f.workspace, "add", ".gitignore");
+  git(f.workspace, "commit", "-m", "fixture without context ignores");
+  const exclude = path.join(f.workspace, ".git/info/exclude");
+  await writeFile(exclude, "# preserve existing rules\n/local-only");
+  const taskRoot = await preflight(f);
+  assert.equal(
+    await readFile(exclude, "utf8"),
+    "# preserve existing rules\n/local-only",
+  );
+  await prepare(f);
+  const contextPaths = [".ai", ".agents", "AGENTS.override.md"];
+  const visibleContext = () =>
+    git(
+      taskRoot,
+      "status",
+      "--porcelain=v1",
+      "--untracked-files=all",
+      "--",
+      ...contextPaths,
+    );
+  assert.equal(visibleContext(), "");
+  assert.equal(
+    git(taskRoot, "ls-files", "--", ".ai", "AGENTS.override.md"),
+    "",
+  );
+  const rules = await readFile(exclude, "utf8");
+  assert.ok(rules.startsWith("# preserve existing rules\n/local-only\n"));
+  await writeFile(exclude, "# preserve existing rules\n/local-only");
+  await prepare(f);
+  assert.equal(visibleContext(), "", "resume repairs missing local excludes");
+  await prepare(f);
+  assert.equal(
+    await readFile(exclude, "utf8"),
+    rules,
+    "retry does not duplicate excludes",
+  );
+  await put(taskRoot, ".ai/README.md", "task workflow change\n");
+  await put(taskRoot, ".agents/local.md", "local guidance\n");
+  await put(taskRoot, "AGENTS.override.md", "local override change\n");
+  assert.equal(visibleContext(), "");
+  assert.match(
+    git(path.join(taskRoot, ".ai"), "status", "--porcelain"),
+    / M README\.md/,
+  );
+  await put(taskRoot, "app.txt", "application change\n");
+  await put(taskRoot, "new-app.txt", "new application file\n");
+  await put(taskRoot, ".agents/README.md", "tracked custom guidance change\n");
+  const status = git(
+    taskRoot,
+    "status",
+    "--porcelain=v1",
+    "--untracked-files=all",
+  );
+  assert.match(status, /M app\.txt/);
+  assert.match(status, /\?\? new-app\.txt/);
+  assert.match(status, /M \.agents\/README\.md/);
+  assert.equal(git(taskRoot, "diff", "--name-only", "--", ".gitignore"), "");
+});
+
+test("unsafe local Git excludes block context writes", async (t) => {
+  const f = await fixture(t, 1);
+  const taskRoot = await preflight(f);
+  await mkdir(path.dirname(taskRoot), { recursive: true });
+  git(
+    f.workspace,
+    "worktree",
+    "add",
+    "-b",
+    "fix/selected-fix",
+    taskRoot,
+    "HEAD",
+  );
+  const outside = path.join(f.workspace, "preserved-excludes");
+  await writeFile(outside, "# keep these bytes\n");
+  const exclude = path.join(f.workspace, ".git/info/exclude");
+  await rm(exclude);
+  await symlink(outside, exclude);
+  assert.throws(
+    () => copyContext(f, taskRoot),
+    /unsafe application Git exclude/,
+  );
+  assert.equal(await exists(path.join(taskRoot, ".ai")), false);
+  assert.equal(await readFile(outside, "utf8"), "# keep these bytes\n");
+});
 
 test("preflight refuses occupied paths, branches, collisions, missing files, and escaping links before mutation", async (t) => {
   const f = await fixture(t, 1);

@@ -106,6 +106,8 @@ After context selection and every repository and context preflight pass:
    Recheck containment, types, exclusions, and source stability immediately
    before running. It owns independent cloning, the exact-file overlay,
    source-deletion handling, and all six relative task-local skill links.
+   It also installs local Git excludes for copied control context in a
+   single-repository worktree and verifies that untracked context is hidden.
    Do not duplicate its mechanics or copy source project-root skill links.
 4. Complete destination verification in `worktree-checks.md`, including actual
    structural fidelity and isolation, and recheck every source and prepared
