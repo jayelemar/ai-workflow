@@ -146,8 +146,19 @@ rtk proxy corepack pnpm@10.34.4 --dir .ai test:focused
 
 Dependency installation enables Husky hooks in this nested repository.
 Before a commit, the hook runs `pnpm health` for source, routing, configuration,
-and formatting checks. Before a push, it runs `pnpm health:full`, adding all
-workflow script tests. A failed check stops the Git operation. Validation runs
+and formatting checks. Before a push, it runs `pnpm health:push`: static health checks always run,
+and changed files across every pushed ref select the affected test suites.
+Ordinary skills and documentation run the fast guidance tests. Setup code and
+the setup reference run setup regressions; worktree setup instructions run
+the worktree regressions, including executable Markdown. Hook and health
+changes run their respective tests. Committed differences from a pushed ref to the current checkout, plus local
+tracked and untracked edits, are included because tests execute the current checkout.
+
+New remote refs, unavailable comparison commits, unknown file types, toolchain
+changes, and direct invocation without Git's ref input fall back to the full
+suite. Ref deletions still run static health. This selection reduces routine
+push time; it does not run every regression on every push. Use `pnpm health:full`
+for explicit comprehensive validation. No validation cache or remote fetch is used. A failed check stops the Git operation. Validation runs
 locally; no GitHub Actions workflow or separate CI instruction index is needed.
 Keep the ignored `instructions/index.md` current when instructions change.
 

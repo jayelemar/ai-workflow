@@ -141,11 +141,11 @@ Use these role defaults unless the user explicitly requests another runtime:
   `instructions/index.md` routing. Keep one project-local index; do not add a
   duplicate CI index.
 - Install `.ai` dependencies to enable its local Husky hooks. The pre-commit
-  hook runs `pnpm health`; the pre-push hook runs `pnpm health:full`. Fix failed
+  hook runs `pnpm health`; the pre-push hook runs `pnpm health:push` (static checks plus affected tests). Fix failed
   checks before delivery; do not bypass hooks to publish failing changes.
 - Existing ignored legacy workflow records must remain untouched unless the
   user explicitly requests cleanup.
 - When a Git parent checkout exists, do not stage `.ai` files in it.
 
-Version: 3.4
+Version: 3.5
 Last Updated: 2026-11-13

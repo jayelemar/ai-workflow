@@ -20,6 +20,7 @@ test("installed hooks stop failing commits and pushes and allow passing ones", a
   const remote = path.join(temporaryRoot, "remote.git");
   const bin = path.join(temporaryRoot, "bin");
   const log = path.join(temporaryRoot, "commands.log");
+  const inputLog = path.join(temporaryRoot, "push-input.log");
   try {
     await mkdir(path.join(repository, ".husky"), { recursive: true });
     await mkdir(bin);
@@ -32,7 +33,7 @@ test("installed hooks stop failing commits and pushes and allow passing ones", a
     const pnpm = path.join(bin, "pnpm");
     await writeFile(
       pnpm,
-      '#!/bin/sh\nprintf "%s\\n" "$*" >> "$HOOK_LOG"\nexit "$HOOK_RESULT"\n',
+      '#!/bin/sh\nprintf "%s\\n" "$*" >> "$HOOK_LOG"\nif [ "$1" = health:push ]; then cat >> "$HOOK_INPUT"; fi\nexit "$HOOK_RESULT"\n',
     );
     await chmod(pnpm, 0o755);
     const env = {
@@ -46,6 +47,7 @@ test("installed hooks stop failing commits and pushes and allow passing ones", a
       GIT_COMMITTER_EMAIL: "hooks@example.invalid",
       HUSKY: "1",
       HOOK_LOG: log,
+      HOOK_INPUT: inputLog,
       HOOK_RESULT: "0",
     };
     const run = (command, args, overrides = {}) =>
@@ -105,8 +107,17 @@ test("installed hooks stop failing commits and pushes and allow passing ones", a
     );
     assert.equal(
       await readFile(log, "utf8"),
-      "health\nhealth\nhealth:full\nhealth:full\n",
+      "health\nhealth\nhealth:push\nhealth:push\n",
     );
+    const inputs = (await readFile(inputLog, "utf8")).trim().split("\n");
+    assert.equal(inputs.length, 2);
+    for (const input of inputs) {
+      const [localRef, localOid, remoteRef, remoteOid] = input.split(" ");
+      assert.equal(localRef, "refs/heads/hook-test");
+      assert.equal(localOid, head);
+      assert.equal(remoteRef, "refs/heads/hook-test");
+      assert.match(remoteOid, /^0+$/);
+    }
   } finally {
     await rm(temporaryRoot, { recursive: true, force: true });
   }
