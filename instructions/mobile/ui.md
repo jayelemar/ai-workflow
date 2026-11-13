@@ -1,5 +1,5 @@
-Version: 1.1
-Last Updated: 2026-11-10
+Version: 1.2
+Last Updated: 2026-11-13
 
 # Mobile UI Instructions
 
@@ -17,6 +17,8 @@ remain visible, reachable, and usable across supported device sizes.
 
 ## Rules
 
+- Before selecting, creating, naming, or using a simulator or emulator, read
+  and follow [Mobile Virtual Devices](virtual-devices.md).
 - Treat visibility and reachability as behavior. An interactive control
   existing in the component or accessibility tree does not prove that a user
   can see or activate it.

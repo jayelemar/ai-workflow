@@ -130,7 +130,7 @@ if (sourceSkillsSafe) for (const skill of skills) check(() => {
   directory(path.join(source, '.agents/skills', skill));
   safe(source, `.agents/skills/${skill}/SKILL.md`);
 });
-const allowedCanonical = relative => /^(?:\.gitignore|AGENTS\.md|README\.md|package\.json|pnpm-lock\.yaml|\.codex\/config\.toml)$/.test(relative) ||
+const allowedCanonical = relative => /^(?:\.gitignore|AGENTS\.md|README\.md|package\.json|pnpm-lock\.yaml|\.codex\/config\.toml|\.husky\/(?:pre-commit|pre-push))$/.test(relative) ||
   /^(?:\.agents\/skills|\.github|docs|instructions\/(?:shared|mobile|desktop|web|server)|prompts|scripts)\//.test(relative);
 for (const relative of canonical) check(() => assert(allowedCanonical(relative), `unexpected canonical location: ${relative}`));
 for (const relative of local) check(() => assert(relative.startsWith('.ai/'), `local context outside workflow: ${relative}`));

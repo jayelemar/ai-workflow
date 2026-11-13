@@ -4,7 +4,6 @@ import {
   mkdtemp,
   mkdir,
   readFile,
-  readdir,
   rm,
   symlink,
   unlink,
@@ -24,6 +23,8 @@ import {
 const bootstrapPaths = [
   ".codex/config.toml",
   ".gitignore",
+  ".husky/pre-commit",
+  ".husky/pre-push",
   "AGENTS.md",
   "README.md",
   "package.json",
@@ -73,7 +74,6 @@ const createFixture = async () => {
     "prompts/worktree-cleanup.md",
     "prompts/skill-discovery.md",
     "prompts/manage-instructions.md",
-    ".github/workflows/health.yml",
     "instructions/shared/testing.md",
     "instructions/mobile/ui.md",
     "instructions/desktop/electron/qa.md",
@@ -828,61 +828,20 @@ test("test:all delegates to full health while focused tests remain fast", async 
   assert.doesNotMatch(packageJson.scripts["test:focused"], /health:full/);
 });
 
-test("CI provisions its ignored instruction index before full health", async () => {
-  const [workflow, instructionIndex, architectureInstruction] =
-    await Promise.all([
-      readFile(path.join(workflowRoot, ".github/workflows/health.yml"), "utf8"),
-      readFile(
-        path.join(workflowRoot, ".github/fixtures/instructions-index.md"),
-        "utf8",
-      ),
-      readFile(
-        path.join(
-          workflowRoot,
-          ".github/fixtures/instructions-architecture.md",
-        ),
-        "utf8",
-      ),
-    ]);
-  const provisionIndexCommand =
-    "cp .github/fixtures/instructions-index.md instructions/index.md";
-  const provisionArchitectureCommand =
-    "cp .github/fixtures/instructions-architecture.md instructions/local/architecture.md";
-
-  assert.match(workflow, /^\s+working-directory: \.ai$/m);
-  assert.match(workflow, /^\s+path: \.ai$/m);
-  assert.match(workflow, /^\s+package_json_file: \.ai\/package\.json$/m);
-  assert.match(workflow, /^\s+cache-dependency-path: \.ai\/pnpm-lock\.yaml$/m);
-  assert.ok(workflow.includes(provisionIndexCommand));
-  assert.ok(workflow.includes(provisionArchitectureCommand));
-  assert.ok(
-    workflow.indexOf(provisionIndexCommand) <
-      workflow.indexOf("pnpm health:full"),
+test("local Git hooks delegate to the existing health commands", async () => {
+  const packageJson = JSON.parse(
+    await readFile(path.join(workflowRoot, "package.json"), "utf8"),
   );
-  assert.ok(
-    workflow.indexOf(provisionArchitectureCommand) <
-      workflow.indexOf("pnpm health:full"),
-  );
-  assert.match(instructionIndex, /^## Rules$/m);
-  assert.match(instructionIndex, /`local\/architecture\.md`/);
-  assert.match(architectureInstruction, /^## Rules$/m);
-
-  // Every portable instruction, including nested Electron guidance, must be
-  // provisioned by the standalone CI index rather than local workspace files.
-  async function assertRoutes(directory, prefix) {
-    for (const entry of await readdir(directory, { withFileTypes: true })) {
-      const route = `${prefix}/${entry.name}`;
-      if (entry.isDirectory())
-        await assertRoutes(path.join(directory, entry.name), route);
-      else if (entry.name.endsWith(".md"))
-        assert.ok(instructionIndex.includes(`\`${route}\``), route);
-    }
-  }
-  for (const category of ["shared", "mobile", "desktop", "web", "server"])
-    await assertRoutes(
-      path.join(workflowRoot, "instructions", category),
-      category,
+  assert.equal(packageJson.scripts.prepare, "husky");
+  for (const [hook, command] of [
+    ["pre-commit", "pnpm health"],
+    ["pre-push", "pnpm health:full"],
+  ]) {
+    assert.equal(
+      (await readFile(path.join(workflowRoot, ".husky", hook), "utf8")).trim(),
+      command,
     );
+  }
 });
 
 test("health implementation is read-only and checks canonical skill source", async () => {

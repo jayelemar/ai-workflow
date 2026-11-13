@@ -136,6 +136,8 @@ async function fixture(t, count, { workflowObjectFormat } = {}) {
     "AGENTS.md": "Workflow baseline\n",
     "README.md": "Workflow readme\n",
     ".codex/config.toml": 'model = "fixture"\n',
+    ".husky/pre-commit": "pnpm health\n",
+    ".husky/pre-push": "pnpm health:full\n",
     "docs/removed.md": "Selected canonical deletion\n",
     "instructions/shared/testing.md": "Shared test principles\n",
     "instructions/mobile/ui.md": "Mobile guidance\n",
@@ -143,6 +145,8 @@ async function fixture(t, count, { workflowObjectFormat } = {}) {
     "instructions/web/wcag.md": "Browser guidance\n",
     "instructions/server/security.md": "Server guidance\n",
   };
+  canonical[".gitignore"] +=
+    "!/.husky/\n!/.husky/pre-commit\n!/.husky/pre-push\n";
   for (const skill of managedSkills) {
     canonical[`.agents/skills/${skill}/SKILL.md`] =
       `---\nname: ${skill}\n---\nFixture skill\n`;

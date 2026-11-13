@@ -22,6 +22,8 @@ export const workflowRoot = path.resolve(
 const BOOTSTRAP_SOURCE_PATHS = [
   ".codex/config.toml",
   ".gitignore",
+  ".husky/pre-commit",
+  ".husky/pre-push",
   "AGENTS.md",
   "README.md",
   "package.json",
