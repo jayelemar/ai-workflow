@@ -14,6 +14,9 @@
 !/.codex/config.toml
 !/.github/
 !/.github/**
+!/.husky/
+!/.husky/pre-commit
+!/.husky/pre-push
 
 # Canonical source directories
 !/docs/

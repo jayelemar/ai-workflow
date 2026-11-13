@@ -12,7 +12,8 @@ These lists are preparation inputs, not saved workflow state or a new copier.
 - `canonical_files`: the union of committed and indexed canonical `.ai` files,
   plus explicitly inspected new canonical source files needed by this plan.
   Canonical locations are `.gitignore`, `AGENTS.md`, `README.md`, `package.json`,
-  `pnpm-lock.yaml`, `.codex/config.toml`, `.agents/skills/`, `.github/`, `docs/`,
+  `pnpm-lock.yaml`, `.codex/config.toml`, `.husky/pre-commit`, `.husky/pre-push`,
+  `.agents/skills/`, `.github/`, `docs/`,
   `instructions/shared/`, `instructions/mobile/`, `instructions/desktop/`,
   `instructions/web/`, `instructions/server/`, `prompts/`, and `scripts/`.
   Include reusable source across all five instruction roots, including nested

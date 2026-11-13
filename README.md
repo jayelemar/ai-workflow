@@ -130,10 +130,18 @@ The independent package requires Node `>=20.20.2` and pins its toolchain. From
 the containing workspace:
 
 ```bash
+rtk proxy corepack pnpm@10.34.4 --dir .ai --ignore-workspace install --frozen-lockfile
 rtk proxy corepack pnpm@10.34.4 --dir .ai health
 rtk proxy corepack pnpm@10.34.4 --dir .ai health:full
 rtk proxy corepack pnpm@10.34.4 --dir .ai test:focused
 ```
+
+Dependency installation enables Husky hooks in this nested repository.
+Before a commit, the hook runs `pnpm health` for source, routing, configuration,
+and formatting checks. Before a push, it runs `pnpm health:full`, adding all
+workflow script tests. A failed check stops the Git operation. Validation runs
+locally; no GitHub Actions workflow or separate CI instruction index is needed.
+Keep the ignored `instructions/index.md` current when instructions change.
 
 Health can also run anywhere with
 `rtk proxy node /absolute/path/to/.ai/scripts/maintenance/health-check.mjs`

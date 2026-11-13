@@ -133,9 +133,15 @@ Use these role defaults unless the user explicitly requests another runtime:
   `instructions/mobile/`, `instructions/desktop/`, `instructions/web/`, and
   `instructions/server/`. Keep `instructions/index.md`, everything under
   `instructions/local/`, and living plans ignored.
+- When adding, moving, or removing a portable instruction, update the ignored
+  `instructions/index.md` routing. Keep one project-local index; do not add a
+  duplicate CI index.
+- Install `.ai` dependencies to enable its local Husky hooks. The pre-commit
+  hook runs `pnpm health`; the pre-push hook runs `pnpm health:full`. Fix failed
+  checks before delivery; do not bypass hooks to publish failing changes.
 - Existing ignored legacy workflow records must remain untouched unless the
   user explicitly requests cleanup.
 - When a Git parent checkout exists, do not stage `.ai` files in it.
 
-Version: 3.2
-Last Updated: 2026-11-04
+Version: 3.3
+Last Updated: 2026-11-13
