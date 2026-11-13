@@ -44,6 +44,7 @@ const managedSkills = [
   "pull-request",
   "show-summary",
   "manual-qa-checklist",
+  "brainstorm",
 ];
 
 const run = (cwd, ...args) =>

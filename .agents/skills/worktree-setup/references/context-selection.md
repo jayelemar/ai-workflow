@@ -22,8 +22,8 @@ These lists are preparation inputs, not saved workflow state or a new copier.
   describe allowed source locations; expand them into regular-file paths,
   never recursive copies. Reject unexpected tracked paths before cloning.
   Include source deletions in the inventory so they remain deleted in the copy.
-  Always include all six managed skills (`create-plan`, `worktree-setup`,
-  `git-commit`, `pull-request`, `show-summary`, `manual-qa-checklist`), their metadata,
+  Always include all managed skills (`create-plan`, `worktree-setup`,
+  `git-commit`, `pull-request`, `show-summary`, `manual-qa-checklist`, `brainstorm`), their metadata,
   and linked references, including inspected new canonical sources. Require each
   source directory and its `SKILL.md` to be real, readable, and contained by
   `.ai/.agents/skills/`,

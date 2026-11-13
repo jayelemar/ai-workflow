@@ -835,7 +835,7 @@ test("local Git hooks delegate to the existing health commands", async () => {
   assert.equal(packageJson.scripts.prepare, "husky");
   for (const [hook, command] of [
     ["pre-commit", "pnpm health"],
-    ["pre-push", "pnpm health:full"],
+    ["pre-push", "pnpm health:push"],
   ]) {
     assert.equal(
       (await readFile(path.join(workflowRoot, ".husky", hook), "utf8")).trim(),

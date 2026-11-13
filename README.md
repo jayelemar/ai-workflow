@@ -14,7 +14,7 @@ rtk proxy corepack pnpm@10.34.4 --dir .ai setup:codex
 ```
 
 Restart Codex from the trusted project root afterward. The utility preserves
-root guidance, installs project-local routing, six skill links, and a config
+root guidance, installs project-local routing, managed skill links, and a config
 snapshot. See [Codex Agent Setup](docs/codex-agent.md) for exact paths, conflict
 handling, active routing, and native discovery verification. No global skills
 or user configuration are installed.
@@ -33,6 +33,9 @@ public workflow source.
 | Standard planned   | Work is complex, ambiguous, cross-cutting, or lengthy                                                                                   | One living plan | Self-review              |
 | Controlled planned | Authentication, authorization, payments, secrets, migrations, destructive behavior, or another named security or trust boundary changes | One living plan | Independent final review |
 
+[Brainstorm](.agents/skills/brainstorm/SKILL.md) keeps exploration read-only until
+the explicit `CREATE_PLAN` command hands the discussion to Create Plan.
+
 [AGENTS.md](AGENTS.md) owns execution, required evidence, and completion for
 native Execute plan, `/goal`, and ordinary implementation requests. The
 [Create Plan skill](.agents/skills/create-plan/SKILL.md) creates and refines plans;
@@ -45,6 +48,10 @@ Useful invocations:
 
 ```text
 Fix the duplicate receipt import. Preserve existing authorization and run the focused receipt tests.
+
+$brainstorm Explore this ticket.
+
+CREATE_PLAN
 
 $create-plan Save a plan for the requested change.
 
@@ -78,6 +85,7 @@ restate still-applicable decisions, and reference that new plan explicitly.
 
 | Skill                                                              | Purpose                                               |
 | ------------------------------------------------------------------ | ----------------------------------------------------- |
+| [Brainstorm](.agents/skills/brainstorm/SKILL.md)                   | Explore ideas; plan only after `CREATE_PLAN`          |
 | [Create Plan](.agents/skills/create-plan/SKILL.md)                 | Create, revise, and review implementation plans       |
 | [Worktree Setup](.agents/skills/worktree-setup/SKILL.md)           | Prepare native worktrees and independent task context |
 | [Git Commit](.agents/skills/git-commit/SKILL.md)                   | Organize and create authorized local commits          |
@@ -138,8 +146,19 @@ rtk proxy corepack pnpm@10.34.4 --dir .ai test:focused
 
 Dependency installation enables Husky hooks in this nested repository.
 Before a commit, the hook runs `pnpm health` for source, routing, configuration,
-and formatting checks. Before a push, it runs `pnpm health:full`, adding all
-workflow script tests. A failed check stops the Git operation. Validation runs
+and formatting checks. Before a push, it runs `pnpm health:push`: static health checks always run,
+and changed files across every pushed ref select the affected test suites.
+Ordinary skills and documentation run the fast guidance tests. Setup code and
+the setup reference run setup regressions; worktree setup instructions run
+the worktree regressions, including executable Markdown. Hook and health
+changes run their respective tests. Committed differences from a pushed ref to the current checkout, plus local
+tracked and untracked edits, are included because tests execute the current checkout.
+
+New remote refs, unavailable comparison commits, unknown file types, toolchain
+changes, and direct invocation without Git's ref input fall back to the full
+suite. Ref deletions still run static health. This selection reduces routine
+push time; it does not run every regression on every push. Use `pnpm health:full`
+for explicit comprehensive validation. No validation cache or remote fetch is used. A failed check stops the Git operation. Validation runs
 locally; no GitHub Actions workflow or separate CI instruction index is needed.
 Keep the ignored `instructions/index.md` current when instructions change.
 

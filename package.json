@@ -13,8 +13,9 @@
     "health:full": "node scripts/maintenance/health-check.mjs --full",
     "cleanup:local": "node scripts/maintenance/cleanup-local.mjs",
     "setup:codex": "node scripts/setup/agents-override.mjs",
-    "test:focused": "node --import tsx --test scripts/maintenance/cleanup-local.test.mjs scripts/maintenance/git-hooks.test.mjs scripts/maintenance/health-check.test.mjs scripts/maintenance/workflow-guidance.test.mjs scripts/maintenance/worktree-context.test.mjs scripts/setup/agents-override.test.mjs",
-    "test:all": "pnpm health:full"
+    "test:focused": "node --import tsx --test scripts/maintenance/cleanup-local.test.mjs scripts/maintenance/git-hooks.test.mjs scripts/maintenance/health-check.test.mjs scripts/maintenance/workflow-guidance.test.mjs scripts/maintenance/worktree-context.test.mjs scripts/setup/agents-override.test.mjs scripts/maintenance/pre-push.test.mjs",
+    "test:all": "pnpm health:full",
+    "health:push": "node scripts/maintenance/pre-push.mjs"
   },
   "devDependencies": {
     "husky": "9.1.7",

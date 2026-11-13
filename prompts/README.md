@@ -5,8 +5,8 @@ skill discovery, instruction management, and cleanup require explicit invocation
 Read `.ai/AGENTS.md` plus relevant routed instructions.
 
 - [Local Codex setup](setup-local-codex.md): install the safe
-  local project override, canonical `.codex/config.toml`, and four relative
-  project-root skill links.
+  local project override, canonical `.codex/config.toml`, and relative
+  project-root links for all managed skills.
 - [Agent skills discovery](skill-discovery.md): research and
   assess repository-relevant skills.
 - [Instructions management](manage-instructions.md): create,
@@ -16,6 +16,9 @@ Read `.ai/AGENTS.md` plus relevant routed instructions.
   request bulk cleanup with `all-plans: true` (including active plans). Remove
   only selected plans, task worktrees, and owned records after inspection and
   exact operator confirmation; preserve unselected plans and all branches.
+
+[Brainstorm](../.agents/skills/brainstorm/SKILL.md) supports `$brainstorm` and
+brainstorming requests, remaining read-only until `CREATE_PLAN`.
 
 Plan creation is owned by
 [Create Plan](../.agents/skills/create-plan/SKILL.md), invoked by plan creation or revision

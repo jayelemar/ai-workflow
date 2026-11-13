@@ -67,6 +67,7 @@ const skillNames = [
   "pull-request",
   "show-summary",
   "manual-qa-checklist",
+  "brainstorm",
 ];
 const legacySkillNames = [
   "ai-build",
