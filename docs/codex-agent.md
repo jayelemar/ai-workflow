@@ -20,6 +20,7 @@ installs these project-local outputs:
 | Output                                      | Behavior                                                                                                                         |
 | ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | `AGENTS.override.md`                        | Routes root guidance first when present, then `.ai/AGENTS.md` and `instructions/index.md`; also covers root guidance added later |
+| `.agents/skills/brainstorm`                 | Relative link to `../../.ai/.agents/skills/brainstorm`                                                                           |
 | `.agents/skills/create-plan`                | Relative link to `../../.ai/.agents/skills/create-plan`                                                                          |
 | `.agents/skills/worktree-setup`             | Relative link to `../../.ai/.agents/skills/worktree-setup`                                                                       |
 | `.agents/skills/git-commit`                 | Relative link to `../../.ai/.agents/skills/git-commit`                                                                           |
@@ -30,7 +31,7 @@ installs these project-local outputs:
 | `instructions/local/github.md` inside `.ai` | Ignored account-mapping template with generic placeholders; existing local content is preserved                                  |
 
 The `.agents/`, `.agents/skills/`, and `.codex/` containers are real directories.
-When the parent is a Git repository, only the override, six generated links,
+When the parent is a Git repository, only the override, managed skill links,
 and config file receive exact parent local Git excludes. Unversioned parents
 install the same outputs without creating Git metadata or ignore files.
 Tracked ignore files, custom skills, other `.codex/` files,
@@ -133,8 +134,8 @@ After setup, verify in a fresh client:
 
 1. Inspect `/skills`, or read-only app-server `skills/list` with the project
    root in `cwds` and `forceReload: true`. Confirm `create-plan`,
-   `worktree-setup`, `git-commit`, `pull-request`, `show-summary`, and
-   `manual-qa-checklist` are enabled and resolve to this
+   `worktree-setup`, `git-commit`, `pull-request`, `show-summary`,
+   `manual-qa-checklist`, and `brainstorm` are enabled and resolve to this
    project's source. File inspection alone does not prove native discovery.
 2. Ask for instruction sources; verify root-first routing. Plan creation loads
    `.ai/.agents/skills/create-plan/SKILL.md`; saved-plan execution follows

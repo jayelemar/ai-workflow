@@ -105,7 +105,7 @@ After context selection and every repository and context preflight pass:
    `workspace`, `task_root`, `workflow_head`, and the three preflighted arrays.
    Recheck containment, types, exclusions, and source stability immediately
    before running. It owns independent cloning, the exact-file overlay,
-   source-deletion handling, and all six relative task-local skill links.
+   source-deletion handling, and all managed relative task-local skill links.
    It also installs local Git excludes for copied control context in a
    single-repository worktree and verifies that untracked context is hidden.
    Do not duplicate its mechanics or copy source project-root skill links.

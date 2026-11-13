@@ -33,7 +33,7 @@ For a single repository, inspect the chosen base tree before mutation. Stop if
 it contains `.ai` or `AGENTS.override.md`. An existing selected workspace file
 must be regular and match its source, allowing Git checkout normalization of
 that same base; differing content is a checkout collision. Inspect `.agents/` and `.agents/skills/`: existing ancestors must be
-real directories, and none of the six managed skill paths may exist in the base,
+real directories, and none of the managed skill paths may exist in the base,
 including tracked links. Preserve unrelated custom files and skills. A tracked
 `docs/` directory alone is not a collision. Do not create the single-repository
 task root before `git worktree add`.
@@ -63,7 +63,7 @@ For every existing target, require all of the following before any creation:
 - Its branch equals the requested safe branch and its `HEAD` equals the exact
   resolved base commit. A branch advanced by implementation is a conflict.
 - All tracked application files and the application index are clean. In a single
-  repository, only selected control files and the six exact managed links may
+  repository, only selected control files and the exact managed links may
   appear as untracked additions; permit ignored context only after inventorying
   it too. Reject other additions, including ignored artifacts. In multiple
   repositories each child must be completely clean, including ignored additions.
@@ -126,7 +126,7 @@ Verify selected-file fidelity without printing contents: bytes, modes,
 timestamps, selected deletions still absent, and required files readable.
 Enumerate the destination `.ai` outside its `.git` to prove every file is
 canonical or explicitly selected and excluded files are absent. Verify root/custom
-routing resolves within the task root. Verify all six `.agents/skills/` entries
+routing resolves within the task root. Verify all managed `.agents/skills/` entries
 are relative links to `../../.ai/.agents/skills/<skill-name>` and resolve within
 the task-local `.ai/.agents/skills/`. Preserve unrelated `.agents/` files and skills.
 

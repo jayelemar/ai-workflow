@@ -1,0 +1,4 @@
+interface:
+  display_name: "Brainstorm"
+  short_description: "Explore ideas before explicitly creating a plan"
+  default_prompt: "Use $brainstorm to explore this idea. Brainstorm only until I explicitly say CREATE_PLAN."

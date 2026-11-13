@@ -27,6 +27,7 @@ const SKILL_NAMES = [
   "pull-request",
   "show-summary",
   "manual-qa-checklist",
+  "brainstorm",
 ];
 const SKILL_PATHS = SKILL_NAMES.map((name) => `.agents/skills/${name}`);
 const LEGACY_SKILL_NAMES = [

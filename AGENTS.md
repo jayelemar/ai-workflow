@@ -7,6 +7,10 @@ This file is the behavioral authority for work that uses the `.ai` repository.
 Ordinary requests use normal Codex behavior: inspect, implement, validate, and
 report without creating workflow artifacts.
 
+For brainstorming, use `.ai/.agents/skills/brainstorm/SKILL.md`. Its read-only
+discussion and explicit planning gate take precedence over the planning rules
+below while brainstorming is active.
+
 Use `.ai/.agents/skills/create-plan/SKILL.md` to create, revise, or review a
 plan before execution. Bounded, understood requests need no workflow artifact.
 Complex, ambiguous, cross-cutting, or long-running work uses one living plan.
@@ -143,5 +147,5 @@ Use these role defaults unless the user explicitly requests another runtime:
   user explicitly requests cleanup.
 - When a Git parent checkout exists, do not stage `.ai` files in it.
 
-Version: 3.3
+Version: 3.4
 Last Updated: 2026-11-13

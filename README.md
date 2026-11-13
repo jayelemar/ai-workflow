@@ -14,7 +14,7 @@ rtk proxy corepack pnpm@10.34.4 --dir .ai setup:codex
 ```
 
 Restart Codex from the trusted project root afterward. The utility preserves
-root guidance, installs project-local routing, six skill links, and a config
+root guidance, installs project-local routing, managed skill links, and a config
 snapshot. See [Codex Agent Setup](docs/codex-agent.md) for exact paths, conflict
 handling, active routing, and native discovery verification. No global skills
 or user configuration are installed.
@@ -33,6 +33,9 @@ public workflow source.
 | Standard planned   | Work is complex, ambiguous, cross-cutting, or lengthy                                                                                   | One living plan | Self-review              |
 | Controlled planned | Authentication, authorization, payments, secrets, migrations, destructive behavior, or another named security or trust boundary changes | One living plan | Independent final review |
 
+[Brainstorm](.agents/skills/brainstorm/SKILL.md) keeps exploration read-only until
+the explicit `CREATE_PLAN` command hands the discussion to Create Plan.
+
 [AGENTS.md](AGENTS.md) owns execution, required evidence, and completion for
 native Execute plan, `/goal`, and ordinary implementation requests. The
 [Create Plan skill](.agents/skills/create-plan/SKILL.md) creates and refines plans;
@@ -45,6 +48,10 @@ Useful invocations:
 
 ```text
 Fix the duplicate receipt import. Preserve existing authorization and run the focused receipt tests.
+
+$brainstorm Explore this ticket.
+
+CREATE_PLAN
 
 $create-plan Save a plan for the requested change.
 
@@ -78,6 +85,7 @@ restate still-applicable decisions, and reference that new plan explicitly.
 
 | Skill                                                              | Purpose                                               |
 | ------------------------------------------------------------------ | ----------------------------------------------------- |
+| [Brainstorm](.agents/skills/brainstorm/SKILL.md)                   | Explore ideas; plan only after `CREATE_PLAN`          |
 | [Create Plan](.agents/skills/create-plan/SKILL.md)                 | Create, revise, and review implementation plans       |
 | [Worktree Setup](.agents/skills/worktree-setup/SKILL.md)           | Prepare native worktrees and independent task context |
 | [Git Commit](.agents/skills/git-commit/SKILL.md)                   | Organize and create authorized local commits          |

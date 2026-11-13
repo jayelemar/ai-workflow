@@ -9,6 +9,9 @@ Produce one decision-complete plan grounded in the request and repository.
 This skill creates or revises plans; it does not implement them or start a Goal.
 Execution standards belong to `.ai/AGENTS.md`.
 
+If brainstorming is active, first follow the gate in
+[Brainstorm](../brainstorm/SKILL.md). Selecting this skill does not bypass it.
+
 Read [plan-template.md](references/plan-template.md) before planning. Inspect
 current code, constraints, and relevant instructions; resolve material decisions
 with the user. Keep the outcome, boundaries, decisions, tasks, required validation,

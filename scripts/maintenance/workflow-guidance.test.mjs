@@ -172,7 +172,7 @@ test("plan worktree setup stays native, safe, and independent", async () => {
     /local_files/,
     /workspace_files/,
     /Include source deletions in the inventory/,
-    /all six managed skills/,
+    /all managed skills/,
     /no symbolic link in any component/,
     /including tracked canonical candidates and required references/,
     /Preserve an accepted\s+custom override byte-for-byte/,
@@ -300,6 +300,7 @@ test("canonical skills declare matching metadata and enable normal matching", as
     "pull-request",
     "show-summary",
     "manual-qa-checklist",
+    "brainstorm",
   ]) {
     const skill = await read(`.agents/skills/${name}/SKILL.md`);
     const metadata = await read(`.agents/skills/${name}/agents/openai.yaml`);
