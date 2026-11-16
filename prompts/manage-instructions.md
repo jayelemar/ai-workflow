@@ -29,6 +29,10 @@ or defer optional guidance to Recommendations.
 - Read `.ai/AGENTS.md`, ignored `.ai/instructions/index.md` if present, and
   [Documentation and Runbook Instructions](../instructions/shared/documentation-runbooks.md)
   before editing; follow its authoring and section-purpose rules.
+- Before creating or expanding instructions for a repeated correction, follow the
+  recurring-correction rule in [Working Rules](../AGENTS.md#working-rules). Use
+  prose for guidance that still requires judgment or cannot reasonably be
+  enforced automatically.
 - Inventory relevant `.ai/instructions/**/*.md` with ignored-file-aware search.
   Search every instruction root, including ignored index/local files, for rules,
   commands, and validation covering the intended guidance before proposing or

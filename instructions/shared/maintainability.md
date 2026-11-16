@@ -1,5 +1,5 @@
-Version: 1.1
-Last Updated: 2026-09-16
+Version: 1.2
+Last Updated: 2026-11-16
 
 # Maintainability Instructions
 
@@ -29,6 +29,9 @@ Keep production changes understandable, reviewable, and safe to evolve.
 - Complexity by itself is not a defect when it is necessary to preserve an
   explicit behavior or security guarantee. Record the requirement and keep the
   implementation no broader than that guarantee.
+- Use comments to explain intent, constraints, and necessary tradeoffs.
+  Workarounds require a concrete justification and relevant validation; comments
+  alone do not establish correctness.
 
 ## Placement
 

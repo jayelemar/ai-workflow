@@ -7,12 +7,14 @@ import {
   lstat,
   readdir,
   readFile,
+  readlink,
   realpath,
   stat,
 } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse as parseToml } from "smol-toml";
+import { parsers as markdownParsers } from "prettier/plugins/markdown";
 
 export const workflowRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -458,6 +460,231 @@ const validateLiteralReferences = async ({ root, stderr }) => {
   return false;
 };
 
+function* markdownNodes(node, skipFootnotes = false) {
+  if (skipFootnotes && node.type === "footnoteDefinition") return;
+  yield node;
+  for (const child of node.children ?? [])
+    yield* markdownNodes(child, skipFootnotes);
+}
+
+const markdownHeadingText = (node) => {
+  if (node.children) return node.children.map(markdownHeadingText).join("");
+  if (["text", "inlineCode"].includes(node.type)) return node.value;
+  return ["image", "imageReference"].includes(node.type)
+    ? (node.alt ?? "")
+    : "";
+};
+
+const markdownReferences = async (source) => {
+  const tree = await markdownParsers.markdown.parse(
+    source.replace(/^\uFEFF/, ""),
+    {},
+  );
+  const definitions = new Map();
+  const footnotes = new Map();
+  // Reference definitions are global, even inside unrendered footnotes.
+  for (const node of markdownNodes(tree)) {
+    if (["definition", "footnoteDefinition"].includes(node.type)) {
+      const entries = node.type === "definition" ? definitions : footnotes;
+      const identifier = node.identifier.toUpperCase();
+      if (!entries.has(identifier)) entries.set(identifier, node);
+    }
+  }
+  const nodes = [...markdownNodes(tree, true)];
+  const seenFootnotes = new Set();
+  for (let index = 0; index < nodes.length; index++) {
+    const node = nodes[index];
+    if (node.type !== "footnoteReference") continue;
+    const identifier = node.identifier.toUpperCase();
+    const definition = footnotes.get(identifier);
+    if (!definition || seenFootnotes.has(identifier)) continue;
+    seenFootnotes.add(identifier);
+    for (const child of definition.children) {
+      for (const descendant of markdownNodes(child, true))
+        nodes.push(descendant);
+    }
+  }
+  const headings = new Set();
+  for (const node of nodes) {
+    if (node.type === "heading") {
+      const base = markdownHeadingText(node)
+        .trim()
+        .toLowerCase()
+        .replace(/[^\p{L}\p{M}\p{N}_ -]/gu, "")
+        .replace(/ /g, "-");
+      let heading = base;
+      let suffix = 0;
+      while (headings.has(heading)) heading = `${base}-${++suffix}`;
+      headings.add(heading);
+    }
+  }
+  const links = [];
+  for (const node of nodes) {
+    const destination = ["link", "image"].includes(node.type)
+      ? node
+      : ["linkReference", "imageReference"].includes(node.type)
+        ? definitions.get(node.identifier.toUpperCase())
+        : undefined;
+    if (destination) {
+      links.push({
+        url: destination.url,
+        line: node.position.start.line,
+      });
+    }
+  }
+  return { headings, links };
+};
+
+const resolveMissingTarget = async (target) => {
+  const root = path.parse(target).root;
+  let resolved = root;
+  let pending = target.slice(root.length).split(path.sep);
+  let symlinks = 0;
+  while (pending.length) {
+    const component = pending.shift();
+    if (!component || component === ".") continue;
+    if (component === "..") {
+      resolved = path.dirname(resolved);
+      continue;
+    }
+    const candidate = path.join(resolved, component);
+    let entry;
+    try {
+      entry = await lstat(candidate);
+    } catch (error) {
+      if (!["ENOENT", "ENOTDIR"].includes(error.code)) return undefined;
+    }
+    if (!entry?.isSymbolicLink()) {
+      resolved = candidate;
+      continue;
+    }
+    // Bound traversal so a cyclic link cannot stall health.
+    if (++symlinks > 40) return undefined;
+    let destination;
+    try {
+      destination = await readlink(candidate);
+    } catch {
+      return undefined;
+    }
+    const destinationRoot = path.parse(destination).root;
+    if (destinationRoot) resolved = destinationRoot;
+    pending = [
+      ...destination.slice(destinationRoot.length).split(path.sep),
+      ...pending,
+    ];
+  }
+  return resolved;
+};
+
+const validateMarkdownReferences = async ({ root, stderr }) => {
+  const files = await collectFromRoots(root, REFERENCE_ROOTS, (file) =>
+    file.endsWith(".md"),
+  );
+  const realRoot = await realpath(root);
+  const contained = (base, target) => {
+    const relative = path.relative(base, target);
+    return (
+      relative !== ".." &&
+      !relative.startsWith(`..${path.sep}`) &&
+      !path.isAbsolute(relative)
+    );
+  };
+  const documents = new Map();
+  const document = async (file) => {
+    if (!documents.has(file)) {
+      documents.set(
+        file,
+        await markdownReferences(await readFile(file, "utf8")),
+      );
+    }
+    return documents.get(file);
+  };
+  const failures = new Set();
+  for (const file of files) {
+    const absolute = path.join(root, file);
+    if (!(await isContainedFile(root, absolute))) continue;
+    let parsed;
+    try {
+      parsed = await document(absolute);
+    } catch {
+      failures.add(`${file}:1: unreadable or invalid Markdown`);
+      continue;
+    }
+    for (const { url, line } of parsed.links) {
+      if (/^(?:[a-z][a-z\d+.-]*:|\/\/)/i.test(url)) continue;
+      const hash = url.indexOf("#");
+      const rawPath = (hash < 0 ? url : url.slice(0, hash)).split("?")[0];
+      const rawFragment = hash < 0 ? "" : url.slice(hash + 1);
+      let pathname;
+      try {
+        pathname = decodeURIComponent(rawPath);
+      } catch {
+        failures.add(`${file}:${line}: invalid local reference encoding`);
+        continue;
+      }
+      const target = pathname
+        ? pathname.startsWith("/")
+          ? path.resolve(root, `.${pathname}`)
+          : path.resolve(path.dirname(absolute), pathname)
+        : absolute;
+      if (!contained(root, target)) continue;
+      const relative = path.relative(root, target);
+      if (
+        LOCAL_ONLY_ROOTS.some(
+          (local) =>
+            relative === local || relative.startsWith(`${local}${path.sep}`),
+        )
+      )
+        continue;
+      let realTarget;
+      let targetStat;
+      try {
+        realTarget = await realpath(target);
+        if (!contained(realRoot, realTarget)) continue;
+        targetStat = await stat(realTarget);
+      } catch {
+        if (!realTarget) {
+          const resolvedTarget = await resolveMissingTarget(target);
+          if (resolvedTarget && !contained(realRoot, resolvedTarget)) continue;
+        }
+        failures.add(
+          `${file}:${line}: missing local target ${JSON.stringify(relative)}`,
+        );
+        continue;
+      }
+      if (!targetStat.isFile() && !targetStat.isDirectory()) {
+        failures.add(
+          `${file}:${line}: invalid local target ${JSON.stringify(relative)}`,
+        );
+      } else if (rawFragment && targetStat.isFile() && /\.md$/i.test(target)) {
+        let fragment;
+        try {
+          fragment = decodeURIComponent(rawFragment);
+        } catch {
+          failures.add(`${file}:${line}: invalid local reference encoding`);
+          continue;
+        }
+        try {
+          if (!(await document(realTarget)).headings.has(fragment)) {
+            failures.add(
+              `${file}:${line}: missing heading ${JSON.stringify(`${relative}#${fragment}`)}`,
+            );
+          }
+        } catch {
+          failures.add(
+            `${file}:${line}: unreadable or invalid Markdown target ${JSON.stringify(relative)}`,
+          );
+        }
+      }
+    }
+  }
+  if (!failures.size) return true;
+  stderr(
+    `FAIL invalid local Markdown references:\n${[...failures].sort().join("\n")}`,
+  );
+  return false;
+};
+
 const readInstructionRoutes = async ({ root, stderr }) => {
   const indexPath = path.join(root, "instructions/index.md");
   if (
@@ -638,6 +865,9 @@ export const runHealthCheck = async ({
     return { ok: false, root };
   }
   if (!(await validateLiteralReferences({ root, stderr }))) {
+    return { ok: false, root };
+  }
+  if (!(await validateMarkdownReferences({ root, stderr }))) {
     return { ok: false, root };
   }
   if (!(await validateParentIndex({ commandExecutor, root, stdout, stderr }))) {

@@ -38,10 +38,29 @@ changed code. A plan never replaces those repository conventions.
   persistence, services, coordination, cryptography, dependencies, retries,
   state, or operational gates without a concrete requirement or demonstrated
   failure that a simpler existing mechanism cannot satisfy.
-- Preserve unrelated work and existing dirty-tree changes. Keep refactors and
-  cleanup outside the requested scope unless they are required for correctness.
-- Prefer readable, strongly typed code that follows existing architecture and
-  naming.
+- Preserve unrelated work and existing dirty-tree changes. Corrections necessary
+  for requested behavior remain in scope. Optional refactors and cleanup require
+  explicit approval, including in code already being changed.
+- Finish unaffected authorized work before presenting optional cleanup at task
+  completion. Give its location, concrete evidence, smallest proposed correction,
+  and impact; wait for approval before including it. If a blocking problem
+  requires materially broader changes, explain the scope expansion and ask
+  before proceeding with that expansion.
+- Reuse existing session authorization; do not ask again for work the user
+  already approved. Mention any approved cleanup in the completion report.
+- Prefer readable, strongly typed code and consistent naming. Before reusing a
+  pattern, check it against current contracts and repository rules. Avoid copying
+  a pattern shown to be incorrect by a demonstrated defect, violated contract,
+  or obsolete API; age or stylistic preference alone is not evidence.
+- Base architectural constraints on a current requirement or demonstrated
+  problem. Prefer narrow APIs and existing types or lint enforcement that fit
+  the boundary. Keep application-specific restrictions in the owning application.
+- When a correction recurs, check whether existing types, APIs, lint rules, or
+  tests prevent it. If a gap remains, consider the smallest practical automated
+  check before adding more prose. Base proposals on concrete evidence and explain
+  their coverage and maintenance cost. Present optional enforcement proposals at
+  task completion and obtain approval before adding work outside the requested
+  scope.
 - Check implied edge cases, failures, state transitions, and permission
   boundaries at changed surfaces.
 - Before approving sensitive changes, verify authentication and access control,
@@ -147,5 +166,5 @@ Use these role defaults unless the user explicitly requests another runtime:
   user explicitly requests cleanup.
 - When a Git parent checkout exists, do not stage `.ai` files in it.
 
-Version: 3.5
-Last Updated: 2026-11-13
+Version: 3.6
+Last Updated: 2026-11-16
