@@ -1,7 +1,8 @@
 # Utility Prompt Index
 
 These prompts are independent utilities, not workflow stages. Local setup,
-skill discovery, instruction management, and cleanup require explicit invocation.
+skill discovery, instruction management, worktree update review, and cleanup
+require explicit invocation.
 Read `.ai/AGENTS.md` plus relevant routed instructions.
 
 - [Local Codex setup](setup-local-codex.md): install the safe
@@ -11,11 +12,21 @@ Read `.ai/AGENTS.md` plus relevant routed instructions.
   assess repository-relevant skills.
 - [Instructions management](manage-instructions.md): create,
   update, route, or retire instruction guidance.
+- [Review worktree updates](review-worktree-updates.md): explain task-owned
+  documentation and instruction changes and request separate approval for each
+  parent file change. Exclude plans; review starts only on explicit invocation.
 - [Plan worktree cleanup](worktree-cleanup.md): inventory only
   without a selector; select `plan: .ai/plans/<plan-name>.md` or explicitly
   request bulk cleanup with `all-plans: true` (including active plans). Remove
   only selected plans, task worktrees, and owned records after inspection and
   exact operator confirmation; preserve unselected plans and all branches.
+
+Start a review from the original workspace:
+
+```text
+Run `.ai/prompts/review-worktree-updates.md`.
+worktree: .worktrees/<task-name>
+```
 
 [Brainstorm](../.agents/skills/brainstorm/SKILL.md) supports `$brainstorm` and
 brainstorming requests, remaining read-only until `CREATE_PLAN`.
