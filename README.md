@@ -94,8 +94,19 @@ restate still-applicable decisions, and reference that new plan explicitly.
 | [Manual QA Checklist](.agents/skills/manual-qa-checklist/SKILL.md) | Show numbered manual test steps and expected results  |
 
 Skills match ordinary requests and explicit `$skill-name` invocation. Local
-setup, read-only skill discovery, instruction management, and selected worktree
-cleanup remain [independent prompts](prompts/README.md).
+setup, read-only skill discovery, instruction management, worktree update review,
+and selected worktree cleanup remain [independent prompts](prompts/README.md).
+
+[Review Worktree Updates](prompts/review-worktree-updates.md) reviews task-owned
+documentation and instruction changes for return to the original workspace.
+Invoke it explicitly; every parent file change requires its own explanation and
+approval. Plans remain excluded. Setup, implementation completion, and cleanup
+do not invoke it automatically.
+
+```text
+Run `.ai/prompts/review-worktree-updates.md`.
+worktree: .worktrees/<task-name>
+```
 
 ## Instructions and Repository Boundary
 
