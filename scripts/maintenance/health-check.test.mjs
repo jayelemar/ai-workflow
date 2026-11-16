@@ -329,6 +329,630 @@ test("configuration presence, syntax, shape, tracking and allowlisting are check
   }
 });
 
+test("Markdown references accept local paths, fragments, images and definitions", async () => {
+  await withFixture(async (fixture) => {
+    await writeFixtureFile(fixture.root, "AGENTS.md", "# Current *rules*\n");
+    await writeFixtureFile(
+      fixture.root,
+      "README.md",
+      [
+        "# Overview",
+        "",
+        "[same document](#overview)",
+        '[local](AGENTS.md?raw=1#current-rules "title")',
+        "[root relative](/AGENTS.md#current-rules)",
+        "[directory](instructions/)",
+        "[non-Markdown fragment](package.json#ignored-fragment)",
+        "[non-Markdown invalid fragment](package.json#bad%ZZ)",
+        "![image](package.json)",
+        "[reference][GUIDE] and ![reference image][asset]",
+        "",
+        "[guide]: AGENTS.md#current-rules",
+        "[asset]: package.json",
+        "",
+      ].join("\n"),
+    );
+    const { result, output } = await inspectFixture(fixture);
+    assert.equal(result.ok, true, output);
+  });
+});
+
+test("Markdown references reject missing inline, image and reference targets", async (t) => {
+  for (const source of [
+    "[missing](missing.md)",
+    "![missing](missing.png)",
+    "[missing][guide]\n\n[guide]: missing.md",
+    "![missing][guide]\n\n[guide]: missing.md",
+    "[missing](/missing.md)",
+  ]) {
+    await t.test(source.split("\n")[0], () =>
+      withFixture(async (fixture) => {
+        await writeFixtureFile(
+          fixture.root,
+          "README.md",
+          `# Overview\n\n${source}\n`,
+        );
+        const { result, output } = await inspectFixture(fixture);
+        assert.equal(result.ok, false, output);
+        assert.match(output, /invalid local Markdown references/);
+        assert.match(output, /README\.md:3/);
+        assert.match(output, /missing\.(md|png)/);
+      }),
+    );
+  }
+});
+
+test("Markdown references reject missing headings in default and full health", async (t) => {
+  for (const args of [[], ["--full"]]) {
+    await t.test(args[0] ?? "default", () =>
+      withFixture(async (fixture) => {
+        await writeFixtureFile(fixture.root, "AGENTS.md", "# Current rules\n");
+        await writeFixtureFile(
+          fixture.root,
+          "README.md",
+          "# Overview\n\n[removed](AGENTS.md#removed-heading)\n",
+        );
+        const output = [];
+        const result = await runHealthCheck({
+          args,
+          workflowDirectory: fixture.root,
+          commandExecutor: createCommandExecutor(fixture),
+          stdout: (message) => output.push(message),
+          stderr: (message) => output.push(message),
+        });
+        assert.equal(result.ok, false, output.join("\n"));
+        assert.match(output.join("\n"), /README\.md:3/);
+        assert.match(output.join("\n"), /AGENTS\.md#removed-heading/);
+      }),
+    );
+  }
+});
+
+test("Markdown references use formatted, Unicode, setext and unique heading IDs", async () => {
+  await withFixture(async (fixture) => {
+    await writeFixtureFile(
+      fixture.root,
+      "AGENTS.md",
+      [
+        "# API: `Read` & *Write*",
+        "# Café workflow",
+        "",
+        "Setext heading",
+        "--------------",
+        "",
+        "# Same",
+        "# Same",
+        "# Same-1",
+        "",
+      ].join("\n"),
+    );
+    await writeFixtureFile(
+      fixture.root,
+      "README.md",
+      [
+        "# Overview",
+        "",
+        "[formatting](AGENTS.md#api-read--write)",
+        "[Unicode](AGENTS.md#caf%C3%A9-workflow)",
+        "[setext](AGENTS.md#setext-heading)",
+        "[first](AGENTS.md#same)",
+        "[duplicate](AGENTS.md#same-1)",
+        "[collision](AGENTS.md#same-1-1)",
+        "",
+      ].join("\n"),
+    );
+    const { result, output } = await inspectFixture(fixture);
+    assert.equal(result.ok, true, output);
+  });
+});
+
+test("Markdown heading text includes inline and reference image descriptions", async (t) => {
+  for (const heading of ["![Logo](package.json)", "![Logo][asset]"]) {
+    await t.test(heading, () =>
+      withFixture(async (fixture) => {
+        await writeFixtureFile(
+          fixture.root,
+          "AGENTS.md",
+          `# ${heading} Title\n\n[asset]: package.json\n`,
+        );
+        await writeFixtureFile(
+          fixture.root,
+          "README.md",
+          "[heading](AGENTS.md#logo-title)\n",
+        );
+        const { result, output } = await inspectFixture(fixture);
+        assert.equal(result.ok, true, output);
+      }),
+    );
+  }
+});
+
+test("Markdown references decode local paths and parse balanced parentheses", async () => {
+  await withFixture(async (fixture) => {
+    const target = "prompts/example (copy).md";
+    await writeFixtureFile(fixture.root, target, "# Details\n");
+    fixture.sourcePaths.push(target);
+    await writeFixtureFile(
+      fixture.root,
+      "README.md",
+      "# Overview\n\n[details](prompts/example%20(copy).md#details)\n",
+    );
+    const { result, output } = await inspectFixture(fixture);
+    assert.equal(result.ok, true, output);
+  });
+});
+
+test("Markdown references ignore code, comments and unused definitions", async () => {
+  await withFixture(async (fixture) => {
+    await writeFixtureFile(
+      fixture.root,
+      "README.md",
+      [
+        "# Overview",
+        "",
+        "`[inline example](missing-inline.md)`",
+        "",
+        "````md",
+        "[fenced example](missing-fenced.md)",
+        "```text",
+        "[nested example](missing-nested.md)",
+        "```",
+        "````",
+        "",
+        "<!-- [hidden](missing-comment.md) -->",
+        "",
+        "[unused]: missing-unused.md",
+        "",
+      ].join("\n"),
+    );
+    const { result, output } = await inspectFixture(fixture);
+    assert.equal(result.ok, true, output);
+  });
+});
+
+test("Markdown references ignore links in unused footnotes", async () => {
+  await withFixture(async (fixture) => {
+    await writeFixtureFile(
+      fixture.root,
+      "README.md",
+      "# Overview\n\n[^unused]: [example](missing.md)\n",
+    );
+    const { result, output } = await inspectFixture(fixture);
+    assert.equal(result.ok, true, output);
+  });
+});
+
+test("Markdown references reject phantom headings from unused footnotes", async () => {
+  await withFixture(async (fixture) => {
+    await writeFixtureFile(
+      fixture.root,
+      "README.md",
+      "# Topic\n\n[^unused]:\n    # Topic\n\n[broken](#topic-1)\n",
+    );
+    const { result, output } = await inspectFixture(fixture);
+    assert.equal(result.ok, false, output);
+    assert.match(output, /README\.md:6: missing heading "README\.md#topic-1"/);
+  });
+});
+
+test("Markdown references validate links in referenced footnotes", async () => {
+  await withFixture(async (fixture) => {
+    await writeFixtureFile(
+      fixture.root,
+      "README.md",
+      "# Overview\n\nRead[^note].\n\n[^note]: [broken](missing.md)\n",
+    );
+    const { result, output } = await inspectFixture(fixture);
+    assert.equal(result.ok, false, output);
+    assert.match(output, /README\.md:5: missing local target "missing\.md"/);
+  });
+});
+
+test("Markdown references follow transitive case-insensitive footnote references", async () => {
+  await withFixture(async (fixture) => {
+    await writeFixtureFile(
+      fixture.root,
+      "README.md",
+      "# Overview\n\nRead[^FIRST].\n\n[^first]: See[^SECOND].\n\n[^second]: [broken](missing.md)\n",
+    );
+    const { result, output } = await inspectFixture(fixture);
+    assert.equal(result.ok, false, output);
+    assert.match(output, /README\.md:7: missing local target "missing\.md"/);
+  });
+});
+
+test("Markdown references ignore unreachable footnote reference cycles", async () => {
+  await withFixture(async (fixture) => {
+    await writeFixtureFile(
+      fixture.root,
+      "README.md",
+      "# Overview\n\n[^first]: See[^second].\n\n[^second]: See[^first] and [hidden](missing.md).\n",
+    );
+    const { result, output } = await inspectFixture(fixture);
+    assert.equal(result.ok, true, output);
+  });
+});
+
+test("Markdown references process reachable cyclic footnotes once", async () => {
+  await withFixture(async (fixture) => {
+    await writeFixtureFile(
+      fixture.root,
+      "README.md",
+      "# Overview\n\nRead[^first] and repeat[^first].\n\n[^first]: See[^second] and [body](#overview).\n\n[^second]: See[^first].\n",
+    );
+    const { result, output } = await inspectFixture(fixture);
+    assert.equal(result.ok, true, output);
+  });
+});
+
+test("Markdown references collect footnote headings after body headings", async (t) => {
+  for (const [fragment, expected] of [
+    ["topic-2", true],
+    ["topic-1-1", false],
+  ]) {
+    await t.test(fragment, () =>
+      withFixture(async (fixture) => {
+        await writeFixtureFile(
+          fixture.root,
+          "README.md",
+          `[^note]:\n    # Topic\n\n# Topic\n\n# Topic-1\n\nRead[^note].\n\n[heading](#${fragment})\n`,
+        );
+        const { result, output } = await inspectFixture(fixture);
+        assert.equal(result.ok, expected, output);
+        if (!expected) assert.match(output, /missing heading/);
+      }),
+    );
+  }
+});
+
+test("Markdown references collect footnotes in first-reference order", async (t) => {
+  for (const [fragment, expected] of [
+    ["topic-1-1", true],
+    ["topic-2", false],
+  ]) {
+    await t.test(fragment, () =>
+      withFixture(async (fixture) => {
+        await writeFixtureFile(
+          fixture.root,
+          "README.md",
+          `[^first]:\n    # Topic-1\n\n[^second]:\n    # Topic\n\n# Topic\n\nSecond[^second], then first[^first].\n\n[heading](#${fragment})\n`,
+        );
+        const { result, output } = await inspectFixture(fixture);
+        assert.equal(result.ok, expected, output);
+        if (!expected) assert.match(output, /missing heading/);
+      }),
+    );
+  }
+});
+
+test("Markdown references keep link definitions global inside unused footnotes", async () => {
+  await withFixture(async (fixture) => {
+    await writeFixtureFile(
+      fixture.root,
+      "README.md",
+      "# Overview\n\n[broken][global]\n\n[^unused]:\n    [global]: missing.md\n",
+    );
+    const { result, output } = await inspectFixture(fixture);
+    assert.equal(result.ok, false, output);
+    assert.match(output, /README\.md:3: missing local target "missing\.md"/);
+  });
+});
+
+test("Markdown references use the first matching footnote definition", async () => {
+  await withFixture(async (fixture) => {
+    await writeFixtureFile(
+      fixture.root,
+      "README.md",
+      "# Overview\n\nRead[^note].\n\n[^note]: [body](#overview)\n\n[^note]: [unused](missing.md)\n",
+    );
+    const { result, output } = await inspectFixture(fixture);
+    assert.equal(result.ok, true, output);
+  });
+});
+
+test("Markdown references ignore front matter with or without a UTF-8 BOM", async (t) => {
+  for (const prefix of ["", "\uFEFF"]) {
+    await t.test(prefix ? "with BOM" : "without BOM", () =>
+      withFixture(async (fixture) => {
+        await writeFixtureFile(
+          fixture.root,
+          "README.md",
+          `${prefix}---\ntitle: '[example](missing-frontmatter.md)'\n---\n\n# Overview\n\n[section](#overview)\n`,
+        );
+        const { result, output } = await inspectFixture(fixture);
+        assert.equal(result.ok, true, output);
+      }),
+    );
+  }
+});
+
+test("Markdown references still reject broken body links after BOM front matter", async () => {
+  await withFixture(async (fixture) => {
+    await writeFixtureFile(
+      fixture.root,
+      "README.md",
+      "\uFEFF---\ntitle: '[example](missing-frontmatter.md)'\n---\n\n# Overview\n\n[broken](missing-body.md)\n",
+    );
+    const { result, output } = await inspectFixture(fixture);
+    assert.equal(result.ok, false, output);
+    assert.match(
+      output,
+      /README\.md:7: missing local target "missing-body\.md"/,
+    );
+    assert.doesNotMatch(output, /missing-frontmatter/);
+  });
+});
+
+test("Markdown references do not count fenced examples as document headings", async () => {
+  await withFixture(async (fixture) => {
+    await writeFixtureFile(
+      fixture.root,
+      "README.md",
+      "# Overview\n\n[example](#example-heading)\n\n```md\n# Example heading\n```\n",
+    );
+    const { result, output } = await inspectFixture(fixture);
+    assert.equal(result.ok, false, output);
+    assert.match(output, /README\.md:3/);
+    assert.match(output, /#example-heading/);
+  });
+});
+
+test("Markdown references reject nonexistent duplicate heading IDs", async () => {
+  await withFixture(async (fixture) => {
+    await writeFixtureFile(fixture.root, "AGENTS.md", "# Repeat\n# Repeat\n");
+    await writeFixtureFile(
+      fixture.root,
+      "README.md",
+      "[missing](AGENTS.md#repeat-2)\n",
+    );
+    const { result, output } = await inspectFixture(fixture);
+    assert.equal(result.ok, false, output);
+    assert.match(output, /AGENTS\.md#repeat-2/);
+  });
+});
+
+test("Markdown references skip URLs, outside-root links and optional runtime records", async () => {
+  await withFixture(async (fixture) => {
+    await writeFixtureFile(
+      fixture.root,
+      "README.md",
+      [
+        "# Overview",
+        "",
+        "[web](https://example.invalid/missing.md#heading)",
+        "[email](mailto:example@example.invalid)",
+        "[network](//example.invalid/missing.md)",
+        "[sibling](../missing.md#heading)",
+        "[encoded sibling](%2E%2E/missing.md#heading)",
+        "[excluded fragment](../missing.md#bad%ZZ)",
+        "[plan](plans/not-created.md#pending)",
+        "[excluded plan fragment](plans/not-created.md#bad%ZZ)",
+        "[artifact](/artifacts/not-created.png)",
+        "",
+      ].join("\n"),
+    );
+    const { result, output } = await inspectFixture(fixture);
+    assert.equal(result.ok, true, output);
+  });
+});
+
+test("Markdown references skip symlinks whose real target is outside the workflow", async () => {
+  await withFixture(async (fixture) => {
+    const outside = path.join(fixture.temporaryRoot, "outside.md");
+    await writeFile(outside, "# Outside\n\n[unread](missing-private.md)\n");
+    await symlink(
+      outside,
+      path.join(fixture.root, "instructions/local/outside.md"),
+    );
+    await writeFixtureFile(
+      fixture.root,
+      "README.md",
+      "[outside](instructions/local/outside.md#bad%ZZ)\n",
+    );
+    const { result, output } = await inspectFixture(fixture);
+    assert.equal(result.ok, true, output);
+  });
+});
+
+test("Markdown references skip missing children under outside-root directory symlinks", async (t) => {
+  for (const reference of [
+    "instructions/local/app/missing.md",
+    "instructions/local/app/not-created/deeper.md#missing",
+    "/instructions/local/app/missing.md#bad%ZZ",
+  ]) {
+    await t.test(reference, () =>
+      withFixture(async (fixture) => {
+        const outside = path.join(fixture.temporaryRoot, "sibling-app");
+        await mkdir(outside);
+        await symlink(
+          outside,
+          path.join(fixture.root, "instructions/local/app"),
+          "dir",
+        );
+        await writeFixtureFile(
+          fixture.root,
+          "README.md",
+          `[outside](${reference})\n`,
+        );
+        const { result, output } = await inspectFixture(fixture);
+        assert.equal(result.ok, true, output);
+      }),
+    );
+  }
+});
+
+test("Markdown references reject missing children under inside-root directory symlinks", async () => {
+  await withFixture(async (fixture) => {
+    const inside = path.join(fixture.root, "instructions/local/owned");
+    await mkdir(inside);
+    await symlink(
+      inside,
+      path.join(fixture.root, "instructions/local/app"),
+      "dir",
+    );
+    await writeFixtureFile(
+      fixture.root,
+      "README.md",
+      "[missing](instructions/local/app/missing.md)\n",
+    );
+    const { result, output } = await inspectFixture(fixture);
+    assert.equal(result.ok, false, output);
+    assert.match(
+      output,
+      /missing local target "instructions\/local\/app\/missing\.md"/,
+    );
+  });
+});
+
+test("Markdown references reject missing targets returning inside through symlink chains", async (t) => {
+  for (const kind of ["file", "dir"]) {
+    for (const form of ["absolute", "relative"]) {
+      await t.test(`${kind}: ${form}`, () =>
+        withFixture(async (fixture) => {
+          const outside = path.join(fixture.temporaryRoot, "sibling-app");
+          await mkdir(outside);
+          await symlink(
+            outside,
+            path.join(fixture.root, "instructions/local/app"),
+            "dir",
+          );
+          const missing = path.join(fixture.root, "missing-inside");
+          await symlink(
+            form === "absolute" ? missing : path.relative(outside, missing),
+            path.join(outside, "back"),
+            kind,
+          );
+          const reference = `instructions/local/app/back${kind === "dir" ? "/nested/missing.md" : ""}`;
+          await writeFixtureFile(
+            fixture.root,
+            "README.md",
+            `[inside](${reference})\n`,
+          );
+          const { result, output } = await inspectFixture(fixture);
+          assert.equal(result.ok, false, output);
+          assert.match(output, /invalid local Markdown references/);
+          assert.match(output, /missing local target/);
+        }),
+      );
+    }
+  }
+});
+
+test("Markdown references skip dangling symlinks pointing outside the workflow", async (t) => {
+  for (const kind of ["file", "dir"]) {
+    for (const form of ["absolute", "relative"]) {
+      await t.test(`${kind}: ${form}`, () =>
+        withFixture(async (fixture) => {
+          const outside = path.join(fixture.temporaryRoot, "sibling-app");
+          await mkdir(outside);
+          const missing = path.join(outside, "not-created");
+          const local = path.join(fixture.root, "instructions/local");
+          await symlink(
+            form === "absolute" ? missing : path.relative(local, missing),
+            path.join(local, "external-link"),
+            kind,
+          );
+          const reference = `instructions/local/external-link${kind === "dir" ? "/nested/missing.md" : ""}`;
+          await writeFixtureFile(
+            fixture.root,
+            "README.md",
+            `[outside](${reference})\n`,
+          );
+          const { result, output } = await inspectFixture(fixture);
+          assert.equal(result.ok, true, output);
+        }),
+      );
+    }
+  }
+});
+
+test("Markdown references follow repeated directory aliases before an outside target", async () => {
+  await withFixture(async (fixture) => {
+    const local = path.join(fixture.root, "instructions/local");
+    await symlink(".", path.join(local, "repeat"), "dir");
+    await symlink(
+      path.join(fixture.temporaryRoot, "not-created.md"),
+      path.join(local, "external-link"),
+    );
+    await writeFixtureFile(
+      fixture.root,
+      "README.md",
+      "[outside](instructions/local/repeat/repeat/external-link)\n",
+    );
+    const { result, output } = await inspectFixture(fixture);
+    assert.equal(result.ok, true, output);
+  });
+});
+
+test("Markdown references reject cyclic symlink targets", async () => {
+  await withFixture(async (fixture) => {
+    const local = path.join(fixture.root, "instructions/local");
+    await symlink("cycle-b", path.join(local, "cycle-a"));
+    await symlink("cycle-a", path.join(local, "cycle-b"));
+    await writeFixtureFile(
+      fixture.root,
+      "README.md",
+      "[cycle](instructions/local/cycle-a)\n",
+    );
+    const { result, output } = await inspectFixture(fixture);
+    assert.equal(result.ok, false, output);
+    assert.match(output, /missing local target/);
+  });
+});
+
+test("Markdown references validate headings after returning symlinks", async (t) => {
+  for (const [fragment, expected] of [
+    ["fixture", true],
+    ["missing", false],
+  ]) {
+    await t.test(fragment, () =>
+      withFixture(async (fixture) => {
+        const outside = path.join(fixture.temporaryRoot, "sibling-app");
+        await mkdir(outside);
+        await symlink(
+          outside,
+          path.join(fixture.root, "instructions/local/app"),
+          "dir",
+        );
+        await symlink(
+          path.join(fixture.root, "AGENTS.md"),
+          path.join(outside, "back.md"),
+        );
+        await writeFixtureFile(
+          fixture.root,
+          "README.md",
+          `[inside](instructions/local/app/back.md#${fragment})\n`,
+        );
+        const { result, output } = await inspectFixture(fixture);
+        assert.equal(result.ok, expected, output);
+        if (!expected) assert.match(output, /missing heading/);
+      }),
+    );
+  }
+});
+
+test("Markdown reference diagnostics omit query values and source excerpts", async (t) => {
+  for (const reference of [
+    "AGENTS.md?token=private-fixture-value#missing",
+    "bad%ZZ.md?token=private-fixture-value",
+    "AGENTS.md#bad%ZZ",
+  ]) {
+    await t.test(reference.split("?")[0], () =>
+      withFixture(async (fixture) => {
+        await writeFixtureFile(
+          fixture.root,
+          "README.md",
+          `[reference](${reference})\n`,
+        );
+        const { result, output } = await inspectFixture(fixture);
+        assert.equal(result.ok, false, output);
+        assert.match(output, /README\.md:1/);
+        assert.doesNotMatch(output, /private-fixture-value|token=/);
+      }),
+    );
+  }
+});
+
 test("health check accepts only default, full, and help modes", () => {
   assert.deepEqual(parseHealthCheckArgs([]), { full: false });
   assert.deepEqual(parseHealthCheckArgs(["--full"]), { full: true });

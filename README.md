@@ -169,6 +169,27 @@ instruction routes, and `.codex/config.toml` syntax and documented field types
 using a pinned TOML parser; errors omit config excerpts. Static checks do not
 prove model availability, account permission, or client support.
 
+Health also validates local Markdown links and images in `AGENTS.md`, `README.md`,
+skills, docs, instructions (including ignored local/index files), and prompts.
+Inline and reference-style destinations resolve relative to their document;
+leading-slash paths resolve from the workflow root. Query strings are ignored
+for path lookup, and URL-encoded paths and fragments are decoded. Files and
+directories must exist. Fragments targeting Markdown files must match a generated
+heading ID, including formatted headings, setext headings, and duplicate suffixes.
+Markdown parsing reuses the installed Prettier plugin, so code examples, nested
+fences, inline code, and comments do not introduce links or headings.
+
+Diagnostics identify the source file and line plus the missing target or heading,
+without query values or source excerpts. Default health, pre-commit, and pre-push
+all include this check. It remains offline and read-only: external URLs, links
+outside this repository (including symlinks to sibling application files), and
+ignored runtime-data roots such as `plans/` and `artifacts/` are excluded.
+Fragments on non-Markdown targets and raw HTML links are not inspected. Markdown
+fragments must name generated headings; custom HTML anchors are not recognized.
+Valid references do not prove the documented behavior is correct;
+use the relevant tests and review evidence for that. Documentation commands are
+never executed by the reference check.
+
 ### Skill authoring validation
 
 The skill-creator Python validator requires PyYAML. To recreate its local
