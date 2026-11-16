@@ -8,6 +8,9 @@ requested independent review. Review the actual Git diff after plan-owned writer
 - Confirm the base, commit, or uncommitted diff being reviewed.
 - Separate plan-owned changes from unrelated and pre-existing work.
 - Trace each requested outcome to implementation and validation evidence.
+  Inspect relevant artifacts directly when they establish required behavior,
+  and confirm they apply to the reviewed version and environment. Report missing,
+  mismatched, or inconclusive evidence as a validation gap.
 
 ## Findings
 

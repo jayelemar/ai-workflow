@@ -28,6 +28,14 @@ scripts, and sandboxed browser or network validation.
   valid layer, and why future developers will understand the test.
 - Test observable behavior and business outcomes. Avoid implementation-detail,
   call-count, mock-behavior, and framework-internal assertions.
+- Consider property-based testing when many valid inputs or event sequences
+  must obey the same rule. Explain the rule being checked, the gap in existing
+  coverage, and the expected benefit before proposing additional tests.
+- Consider formal verification only for a specific critical rule when simpler
+  checks provide insufficient confidence. Explain what the model or proof would
+  establish, its assumptions, limitations, and maintenance cost.
+- Follow the [scope and approval rules](../../AGENTS.md#working-rules) before
+  introducing additional tooling or expanding verification work.
 - Treat flakes as defects: fix, quarantine, or remove tests with arbitrary waits,
   unstable external dependencies, or timing sensitivity. Delete obsolete,
   duplicate, low-signal, removed-feature, and costly-to-maintain coverage.
@@ -43,6 +51,12 @@ scripts, and sandboxed browser or network validation.
 Follow [Validation and Completion](../../AGENTS.md#validation-and-completion)
 for required versus optional evidence, completion blocking, and deferred checks.
 
+- For critical implemented user workflows, read and follow the
+  [workflow verification map rules](documentation-runbooks.md#rules). Consult the
+  project's documented map when selecting checks. Identify the affected user
+  behavior and states, then reuse the smallest sufficient existing tests or
+  runtime drivers. Report missing maps or coverage and propose additional tooling
+  under the [scope and approval rules](../../AGENTS.md#working-rules).
 - Before saving a validation command, name its observable invariant and expected
   result. Verify the exact command exercises it with the relevant configuration,
   fixtures, environment, and external inputs.

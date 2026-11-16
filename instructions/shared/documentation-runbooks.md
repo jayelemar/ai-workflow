@@ -1,5 +1,5 @@
-Version: 1.0
-Last Updated: 2026-07-18
+Version: 1.1
+Last Updated: 2026-11-16
 
 # Documentation And Runbook Instructions
 
@@ -12,6 +12,7 @@ usable by operators, implementers, and reviewers.
 
 - Security-sensitive domains, cross-system contracts, ownership boundaries, migrations, deployments, and operational recovery changes.
 - Workflow documentation, skill entrypoints, prompts, and repository instructions.
+- Documentation of critical implemented user workflows and their verification.
 
 ## Rules
 
@@ -19,6 +20,11 @@ usable by operators, implementers, and reviewers.
 - Document system contracts, ownership boundaries, and externally visible compatibility expectations when a change crosses modules, services, or teams.
 - Document deployment, migration, rollback, and recovery procedures for changes that need operator action or production observation.
 - Keep README and feature documentation aligned with architecture changes that alter entry points, boundaries, configuration, or operating procedures.
+- For critical implemented user workflows, maintain a concise verification map
+  in existing project or feature documentation. Include the user entry point,
+  important states and expected outcomes, verification commands or test
+  references, prerequisites, and known gaps. Keep it current when the workflow
+  or its verification changes.
 - Write runbooks as executable steps with prerequisites, signals, safe actions, escalation criteria, and recovery verification.
 
 - Give each file one purpose and each rule one canonical owner. Link to that
