@@ -26,9 +26,9 @@ remain visible, reachable, and usable across supported device sizes.
   When the project does not declare a smaller supported viewport, use a compact
   portrait baseline of 375 by 667 logical points on iOS and 360 by 640 logical
   points on Android.
-- Also verify a representative modern or tall phone. Use logical viewport
-  dimensions as acceptance criteria rather than relying only on named device
-  models.
+- Also verify a representative modern or tall phone within the selected
+  platforms. Use logical viewport dimensions as acceptance criteria rather
+  than relying only on named device models.
 - Content that can grow because of headings, copy, localization, dynamic data,
   loading or error states, accessibility text scaling, or inserted controls
   must reflow or be reachable through scrolling.
@@ -62,8 +62,10 @@ remain visible, reachable, and usable across supported device sizes.
 
 ## Validation
 
-- For a layout-affecting mobile change, verify the affected screen on both a
-  compact phone viewport and a representative modern or tall phone viewport.
+- For a layout-affecting mobile change, verify the affected screen on a
+  compact phone viewport and a representative modern or tall phone viewport
+  within each platform selected under [Mobile Virtual Devices](virtual-devices.md).
+  Two viewport sizes do not automatically require both iOS and Android.
 - Exercise the state with the greatest expected vertical content and confirm
   every required action is fully visible or reachable by scrolling and can be
   activated.
