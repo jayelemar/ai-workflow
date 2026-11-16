@@ -17,6 +17,22 @@ work or accumulating unnecessary simulators and emulators.
 
 ## Rules
 
+- When a task first needs simulator or emulator testing in the current
+  conversation, ask "iOS Simulator, Android Emulator, or both?" unless the user
+  has already selected the platforms. Reuse that choice across tasks and reruns
+  until the user changes it; do not save it as a global preference. Documentation
+  changes and changes requiring no native checks do not trigger this question.
+- Wait for the answer before selecting, creating, booting, or testing on a
+  device. Continue independent work while waiting. Do not infer a choice from
+  available or running devices, or default to both platforms.
+- Run the selected checks using available tools before asking the user for
+  manual help. If blocked, report the exact unverified behavior, limitation,
+  and smallest follow-up check under
+  [Validation and Completion](../../AGENTS.md#validation-and-completion).
+- A platform choice defines coverage, not a waiver of an explicit
+  platform-specific acceptance requirement. If the choice cannot establish
+  that requirement, explain the gap and resolve the conflict with the user;
+  do not silently expand coverage or claim the requirement passed.
 - Inventory existing devices before creating one. Match the task's required
   device type, OS/runtime, and logical viewport; keep device matrices and
   platform-specific commands in local instructions.
@@ -56,6 +72,8 @@ work or accumulating unnecessary simulators and emulators.
 
 ## Validation
 
+- Report the selected platforms and the platforms actually tested. Evidence
+  from one platform does not establish behavior on the other.
 - Before using a selected device, confirm its identifier, model, OS/runtime,
   required viewport, and availability from current tooling evidence.
 - After a rename or creation, confirm the displayed name matches the metadata

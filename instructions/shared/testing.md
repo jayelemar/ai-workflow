@@ -75,12 +75,18 @@ for required versus optional evidence, completion blocking, and deferred checks.
 - For environment-dependent behavior, inspect effective configuration in every
   required environment at its consuming boundary. Mocks or local evidence cannot
   prove DNS, TLS, OS association, deployed configuration, or external services.
-- Require direct compatible native-runtime or physical-device checks when
-  acceptance depends on native rendering, frame timing, lifecycle, platform file
-  URIs, or native upload transport. Source-only, mocked, browser-only, and
-  non-native checks supplement but cannot replace this evidence. Client-only or
-  server-only work without that native boundary does not require native checks.
-- Do not add a generic operator-confirmation gate. Ask only when venues differ
+- Require direct compatible native-runtime checks when acceptance depends on
+  native rendering, frame timing, lifecycle, platform file URIs, or native upload
+  transport. Compatible iOS simulators and Android emulators provide
+  native-runtime evidence for behavior they reproduce. Require physical hardware
+  only for a named behavior that virtual devices cannot establish. Source-only,
+  mocked, browser-only, and non-native checks supplement but cannot replace
+  required native evidence. Client-only or server-only work without that native
+  boundary does not require native checks.
+- For mobile simulator platform selection and agent-run checks, follow
+  [Mobile Virtual Devices](../mobile/virtual-devices.md#rules).
+- Apart from that platform choice, do not add a generic operator-confirmation
+  gate. Ask only when venues differ
   materially in evidence or residual risk and the request or finalized spec
   leaves that choice unresolved. Name required operator authority for a new
   deployment, credential use, privileged action, or shared-data mutation.
