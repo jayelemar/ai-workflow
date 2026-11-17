@@ -1,5 +1,5 @@
-Version: 1.2
-Last Updated: 2026-11-13
+Version: 1.3
+Last Updated: 2026-11-17
 
 # Mobile UI Instructions
 
@@ -73,8 +73,17 @@ remain visible, reachable, and usable across supported device sizes.
   obstruction, frame timing, or gesture interaction. Component-tree presence,
   snapshots, and source inspection are supplemental and cannot prove those
   behaviors.
-- Check accessibility text scaling when changed text or controls are near a
-  layout boundary.
+- Include accessibility checks in plans only when explicitly requested, required
+  by acceptance criteria, or justified by a concrete regression risk in the
+  changed behavior. Name the risk and the smallest sufficient check; targeting
+  iOS or Android alone does not require an accessibility checklist.
+- Check enlarged text when a change affects text scaling or reflow, or creates
+  a concrete clipping or control-reachability risk at larger font sizes. Check
+  VoiceOver or TalkBack when a change affects accessible labels, roles, focus
+  order, announcements, or screen-reader interaction.
+- Reuse relevant existing coverage or bounded manual checks. Add automated
+  accessibility tests only when an uncovered regression risk warrants maintained
+  coverage; do not add a generic accessibility suite for routine mobile changes.
 - Exercise changed states and transitions, checking input preservation and
   recovery actions. For background-refresh changes, verify populated content
   stays visible while progress is indicated.
