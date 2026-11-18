@@ -6,6 +6,15 @@ requests. It routes plan creation to `.ai/.agents/skills/create-plan/SKILL.md`.
 
 ## Run Setup
 
+The local `instructions/index.md` and `instructions/local/architecture.md`
+are ignored by Git and absent from a fresh clone. The
+[setup prompt](../prompts/setup-local-codex.md) handles missing files through
+[Create or Update Instructions](../prompts/manage-instructions.md) in bootstrap
+mode, then continues installation after its creation approval and validation.
+Existing valid instructions are preserved. For manual CLI setup, complete that
+bootstrap first if either file is missing; the utility requires a nonempty index
+and does not discover or generate project instructions.
+
 Run only after an explicit local setup request, from the containing project root (Git or unversioned):
 
 ```bash
@@ -13,9 +22,9 @@ rtk proxy corepack pnpm@10.34.4 --dir .ai setup:codex
 ```
 
 From `.ai`, the equivalent is `rtk proxy corepack pnpm@10.34.4 setup:codex`.
-Delegate all mutation, preflight, and validation to the
+After instruction bootstrap, delegate all installation mutation, preflight, and validation to the
 [setup utility](../scripts/setup/agents-override.mjs). Do not add independent
-filesystem, Git, or workflow-stage logic.
+installation filesystem, Git, or workflow-stage logic.
 
 ## Installed Files
 
