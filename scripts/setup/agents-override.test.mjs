@@ -90,7 +90,7 @@ const excludeRules = managedPaths.map((name) => `/${name}`);
 // test-only block can miss differences introduced by Markdown formatting.
 test("the literal documented routing block preserves custom guidance", async () => {
   const documentation = await readFile(
-    path.join(repositoryRoot, "docs/codex-agent.md"),
+    path.join(repositoryRoot, "docs/codex-setup.md"),
     "utf8",
   );
   const documentedBlock = documentation.match(/```md\n([\s\S]*?)\n```/)?.[1];

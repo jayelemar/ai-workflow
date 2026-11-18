@@ -1,10 +1,10 @@
-# Codex Project Instruction Setup
+# Codex Setup
 
 Codex checks `AGENTS.override.md` before `AGENTS.md` in each workspace
 directory. The nested [AGENTS.md](../AGENTS.md) owns execution behavior for native Execute plan, `/goal`, and ordinary
 requests. It routes plan creation to `.ai/.agents/skills/create-plan/SKILL.md`.
 
-## Setup and Outputs
+## Run Setup
 
 Run only after an explicit local setup request, from the containing project root (Git or unversioned):
 
@@ -13,9 +13,14 @@ rtk proxy corepack pnpm@10.34.4 --dir .ai setup:codex
 ```
 
 From `.ai`, the equivalent is `rtk proxy corepack pnpm@10.34.4 setup:codex`.
-Delegate mutation and preflight to the [setup utility](../scripts/setup/agents-override.mjs).
-It preserves readable regular root `AGENTS.md` bytes and tracking state, and
-installs these project-local outputs:
+Delegate all mutation, preflight, and validation to the
+[setup utility](../scripts/setup/agents-override.mjs). Do not add independent
+filesystem, Git, or workflow-stage logic.
+
+## Installed Files
+
+The utility preserves readable regular root `AGENTS.md` bytes and tracking
+state, and installs these project-local outputs:
 
 | Output                                      | Behavior                                                                                                                         |
 | ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
@@ -49,8 +54,11 @@ GitHub login, and CLI profile mappings locally; existing bytes, modes, and
 timestamps are preserved on reruns. Account authentication and CLI profile
 configuration remain separate operator steps. Both delivery skills read the
 local file through the shared delivery instructions, without changing the index.
+After setup, report the ignored template's location and ask the operator to
+complete its mappings once. Setup does not sign in, create CLI profiles, or
+copy credentials.
 
-## Renamed skills and existing installations
+## Existing Installations and Skill Renames
 
 Run the setup command above to migrate the four previously managed skill links
 to the new names. Only untracked symlinks with the exact old generated relative
@@ -62,7 +70,7 @@ Retries reuse valid new links and finish any remaining legacy-link removal.
 Historical plans and prepared task roots are not rewritten. Recreate prepared
 execution environments when they need the renamed workflow.
 
-## Active Routing Block
+## Custom Instruction Routing
 
 A custom override is preserved byte-for-byte only when this exact block occurs
 once as active Markdown, outside code fences and enclosing HTML comments:
@@ -87,6 +95,7 @@ automatically rewritten. Accepted overrides and exact excludes remain unchanged.
 Whole-operation preflight validates sources, outputs, ancestors, routing, and
 excludes before managed writes. Stop and resolve the reported condition without
 discarding root/custom guidance; never force, merge, or overwrite automatically.
+Do not broaden ignores or bypass preflight.
 
 - Reject tracked managed outputs, tracked overrides, symlink/non-regular
   instruction targets, defined legacy Codex conflicts, missing sources, unsafe
@@ -113,6 +122,9 @@ discarding root/custom guidance; never force, merge, or overwrite automatically.
 - Unexpected write failures must report partial writes. Preserve unrelated
   content, resolve the reported conflict, and retry; non-zero exit is no success.
 
+Report actual command output and exit status. Never claim success after a
+non-zero result.
+
 Without a Git parent, setup installs and verifies the same outputs while skipping
 parent tracking and exclude operations. The independent `.ai` Git repository
 and its private account ignore checks remain required. Existing output containers
@@ -121,7 +133,7 @@ Git metadata directories, and a parent inside another worktree still stop setup
 before writes. Run setup at the coordination root, not in a child application
 repository.
 
-## Runtime and Verification
+## Runtime Configuration
 
 The repository `.codex/config.toml` sets trusted `.ai` sessions' default model
 to `gpt-6.1-sol` and otherwise unconfigured sub-agents to `gpt-6.1-sol` with
@@ -129,6 +141,8 @@ to `gpt-6.1-sol` and otherwise unconfigured sub-agents to `gpt-6.1-sol` with
 for containing-workspace sessions; nested config alone does not apply above
 `.ai`. Restart Codex from the trusted project root. Higher-priority runtime and
 command-line settings still apply. See [project configuration](https://learn.chatgpt.com/docs/config-file/config-advanced).
+
+## Verify Setup
 
 After setup, verify in a fresh client:
 

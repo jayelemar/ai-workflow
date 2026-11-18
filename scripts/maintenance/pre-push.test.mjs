@@ -45,7 +45,7 @@ test("executable instructions and production scripts select their regression sui
       "scripts/setup/agents-override.mjs",
       "scripts/setup/agents-override.test.mjs",
     ],
-    ["docs/codex-agent.md", "scripts/setup/agents-override.test.mjs"],
+    ["docs/codex-setup.md", "scripts/setup/agents-override.test.mjs"],
     [
       "scripts/maintenance/cleanup-local.mjs",
       "scripts/maintenance/cleanup-local.test.mjs",

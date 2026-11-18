@@ -74,7 +74,7 @@ test("safety and delivery boundaries remain explicit", async () => {
 test("root authority separates planning from saved-plan execution", async () => {
   const [agents, setupDoc] = await Promise.all([
     read("AGENTS.md"),
-    read("docs/codex-agent.md"),
+    read("docs/codex-setup.md"),
   ]);
 
   assert.match(agents, /\.ai\/\.agents\/skills\/create-plan\/SKILL\.md/);
@@ -278,7 +278,7 @@ test("workflow cleanup requires explicit scope, confirms, and preserves branches
 
 test("role guidance has one canonical owner with supported runtime settings", async () => {
   const source = await read("AGENTS.md");
-  const setup = await read("docs/codex-agent.md");
+  const setup = await read("docs/codex-setup.md");
   assert.match(
     setup,
     /\[.*?\]\(\.\.\/AGENTS\.md(?:#subagent-models-and-names)?\)/,

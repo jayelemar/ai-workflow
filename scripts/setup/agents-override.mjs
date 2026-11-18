@@ -392,7 +392,7 @@ const inspectOverride = async () => {
   }
   if (!hasExplicitRouting(content)) {
     throw new Error(
-      `${OVERRIDE_NAME} needs one exact active routing block from .ai/docs/codex-agent.md (root AGENTS.md, then .ai/AGENTS.md, then the instruction index); it was preserved. Add the documented block outside code fences and comments, then retry`,
+      `${OVERRIDE_NAME} needs one exact active routing block from .ai/docs/codex-setup.md (root AGENTS.md, then .ai/AGENTS.md, then the instruction index); it was preserved. Add the documented block outside code fences and comments, then retry`,
     );
   }
   return { content, status: "custom routing preserved" };

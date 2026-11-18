@@ -21,7 +21,7 @@ export function selectTests(paths) {
       selected.add(contextTests);
     } else if (
       file === "scripts/setup/agents-override.mjs" ||
-      file === "docs/codex-agent.md"
+      file === "docs/codex-setup.md"
     ) {
       selected.add(setupTests);
     } else if (file === "scripts/maintenance/cleanup-local.mjs") {
