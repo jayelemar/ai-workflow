@@ -65,7 +65,7 @@ required context conflicts with an exclusion. A broader snapshot requires
 explicit named scope and never implicitly authorizes credential copying.
 
 Require readable regular `AGENTS.override.md`, `.ai/AGENTS.md`, and the index.
-Require the exact active routing block documented in `docs/codex-agent.md`
+Require the exact active routing block documented in `docs/codex-setup.md`
 inside `.ai`, including the conditional root route, exactly once. Verify its
 explicit routing order, including existing root guidance. Preserve an accepted
 custom override byte-for-byte. If routing is absent or

@@ -6,24 +6,19 @@ and execution skills, independent utilities, and self-contained health checks.
 
 ## Setup
 
-Only after explicitly requesting local setup, run from the containing Git
-workspace:
+To connect this workspace to the shared Codex instructions and skills,
+ask Codex to run [Local Codex Setup](prompts/setup-local-codex.md).
+
+For manual setup, run from the containing project root (Git or unversioned):
 
 ```bash
 rtk proxy corepack pnpm@10.34.4 --dir .ai setup:codex
 ```
 
 Restart Codex from the trusted project root afterward. The utility preserves
-root guidance, installs project-local routing, managed skill links, and a config
-snapshot. See [Codex Agent Setup](docs/codex-agent.md) for exact paths, conflict
-handling, active routing, and native discovery verification. No global skills
-or user configuration are installed.
-
-Setup also creates ignored `instructions/local/github.md` inside `.ai` with
-generic account-mapping placeholders. Complete the mappings locally once;
-rerunning setup preserves existing private instructions and fills in a missing
-template. Account names and machine-specific profile paths stay out of the
-public workflow source.
+root guidance and installs project-local routing, skill links, and configuration.
+Read [Codex Setup](docs/codex-setup.md) before running setup for requirements,
+installed files, account mappings, conflict recovery, and verification.
 
 ## Workflow
 
