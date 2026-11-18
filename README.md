@@ -8,6 +8,8 @@ and execution skills, independent utilities, and self-contained health checks.
 
 To connect this workspace to the shared Codex instructions and skills,
 ask Codex to run [Local Codex Setup](prompts/setup-local-codex.md).
+If local instructions are missing, that prompt bootstraps them with one creation
+approval, then continues setup in the same session.
 
 For manual setup, run from the containing project root (Git or unversioned):
 
