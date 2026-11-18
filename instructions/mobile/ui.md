@@ -1,5 +1,5 @@
-Version: 1.2
-Last Updated: 2026-11-13
+Version: 1.3
+Last Updated: 2026-11-19
 
 # Mobile UI Instructions
 
@@ -73,8 +73,9 @@ remain visible, reachable, and usable across supported device sizes.
   obstruction, frame timing, or gesture interaction. Component-tree presence,
   snapshots, and source inspection are supplemental and cannot prove those
   behaviors.
-- Check accessibility text scaling when changed text or controls are near a
-  layout boundary.
+- Run enlarged-text and accessibility text-scaling checks only when the user
+  explicitly requests them. Added controls, growing content, or proximity to
+  layout boundaries do not trigger these checks.
 - Exercise changed states and transitions, checking input preservation and
   recovery actions. For background-refresh changes, verify populated content
   stays visible while progress is indicated.
