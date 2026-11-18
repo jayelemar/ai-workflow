@@ -253,7 +253,6 @@ test("workflow cleanup requires explicit scope, confirms, and preserves branches
     /Selection defines eligibility, never checkboxes, prose, filenames, age/,
     /including active\s+plans/,
     /Reject missing\s+plans/,
-    /symlinks[\s\S]+including dangling links/,
     /Reject ambiguous\/shared ownership/,
     /all source plans and references, including\s+unselected plans/,
     /Type PROCEED to clean up only the selected plans listed above, or CANCEL to stop\./,
@@ -274,6 +273,36 @@ test("workflow cleanup requires explicit scope, confirms, and preserves branches
     assert.match(source, /plan: \.ai\/plans\/<plan-name>\.md/);
     assert.match(source, /all-plans: true/);
   }
+});
+
+test("workflow cleanup treats contained symlinks as leaves and rejects linked boundaries", async () => {
+  const cleanup = (await read("prompts/worktree-cleanup.md")).replace(
+    /\s+/g,
+    " ",
+  );
+
+  for (const expectation of [
+    /Inspect entries with `lstat` or equivalent no-follow metadata/,
+    /Reject symlinks\s+at source `\.ai\/`, `plans\/`, source plan files, task roots, native worktree\s+roots, task-root parent, managed root directories, and every existing ancestor\s+of a cleanup target/,
+    /Allow symlinks only inside selected task roots and plan-owned record\s+directories/,
+    /including dependency links in `node_modules`, directory links,\s+external-target links, and dangling links/,
+    /Treat each link as a leaf; never\s+traverse, inspect, or delete its target/,
+    /Check containment and exact plan\s+ownership of the link's own path/,
+    /Reject standalone symlink record targets/,
+    /complete in-memory symlink inventory of relative entry paths and\s+`readlink` destinations/,
+    /Summarize symlink counts and locations by task root or record directory/,
+    /group dependency links under `node_modules` and show at most five example\s+paths per group/,
+    /Contained links will be removed; external targets remain untouched\./,
+    /repeat discovery[\s\S]+full\s+inspection, including the complete symlink inventory/,
+    /symlink paths or destinations[\s\S]+changed,[\s\S]+require a new `PROCEED` or `CANCEL`/,
+    /All removal methods, including recursive removal, must never follow\s+directory symlinks/,
+    /unlink symlink entries themselves without trailing slashes or\s+target resolution/,
+  ])
+    assert.match(cleanup, expectation);
+  assert.doesNotMatch(
+    cleanup,
+    /Check every target, existing ancestor, and directory descendant for symlinks/,
+  );
 });
 
 test("role guidance has one canonical owner with supported runtime settings", async () => {

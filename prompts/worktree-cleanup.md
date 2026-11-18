@@ -59,10 +59,19 @@ Build one inventory, grouped by selected plan, in deterministic filename order:
    `.ai/logs/`, `.ai/state/`, and `.ai/tmp/` whose first relative component
    exactly matches the plan name. Include additional records explicitly
    referenced by that plan only beneath those same managed roots.
-4. Check every target, existing ancestor, and directory descendant for symlinks
-   (including dangling links), traversal, and escape from its exact allowed
-   root. Include source plans, task-root parent, and managed roots. Never follow
-   links or delete a containing directory to bypass inspection.
+4. Inspect entries with `lstat` or equivalent no-follow metadata, including
+   dangling links; do not use target-following existence checks. Reject
+   traversal and escape from each target's exact allowed root. Reject symlinks
+   at source `.ai/`, `plans/`, source plan files, task roots, native worktree
+   roots, task-root parent, managed root directories, and every existing ancestor
+   of a cleanup target. Check ancestors before accessing entries beneath them.
+   Allow symlinks only inside selected task roots and plan-owned record
+   directories, including dependency links in `node_modules`, directory links,
+   external-target links, and dangling links. Treat each link as a leaf; never
+   traverse, inspect, or delete its target. Check containment and exact plan
+   ownership of the link's own path, without resolving its destination. Reject
+   standalone symlink record targets. Never delete a containing directory to
+   bypass inspection.
 5. Check ownership against all source plans and references, including
    unselected plans. Reject ambiguous/shared ownership and overlapping
    directory/child targets even when all owners are selected. References cannot
@@ -76,7 +85,7 @@ Build one inventory, grouped by selected plan, in deterministic filename order:
 ## Inspect
 
 A missing task root does not block source-record cleanup; show it as absent.
-Existing task roots must be real, symlink-free directories contained beneath
+Existing task roots must themselves be real directories contained beneath
 `<workspace>/.worktrees/`, matching one supported layout:
 
 | Layout                                       | Native worktrees                        | Control context      |
@@ -99,6 +108,13 @@ ignored files inside listed roots are also permanently removed even if not
 individually listed. Never print contents, environment values, credentials, or
 secret-derived data.
 
+Keep a complete in-memory symlink inventory of relative entry paths and
+`readlink` destinations for comparison, without printing destination values.
+Summarize symlink counts and locations by task root or record directory;
+group dependency links under `node_modules` and show at most five example
+paths per group, with counts for omitted links. Do not dump individual dependency
+links. State explicitly: Contained links will be removed; external targets remain untouched.
+
 ## Confirm and Recheck
 
 After the complete inventory, ask exactly:
@@ -113,11 +129,20 @@ The invocation itself and every response other than exact `PROCEED` grant no
 deletion authority.
 
 On `PROCEED`, repeat discovery, selector validation, ownership checks, and full
-inspection with the same selector before mutation. If discovered/selected plans,
-source contents, targets, status, registrations, branches, or record inventory
+inspection, including the complete symlink inventory, with the same selector
+before mutation. If discovered/selected plans, source contents, targets, status,
+registrations, branches, record inventory, or symlink paths or destinations
 changed, display the updated inventory and require a new `PROCEED` or `CANCEL`.
+Compare every link, including omitted examples; unchanged summary counts alone
+are insufficient. Unsafe changes stop cleanup before mutation.
 
 ## Delete and Verify
+
+All removal methods, including recursive removal, must never follow directory
+symlinks: unlink symlink entries themselves without trailing slashes or target
+resolution. Use no-follow traversal for real directories and stop if a protected
+root or ancestor becomes a symlink. This applies to native worktree removal and
+remaining task-root and record removal alike.
 
 1. Remove listed registered worktrees through their primary repositories with
    `git worktree remove`. Use `--force` only to discard changes already disclosed
