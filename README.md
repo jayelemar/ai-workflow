@@ -58,7 +58,7 @@ $worktree-setup plan: .ai/plans/example-change.md
 
 $git-commit Prepare commits for these changes.
 
-$pull-request Base: AUTO
+$pull-request
 
 $show-summary
 
