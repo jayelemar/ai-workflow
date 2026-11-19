@@ -21,6 +21,9 @@ Select relevant type, lint, unit, and native checks from current package scripts
 rather than running every command automatically. Determine which command builds
 or launches Electron; avoid building twice without a reason.
 
+Apply [Accessibility test approval](../../shared/testing.md#accessibility-test-approval)
+before planning or running dedicated desktop or renderer accessibility checks.
+
 If the harness accepts an external unpacked or packaged executable, apply the
 shared runtime-compatibility checks and record which executable was exercised,
 even if a test script also builds source.
