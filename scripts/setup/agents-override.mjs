@@ -26,6 +26,7 @@ const SKILL_NAMES = [
   "git-commit",
   "pull-request",
   "show-summary",
+  "show-plan-progress",
   "manual-qa-checklist",
   "brainstorm",
 ];

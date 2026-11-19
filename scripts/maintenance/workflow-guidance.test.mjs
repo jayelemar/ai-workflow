@@ -328,6 +328,7 @@ test("canonical skills declare matching metadata and enable normal matching", as
     "git-commit",
     "pull-request",
     "show-summary",
+    "show-plan-progress",
     "manual-qa-checklist",
     "brainstorm",
   ]) {

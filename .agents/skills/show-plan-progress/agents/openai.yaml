@@ -1,0 +1,4 @@
+interface:
+  display_name: "Show Plan Progress"
+  short_description: "Show evidence-backed implementation plan progress"
+  default_prompt: "Use $show-plan-progress to assess completion of the selected implementation plan and summarize the evidence in chat."
