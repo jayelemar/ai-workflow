@@ -46,6 +46,37 @@ scripts, and sandboxed browser or network validation.
   critical E2E set. Put expensive full regressions, browser matrices, visual,
   performance, and long-running E2E checks in scheduled or dedicated pipelines.
 
+## Accessibility test approval
+
+- Dedicated accessibility testing is off by default on mobile, web, and
+  desktop. This includes VoiceOver, TalkBack and other screen readers,
+  enlarged text/Dynamic Type, browser text scaling, accessibility audits,
+  and other dedicated manual or automated accessibility checks.
+- Do not add these checks to plans, suggest them, or execute them merely
+  because UI, labels, roles, focus, announcements, or layout changed, a
+  regression risk exists, or tooling is available. Continue implementing
+  accessible behavior under the applicable UI instructions.
+- A direct user request to run a named check or explicit approval of a
+  scoped testing proposal authorizes that check. Reuse approval within its
+  stated scope. Generic implementation, plan-execution, or "run tests"
+  instructions do not grant accessibility-testing approval.
+- If an existing task, accepted plan, or runbook explicitly requires an
+  unapproved check, explain that requirement and the smallest proposed check,
+  then ask permission before execution. Do not invent a requirement to trigger
+  this question. Without such a requirement, skip the check without prompting.
+- If approval is declined, do not run or repeatedly request the check. Report
+  it as untested. Resolve any conflicting mandatory acceptance requirement
+  with the user rather than silently removing it or claiming it passed;
+  continue unaffected authorized work.
+- Before running a command, inspect its scope for bundled dedicated
+  accessibility checks. Obtain approval or use an existing narrower command.
+  Do not silently disable maintained tests, change application suites, or
+  claim the broader gate passed after running only a subset.
+- Ordinary functional tests, including incidental label or focus assertions,
+  and UI automation using accessibility selectors remain allowed. Reading
+  an accessibility tree to locate and activate a control is not a screen-reader
+  test and does not authorize a dedicated accessibility audit.
+
 ## Required evidence
 
 Follow [Validation and Completion](../../AGENTS.md#validation-and-completion)
@@ -85,8 +116,8 @@ for required versus optional evidence, completion blocking, and deferred checks.
   boundary does not require native checks.
 - For mobile simulator platform selection and agent-run checks, follow
   [Mobile Virtual Devices](../mobile/virtual-devices.md#rules).
-- Apart from that platform choice, do not add a generic operator-confirmation
-  gate. Ask only when venues differ
+- Apart from that platform choice and [Accessibility test approval](#accessibility-test-approval),
+  do not add a generic operator-confirmation gate. Ask only when venues differ
   materially in evidence or residual risk and the request or finalized spec
   leaves that choice unresolved. Name required operator authority for a new
   deployment, credential use, privileged action, or shared-data mutation.

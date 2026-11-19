@@ -1,5 +1,5 @@
-Version: 2.0
-Last Updated: 2026-08-13
+Version: 2.1
+Last Updated: 2026-11-19
 
 # WCAG Frontend Instructions
 
@@ -48,14 +48,16 @@ Set a framework-agnostic WCAG 2.2 AA baseline for browser and HTML interfaces.
 
 ## Validation
 
-- Manually verify keyboard order, activation, dismissal, and focus return for
-  changed interaction.
-- Inspect accessible names, labels, roles, descriptions, status messages, and
-  landmarks with accessibility tooling when semantics change.
-- Run available automated accessibility and focused regression checks, while
-  recognizing that automation does not establish full WCAG conformance.
-- Verify contrast after visual-token or state-color changes.
-- For optional accessibility checks blocked by unavailable tooling or devices,
+- Follow [Accessibility test approval](../shared/testing.md#accessibility-test-approval)
+  before planning or running dedicated accessibility checks, including
+  screen readers, enlarged text, zoom/text-scaling checks, contrast audits,
+  and automated accessibility tooling. Semantics or visual changes alone
+  do not authorize these checks.
+- Verify keyboard order, activation, dismissal, and focus return as ordinary
+  functional behavior for changed interaction.
+- Keep approved accessibility checks within their authorized scope.
+  Automated results do not establish full WCAG conformance.
+- For approved accessibility checks blocked by unavailable tooling or devices,
   follow [Validation and Completion](../../AGENTS.md#validation-and-completion).
 
 ## Anti-Patterns

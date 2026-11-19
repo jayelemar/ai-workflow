@@ -134,6 +134,8 @@ Use these role defaults unless the user explicitly requests another runtime:
 
 ## Validation and Completion
 
+- Before selecting or running validation, follow
+  [Accessibility test approval](instructions/shared/testing.md#accessibility-test-approval).
 - Run the smallest sufficient validation that proves the changed behavior.
 - Evidence for every acceptance criterion or completion invariant is required,
   including automated, native, physical-device, operator, deployment, external
@@ -166,5 +168,5 @@ Use these role defaults unless the user explicitly requests another runtime:
   user explicitly requests cleanup.
 - When a Git parent checkout exists, do not stage `.ai` files in it.
 
-Version: 3.6
-Last Updated: 2026-11-16
+Version: 3.7
+Last Updated: 2026-11-19
