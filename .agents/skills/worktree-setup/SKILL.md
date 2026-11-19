@@ -113,7 +113,8 @@ After context selection and every repository and context preflight pass:
    structural fidelity and isolation, and recheck every source and prepared
    checkout. Routine setup requires no dependency installation, package manager,
    network access, or default/full workflow health. Implementation handles
-   dependency setup and application validation. Creating worktrees does not
+   dependency setup, repository-documented hook initialization in each prepared
+   checkout, and application validation. Creating worktrees does not
    authorize secret copying or dependency installation.
 
 If any creation, copy, or verification fails after mutation begins, preserve
@@ -128,12 +129,15 @@ execution. Resolve every placeholder to a concrete value; quote shell values.
 The first block is one exact ready-to-copy execution prompt. Include the
 absolute task-local plan path and an explicit repository-ID-to-absolute-worktree-
 path mapping for every repository, even for one repository. Never refer to paths
-"reported above." Include relevant source-work limitations from verification. State that implementation
-handles dependency setup and application validation.
+"reported above." Include relevant source-work limitations from verification.
+State that implementation handles dependency setup, repository-documented hook
+initialization in each prepared checkout, and application validation. Require
+[Hook verification](../../../instructions/shared/delivery-hygiene.md#hook-verification)
+before commits or pushes in the execution handoff.
 For controlled work, require the plan's independent final review before finishing:
 
 ```text
-/goal Implement <task-root>/.ai/plans/<plan-name>.md. Use these prepared worktrees for all plan-owned edits: <repository-id>=<absolute-worktree-path> (repeat for every repository). Preserve its boundaries, keep the task-local plan updated, run every required validation, and finish only when its definition of done is proven. Implementation handles dependency setup and application validation. Implementation and Goal execution have not started; delivery requires separate explicit authorization.
+/goal Implement <task-root>/.ai/plans/<plan-name>.md. Use these prepared worktrees for all plan-owned edits: <repository-id>=<absolute-worktree-path> (repeat for every repository). Preserve its boundaries, keep the task-local plan updated, run every required validation, and finish only when its definition of done is proven. Implementation handles dependency setup, repository-documented hook initialization in each prepared checkout, and application validation. Verify hooks before commits or pushes following .ai/instructions/shared/delivery-hygiene.md#hook-verification. Implementation and Goal execution have not started; delivery requires separate explicit authorization.
 ```
 
 The second block is the single two-pane launcher below, printed without starting

@@ -1,5 +1,5 @@
-Version: 1.1
-Last Updated: 2026-09-23
+Version: 1.2
+Last Updated: 2026-11-19
 
 # Delivery Hygiene Instructions
 
@@ -32,6 +32,21 @@ Keep changes easy to review, deploy, revert, and trace.
 - Add repository-specific trailers only when an existing delivery convention
   or explicit user request requires them. Do not create a workflow ledger for
   commit metadata.
+
+## Hook verification
+
+Before a commit or push in a repository with documented hooks:
+
+- In the actual checkout, resolve Git's effective hook path and verify the
+  expected executable launchers, that required helper files are readable, and
+  that hooks are enabled, including environment or startup settings that can
+  disable them. Dependency installation, a configured hook path, or directly
+  passing quality scripts alone do not prove hook readiness.
+- When hooks are missing or disabled, follow the repository's documented
+  initialization procedure within existing setup authorization. If authorization
+  is absent or initialization or verification cannot succeed, report the concrete
+  blocker and stop the commit or push.
+- Do not bypass hooks or redirect shared Git configuration as a workaround.
 
 ## GitHub Accounts
 
