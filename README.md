@@ -62,6 +62,8 @@ $pull-request Base: AUTO
 
 $show-summary
 
+$show-plan-progress
+
 $manual-qa-checklist
 ```
 
@@ -88,6 +90,7 @@ restate still-applicable decisions, and reference that new plan explicitly.
 | [Git Commit](.agents/skills/git-commit/SKILL.md)                   | Organize and create authorized local commits          |
 | [Pull Request](.agents/skills/pull-request/SKILL.md)               | Preview a PR and publish after exact-preview approval |
 | [Show Summary](.agents/skills/show-summary/SKILL.md)               | Show a short, nontechnical summary in chat            |
+| [Show Plan Progress](.agents/skills/show-plan-progress/SKILL.md)   | Show evidence-backed completion coverage for a plan   |
 | [Manual QA Checklist](.agents/skills/manual-qa-checklist/SKILL.md) | Show numbered manual test steps and expected results  |
 
 Skills match ordinary requests and explicit `$skill-name` invocation. Local
