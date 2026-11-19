@@ -126,6 +126,23 @@ test("delivery utilities use repository evidence without workflow metadata", asy
   assert.doesNotMatch(source, /Workflow-(Work-Item|Spec|Plan-Revision)/);
 });
 
+test("delivery verifies documented hooks in the actual checkout before commits or pushes", async () => {
+  const source = (
+    await read("instructions/shared/delivery-hygiene.md")
+  ).replace(/\s+/g, " ");
+  for (const expectation of [
+    /Before a commit or push in a repository with documented hooks/,
+    /actual checkout[\s\S]+effective hook path/,
+    /expected executable launchers[\s\S]+required helper files[\s\S]+hooks are enabled/,
+    /Dependency installation[\s\S]+configured hook path[\s\S]+directly passing quality scripts alone do not prove hook readiness/,
+    /missing or disabled[\s\S]+repository's documented initialization procedure[\s\S]+existing setup authorization/,
+    /initialization or verification cannot succeed[\s\S]+report the concrete blocker and stop the commit or push/,
+    /Do not bypass hooks or redirect shared Git configuration as a workaround/,
+  ]) {
+    assert.match(source, expectation);
+  }
+});
+
 test("plan worktree setup stays native, safe, and independent", async () => {
   const [prepare, selection, checks, copy, readme, promptIndex] =
     await Promise.all([
@@ -185,6 +202,18 @@ test("plan worktree setup stays native, safe, and independent", async () => {
   );
   assert.match(readme, /\$worktree-setup/);
   assert.match(promptIndex, /Worktree Setup/);
+  assert.match(
+    prepare,
+    /Routine setup requires no dependency installation, package manager,\s+network access/,
+  );
+  assert.match(
+    prepare,
+    /Implementation handles\s+dependency setup, repository-documented hook initialization in each prepared\s+checkout, and application validation/,
+  );
+  assert.match(
+    prepare,
+    /\[Hook verification\]\(\.\.\/\.\.\/\.\.\/instructions\/shared\/delivery-hygiene\.md#hook-verification\)/,
+  );
 });
 
 test("successful setup emits only self-contained handoffs and failures cannot launch", async () => {
@@ -209,6 +238,14 @@ test("successful setup emits only self-contained handoffs and failures cannot la
     /^\/goal Implement <task-root>\/\.ai\/plans\/<plan-name>\.md\./,
   );
   assert.match(blocks[0][2], /<repository-id>=<absolute-worktree-path>/);
+  assert.match(
+    blocks[0][2],
+    /Implementation handles dependency setup, repository-documented hook initialization in each prepared checkout, and application validation/,
+  );
+  assert.match(
+    blocks[0][2],
+    /Verify hooks before commits or pushes following \.ai\/instructions\/shared\/delivery-hygiene\.md#hook-verification/,
+  );
   assert.match(
     blocks[0][2],
     /Preserve its boundaries[\s\S]+keep the task-local plan updated[\s\S]+run every required validation[\s\S]+definition of done is proven/,
