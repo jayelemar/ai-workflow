@@ -3,12 +3,14 @@
 import {
   lstat,
   mkdir,
+  open,
   readdir,
   readlink,
   realpath,
   rmdir,
   unlink,
 } from "node:fs/promises";
+import { constants } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -36,6 +38,47 @@ const isContained = (root, targetPath) => {
 const relativeToWorkflow = (root, targetPath) =>
   path.relative(root, targetPath).split(path.sep).join("/");
 
+const sourceExpectsResources = async (root, task) => {
+  const plans = path.join(root, "plans");
+  const source = path.join(plans, `${task}.md`);
+  let handle;
+  try {
+    const directory = await lstat(plans);
+    if (directory.isSymbolicLink() || !directory.isDirectory()) return true;
+    const metadata = await lstat(source);
+    if (metadata.isSymbolicLink() || !metadata.isFile()) return true;
+    handle = await open(source, constants.O_RDONLY | constants.O_NOFOLLOW);
+    // Match the resource helper's bounded plan size. Unreadable or oversized
+    // evidence must never make the remaining artifact directory disposable.
+    const limit = 2 * 1024 * 1024;
+    const bytes = Buffer.alloc(limit + 1);
+    let used = 0;
+    while (used < bytes.length) {
+      const { bytesRead } = await handle.read(
+        bytes,
+        used,
+        bytes.length - used,
+        null,
+      );
+      if (!bytesRead) break;
+      used += bytesRead;
+    }
+    return (
+      used > limit ||
+      /^\s*<!--\s*task-resources\b/im.test(
+        new TextDecoder("utf-8", { fatal: true }).decode(
+          bytes.subarray(0, used),
+        ),
+      )
+    );
+  } catch (error) {
+    if (error.code === "ENOENT") return false;
+    throw error;
+  } finally {
+    await handle?.close();
+  }
+};
+
 export const parseCleanupArgs = (args) => {
   if (args.length === 0) return { apply: false };
   if (args.length === 1 && args[0] === "--apply") return { apply: true };
@@ -49,7 +92,7 @@ const collectRootEntries = async ({ root, rootPath }) => {
   try {
     metadata = await lstat(rootPath);
   } catch (error) {
-    if (error.code === "ENOENT") return [];
+    if (error.code === "ENOENT") return { entries: [], preserved: [] };
     throw error;
   }
   if (metadata.isSymbolicLink()) {
@@ -69,8 +112,18 @@ const collectRootEntries = async ({ root, rootPath }) => {
   }
 
   const entries = [];
+  const preserved = [];
   const visit = async (directoryPath) => {
     const children = await readdir(directoryPath, { withFileTypes: true });
+    // Preserve auxiliary evidence even when the expected manifest was lost.
+    // Invalid markers and linked plans cannot establish legacy cleanup authority.
+    if (
+      path.dirname(directoryPath) === path.join(root, "artifacts") &&
+      (children.some((child) => child.name === "resources.json") ||
+        (await sourceExpectsResources(root, path.basename(directoryPath))))
+    ) {
+      return true;
+    }
     for (const child of children) {
       const childPath = path.join(directoryPath, child.name);
       if (!isContained(root, childPath)) {
@@ -78,19 +131,33 @@ const collectRootEntries = async ({ root, rootPath }) => {
           `unsafe cleanup target escapes the workflow directory: ${childPath}`,
         );
       }
-      entries.push({
+      const entry = {
         directory: child.isDirectory() && !child.isSymbolicLink(),
         path: childPath,
         relativePath: relativeToWorkflow(root, childPath),
-      });
-      if (child.isDirectory() && !child.isSymbolicLink()) {
-        await visit(childPath);
+      };
+      if (
+        directoryPath === path.join(root, "artifacts") &&
+        !entry.directory &&
+        (await sourceExpectsResources(root, child.name))
+      )
+        throw new Error(
+          `unsafe marked task artifact is not a real directory: ${entry.relativePath}`,
+        );
+      if (
+        childPath === path.join(root, "tmp", "task-resources.lock") ||
+        (entry.directory && (await visit(childPath)))
+      ) {
+        preserved.push(entry);
+      } else {
+        entries.push(entry);
       }
     }
+    return false;
   };
 
   await visit(rootPath);
-  return entries;
+  return { entries, preserved };
 };
 
 // A plan link can alias a managed root, even through an external directory.
@@ -188,15 +255,19 @@ export const preflightCleanup = async ({
   const roots = LOCAL_RECORD_ROOTS.map((relativePath) =>
     path.join(root, relativePath),
   );
-  const entries = (
-    await Promise.all(
-      roots.map((rootPath) => collectRootEntries({ root, rootPath })),
-    )
-  )
-    .flat()
-    .sort((left, right) => left.relativePath.localeCompare(right.relativePath));
   await verifyPlanIsolation(root);
-  return { entries, root, roots };
+  const collected = await Promise.all(
+    roots.map((rootPath) => collectRootEntries({ root, rootPath })),
+  );
+  const sortedEntries = (key) =>
+    collected
+      .flatMap((result) => result[key])
+      .sort((left, right) =>
+        left.relativePath.localeCompare(right.relativePath),
+      );
+  const entries = sortedEntries("entries");
+  const preserved = sortedEntries("preserved");
+  return { entries, preserved, root, roots };
 };
 
 const removeEntry = async (entry) => {
@@ -207,15 +278,25 @@ const removeEntry = async (entry) => {
   }
 };
 
-export const verifyManagedRoots = async (roots) => {
+export const verifyManagedRoots = async (roots, preserved = []) => {
   for (const rootPath of roots) {
     const metadata = await lstat(rootPath);
     if (metadata.isSymbolicLink() || !metadata.isDirectory()) {
       throw new Error(`managed root is not an empty directory: ${rootPath}`);
     }
     const entries = await readdir(rootPath);
-    if (entries.length > 0) {
-      throw new Error(`managed root is not empty: ${rootPath}`);
+    const expected = preserved
+      .filter((entry) => path.dirname(entry.path) === rootPath)
+      .map((entry) => path.basename(entry.path));
+    if (
+      entries.length !== expected.length ||
+      entries.some((entry) => !expected.includes(entry))
+    ) {
+      throw new Error(
+        expected.length
+          ? `managed root does not match preserved entries: ${rootPath}`
+          : `managed root is not empty: ${rootPath}`,
+      );
     }
   }
 };
@@ -241,6 +322,9 @@ export const runCleanup = async ({
       "The entire plans/ tree is excluded. Use worktree-cleanup.md for selected plan cleanup.",
     );
     output(
+      "Task artifact directories containing resources.json or identified by source-plan resource markers, and tmp/task-resources.lock, are preserved without following links or operating resource providers.",
+    );
+    output(
       "Preflight rejects managed roots reachable through plan links before any mutation.",
     );
     return { ok: true };
@@ -259,12 +343,19 @@ export const runCleanup = async ({
     return { ok: false };
   }
 
+  printTargets({ entries: preflight.preserved, output, verb: "Preserved" });
+  output(`Cleanup preserved entry count: ${preflight.preserved.length}`);
+
   if (!options.apply) {
     printTargets({ entries: preflight.entries, output, verb: "Would remove" });
     output(`Cleanup preview target count: ${preflight.entries.length}`);
     output("No mutation occurred.");
     output("WARNING: --apply permanently removes legacy local records.");
-    return { entries: preflight.entries, ok: true };
+    return {
+      entries: preflight.entries,
+      ok: true,
+      preserved: preflight.preserved,
+    };
   }
 
   output("WARNING: --apply permanently removes legacy local records.");
@@ -281,12 +372,18 @@ export const runCleanup = async ({
     try {
       await remove(entry);
       removed.push(entry);
+      output(`Removed ${entry.relativePath}`);
     } catch (error) {
       output(
         `FAIL cleanup:local deletion: ${entry.relativePath}: ${error.message}`,
       );
       output(`Cleanup removed count before failure: ${removed.length}`);
-      return { entries: preflight.entries, ok: false, removed };
+      return {
+        entries: preflight.entries,
+        ok: false,
+        preserved: preflight.preserved,
+        removed,
+      };
     }
   }
 
@@ -294,16 +391,29 @@ export const runCleanup = async ({
     await Promise.all(
       preflight.roots.map((rootPath) => mkdir(rootPath, { recursive: true })),
     );
-    await verifyManagedRoots(preflight.roots);
+    await verifyManagedRoots(preflight.roots, preflight.preserved);
   } catch (error) {
     output(`FAIL cleanup:local root postcondition: ${error.message}`);
-    return { entries: preflight.entries, ok: false, removed };
+    return {
+      entries: preflight.entries,
+      ok: false,
+      preserved: preflight.preserved,
+      removed,
+    };
   }
 
-  printTargets({ entries: preflight.entries, output, verb: "Removed" });
   output(`Cleanup removed count: ${removed.length}`);
-  output("All managed local-record roots are present and empty.");
-  return { entries: preflight.entries, ok: true, removed };
+  output(
+    preflight.preserved.length
+      ? "All managed local-record roots are present and contain only preserved task evidence."
+      : "All managed local-record roots are present and empty.",
+  );
+  return {
+    entries: preflight.entries,
+    ok: true,
+    preserved: preflight.preserved,
+    removed,
+  };
 };
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

@@ -6,6 +6,10 @@ settings:
 
 importers:
   .:
+    dependencies:
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
     devDependencies:
       husky:
         specifier: 9.1.7
@@ -302,6 +306,12 @@ packages:
     engines: { node: ">=18.0.0" }
     hasBin: true
 
+  zod@4.6.7:
+    resolution:
+      {
+        integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==,
+      }
+
 snapshots:
   "@esbuild/aix-ppc64@0.28.2":
     optional: true
@@ -424,3 +434,5 @@ snapshots:
       esbuild: 0.28.2
     optionalDependencies:
       fsevents: 2.3.3
+
+  zod@4.6.7: {}
