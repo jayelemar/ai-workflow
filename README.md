@@ -37,7 +37,9 @@ the explicit `CREATE_PLAN` command hands the discussion to Create Plan.
 native Execute plan, `/goal`, and ordinary implementation requests. The
 [Create Plan skill](.agents/skills/create-plan/SKILL.md) creates and refines plans;
 [Plan Review](instructions/shared/plan-review.md) owns detailed review procedures.
-No workflow state machine or companion status artifacts are maintained. Skills
+No workflow state machine or companion status artifacts are maintained. Planned
+execution records disposable local resources only when needed, under
+[Task Resources](instructions/shared/task-resources.md). Skills
 do not automatically chain actions or grant delivery, installation, or cleanup
 authority.
 
@@ -79,6 +81,16 @@ verified isolation and selected context, without workflow health or dependency
 installation; implementation handles dependencies and application validation. Finish or stop the
 current Goal before starting another. Give each new outcome its own plan,
 restate still-applicable decisions, and reference that new plan explicitly.
+
+Before a main-checkout or worktree execution creates its first local Docker
+resource or dedicated iOS Simulator, follow
+[Task Resources](instructions/shared/task-resources.md). Initialize with the
+original workspace/source plan and exact execution root, then pass its exact
+`TASK_RESOURCES_CONTEXT` JSON to fixtures and other child commands. Worktree
+setup carries the original source identity in its handoff; the copied workflow
+never owns a second resource record. Planning and worktree-only setup create no
+resource artifact. Version 1 rejects tracked Android and other unsupported
+providers explicitly.
 
 ## Skills and Utilities
 
@@ -130,7 +142,9 @@ is explicitly requested. Preview legacy cleanup from `.ai` with
 `rtk proxy pnpm cleanup:local`; use `--apply` only with explicit deletion
 authority. Its [implementation](scripts/maintenance/cleanup-local.mjs) owns
 containment checks and excludes the entire `plans/` tree, including linked,
-hidden, and nested entries.
+hidden, and nested entries. It also preserves resource manifests, their containing
+artifact directories, and the resource coordination lock, including malformed or
+unresolved evidence. It never operates Docker or Simulator providers.
 
 For selected plans, use [Clean Plan Worktrees and Records](prompts/worktree-cleanup.md):
 
@@ -149,7 +163,44 @@ include everything except saved-outfit-details.md and platform-services-mobile.m
 That utility owns inventory, exact confirmation, reinspection, and branch
 retention. Deliberate `all-plans: true` and the exclusion form include active
 plans unless excluded. Exclusions preserve those plans, their worktrees, and
-owned records. With no selector, it only inventories and shows examples.
+owned records and every execution/resource. With no selector, it only inventories
+and shows examples. The complete preview includes recorded Docker resources and
+dedicated devices; after the same exact confirmation, resources are deleted
+before worktrees, and plans/evidence last. Source checkouts, branches, runtimes,
+and shared/base images survive. Failure or unexpected sharing keeps the plan
+and artifact for recovery; see [Task Resources](instructions/shared/task-resources.md#recovery).
+
+### Task resource verification map
+
+| Entry/state                         | Expected result                                                                                                                    | Verification / prerequisites                                                                                                                                                   |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Main or prepared-worktree execution | First allocation initializes one source manifest; executions and resources stay isolated; children receive context                 | Original helper `init`, `--help`, and maintained `scripts/resources/store.test.mjs` and `providers.test.mjs`; readable source plan and writable canonical artifact/marker/lock |
+| Selected cleanup / exclusions       | Inventory includes all selected executions; excluded resources survive; `CANCEL` changes nothing; changed preview refuses deletion | Original helper `inventory` with repeated selected `--plan`, then prompt-owned `cleanup-confirmed`; stopped agents/tests and available matching local providers                |
+| Failure / retry                     | Partial cleanup retains plan/artifact; exact-ID retry tolerates absence; shared images remain with evidence                        | `reconcile`, `release`, and a fresh inventory under [recovery guidance](instructions/shared/task-resources.md#recovery); never infer ownership from names                      |
+| Explicit resume                     | Ownership, provider identity and current use are checked before activation; provider changes block allocation                      | Original helper `init --resume`, manager/store/CLI tests, and available matching local providers                                                                               |
+| Final file phase                    | Only confirmed cleanup transitions are accepted; the existing lock protects worktrees, plans and records until removal finishes    | `verifyFileCleanupUnlocked`, manager filesystem regressions and the cleanup prompt; retain the original preview and successful cleanup result                                  |
+| Normal tracked fixture teardown     | Only bound allocations are removed after verification; refusal cannot reach raw Docker fallback                                    | `scripts/resources/disposal.test.mjs`, `fixtures.test.mjs`, `compose.test.mjs`, and the standalone native Docker harness                                                       |
+| Fast repository verification        | Schema, record, provider-boundary, cleanup preservation, and guidance regressions pass                                             | `rtk proxy pnpm health` and `rtk proxy pnpm test:focused` from `.ai`; installed pinned dependencies                                                                            |
+| Real lifecycle evidence             | Disposable local Docker/iOS creation, confirmation/refusal, deletion, and preservation are verified                                | Explicit disposable provider smoke named by the executing plan; local Docker and selected installed iOS runtime; mocked tests alone leave this unverified                      |
+
+All provisioning code, dependencies, and verification live in `.ai`; no application
+package or server checkout is required. CLI tests use arbitrary configuration
+paths and standalone Docker operations. These checks cover resource lifecycle;
+product authentication and application behavior remain outside this change.
+No real provider call runs as part of a documentation check or worktree setup.
+
+The explicit native harness is `scripts/resources/smoke.mjs`. From the original
+workspace, run `rtk proxy node .ai/scripts/resources/smoke.mjs --docker --fixture-id <fresh-UUID>`
+or `rtk proxy node .ai/scripts/resources/smoke.mjs --ios --fixture-id <fresh-UUID> --device-type <installed-device-type> --runtime <installed-iOS-runtime>`.
+Use `rtk proxy node .ai/scripts/resources/smoke.mjs --docker --ports-only --fixture-id <fresh-UUID>`
+to verify two simultaneous tasks receive distinct actual loopback ports and
+private Compose resources from the same fixed-port source configuration.
+Use `rtk proxy node .ai/scripts/resources/smoke.mjs --docker --recovery-only --fixture-id <fresh-UUID>`
+to interrupt disposable containers before startup and verify exact-ID recovery
+through reconciliation and bound disposal, including uninitialized network metadata.
+Select the device-testing platform first. These commands create and remove only
+their own disposable fixtures; they preserve evidence on failure. Record the
+chosen command and fixture UUID in the executing plan before running it.
 
 ## Checks
 

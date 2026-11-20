@@ -1,5 +1,5 @@
-Version: 1.0
-Last Updated: 2026-11-13
+Version: 1.1
+Last Updated: 2026-11-19
 
 # Mobile Virtual Device Instructions
 
@@ -33,20 +33,32 @@ work or accumulating unnecessary simulators and emulators.
   platform-specific acceptance requirement. If the choice cannot establish
   that requirement, explain the gap and resolve the conflict with the user;
   do not silently expand coverage or claim the requirement passed.
+- For saved-plan execution, read and follow
+  [Task Resources](../shared/task-resources.md) before provisioning. Its v1
+  provider supports iOS Simulator only. An Android or both-platform selection
+  remains valid coverage intent, but tracked Android allocation is unsupported;
+  report the gap and resolve it rather than treating Android as iOS or silently
+  omitting the requested checks. Preserve the platform-choice rules above.
 - Inventory existing devices before creating one. Match the task's required
   device type, OS/runtime, and logical viewport; keep device matrices and
   platform-specific commands in local instructions.
-- Prefer a suitable existing device when it is available. Check current
-  session ownership, active test runs, and relevant processes using the
-  platform's available tooling. A booted device is neither proof of use nor
-  proof of availability; a shut-down device may still belong to a pending run.
+- In tracked execution, reuse only a suitable device already recorded to the
+  same task and execution, with verified creation ownership and availability.
+  Never adopt, rename, or borrow a personal or other-task device. Otherwise
+  create the minimum dedicated instances through the context-bearing original
+  helper's `ios-create --device-type <identifier> --runtime <identifier>` command,
+  using installed metadata. Outside tracked execution, prefer a suitable
+  available device. Check current session ownership, active test runs, and
+  relevant processes using the platform's available tooling. A booted device is
+  neither proof of use nor proof of availability; a shut-down device may still belong to a pending run.
   If availability cannot be established, treat the device as unavailable.
 - Do not take over, rename, shut down, reset, or otherwise interrupt a device
   another session or process is using.
-- When suitable devices are busy, continue independent work and recheck
+- When suitable owned devices are busy, continue independent work and recheck
   availability. Create an additional instance only when device testing is
-  blocked and no suitable device is available. If no suitable device exists,
-  create only the minimum needed to meet the task's requirements.
+  blocked and no suitable owned device is available. In tracked execution, an
+  unowned device never satisfies availability. Create only the minimum needed
+  to meet the task's requirements.
 - Recheck the inventory immediately before creation to avoid duplicating a
   device that has become available or was just created. Apply the same reuse
   rules to additional instances in future tasks.
@@ -55,8 +67,8 @@ work or accumulating unnecessary simulators and emulators.
   from device configuration and runtime metadata, not from an existing alias
   or a guessed testing role. If metadata is insufficient, report the missing
   information instead of inventing a model or version.
-- When reusing an available device with a generic or misleading label such as
-  `MyUse Modern`, rename its display label to match that convention. Keep
+- When reusing an available device with proven task ownership and a generic
+  or misleading label such as `MyUse Modern`, rename its display label to match that convention. Keep
   roles such as compact, modern, or tall in testing notes.
 - For additional instances with the same model and OS, keep the first name
   unsuffixed and append ` (2)`, ` (3)`, and so on. Check existing names and use
@@ -80,4 +92,8 @@ work or accumulating unnecessary simulators and emulators.
   and is unique. For a rename, confirm the identifier remains unchanged.
 - In the task's validation notes, record the device name and identifier,
   whether it was reused or created, and the reason an additional instance was
-  necessary. Report unresolved availability or naming limitations.
+  necessary. Include its canonical task/execution context when tracked. Report
+  unresolved availability, ownership, or naming limitations.
+- Delete tracked dedicated devices only through confirmed selected-task cleanup
+  under [Task Resources](../shared/task-resources.md); verify the exact UDID is
+  absent while unrelated devices and installed runtimes remain.

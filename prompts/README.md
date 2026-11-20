@@ -20,8 +20,11 @@ Read `.ai/AGENTS.md` plus relevant routed instructions.
   request bulk cleanup with `all-plans: true`, or use
   `include everything except saved-outfit-details.md and platform-services-mobile.md`.
   Bulk includes active plans unless explicitly excluded. Remove
-  only selected plans, task worktrees, and owned records after inspection and
-  exact operator confirmation; preserve unselected plans and all branches.
+  only selected task resources, plans, worktrees, and owned records after
+  inspection and exact operator confirmation; resources are removed before worktrees, and
+  plans/evidence last. Preserve unselected plans/resources, source checkouts,
+  and all branches. [Task Resources](../instructions/shared/task-resources.md)
+  owns creation context and recovery requirements.
 
 Start a review from the original workspace:
 

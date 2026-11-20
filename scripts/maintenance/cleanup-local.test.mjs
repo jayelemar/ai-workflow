@@ -47,6 +47,99 @@ const run = async (fixture, options = {}) => {
 };
 
 for (const args of [[], ["--apply"]]) {
+  test(`${args.length ? "apply" : "preview"} blocks marked artifact symlinks before deleting any evidence`, async () => {
+    for (const target of ["../tmp/task", "../tmp/missing", "../logs/task"]) {
+      await withFixture(async (fixture) => {
+        const root = fixture.workflowDirectory;
+        const plans = path.join(root, "plans");
+        await mkdir(plans);
+        await writeFile(
+          path.join(plans, "task.md"),
+          "# Task\n<!-- task-resources: 0db4af2e-cc8c-499b-ae93-49fe239705fd -->\n",
+        );
+        const artifacts = path.join(root, "artifacts");
+        await mkdir(artifacts);
+        await mkdir(path.join(root, "tmp/task"), { recursive: true });
+        await mkdir(path.join(root, "logs/task"), { recursive: true });
+        await writeFile(
+          path.join(root, "tmp/task/resources.json"),
+          "ownership evidence\n",
+        );
+        await writeFile(
+          path.join(root, "logs/task/recovery.txt"),
+          "recovery evidence\n",
+        );
+        const link = path.join(artifacts, "task");
+        await symlink(target, link);
+        const { result, output } = await run(fixture, { args });
+        assert.equal(result.ok, false);
+        assert.match(output.join("\n"), /preflight:.*marked task artifact/);
+        assert.equal(await readlink(link), target);
+        assert.equal(
+          await readFile(path.join(root, "tmp/task/resources.json"), "utf8"),
+          "ownership evidence\n",
+        );
+        assert.equal(
+          await readFile(path.join(root, "logs/task/recovery.txt"), "utf8"),
+          "recovery evidence\n",
+        );
+      });
+    }
+  });
+
+  test(`${args.length ? "apply" : "preview"} preserves marked task evidence when its manifest is missing`, async () => {
+    await withFixture(async (fixture) => {
+      const plans = path.join(fixture.workflowDirectory, "plans");
+      const artifacts = path.join(fixture.workflowDirectory, "artifacts");
+      await mkdir(plans);
+      for (const [task, marker] of Object.entries({
+        tracked:
+          "<!-- task-resources: 0db4af2e-cc8c-499b-ae93-49fe239705fd -->",
+        malformed: "<!-- TASK-RESOURCES: interrupted marker",
+      })) {
+        await writeFile(path.join(plans, `${task}.md`), `# Task\n${marker}\n`);
+        await mkdir(path.join(artifacts, task), { recursive: true });
+        await writeFile(
+          path.join(artifacts, task, "compose-recovery.yaml"),
+          "ownership proof\n",
+        );
+        await writeFile(
+          path.join(artifacts, task, "resources-recovery.tmp"),
+          "partial recovery record\n",
+        );
+      }
+      await writeFile(path.join(plans, "legacy.md"), "# No resource marker\n");
+      await mkdir(path.join(artifacts, "legacy"));
+      await writeFile(path.join(artifacts, "legacy", "old.txt"), "legacy\n");
+      const { result, output } = await run(fixture, { args });
+      assert.equal(result.ok, true, output.join("\n"));
+      assert.deepEqual(
+        result.entries.map((entry) => entry.relativePath),
+        ["artifacts/legacy", "artifacts/legacy/old.txt"],
+      );
+      assert.deepEqual(
+        result.preserved.map((entry) => entry.relativePath),
+        ["artifacts/malformed", "artifacts/tracked"],
+      );
+      for (const task of ["tracked", "malformed"]) {
+        assert.equal(
+          await readFile(
+            path.join(artifacts, task, "compose-recovery.yaml"),
+            "utf8",
+          ),
+          "ownership proof\n",
+        );
+        assert.equal(
+          await readFile(
+            path.join(artifacts, task, "resources-recovery.tmp"),
+            "utf8",
+          ),
+          "partial recovery record\n",
+        );
+      }
+    });
+  });
+
   test(`${args.length ? "apply" : "preview"} rejects case-variant plan aliases, including dangling aliases, before mutation`, async () => {
     for (const alias of [
       "root",
@@ -390,6 +483,173 @@ test("apply removes every entry without traversing links and leaves all managed 
   });
 });
 
+for (const args of [[], ["--apply"]]) {
+  test(`${args.length ? "apply" : "preview"} preserves complete task evidence without parsing resource records`, async () => {
+    await withFixture(async (fixture) => {
+      const artifacts = path.join(fixture.workflowDirectory, "artifacts");
+      const records = {
+        valid: JSON.stringify({ schemaVersion: 1, resources: [] }),
+        malformed: "{ unfinished",
+        unresolved: JSON.stringify({
+          sourcePlan: "plans/expected-but-missing.md",
+          resources: [{ status: "pending" }],
+        }),
+      };
+      for (const [task, contents] of Object.entries(records)) {
+        await mkdir(path.join(artifacts, task, "nested"), { recursive: true });
+        await writeFile(path.join(artifacts, task, "resources.json"), contents);
+        await writeFile(
+          path.join(artifacts, task, "nested", "ownership.txt"),
+          "evidence\n",
+        );
+      }
+      await mkdir(path.join(artifacts, "legacy"));
+      await writeFile(path.join(artifacts, "legacy", "old.txt"), "legacy\n");
+
+      const { output, result } = await run(fixture, { args });
+
+      assert.equal(result.ok, true, output.join("\n"));
+      assert.deepEqual(
+        result.entries.map((entry) => entry.relativePath),
+        ["artifacts/legacy", "artifacts/legacy/old.txt"],
+      );
+      assert.deepEqual(
+        result.preserved.map((entry) => entry.relativePath),
+        ["artifacts/malformed", "artifacts/unresolved", "artifacts/valid"],
+      );
+      for (const [task, contents] of Object.entries(records)) {
+        assert.equal(
+          await readFile(path.join(artifacts, task, "resources.json"), "utf8"),
+          contents,
+        );
+        assert.equal(
+          await readFile(
+            path.join(artifacts, task, "nested", "ownership.txt"),
+            "utf8",
+          ),
+          "evidence\n",
+        );
+        assert.match(
+          output.join("\n"),
+          new RegExp(`Preserved artifacts/${task}`),
+        );
+      }
+      if (args.length) {
+        await assert.rejects(lstat(path.join(artifacts, "legacy")), {
+          code: "ENOENT",
+        });
+        assert.equal(result.removed.length, 2);
+        assert.match(output.join("\n"), /Cleanup removed count: 2/);
+        assert.doesNotMatch(output.join("\n"), /roots are present and empty/);
+      } else {
+        assert.equal(
+          await readFile(path.join(artifacts, "legacy", "old.txt"), "utf8"),
+          "legacy\n",
+        );
+      }
+    });
+  });
+
+  test(`${args.length ? "apply" : "preview"} preserves linked and dangling resource entries without following them`, async () => {
+    await withFixture(async (fixture) => {
+      const artifacts = path.join(fixture.workflowDirectory, "artifacts");
+      const external = path.join(fixture.temporaryRoot, "external");
+      await mkdir(external);
+      await writeFile(path.join(external, "ownership.txt"), "external\n");
+      for (const [task, destination] of [
+        ["linked", external],
+        ["dangling", "missing.json"],
+      ]) {
+        await mkdir(path.join(artifacts, task), { recursive: true });
+        await symlink(
+          destination,
+          path.join(artifacts, task, "resources.json"),
+        );
+      }
+      await mkdir(path.join(artifacts, "directory", "resources.json"), {
+        recursive: true,
+      });
+      await writeFile(
+        path.join(artifacts, "directory", "resources.json", "ownership.txt"),
+        "evidence\n",
+      );
+
+      const { output, result } = await run(fixture, { args });
+
+      assert.equal(result.ok, true, output.join("\n"));
+      assert.deepEqual(result.entries, []);
+      assert.equal(
+        await readlink(path.join(artifacts, "linked", "resources.json")),
+        external,
+      );
+      assert.equal(
+        await readlink(path.join(artifacts, "dangling", "resources.json")),
+        "missing.json",
+      );
+      assert.equal(
+        await readFile(
+          path.join(artifacts, "directory", "resources.json", "ownership.txt"),
+          "utf8",
+        ),
+        "evidence\n",
+      );
+      assert.equal(
+        await readFile(path.join(external, "ownership.txt"), "utf8"),
+        "external\n",
+      );
+    });
+  });
+
+  test(`${args.length ? "apply" : "preview"} preserves the resource lock independently of its contents`, async () => {
+    for (const lockType of ["empty", "populated", "dangling-link"]) {
+      await withFixture(async (fixture) => {
+        const temporary = path.join(fixture.workflowDirectory, "tmp");
+        const lock = path.join(temporary, "task-resources.lock");
+        await mkdir(temporary);
+        if (lockType === "dangling-link") {
+          await symlink("missing-lock", lock);
+        } else {
+          await mkdir(lock);
+          if (lockType === "populated") {
+            await mkdir(path.join(lock, "nested"));
+            await writeFile(
+              path.join(lock, "nested", "holder.json"),
+              "holder\n",
+            );
+          }
+        }
+        await writeFile(path.join(temporary, "legacy.txt"), "legacy\n");
+
+        const { output, result } = await run(fixture, { args });
+
+        assert.equal(result.ok, true, output.join("\n"));
+        assert.deepEqual(
+          result.preserved.map((entry) => entry.relativePath),
+          ["tmp/task-resources.lock"],
+        );
+        assert.deepEqual(
+          result.entries.map((entry) => entry.relativePath),
+          ["tmp/legacy.txt"],
+        );
+        assert.equal(
+          (await lstat(lock)).isSymbolicLink(),
+          lockType === "dangling-link",
+        );
+        if (lockType === "populated") {
+          assert.equal(
+            await readFile(path.join(lock, "nested", "holder.json"), "utf8"),
+            "holder\n",
+          );
+        }
+        if (args.length) {
+          assert.deepEqual(await readdir(temporary), ["task-resources.lock"]);
+          assert.equal(result.removed.length, 1);
+        }
+      });
+    }
+  });
+}
+
 test("empty and missing roots succeed without preview mutation and apply creates all roots", async () => {
   await withFixture(async (fixture) => {
     const preview = await run(fixture);
@@ -549,5 +809,70 @@ test("managed-root postcondition verification rejects links and remaining entrie
       verifyManagedRoots(roots),
       /managed root is not an empty directory/,
     );
+  });
+});
+
+test("managed-root postconditions accept only the preflight-preserved entries", async () => {
+  await withFixture(async (fixture) => {
+    const roots = LOCAL_RECORD_ROOTS.map((localRoot) =>
+      path.join(fixture.workflowDirectory, localRoot),
+    );
+    await Promise.all(roots.map((root) => mkdir(root)));
+    const task = path.join(roots[0], "task");
+    await mkdir(task);
+    await writeFile(path.join(task, "resources.json"), "{ unresolved");
+    const { result } = await run(fixture);
+
+    await verifyManagedRoots(roots, result.preserved);
+    const unexpected = path.join(roots[0], "unexpected.txt");
+    await writeFile(unexpected, "concurrent\n");
+    await assert.rejects(
+      verifyManagedRoots(roots, result.preserved),
+      /does not match preserved entries/,
+    );
+    await rm(unexpected);
+    await rm(task, { recursive: true });
+    await assert.rejects(
+      verifyManagedRoots(roots, result.preserved),
+      /does not match preserved entries/,
+    );
+  });
+});
+
+test("partial failures report completed legacy removals and preserve task evidence", async () => {
+  await withFixture(async (fixture) => {
+    const task = path.join(fixture.workflowDirectory, "artifacts", "task");
+    await mkdir(task, { recursive: true });
+    await writeFile(path.join(task, "resources.json"), "{ unresolved");
+    const logs = path.join(fixture.workflowDirectory, "logs");
+    await mkdir(logs);
+    await writeFile(path.join(logs, "a.txt"), "a\n");
+    await writeFile(path.join(logs, "b.txt"), "b\n");
+
+    const { output, result } = await run(fixture, {
+      args: ["--apply"],
+      remove: async (entry) => {
+        if (entry.relativePath === "logs/b.txt")
+          throw new Error("simulated failure");
+        await rm(entry.path);
+      },
+    });
+
+    assert.equal(result.ok, false);
+    assert.deepEqual(
+      result.removed.map((entry) => entry.relativePath),
+      ["logs/a.txt"],
+    );
+    assert.deepEqual(
+      output.filter((line) => line.startsWith("Removed ")),
+      ["Removed logs/a.txt"],
+    );
+    assert.match(output.join("\n"), /Cleanup removed count before failure: 1/);
+    assert.match(output.join("\n"), /Preserved artifacts\/task/);
+    assert.equal(
+      await readFile(path.join(task, "resources.json"), "utf8"),
+      "{ unresolved",
+    );
+    assert.equal(await readFile(path.join(logs, "b.txt"), "utf8"), "b\n");
   });
 });

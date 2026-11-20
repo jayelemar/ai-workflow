@@ -310,6 +310,9 @@ test("workflow cleanup requires explicit scope, confirms, and preserves branches
     /Retain every Git branch/,
     /Preserve unselected plans, task roots and records, unrelated records/,
     /Never\s+substitute global `cleanup:local`/,
+    /withResourceLock\(sourceWorkspace, async/,
+    /verifyFileCleanupUnlocked\(originalPreview, cleanupResult\)/,
+    /Hold this one lock throughout steps 4–8/,
     /Do not remove any source plan or record until worktree\/task-root removal\s+succeeds for every selected plan/,
     /Never claim completion with a listed target remaining\s+or a required postcondition unverified/,
   ])

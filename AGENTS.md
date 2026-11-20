@@ -70,6 +70,8 @@ changed code. A plan never replaces those repository conventions.
   for genuinely parallel implementation.
 - Do not create workflow runners, transition databases, status sidecars,
   review fingerprints, detailed event ledgers, or automatic delivery actions.
+  The bounded task-resource record described below is an explicit exception,
+  not authority for a general registry or workflow ledger.
 
 ## Executing Saved Plans
 
@@ -80,6 +82,11 @@ implement a plan; execution does not require invoking `create-plan`.
   discoveries, validation, and outcome in that same file, without sidecars.
 - Record material discoveries; ask only for unresolved behavior, permission,
   destructive, external-action, or repository-ownership decisions.
+- Before a saved-plan execution allocates its first disposable local resource,
+  read and follow [Task Resources](instructions/shared/task-resources.md).
+  Initialize the canonical source context and pass it to every resource-creating
+  child command that provisions through the helper. Plan creation and worktree-only
+  setup do not initialize resource records.
 - Goal mode is available for long-running execution, not required. Do not start
   a Goal without a user request or duplicate its runtime progress elsewhere.
 - Before controlled review, explicitly requested independent review, or a
@@ -164,9 +171,15 @@ Use these role defaults unless the user explicitly requests another runtime:
 - Install `.ai` dependencies to enable its local Husky hooks. The pre-commit
   hook runs `pnpm health`; the pre-push hook runs `pnpm health:push` (static checks plus affected tests). Fix failed
   checks before delivery; do not bypass hooks to publish failing changes.
+- Worktree execution may use the original workspace resource helper to update
+  only its canonical task resource artifact, temporary coordination lock, and
+  source-plan resource identity marker under
+  [Task Resources](instructions/shared/task-resources.md). This narrow exception
+  permits no source application or workflow code edits from the worktree; if
+  the write is unavailable, stop before allocating resources.
 - Existing ignored legacy workflow records must remain untouched unless the
   user explicitly requests cleanup.
 - When a Git parent checkout exists, do not stage `.ai` files in it.
 
-Version: 3.7
+Version: 3.8
 Last Updated: 2026-11-19
