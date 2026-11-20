@@ -139,9 +139,17 @@ Run `.ai/prompts/worktree-cleanup.md`.
 plan: .ai/plans/<plan-name>.md
 ```
 
+To include all plans except named ones, use:
+
+```text
+Run `.ai/prompts/worktree-cleanup.md`.
+include everything except saved-outfit-details.md and platform-services-mobile.md
+```
+
 That utility owns inventory, exact confirmation, reinspection, and branch
-retention. Deliberate `all-plans: true` includes active plans. With no selector,
-it only inventories and shows examples.
+retention. Deliberate `all-plans: true` and the exclusion form include active
+plans unless excluded. Exclusions preserve those plans, their worktrees, and
+owned records. With no selector, it only inventories and shows examples.
 
 ## Checks
 

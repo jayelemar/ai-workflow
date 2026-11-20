@@ -284,11 +284,20 @@ test("workflow cleanup requires explicit scope, confirms, and preserves branches
 
   assert.match(cleanup, /plan: \.ai\/plans\/<plan-name>\.md/);
   assert.match(cleanup, /all-plans: true/);
+  const exclusionExample =
+    /include everything except saved-outfit-details\.md and platform-services-mobile\.md/;
+  assert.match(cleanup, exclusionExample);
   for (const expectation of [
     /Reject simultaneous\/repeated selectors/,
     /With no selector[\s\S]+read-only plan inventory[\s\S]+without confirmation or mutation/,
     /Selection defines eligibility, never checkboxes, prose, filenames, age/,
     /including active\s+plans/,
+    /Reject paths,\s+duplicate names, and missing or unsafe exclusions before confirmation/,
+    /never\s+silently ignore an exclusion or fall back to including everything/,
+    /when every plan is excluded[\s\S]+without confirmation or mutation/,
+    /List both selected and excluded source plans before\s+confirmation/,
+    /excluded plans and their task roots and records are unselected\s+and must remain untouched/,
+    /repeat discovery, selector validation[\s\S]+same selector\s+before mutation/,
     /Reject missing\s+plans/,
     /Reject ambiguous\/shared ownership/,
     /all source plans and references, including\s+unselected plans/,
@@ -309,6 +318,7 @@ test("workflow cleanup requires explicit scope, confirms, and preserves branches
     assert.match(source, /worktree-cleanup\.md/);
     assert.match(source, /plan: \.ai\/plans\/<plan-name>\.md/);
     assert.match(source, /all-plans: true/);
+    assert.match(source, exclusionExample);
   }
 });
 

@@ -17,7 +17,9 @@ Read `.ai/AGENTS.md` plus relevant routed instructions.
   parent file change. Exclude plans; review starts only on explicit invocation.
 - [Plan worktree cleanup](worktree-cleanup.md): inventory only
   without a selector; select `plan: .ai/plans/<plan-name>.md` or explicitly
-  request bulk cleanup with `all-plans: true` (including active plans). Remove
+  request bulk cleanup with `all-plans: true`, or use
+  `include everything except saved-outfit-details.md and platform-services-mobile.md`.
+  Bulk includes active plans unless explicitly excluded. Remove
   only selected plans, task worktrees, and owned records after inspection and
   exact operator confirmation; preserve unselected plans and all branches.
 
