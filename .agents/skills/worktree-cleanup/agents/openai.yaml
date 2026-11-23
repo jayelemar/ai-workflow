@@ -1,0 +1,4 @@
+interface:
+  display_name: "Worktree Cleanup"
+  short_description: "Clean selected plans, worktrees, and task resources"
+  default_prompt: "Use $worktree-cleanup to inventory plans and show cleanup selection examples."

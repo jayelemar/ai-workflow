@@ -319,7 +319,7 @@ export const runCleanup = async ({
       "--apply removes every legacy entry under artifacts/, logs/, specs/, state/, and tmp/.",
     );
     output(
-      "The entire plans/ tree is excluded. Use worktree-cleanup.md for selected plan cleanup.",
+      "The entire plans/ tree is excluded. Use $worktree-cleanup for selected plan cleanup.",
     );
     output(
       "Task artifact directories containing resources.json or identified by source-plan resource markers, and tmp/task-resources.lock, are preserved without following links or operating resource providers.",

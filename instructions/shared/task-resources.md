@@ -159,7 +159,7 @@ even when a provider plugin is installed; reject them before any allocation.
   file-only cleanup; never discover or adopt resources by name as a fallback.
   Legacy cleanup refuses marked artifact paths that are links or other non-directory
   entries before removing any local records; retain all targets for recovery.
-- Use [Clean Plan Worktrees and Records](../../prompts/worktree-cleanup.md) for
+- Use [Worktree Cleanup](../../.agents/skills/worktree-cleanup/SKILL.md) for
   selected-plan cleanup. It owns selection, exclusions, the single complete
   preview, exact confirmation, fresh inspection, and resource-before-worktree
   removal. The helper removes resources only; it never removes worktrees, plans,

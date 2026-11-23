@@ -66,7 +66,8 @@ const skillNames = [
   "git-commit",
   "pull-request",
   "show-summary",
-  "show-plan-progress",
+  "worktree-cleanup",
+  "setup-local-codex",
   "manual-qa-checklist",
   "brainstorm",
 ];
@@ -76,6 +77,7 @@ const legacySkillNames = [
   "ai-commit",
   "ai-pr",
   "show-qa-checklist",
+  "show-plan-progress",
 ];
 const legacySkillPaths = legacySkillNames.map(
   (name) => `.agents/skills/${name}`,
@@ -402,12 +404,15 @@ test("legacy conflicts and tracked destinations refuse every managed write", asy
     "deleted tracked link",
     "tracked directory",
   ];
-  for (const kind of kinds) {
-    await t.test(kind, async () => {
+  for (const [name, kind] of [
+    "ai-worktree-setup",
+    "show-plan-progress",
+  ].flatMap((name) => kinds.map((kind) => [name, kind]))) {
+    await t.test(`${name}: ${kind}`, async () => {
       await withFixture(async (fixture) => {
         // A safe earlier entry must also survive a later conflict.
         await installLegacyLinks(fixture, legacySkillNames.slice(0, 1));
-        const relativePath = legacySkillPaths[1];
+        const relativePath = `.agents/skills/${name}`;
         const target = path.join(fixture.projectRoot, relativePath);
         if (kind === "file") await writeFile(target, "Keep my custom skill\n");
         else if (kind === "directory" || kind === "tracked directory") {
@@ -418,15 +423,12 @@ test("legacy conflicts and tracked destinations refuse every managed write", asy
             kind === "wrong dangling link"
               ? "missing-custom-skill"
               : kind === "normalized target"
-                ? "../../.ai/.agents/skills/./ai-worktree-setup"
+                ? `../../.ai/.agents/skills/./${name}`
                 : kind === "absolute target"
-                  ? path.join(
-                      fixture.workflowRoot,
-                      ".agents/skills/ai-worktree-setup",
-                    )
+                  ? path.join(fixture.workflowRoot, `.agents/skills/${name}`)
                   : kind === "new source target"
                     ? "../../.ai/.agents/skills/worktree-setup"
-                    : "../../.ai/.agents/skills/ai-worktree-setup";
+                    : `../../.ai/.agents/skills/${name}`;
           await symlink(link, target);
         }
         if (kind.includes("tracked")) {
