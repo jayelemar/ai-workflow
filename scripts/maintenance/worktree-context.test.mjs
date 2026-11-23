@@ -43,7 +43,8 @@ const managedSkills = [
   "git-commit",
   "pull-request",
   "show-summary",
-  "show-plan-progress",
+  "worktree-cleanup",
+  "setup-local-codex",
   "manual-qa-checklist",
   "brainstorm",
 ];

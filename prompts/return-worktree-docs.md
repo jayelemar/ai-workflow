@@ -1,6 +1,6 @@
-# Review Worktree Updates
+# Return Worktree Docs
 
-Review task-owned documentation and instruction changes for return to the
+Review task-owned documentation, instruction, skill, and prompt changes for return to the
 original source workspace. Explain each proposed file change and obtain its
 own explicit approval before writing to the parent.
 
@@ -12,7 +12,7 @@ completion, worktree setup, and cleanup do not invoke it automatically.
 From the original workspace:
 
 ```text
-Run `.ai/prompts/review-worktree-updates.md`.
+Run `.ai/prompts/return-worktree-docs.md`.
 worktree: .worktrees/<task-name>
 ```
 

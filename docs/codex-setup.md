@@ -8,10 +8,12 @@ requests. It routes plan creation to `.ai/.agents/skills/create-plan/SKILL.md`.
 
 The local `instructions/index.md` and `instructions/local/architecture.md`
 are ignored by Git and absent from a fresh clone. The
-[setup prompt](../prompts/setup-local-codex.md) handles missing files through
+[setup skill](../.agents/skills/setup-local-codex/SKILL.md) handles missing files through
 [Create or Update Instructions](../prompts/manage-instructions.md) in bootstrap
 mode, then continues installation after its creation approval and validation.
-Existing valid instructions are preserved. For manual CLI setup, complete that
+Existing valid instructions are preserved. Before skill discovery is installed,
+ask Codex to read and follow `.ai/.agents/skills/setup-local-codex/SKILL.md`
+directly; afterward use `$setup-local-codex`. For manual CLI setup, complete that
 bootstrap first if either file is missing; the utility requires a nonempty index
 and does not discover or generate project instructions.
 
@@ -40,8 +42,9 @@ state, and installs these project-local outputs:
 | `.agents/skills/git-commit`                 | Relative link to `../../.ai/.agents/skills/git-commit`                                                                           |
 | `.agents/skills/pull-request`               | Relative link to `../../.ai/.agents/skills/pull-request`                                                                         |
 | `.agents/skills/show-summary`               | Relative link to `../../.ai/.agents/skills/show-summary`                                                                         |
-| `.agents/skills/show-plan-progress`         | Relative link to `../../.ai/.agents/skills/show-plan-progress`                                                                   |
 | `.agents/skills/manual-qa-checklist`        | Relative link to `../../.ai/.agents/skills/manual-qa-checklist`                                                                  |
+| `.agents/skills/worktree-cleanup`           | Relative link to `../../.ai/.agents/skills/worktree-cleanup`                                                                     |
+| `.agents/skills/setup-local-codex`          | Relative link to `../../.ai/.agents/skills/setup-local-codex`                                                                    |
 | `.codex/config.toml`                        | Byte-exact snapshot of `.ai/.codex/config.toml`, currently the only canonical config content                                     |
 | `instructions/local/github.md` inside `.ai` | Ignored account-mapping template with generic placeholders; existing local content is preserved                                  |
 
@@ -70,8 +73,8 @@ copy credentials.
 
 ## Existing Installations and Skill Renames
 
-Run the setup command above to migrate the four previously managed skill links
-to the new names. Only untracked symlinks with the exact old generated relative
+Run the setup command above to install the current skill links and retire
+previously generated links, including `show-plan-progress`. Only untracked symlinks with the exact old generated relative
 target are removed, even if dangling after source renaming. Setup verifies new
 outputs before removing old links. Custom entries, wrong links, tracked paths,
 and case aliases stop setup before writes; resolve them explicitly. Existing
@@ -158,7 +161,8 @@ After setup, verify in a fresh client:
 
 1. Inspect `/skills`, or read-only app-server `skills/list` with the project
    root in `cwds` and `forceReload: true`. Confirm `create-plan`,
-   `worktree-setup`, `git-commit`, `pull-request`, `show-summary`, `show-plan-progress`,
+   `worktree-setup`, `git-commit`, `pull-request`, `show-summary`, `worktree-cleanup`,
+   `setup-local-codex`,
    `manual-qa-checklist`, and `brainstorm` are enabled and resolve to this
    project's source. File inspection alone does not prove native discovery.
 2. Ask for instruction sources; verify root-first routing. Plan creation loads

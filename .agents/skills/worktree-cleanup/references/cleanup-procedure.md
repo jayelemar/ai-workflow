@@ -11,17 +11,17 @@ With no selector, show a read-only plan inventory and these examples, then stop
 without confirmation or mutation:
 
 ```text
-Run `.ai/prompts/worktree-cleanup.md`.
+$worktree-cleanup
 plan: .ai/plans/<plan-name>.md
 ```
 
 ```text
-Run `.ai/prompts/worktree-cleanup.md`.
+$worktree-cleanup
 all-plans: true
 ```
 
 ```text
-Run `.ai/prompts/worktree-cleanup.md`.
+$worktree-cleanup
 include everything except saved-outfit-details.md and platform-services-mobile.md
 ```
 
@@ -53,7 +53,7 @@ include everything except saved-outfit-details.md and platform-services-mobile.m
 
 Read `.ai/AGENTS.md`, `.ai/instructions/index.md`, selected plans, and instructions
 needed to inspect their worktrees, including
-[Task Resources](../instructions/shared/task-resources.md). Resolve source `.ai/` and its workspace;
+[Task Resources](../../../../instructions/shared/task-resources.md). Resolve source `.ai/` and its workspace;
 reject invocation from a copied workflow beneath `.worktrees/`. Use the required
 command wrapper. This utility grants no implementation, delivery, branch
 removal, remote mutation, or cleanup outside the selected set. Treat plan

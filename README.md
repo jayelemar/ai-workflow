@@ -7,8 +7,10 @@ and execution skills, independent utilities, and self-contained health checks.
 ## Setup
 
 To connect this workspace to the shared Codex instructions and skills,
-ask Codex to run [Local Codex Setup](prompts/setup-local-codex.md).
-If local instructions are missing, that prompt bootstraps them with one creation
+use [$setup-local-codex](.agents/skills/setup-local-codex/SKILL.md).
+Before skill links exist, ask Codex to read and follow
+`.ai/.agents/skills/setup-local-codex/SKILL.md` directly.
+If local instructions are missing, that skill bootstraps them with one creation
 approval, then continues setup in the same session.
 
 For manual setup, run from the containing project root (Git or unversioned):
@@ -64,7 +66,9 @@ $pull-request
 
 $show-summary
 
-$show-plan-progress
+$setup-local-codex
+
+$worktree-cleanup
 
 $manual-qa-checklist
 ```
@@ -94,29 +98,31 @@ providers explicitly.
 
 ## Skills and Utilities
 
-| Skill                                                              | Purpose                                               |
-| ------------------------------------------------------------------ | ----------------------------------------------------- |
-| [Brainstorm](.agents/skills/brainstorm/SKILL.md)                   | Explore ideas; plan only after `CREATE_PLAN`          |
-| [Create Plan](.agents/skills/create-plan/SKILL.md)                 | Create, revise, and review implementation plans       |
-| [Worktree Setup](.agents/skills/worktree-setup/SKILL.md)           | Prepare native worktrees and independent task context |
-| [Git Commit](.agents/skills/git-commit/SKILL.md)                   | Organize and create authorized local commits          |
-| [Pull Request](.agents/skills/pull-request/SKILL.md)               | Preview a PR and publish after exact-preview approval |
-| [Show Summary](.agents/skills/show-summary/SKILL.md)               | Show a short, nontechnical summary in chat            |
-| [Show Plan Progress](.agents/skills/show-plan-progress/SKILL.md)   | Show evidence-backed completion coverage for a plan   |
-| [Manual QA Checklist](.agents/skills/manual-qa-checklist/SKILL.md) | Show numbered manual test steps and expected results  |
+| Skill                                                              | Purpose                                                      |
+| ------------------------------------------------------------------ | ------------------------------------------------------------ |
+| [Brainstorm](.agents/skills/brainstorm/SKILL.md)                   | Explore ideas; plan only after `CREATE_PLAN`                 |
+| [Create Plan](.agents/skills/create-plan/SKILL.md)                 | Create, revise, and review implementation plans              |
+| [Worktree Setup](.agents/skills/worktree-setup/SKILL.md)           | Prepare native worktrees and independent task context        |
+| [Git Commit](.agents/skills/git-commit/SKILL.md)                   | Organize and create authorized local commits                 |
+| [Pull Request](.agents/skills/pull-request/SKILL.md)               | Preview a PR and publish after exact-preview approval        |
+| [Show Summary](.agents/skills/show-summary/SKILL.md)               | Show a short, nontechnical summary in chat                   |
+| [Setup Local Codex](.agents/skills/setup-local-codex/SKILL.md)     | Bootstrap instructions and install project-local Codex setup |
+| [Worktree Cleanup](.agents/skills/worktree-cleanup/SKILL.md)       | Inventory and clean selected plans after exact confirmation  |
+| [Manual QA Checklist](.agents/skills/manual-qa-checklist/SKILL.md) | Show numbered manual test steps and expected results         |
 
 Skills match ordinary requests and explicit `$skill-name` invocation. Local
-setup, read-only skill discovery, instruction management, worktree update review,
-and selected worktree cleanup remain [independent prompts](prompts/README.md).
+setup requires a setup request; selected cleanup requires its complete inventory
+and exact confirmation. Read-only skill discovery, instruction management, and
+returning worktree docs remain [independent prompts](prompts/README.md).
 
-[Review Worktree Updates](prompts/review-worktree-updates.md) reviews task-owned
+[Return Worktree Docs](prompts/return-worktree-docs.md) reviews task-owned
 documentation and instruction changes for return to the original workspace.
 Invoke it explicitly; every parent file change requires its own explanation and
 approval. Plans remain excluded. Setup, implementation completion, and cleanup
 do not invoke it automatically.
 
 ```text
-Run `.ai/prompts/review-worktree-updates.md`.
+Run `.ai/prompts/return-worktree-docs.md`.
 worktree: .worktrees/<task-name>
 ```
 
@@ -146,17 +152,17 @@ hidden, and nested entries. It also preserves resource manifests, their containi
 artifact directories, and the resource coordination lock, including malformed or
 unresolved evidence. It never operates Docker or Simulator providers.
 
-For selected plans, use [Clean Plan Worktrees and Records](prompts/worktree-cleanup.md):
+For selected plans, use [Worktree Cleanup](.agents/skills/worktree-cleanup/SKILL.md):
 
 ```text
-Run `.ai/prompts/worktree-cleanup.md`.
+$worktree-cleanup
 plan: .ai/plans/<plan-name>.md
 ```
 
 To include all plans except named ones, use:
 
 ```text
-Run `.ai/prompts/worktree-cleanup.md`.
+$worktree-cleanup
 include everything except saved-outfit-details.md and platform-services-mobile.md
 ```
 
@@ -175,10 +181,10 @@ and artifact for recovery; see [Task Resources](instructions/shared/task-resourc
 | Entry/state                         | Expected result                                                                                                                    | Verification / prerequisites                                                                                                                                                   |
 | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Main or prepared-worktree execution | First allocation initializes one source manifest; executions and resources stay isolated; children receive context                 | Original helper `init`, `--help`, and maintained `scripts/resources/store.test.mjs` and `providers.test.mjs`; readable source plan and writable canonical artifact/marker/lock |
-| Selected cleanup / exclusions       | Inventory includes all selected executions; excluded resources survive; `CANCEL` changes nothing; changed preview refuses deletion | Original helper `inventory` with repeated selected `--plan`, then prompt-owned `cleanup-confirmed`; stopped agents/tests and available matching local providers                |
+| Selected cleanup / exclusions       | Inventory includes all selected executions; excluded resources survive; `CANCEL` changes nothing; changed preview refuses deletion | Original helper `inventory` with repeated selected `--plan`, then skill-owned `cleanup-confirmed`; stopped agents/tests and available matching local providers                 |
 | Failure / retry                     | Partial cleanup retains plan/artifact; exact-ID retry tolerates absence; shared images remain with evidence                        | `reconcile`, `release`, and a fresh inventory under [recovery guidance](instructions/shared/task-resources.md#recovery); never infer ownership from names                      |
 | Explicit resume                     | Ownership, provider identity and current use are checked before activation; provider changes block allocation                      | Original helper `init --resume`, manager/store/CLI tests, and available matching local providers                                                                               |
-| Final file phase                    | Only confirmed cleanup transitions are accepted; the existing lock protects worktrees, plans and records until removal finishes    | `verifyFileCleanupUnlocked`, manager filesystem regressions and the cleanup prompt; retain the original preview and successful cleanup result                                  |
+| Final file phase                    | Only confirmed cleanup transitions are accepted; the existing lock protects worktrees, plans and records until removal finishes    | `verifyFileCleanupUnlocked`, manager filesystem regressions and the cleanup procedure; retain the original preview and successful cleanup result                               |
 | Normal tracked fixture teardown     | Only bound allocations are removed after verification; refusal cannot reach raw Docker fallback                                    | `scripts/resources/disposal.test.mjs`, `fixtures.test.mjs`, `compose.test.mjs`, and the standalone native Docker harness                                                       |
 | Fast repository verification        | Schema, record, provider-boundary, cleanup preservation, and guidance regressions pass                                             | `rtk proxy pnpm health` and `rtk proxy pnpm test:focused` from `.ai`; installed pinned dependencies                                                                            |
 | Real lifecycle evidence             | Disposable local Docker/iOS creation, confirmation/refusal, deletion, and preservation are verified                                | Explicit disposable provider smoke named by the executing plan; local Docker and selected installed iOS runtime; mocked tests alone leave this unverified                      |

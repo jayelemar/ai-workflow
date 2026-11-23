@@ -1,0 +1,4 @@
+interface:
+  display_name: "Setup Local Codex"
+  short_description: "Set up project-local Codex instructions and skills"
+  default_prompt: "Use $setup-local-codex to set up this workspace and preserve its existing guidance and configuration."

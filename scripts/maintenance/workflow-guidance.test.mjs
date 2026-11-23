@@ -276,12 +276,17 @@ test("successful setup emits only self-contained handoffs and failures cannot la
 });
 
 test("workflow cleanup requires explicit scope, confirms, and preserves branches", async () => {
-  const [cleanup, readme, promptIndex] = await Promise.all([
-    read("prompts/worktree-cleanup.md"),
+  const [cleanup, cleanupSkill, readme, promptIndex] = await Promise.all([
+    read(".agents/skills/worktree-cleanup/references/cleanup-procedure.md"),
+    read(".agents/skills/worktree-cleanup/SKILL.md"),
     read("README.md"),
     read("prompts/README.md"),
   ]);
 
+  assert.match(
+    cleanupSkill,
+    /Read and follow the complete \[cleanup procedure\]\(references\/cleanup-procedure\.md\)[\s\S]+before inventory, confirmation, or mutation/,
+  );
   assert.match(cleanup, /plan: \.ai\/plans\/<plan-name>\.md/);
   assert.match(cleanup, /all-plans: true/);
   const exclusionExample =
@@ -318,7 +323,7 @@ test("workflow cleanup requires explicit scope, confirms, and preserves branches
   ])
     assert.match(cleanup, expectation);
   for (const source of [readme, promptIndex]) {
-    assert.match(source, /worktree-cleanup\.md/);
+    assert.match(source, /\$worktree-cleanup/);
     assert.match(source, /plan: \.ai\/plans\/<plan-name>\.md/);
     assert.match(source, /all-plans: true/);
     assert.match(source, exclusionExample);
@@ -326,10 +331,11 @@ test("workflow cleanup requires explicit scope, confirms, and preserves branches
 });
 
 test("workflow cleanup treats contained symlinks as leaves and rejects linked boundaries", async () => {
-  const cleanup = (await read("prompts/worktree-cleanup.md")).replace(
-    /\s+/g,
-    " ",
-  );
+  const cleanup = (
+    await read(
+      ".agents/skills/worktree-cleanup/references/cleanup-procedure.md",
+    )
+  ).replace(/\s+/g, " ");
 
   for (const expectation of [
     /Inspect entries with `lstat` or equivalent no-follow metadata/,
@@ -378,7 +384,8 @@ test("canonical skills declare matching metadata and enable normal matching", as
     "git-commit",
     "pull-request",
     "show-summary",
-    "show-plan-progress",
+    "worktree-cleanup",
+    "setup-local-codex",
     "manual-qa-checklist",
     "brainstorm",
   ]) {
