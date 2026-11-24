@@ -46,6 +46,30 @@ scripts, and sandboxed browser or network validation.
   critical E2E set. Put expensive full regressions, browser matrices, visual,
   performance, and long-running E2E checks in scheduled or dedicated pipelines.
 
+## Test progress reporting
+
+- Before running validation, show a concise numbered list of the selected
+  checks and their total in chat. State what is counted: validation checks
+  (commands or manual scenarios), suites, or individual test cases. Keep that
+  unit consistent; one command can contain many test cases.
+- Announce each check as it starts using `(i/N) Running: <check name>`, where
+  `i` is its position in the list and `N` is the selected total. Report its
+  result as `(i/N) Passed`, `Failed`, or `Blocked`, with the check name and a
+  short explanation for failures or blockers. The position identifies the
+  current check; it is not a count of completed checks.
+- For concurrent checks, name the active checks and report completed/total
+  separately. For a long-running check, give a chat update at least every
+  60 seconds with its name and latest observed progress, or state that it is
+  still running without new output. Do not invent current test names or counts.
+- Prefer existing runner progress output for individual test cases. If their
+  total or current case is unavailable, say so and use the selected validation
+  check count. Do not run tests twice merely to discover a total or add a
+  custom progress runner, persistent status file, or dependency for reporting.
+- If failures or discoveries change the selected checks, explain the change
+  and update the list and total before continuing. At the end, report totals
+  for passed, failed, blocked, skipped, and not-run checks; distinguish runner
+  test-case totals when available. A stopped run must identify remaining checks.
+
 ## Accessibility test approval
 
 - Dedicated accessibility testing is off by default on mobile, web, and
