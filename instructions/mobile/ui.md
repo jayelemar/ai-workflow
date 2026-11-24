@@ -1,5 +1,5 @@
-Version: 1.6
-Last Updated: 2026-11-24
+Version: 1.7
+Last Updated: 2026-11-25
 
 # Mobile UI Instructions
 
@@ -68,11 +68,15 @@ remain visible, reachable, and usable across supported device sizes.
   viewport matrix or native checks when it has no native-dependent behavior.
 - For a layout-affecting change, default to one compact phone viewport within
   each platform selected under [Mobile Virtual Devices](virtual-devices.md).
-  Add a representative modern or tall phone when the change affects shared
+  Propose a representative modern or tall phone when the change affects shared
   layout primitives, responsive breakpoints, viewport-relative sizing,
   distributed spacing, anchored controls, or safe-area handling; when a known
   defect depends on a larger viewport; or when explicit acceptance criteria
   require both sizes. State the concrete reason for additional coverage.
+  Before adopting coverage on two or more devices, obtain approval of the
+  specific device list under [Mobile Virtual Devices](virtual-devices.md#rules).
+  An explicit user-selected single device overrides the default viewport matrix;
+  report remaining coverage gaps without adding devices automatically.
   Two viewport sizes do not automatically require both iOS and Android.
 - When a functional flow needs native verification, run it on one required
   viewport per selected platform unless behavior itself differs by viewport.
