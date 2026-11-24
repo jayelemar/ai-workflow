@@ -140,7 +140,9 @@ for required versus optional evidence, completion blocking, and deferred checks.
   boundary does not require native checks.
 - For mobile simulator platform selection and agent-run checks, follow
   [Mobile Virtual Devices](../mobile/virtual-devices.md#rules).
-- Apart from that platform choice and [Accessibility test approval](#accessibility-test-approval),
+- Apart from that platform choice, the multiple-device approval required by
+  [Mobile Virtual Devices](../mobile/virtual-devices.md#rules), and
+  [Accessibility test approval](#accessibility-test-approval),
   do not add a generic operator-confirmation gate. Ask only when venues differ
   materially in evidence or residual risk and the request or finalized spec
   leaves that choice unresolved. Name required operator authority for a new

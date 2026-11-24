@@ -1,5 +1,5 @@
-Version: 1.1
-Last Updated: 2026-11-19
+Version: 1.2
+Last Updated: 2026-11-25
 
 # Mobile Virtual Device Instructions
 
@@ -14,6 +14,7 @@ work or accumulating unnecessary simulators and emulators.
   other virtual devices used for mobile development and testing.
 - Phone, tablet, and other supported device types, including tasks without UI
   changes. Physical device names remain under the user's control.
+- The multiple-device approval rule also applies to physical mobile test devices.
 
 ## Rules
 
@@ -25,6 +26,17 @@ work or accumulating unnecessary simulators and emulators.
 - Wait for the answer before selecting, creating, booting, or testing on a
   device. Continue independent work while waiting. Do not infer a choice from
   available or running devices, or default to both platforms.
+- Before adopting a test matrix with two or more devices, obtain explicit user
+  approval of the specific device list. State each device's model, OS/runtime,
+  logical viewport and testing purpose, including separate instances of the
+  same model. Read-only inventory may establish these details before asking;
+  wait for approval before creating, booting or testing the proposed matrix.
+  Count devices across the task, not only those used simultaneously. A platform
+  choice or generic request to run tests does not approve multiple devices.
+- Reuse existing explicit approval for the same device list and testing scope.
+  Ask again before expanding or substituting devices in an approved matrix of
+  two or more. If the user limits testing to one device, preserve that limit
+  and report the coverage gap rather than automatically adding another device.
 - Run the selected checks using available tools before asking the user for
   manual help. If blocked, report the exact unverified behavior, limitation,
   and smallest follow-up check under
@@ -84,6 +96,8 @@ work or accumulating unnecessary simulators and emulators.
 
 ## Validation
 
+- For tests using two or more devices, record the approved device list and
+  confirm the actual devices used stay within that approval.
 - Report the selected platforms and the platforms actually tested. Evidence
   from one platform does not establish behavior on the other.
 - Before using a selected device, confirm its identifier, model, OS/runtime,
