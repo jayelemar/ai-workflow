@@ -1,5 +1,5 @@
-Version: 1.5
-Last Updated: 2026-11-19
+Version: 1.6
+Last Updated: 2026-11-24
 
 # Mobile UI Instructions
 
@@ -26,9 +26,9 @@ remain visible, reachable, and usable across supported device sizes.
   When the project does not declare a smaller supported viewport, use a compact
   portrait baseline of 375 by 667 logical points on iOS and 360 by 640 logical
   points on Android.
-- Also verify a representative modern or tall phone within the selected
-  platforms. Use logical viewport dimensions as acceptance criteria rather
-  than relying only on named device models.
+- Select viewport coverage under Validation based on the changed layout risk.
+  Use logical viewport dimensions as acceptance criteria rather than relying
+  only on named device models.
 - Content that can grow because of headings, copy, localization, dynamic data,
   loading or error states, accessibility text scaling, or inserted controls
   must reflow or be reachable through scrolling.
@@ -62,10 +62,27 @@ remain visible, reachable, and usable across supported device sizes.
 
 ## Validation
 
-- For a layout-affecting mobile change, verify the affected screen on a
-  compact phone viewport and a representative modern or tall phone viewport
-  within each platform selected under [Mobile Virtual Devices](virtual-devices.md).
+- Before testing, identify the affected screens, changed behavior, and whether
+  correctness depends on viewport dimensions. Follow [test selection](../shared/testing.md#test-selection)
+  for functional coverage; a mobile feature change alone does not require a
+  viewport matrix or native checks when it has no native-dependent behavior.
+- For a layout-affecting change, default to one compact phone viewport within
+  each platform selected under [Mobile Virtual Devices](virtual-devices.md).
+  Add a representative modern or tall phone when the change affects shared
+  layout primitives, responsive breakpoints, viewport-relative sizing,
+  distributed spacing, anchored controls, or safe-area handling; when a known
+  defect depends on a larger viewport; or when explicit acceptance criteria
+  require both sizes. State the concrete reason for additional coverage.
   Two viewport sizes do not automatically require both iOS and Android.
+- When a functional flow needs native verification, run it on one required
+  viewport per selected platform unless behavior itself differs by viewport.
+  On additional sizes, check only the affected layout and interactions, using
+  the same state or fixture where practical. Do not repeat unrelated screens
+  or the full feature suite merely to obtain another viewport result.
+- Reuse prior evidence only when its application version, runtime, configuration,
+  and changed surfaces remain compatible under [required evidence](../shared/testing.md#required-evidence).
+  Recheck affected screens after relevant edits; prior evidence for an unchanged
+  screen does not require rerunning it because another feature was added.
 - Exercise the state with the greatest expected vertical content and confirm
   every required action is fully visible or reachable by scrolling and can be
   activated.
@@ -79,12 +96,16 @@ remain visible, reachable, and usable across supported device sizes.
 - Exercise changed states and transitions, checking input preservation and
   recovery actions. For background-refresh changes, verify populated content
   stays visible while progress is indicated.
-- For blocked compact-device validation, follow
+- Report the tested viewport dimensions and behavior, why any additional size
+  was needed, and any required coverage still missing. For blocked required
+  viewport validation, follow
   [Validation and Completion](../../AGENTS.md#validation-and-completion).
 
 ## Anti-Patterns
 
-- Testing only on the developer's default or largest simulator.
+- Choosing only the developer's default or largest simulator without assessing
+  compact-layout risk.
+- Repeating the full feature flow at every phone size when only layout differs.
 - Validating phone width while ignoring available height and safe-area insets.
 - Fixed-height containers around variable text, dynamic content, or actions.
 - Adding headers, banners, copy, or actions without rechecking the remaining
