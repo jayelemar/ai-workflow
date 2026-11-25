@@ -13,7 +13,7 @@
     "health:full": "node scripts/maintenance/health-check.mjs --full",
     "cleanup:local": "node scripts/maintenance/cleanup-local.mjs",
     "setup:codex": "node scripts/setup/agents-override.mjs",
-    "test:focused": "node --import tsx --test scripts/maintenance/cleanup-local.test.mjs scripts/maintenance/git-hooks.test.mjs scripts/maintenance/health-check.test.mjs scripts/maintenance/workflow-guidance.test.mjs scripts/maintenance/worktree-context.test.mjs scripts/setup/agents-override.test.mjs scripts/maintenance/pre-push.test.mjs scripts/resources/store.test.mjs scripts/resources/providers.test.mjs scripts/resources/manager.test.mjs scripts/resources/cli.test.mjs scripts/resources/volumes.test.mjs scripts/resources/compose.test.mjs scripts/resources/fixtures.test.mjs scripts/resources/images.test.mjs scripts/resources/disposal.test.mjs",
+    "test:focused": "node --import tsx --test scripts/resources/smoke.test.mjs scripts/resources/naming.test.mjs scripts/maintenance/cleanup-local.test.mjs scripts/maintenance/git-hooks.test.mjs scripts/maintenance/health-check.test.mjs scripts/maintenance/workflow-guidance.test.mjs scripts/maintenance/worktree-context.test.mjs scripts/setup/agents-override.test.mjs scripts/maintenance/pre-push.test.mjs scripts/resources/store.test.mjs scripts/resources/providers.test.mjs scripts/resources/manager.test.mjs scripts/resources/cli.test.mjs scripts/resources/volumes.test.mjs scripts/resources/compose.test.mjs scripts/resources/fixtures.test.mjs scripts/resources/images.test.mjs scripts/resources/disposal.test.mjs",
     "resources": "node scripts/resources/task-resources.mjs",
     "test:all": "pnpm health:full",
     "health:push": "node scripts/maintenance/pre-push.mjs"

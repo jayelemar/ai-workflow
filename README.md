@@ -96,6 +96,27 @@ never owns a second resource record. Planning and worktree-only setup create no
 resource artifact. Version 1 rejects tracked Android and other unsupported
 providers explicitly.
 
+Before creating any workflow resource, including ordinary tasks without plans,
+follow [Resource Naming](instructions/shared/resource-naming.md). New device
+labels show project, source plan/task, and model, for example
+`ExampleApp · wardrobe-gallery · iPhone 16 Pro`; runtime details stay in metadata.
+Docker helpers generate descriptive names such as
+`exampleapp-wardrobe-gallery-postgres-a1b2c3d4e5f6`. Existing resources keep their
+names and stable identifiers. Names never replace ownership evidence.
+
+When source-local instructions configure a descriptive project label, supply it
+at resource initialization:
+
+```bash
+rtk proxy node '<source-workspace>/.ai/scripts/resources/task-resources.mjs' init --workspace '<source-workspace>' --plan '.ai/plans/<plan-name>.md' --root '<execution-root>' --project-name '<source-project-label>'
+```
+
+Init records the resolved `projectName` in the existing manifest. Without an
+explicit or recorded label it uses the canonical source workspace basename.
+Worktree handoffs retain that source label. Resume preserves a recorded label
+and rejects conflicting explicit input; old manifests without it remain valid
+under [Task Resources](instructions/shared/task-resources.md).
+
 ## Skills and Utilities
 
 | Skill                                                              | Purpose                                                      |
@@ -178,16 +199,17 @@ and artifact for recovery; see [Task Resources](instructions/shared/task-resourc
 
 ### Task resource verification map
 
-| Entry/state                         | Expected result                                                                                                                    | Verification / prerequisites                                                                                                                                                   |
-| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Main or prepared-worktree execution | First allocation initializes one source manifest; executions and resources stay isolated; children receive context                 | Original helper `init`, `--help`, and maintained `scripts/resources/store.test.mjs` and `providers.test.mjs`; readable source plan and writable canonical artifact/marker/lock |
-| Selected cleanup / exclusions       | Inventory includes all selected executions; excluded resources survive; `CANCEL` changes nothing; changed preview refuses deletion | Original helper `inventory` with repeated selected `--plan`, then skill-owned `cleanup-confirmed`; stopped agents/tests and available matching local providers                 |
-| Failure / retry                     | Partial cleanup retains plan/artifact; exact-ID retry tolerates absence; shared images remain with evidence                        | `reconcile`, `release`, and a fresh inventory under [recovery guidance](instructions/shared/task-resources.md#recovery); never infer ownership from names                      |
-| Explicit resume                     | Ownership, provider identity and current use are checked before activation; provider changes block allocation                      | Original helper `init --resume`, manager/store/CLI tests, and available matching local providers                                                                               |
-| Final file phase                    | Only confirmed cleanup transitions are accepted; the existing lock protects worktrees, plans and records until removal finishes    | `verifyFileCleanupUnlocked`, manager filesystem regressions and the cleanup procedure; retain the original preview and successful cleanup result                               |
-| Normal tracked fixture teardown     | Only bound allocations are removed after verification; refusal cannot reach raw Docker fallback                                    | `scripts/resources/disposal.test.mjs`, `fixtures.test.mjs`, `compose.test.mjs`, and the standalone native Docker harness                                                       |
-| Fast repository verification        | Schema, record, provider-boundary, cleanup preservation, and guidance regressions pass                                             | `rtk proxy pnpm health` and `rtk proxy pnpm test:focused` from `.ai`; installed pinned dependencies                                                                            |
-| Real lifecycle evidence             | Disposable local Docker/iOS creation, confirmation/refusal, deletion, and preservation are verified                                | Explicit disposable provider smoke named by the executing plan; local Docker and selected installed iOS runtime; mocked tests alone leave this unverified                      |
+| Entry/state                         | Expected result                                                                                                                     | Verification / prerequisites                                                                                                                                                                |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Main or prepared-worktree execution | First allocation initializes one source manifest; executions and resources stay isolated; children receive context                  | Original helper `init`, `--help`, and maintained `scripts/resources/store.test.mjs` and `providers.test.mjs`; readable source plan and writable canonical artifact/marker/lock              |
+| New resource naming                 | Provider-visible names contain source project/task and model or service; runtime metadata, reused names and ownership remain intact | [Resource Naming](instructions/shared/resource-naming.md), `scripts/resources/naming.test.mjs`, provider/Compose/CLI tests, and native smoke; configured source label or workspace fallback |
+| Selected cleanup / exclusions       | Inventory includes all selected executions; excluded resources survive; `CANCEL` changes nothing; changed preview refuses deletion  | Original helper `inventory` with repeated selected `--plan`, then skill-owned `cleanup-confirmed`; stopped agents/tests and available matching local providers                              |
+| Failure / retry                     | Partial cleanup retains plan/artifact; exact-ID retry tolerates absence; shared images remain with evidence                         | `reconcile`, `release`, and a fresh inventory under [recovery guidance](instructions/shared/task-resources.md#recovery); never infer ownership from names                                   |
+| Explicit resume                     | Ownership, provider identity and current use are checked before activation; provider changes block allocation                       | Original helper `init --resume`, manager/store/CLI tests, and available matching local providers                                                                                            |
+| Final file phase                    | Only confirmed cleanup transitions are accepted; the existing lock protects worktrees, plans and records until removal finishes     | `verifyFileCleanupUnlocked`, manager filesystem regressions and the cleanup procedure; retain the original preview and successful cleanup result                                            |
+| Normal tracked fixture teardown     | Only bound allocations are removed after verification; refusal cannot reach raw Docker fallback                                     | `scripts/resources/disposal.test.mjs`, `fixtures.test.mjs`, `compose.test.mjs`, and the standalone native Docker harness                                                                    |
+| Fast repository verification        | Schema, record, provider-boundary, cleanup preservation, and guidance regressions pass                                              | `rtk proxy pnpm health` and `rtk proxy pnpm test:focused` from `.ai`; installed pinned dependencies                                                                                         |
+| Real lifecycle evidence             | Disposable local Docker/iOS creation, confirmation/refusal, deletion, and preservation are verified                                 | Explicit disposable provider smoke named by the executing plan; local Docker and selected installed iOS runtime; mocked tests alone leave this unverified                                   |
 
 All provisioning code, dependencies, and verification live in `.ai`; no application
 package or server checkout is required. CLI tests use arbitrary configuration

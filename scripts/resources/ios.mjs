@@ -6,6 +6,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { z } from "zod";
 import { AbsolutePathSchema } from "./schema.mjs";
+import { deviceName } from "./naming.mjs";
 
 const execute = promisify(execFile);
 const uuid = z.uuid();
@@ -103,7 +104,7 @@ export class IOSProvider {
     }
   }
 
-  async create({ deviceType, runtime }, provider, ownership) {
+  async create({ deviceType, runtime }, provider, ownership, naming) {
     const owner = CreationOwnerSchema.safeParse(ownership);
     if (!owner.success)
       throw new Error("Unverified Simulator creation ownership evidence");
@@ -123,15 +124,13 @@ export class IOSProvider {
         "Requested iOS model/runtime is not installed and available",
       );
     }
-    const base = `${model.name} — ${system.name}`;
-    const names = new Set(
+    const name = deviceName(
+      naming,
+      model.name,
       Object.values(before.devices)
         .flat()
         .map((device) => device.name),
     );
-    let name = base;
-    for (let suffix = 2; names.has(name); suffix++)
-      name = `${base} (${suffix})`;
     const priorIds = new Set(
       Object.values(before.devices)
         .flat()
@@ -152,6 +151,10 @@ export class IOSProvider {
     if (!actual)
       throw new Error(
         "Created Simulator is absent from the provider inventory; allocation remains pending",
+      );
+    if (actual.name !== name)
+      throw new Error(
+        "Created Simulator display name differs from the requested name",
       );
     const { workspace, ...identity } = owner.data;
     const proof = ownershipProof(identity, workspace, udid);

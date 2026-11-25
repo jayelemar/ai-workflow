@@ -1,5 +1,6 @@
 // Explicit native smoke only: never import this file into the fast test suite.
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
 import { mkdtemp, mkdir, realpath, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -135,13 +136,21 @@ async function workspaceFixture(fixtureId, onCreated) {
   );
   // A task-local workflow directory must never receive a substitute manifest.
   await mkdir(path.join(worktreeRoot, ".ai"));
-  const root = await initExecution({ workspace, plan: selectedPlan });
+  const root = await initExecution({
+    workspace,
+    plan: selectedPlan,
+    projectName: "Resource Smoke",
+  });
   const worktree = await initExecution({
     workspace,
     plan: selectedPlan,
     root: worktreeRoot,
   });
-  const excluded = await initExecution({ workspace, plan: excludedPlan });
+  const excluded = await initExecution({
+    workspace,
+    plan: excludedPlan,
+    projectName: "Resource Smoke",
+  });
   assert.notEqual(root.executionId, worktree.executionId);
   assert.equal((await readAllManifests(workspace)).length, 2);
   assert.equal((await readManifest(root)).executions.length, 2);
@@ -299,6 +308,29 @@ async function dockerPortSmoke(fixture) {
       "volume",
     ]);
     assert.ok(manifest.resources.every((entry) => entry.state === "present"));
+    assert.match(
+      stack.project,
+      /^resource-smoke-(selected|excluded)-task-compose-[a-f0-9]{12}$/,
+    );
+    for (const entry of manifest.resources) {
+      if (entry.kind === "image") {
+        const image = await docker.inspect("image", entry.locator.id, provider);
+        assert.deepEqual(image.tags, [`${stack.project}-worker-b-0:task`]);
+      } else {
+        const identity =
+          entry.kind === "volume" ? entry.locator.name : entry.locator.id;
+        const name = (
+          await docker.command(
+            [entry.kind, "inspect", "--format", "{{.Name}}", identity],
+            provider.endpoint,
+          )
+        ).replace(/^\//, "");
+        assert.ok(
+          name.startsWith(stack.project),
+          `Unexpected Compose ${entry.kind} name: ${name}`,
+        );
+      }
+    }
     const binding = actual.ports["8025/tcp"][0];
     const publication = `${binding.HostIp}:${binding.HostPort}`;
     const environment = JSON.parse(
@@ -357,6 +389,7 @@ async function dockerPortSmoke(fixture) {
       publication,
     })),
     checks: {
+      readableComposeNamesAndBuildTags: true,
       simultaneousTaskPortIsolation: true,
       distinctOwnedResources: true,
       builtImageDeclaredStorageTracked: true,
@@ -471,6 +504,19 @@ async function dockerSmoke(fixture, fixtureId) {
   const rootNetwork = await trackedNetwork(root);
   const worktreeNetwork = await trackedNetwork(worktree);
   assert.notEqual(rootNetwork.getId(), worktreeNetwork.getId());
+  for (const network of [rootNetwork, worktreeNetwork]) {
+    assert.match(
+      network.getName(),
+      /^resource-smoke-selected-task-network-[a-f0-9]{12}$/,
+    );
+    assert.equal(
+      await docker.command(
+        ["network", "inspect", "--format", "{{.Name}}", network.getId()],
+        provider.endpoint,
+      ),
+      network.getName(),
+    );
+  }
   const volumeReservation = await manager.reserve(root, "volume", provider);
   const namedVolume = `ai-smoke-${fixtureId}-data`;
   if (await docker.inspect("volume", namedVolume, provider))
@@ -492,6 +538,32 @@ async function dockerSmoke(fixture, fixtureId) {
     environment: { POSTGRES_HOST_AUTH_METHOD: "trust" },
     ports: [5432],
   });
+  assert.match(
+    database.getName(),
+    /^resource-smoke-selected-task-postgres-[a-f0-9]{12}$/,
+  );
+  assert.equal(
+    (
+      await docker.command(
+        ["container", "inspect", "--format", "{{.Name}}", database.getId()],
+        provider.endpoint,
+      )
+    ).replace(/^\//, ""),
+    database.getName(),
+  );
+  const databaseNative = await docker.inspect(
+    "container",
+    database.getId(),
+    provider,
+  );
+  assert.ok(databaseNative.mounts.some((mount) => mount.Type === "volume"));
+  for (const mount of databaseNative.mounts.filter(
+    (mount) => mount.Type === "volume",
+  ))
+    assert.match(
+      mount.Name,
+      /^resource-smoke-selected-task-volume-[0-9]+-[a-f0-9]{12}$/,
+    );
   await trackedContainer(root, seaweed, {
     networkId: rootNetwork.getId(),
     volumeMounts: [{ source: namedVolume, target: "/data" }],
@@ -591,7 +663,9 @@ async function dockerSmoke(fixture, fixtureId) {
       (entry) =>
         entry.kind === "volume" &&
         entry.dependencies.includes(databaseEntry.id) &&
-        /^[a-f0-9]{64}$/.test(entry.locator.name),
+        /^resource-smoke-selected-task-volume-[0-9]+-[a-f0-9]{12}$/.test(
+          entry.locator.name,
+        ),
     ),
   );
   assert.ok(
@@ -732,6 +806,7 @@ async function dockerSmoke(fixture, fixtureId) {
     checks: {
       rootWorktreeIsolation: true,
       automaticTracking: true,
+      readableStandaloneNames: true,
       genericDockerFixtures: true,
       simultaneousFixturePortIsolation: true,
       normalFixtureTeardown: true,
@@ -808,15 +883,13 @@ async function iosSmoke(fixture, configuration) {
   const model = before.devicetypes.find(
     (type) => type.identifier === locator.deviceType,
   );
-  const runtime = before.runtimes.find(
-    (system) => system.identifier === locator.runtime,
-  );
-  const baseName = `${model.name} — ${runtime.name}`;
+  const baseName = `Resource Smoke · selected-task · ${model.name}`;
   const priorNames = new Set(beforeDevices.map((device) => device.name));
   let expectedName = baseName;
   for (let suffix = 2; priorNames.has(expectedName); suffix++)
     expectedName = `${baseName} (${suffix})`;
   assert.equal(locator.name, expectedName);
+  assert.equal((await ios.inspect({ locator, provider })).name, expectedName);
   const created = await ios.devices(provider);
   const createdIds = Object.values(created.devices)
     .flat()
@@ -900,6 +973,7 @@ async function iosSmoke(fixture, configuration) {
 
 let fixture;
 let configuration;
+let composeRecovery;
 try {
   configuration = options(process.argv.slice(2));
   if (!configuration) {
@@ -929,6 +1003,23 @@ Evidence is retained in a temporary canonical workspace, including on failure.`)
             ? await dockerPortSmoke(fixture)
             : await dockerSmoke(fixture, configuration["--fixture-id"])
         : await iosSmoke(fixture, configuration);
+    if (
+      configuration.provider === "docker" &&
+      !configuration.portsOnly &&
+      !configuration.recoveryOnly
+    ) {
+      composeRecovery = { fixtureId: randomUUID(), evidence: null };
+      const composeFixture = await workspaceFixture(
+        composeRecovery.fixtureId,
+        (workspace) => {
+          composeRecovery.evidence = workspace;
+        },
+      );
+      result.compose = {
+        ...composeRecovery,
+        ...(await dockerPortSmoke(composeFixture)),
+      };
+    }
     assert.equal((await readAllManifests(fixture.workspace)).length, 2);
     await assert.rejects(
       stat(path.join(fixture.worktreeRoot, ".ai/artifacts")),
@@ -970,6 +1061,7 @@ Evidence is retained in a temporary canonical workspace, including on failure.`)
       fixtureId: configuration?.["--fixture-id"] ?? null,
       provider: configuration?.provider ?? null,
       evidence: fixture?.workspace ?? null,
+      ...(composeRecovery ? { compose: composeRecovery } : {}),
       failed: true,
       reason:
         error instanceof assert.AssertionError

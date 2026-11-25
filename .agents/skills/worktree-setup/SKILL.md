@@ -42,6 +42,11 @@ branch: feat/<plan-name>
    its filename. Retain this canonical original workspace and source-relative
    plan path for the execution handoff; a copied `.ai/` is not the resource
    authority.
+   Read [Resource Naming](../../../instructions/shared/resource-naming.md) and
+   retain any source-local descriptive project label for future
+   `init --project-name` input. Otherwise retain the canonical source workspace
+   basename; never substitute the task-root basename. This label does not alter
+   worktree paths or the tmux session naming below.
 3. Resolve each repository from an explicit invocation mapping or a repository
    root clearly named by the plan. Infer the workspace Git top level when every
    plan-owned path clearly belongs to it. Each root must be relative to the workspace,
@@ -140,7 +145,9 @@ Include the canonical absolute original workspace, exact source-relative plan,
 and absolute original helper path. Require task-local execution to use that
 original helper and its canonical record, never the copied `.ai` artifact; it
 initializes immediately before the first resource and passes its exact JSON
-context to every resource-creating child. This permits only the source resource
+context to every resource-creating child. Include the resolved source project
+label and require `init --project-name` to receive it, preserving any already
+recorded label under Task Resources. This permits only the source resource
 artifact, temporary lock, and helper-owned source-plan marker writes described
 in [Task Resources](../../../instructions/shared/task-resources.md), with no
 source code edits. If that write is unavailable, stop before allocation.
@@ -151,7 +158,7 @@ before commits or pushes in the execution handoff.
 For controlled work, require the plan's independent final review before finishing:
 
 ```text
-/goal Implement <task-root>/.ai/plans/<plan-name>.md. Use these prepared worktrees for all plan-owned edits: <repository-id>=<absolute-worktree-path> (repeat for every repository). Preserve its boundaries, keep the task-local plan updated, run every required validation, and finish only when its definition of done is proven. Original workspace: <source-workspace>; source plan: .ai/plans/<plan-name>.md. Before the first resource allocation, follow .ai/instructions/shared/task-resources.md using <source-workspace>/.ai/scripts/resources/task-resources.mjs with that original workspace/source plan and <task-root> as execution root. Pass its exact TASK_RESOURCES_CONTEXT JSON to every resource-creating child. Use the original helper and canonical source artifact, never a copied .ai resource record. Only its resource artifact, temporary lock, and helper-owned source-plan marker may be written outside the worktrees; stop before allocation if unavailable. Implementation handles dependency setup, repository-documented hook initialization in each prepared checkout, and application validation. Verify hooks before commits or pushes following .ai/instructions/shared/delivery-hygiene.md#hook-verification. Implementation and Goal execution have not started; delivery requires separate explicit authorization.
+/goal Implement <task-root>/.ai/plans/<plan-name>.md. Use these prepared worktrees for all plan-owned edits: <repository-id>=<absolute-worktree-path> (repeat for every repository). Preserve its boundaries, keep the task-local plan updated, run every required validation, and finish only when its definition of done is proven. Original workspace: <source-workspace>; source plan: .ai/plans/<plan-name>.md; source project label: <source-project-label>. Before the first resource allocation, follow .ai/instructions/shared/task-resources.md using <source-workspace>/.ai/scripts/resources/task-resources.mjs with that original workspace/source plan, <task-root> as execution root, and --project-name '<source-project-label>', preserving any recorded label. Pass its exact TASK_RESOURCES_CONTEXT JSON to every resource-creating child. Use the original helper and canonical source artifact, never a copied .ai resource record. Only its resource artifact, temporary lock, and helper-owned source-plan marker may be written outside the worktrees; stop before allocation if unavailable. Implementation handles dependency setup, repository-documented hook initialization in each prepared checkout, and application validation. Verify hooks before commits or pushes following .ai/instructions/shared/delivery-hygiene.md#hook-verification. Implementation and Goal execution have not started; delivery requires separate explicit authorization.
 ```
 
 The second block is the single two-pane launcher below, printed without starting

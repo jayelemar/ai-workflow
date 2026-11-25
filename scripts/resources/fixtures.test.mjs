@@ -77,13 +77,16 @@ class FakeDocker extends DockerProvider {
         "com.docker.network.bridge.host_binding_ipv4=127.0.0.1",
       );
       return this.create("network", labels, {
+        name: args.at(-1),
         driver: "bridge",
         options: { "com.docker.network.bridge.host_binding_ipv4": "127.0.0.1" },
         containers: {},
       }).id;
     }
     if (args[0] === "volume" && args[1] === "create")
-      return this.create("volume", labels).name;
+      return this.create("volume", labels, {
+        ...(args.length % 2 === 1 ? { name: args.at(-1) } : {}),
+      }).name;
     if (args[0] === "container" && args[1] === "create") {
       const networkId = args[args.indexOf("--network") + 1];
       assert.match(networkId, /^[a-f0-9]{64}$/);
@@ -105,6 +108,9 @@ class FakeDocker extends DockerProvider {
         }
       }
       const object = this.create("container", labels, {
+        ...(args.includes("--name")
+          ? { name: args[args.indexOf("--name") + 1] }
+          : {}),
         mounts,
         declaredVolumes: { "/data": {} },
         ports,
@@ -134,7 +140,7 @@ class FakeDocker extends DockerProvider {
       tags: [],
       ...overrides,
     };
-    this.objects.set(`${kind}:${id}`, object);
+    this.objects.set(`${kind}:${kind === "volume" ? object.name : id}`, object);
     return object;
   }
   async remove(entry) {
@@ -214,6 +220,56 @@ test("portable Docker API pins images, uses private networking, preallocates ima
     create.includes(
       [...f.docker.objects.values()].find((entry) => entry.kind === "image").id,
     ),
+  );
+});
+
+test("new Docker names include source project, plan, service, and each reservation suffix", async (t) => {
+  const f = await fixture(t);
+  const manifest = await readManifest(f.context);
+  const project = path.basename(f.context.workspace).toLowerCase();
+  const expected = (entry, description) =>
+    `${project}-fixture-stop-${description}-${entry.id.replaceAll("-", "").slice(0, 12)}`;
+  for (const entry of manifest.resources) {
+    const description = {
+      container: "public-fixture",
+      network: "network",
+      volume: "volume-0",
+    }[entry.kind];
+    const object = f.docker.objects.get(
+      `${entry.kind}:${entry.locator.id ?? entry.locator.name}`,
+    );
+    assert.equal(object.name, expected(entry, description));
+    if (entry.kind === "container")
+      assert.equal(f.started.getName(), object.name);
+  }
+  const second = await startDockerContainer(
+    { image: "public-fixture:unit" },
+    f.dependencies,
+  );
+  assert.notEqual(second.getName(), f.started.getName());
+  assert.equal(
+    (await readManifest(f.context)).resources.filter(
+      (entry) => entry.kind === "network",
+    ).length,
+    1,
+  );
+});
+
+test("creating a named container reuses an available legacy network without renaming it", async (t) => {
+  const f = await fixture(t);
+  const network = [...f.docker.objects.values()].find(
+    (object) => object.kind === "network",
+  );
+  network.name = "legacy-private-network";
+  const next = await startDockerContainer(
+    { image: "public-fixture:unit" },
+    f.dependencies,
+  );
+  assert.equal(network.name, "legacy-private-network");
+  assert.equal(
+    Object.values(f.docker.objects.get(`container:${next.getId()}`).networks)[0]
+      .NetworkID,
+    network.id,
   );
 });
 

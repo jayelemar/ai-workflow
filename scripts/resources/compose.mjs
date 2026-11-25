@@ -8,6 +8,7 @@ import { readManifest } from "./store.mjs";
 import { AbsolutePathSchema } from "./schema.mjs";
 import { validateTaskImage } from "./images.mjs";
 import { disposeDockerAllocations } from "./disposal.mjs";
+import { dockerName, slug } from "./naming.mjs";
 
 // Check all ancestors as well as the final file; generated overlays must never
 // follow a symlink into a checkout or another task's artifact.
@@ -153,8 +154,9 @@ export async function trackedCompose(
     (await realpath(directory)) !== directory
   )
     throw new Error("Compose directory must be a canonical directory");
-  const { execution } = await manager.context(context);
+  const { execution, manifest } = await manager.context(context);
   files = await resolveComposeFiles(directory, files, execution);
+  const isolatedProject = dockerName(manifest, "compose", randomUUID());
   project ??=
     path
       .basename(directory)
@@ -190,6 +192,20 @@ export async function trackedCompose(
   }
   const services = Object.keys(config.services);
   const volumes = Object.keys(config.volumes ?? {});
+  // Keep caller keys and Compose's normal suffixes, but reject names that
+  // cannot fit the recorded provider identity before pulling or building images.
+  if (
+    volumes.some((name) => `${isolatedProject}_${name}`.length > 255) ||
+    services.some((name) => `${isolatedProject}-${name}-1`.length > 255)
+  )
+    throw new Error("Generated Compose resource name exceeds 255 characters");
+  const buildTags = new Map();
+  for (const [service, configuration] of Object.entries(config.services))
+    if (configuration.build)
+      buildTags.set(
+        service,
+        `${isolatedProject}-${slug(service)}-${buildTags.size}:task`,
+      );
   // Allocation consumes this same resolved snapshot from stdin. Re-reading the
   // caller's files after validation could introduce resources without ownership
   // reservations; expanded configuration must never be written to an artifact.
@@ -284,7 +300,6 @@ export async function trackedCompose(
       validatedImages.set(service, actual.id);
     }
   }
-  const isolatedProject = `ai-${context.executionId}-${randomUUID().slice(0, 8)}`;
   const overlay = {
     services: Object.create(null),
     volumes: Object.create(null),
@@ -319,14 +334,13 @@ export async function trackedCompose(
     name: `${isolatedProject}_default`,
     labels: network.labels,
   };
-  let buildIndex = 0;
   for (const [service, configuration] of Object.entries(config.services)) {
     const target = overlay.services[service];
     if (configuration.build) {
       // Compose service identifiers may contain uppercase characters, while
       // Docker image repository names must be lowercase. Indices also avoid
       // collisions between service names that differ only by case.
-      target.image = `${isolatedProject}-build-${buildIndex++}:task`;
+      target.image = buildTags.get(service);
       const image = await reserve("image", { expectedTags: [target.image] });
       target.build = { labels: image.labels };
     }

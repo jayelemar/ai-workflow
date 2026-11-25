@@ -173,7 +173,9 @@ test("any selected provider or ownership failure refuses all native mutations wi
   for (const failure of ["daemon", "ownership"]) {
     const f = await fixture(t);
     const container = await f.allocate("container");
-    const volume = await f.allocate("volume");
+    const volume = await f.allocate("volume", {
+      name: "myuse-disposal-task-volume-0-a1b2c3d4e5f6",
+    });
     if (failure === "daemon") f.docker.provider.daemonId = "replacement-daemon";
     else volume.object.labels["ai.task"] = randomUUID();
     await assert.rejects(dispose(f, container, volume));

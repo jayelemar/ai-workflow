@@ -2,6 +2,7 @@ import path from "node:path";
 import { ownershipLabels, owns } from "./docker.mjs";
 import { validateTaskImage } from "./images.mjs";
 import { readAllManifests, readManifest, updateManifest } from "./store.mjs";
+import { dockerName } from "./naming.mjs";
 
 const sameProvider = (left, right) =>
   left?.type === "docker" &&
@@ -78,7 +79,7 @@ async function requireExclusiveVolumeRecord(context, manifest, entry) {
 }
 
 // Preallocating image VOLUMEs provides immutable ownership even after the
-// creating container disappears. Docker still chooses each anonymous name.
+// creating container disappears. Each new volume receives its reserved name.
 export async function prepareContainerVolumes({
   manager,
   context,
@@ -108,6 +109,7 @@ export async function prepareContainerVolumes({
     throw new Error(
       "Container volumes require a pending allocation in this execution",
     );
+  dockerName(manifest, "volume-0", recordedParent.id);
   await manager.docker.verifyIdentity(provider);
   const mounts = [];
   const targets = new Set();
@@ -188,7 +190,7 @@ export async function prepareContainerVolumes({
   if (new Set([...targets, ...declaredTargets]).size > 128)
     throw new Error("Container volume mounts exceed the supported limit");
   const entries = [];
-  for (const target of declaredTargets) {
+  for (const [index, target] of declaredTargets.entries()) {
     if (targets.has(target)) continue;
     const { entry, labels } = await manager.reserve(
       context,
@@ -199,9 +201,11 @@ export async function prepareContainerVolumes({
     const args = ["volume", "create"];
     for (const [key, value] of Object.entries(labels))
       args.push("--label", `${key}=${value}`);
+    const requestedName = dockerName(manifest, `volume-${index}`, entry.id);
+    args.push(requestedName);
     const name = await manager.docker.command(args, provider.endpoint);
-    if (!/^[a-f0-9]{64}$/.test(name))
-      throw new Error("Docker did not return a verified anonymous volume name");
+    if (name !== requestedName)
+      throw new Error("Docker did not return the exact requested volume name");
     await manager.captureDocker(context, entry.id, name);
     const captured = (await readManifest(context)).resources.find(
       (item) => item.id === entry.id,

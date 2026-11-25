@@ -14,6 +14,9 @@ even when a provider plugin is installed; reject them before any allocation.
 
 ## Rules
 
+- Before provisioning, read and follow [Resource Naming](resource-naming.md).
+  It owns descriptive names for new allocations; existing resources retain
+  their names and all ownership and cleanup safeguards below.
 - Resolve and retain the canonical original workspace, source-relative plan
   `.ai/plans/<plan-name>.md`, exact execution root, and repository mapping before
   provisioning. Worktree handoffs must carry the original workspace and source
@@ -23,6 +26,17 @@ even when a provider plugin is installed; reject them before any allocation.
   ```bash
   rtk proxy node '<source-workspace>/.ai/scripts/resources/task-resources.mjs' init --workspace '<source-workspace>' --plan '.ai/plans/<plan-name>.md' --root '<execution-root>'
   ```
+
+  Add `--project-name '<source-project-label>'` when canonical source-local
+  guidance configures a descriptive label (JavaScript input `projectName`). Init
+  persists the resolved optional `projectName` in the existing v1 manifest;
+  without a supplied or recorded label it uses the canonical source workspace
+  basename. Legacy records without that field remain valid and use the same
+  fallback without a read-time rewrite. A later init may set a previously absent
+  label for future allocations. Preserve a recorded label on resume; a conflicting
+  explicit label is rejected. `TASK_RESOURCES_CONTEXT` and ownership identity
+  formats remain unchanged. Do not parse arbitrary instruction prose as executable
+  configuration or create a second configuration file.
 
   Main-checkout execution uses its original workspace or an exact primary
   repository as the execution root; worktree execution uses its prepared task
@@ -55,7 +69,7 @@ even when a provider plugin is installed; reject them before any allocation.
 
   The command is `node '<source-workspace>/.ai/scripts/resources/task-resources.mjs' docker-create`
   with the context supplied in its environment. The result contains the container
-  ID and actual loopback host ports. Configuration may also contain `command`,
+  ID, generated name, and actual loopback host ports. Configuration may also contain `command`,
   `environment`, `networkId`, and owned `volumeMounts`; see the helper API in
   `scripts/resources/fixtures.mjs`. Environment and command values pass directly
   to Docker and are never written to the artifact or printed in helper output.
@@ -104,7 +118,8 @@ even when a provider plugin is installed; reject them before any allocation.
   [Mobile Virtual Devices](../mobile/virtual-devices.md). Inventory first; reuse
   only a verified available device recorded to the same task and execution,
   otherwise create the minimum dedicated instances. Keep stable-ID targeting,
-  established model/OS names, and unrelated devices unchanged.
+  existing names, and unrelated devices unchanged. New devices use the
+  [Resource Naming](resource-naming.md) convention with runtime metadata retained.
   Newly created iOS devices receive a small ownership proof inside their own data
   directory. Cleanup requires that proof to match the central record; an existing
   device cannot become task-owned merely by listing its UDID in JSON. Never plant

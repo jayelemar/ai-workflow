@@ -49,6 +49,7 @@ test("standalone Docker CLI forwards context and prints only connection identifi
         assert.deepEqual(tracking.getContext(), context);
         return {
           getId: () => "container-id",
+          getName: () => "sample-task-example-123456789abc",
           getHost: () => "127.0.0.1",
           getMappedPort: (port, protocol) => {
             assert.equal(protocol, port === 5432 ? "tcp" : "udp");
@@ -69,6 +70,7 @@ test("standalone Docker CLI forwards context and prints only connection identifi
   assert.deepEqual(output, [
     {
       id: "container-id",
+      name: "sample-task-example-123456789abc",
       host: "127.0.0.1",
       ports: [
         { containerPort: 5432, protocol: "tcp", hostPort: 15432 },
@@ -99,7 +101,11 @@ test("Docker stdin preserves Unicode when UTF-8 characters span byte chunks", as
       input: Readable.from(Array.from(bytes, (byte) => Buffer.from([byte]))),
       createContainer: async (actual) => {
         assert.deepEqual(actual, configuration);
-        return { getId: () => "container-id", getHost: () => "127.0.0.1" };
+        return {
+          getId: () => "container-id",
+          getName: () => "sample-task-example-123456789abc",
+          getHost: () => "127.0.0.1",
+        };
       },
       output: (line) => output.push(line),
     });
@@ -291,6 +297,8 @@ test("CLI resume forwards the exact execution through live manager verification"
         "/original",
         "--resume",
         resume,
+        "--project-name",
+        "ExampleApp",
       ],
       {
         manager: {
@@ -300,6 +308,7 @@ test("CLI resume forwards the exact execution through live manager verification"
               plan: ".ai/plans/sample-task.md",
               root: "/original",
               resume,
+              projectName: "ExampleApp",
             });
             throw new Error("Live verification refused");
           },

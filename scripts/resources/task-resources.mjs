@@ -12,7 +12,7 @@ import { startDockerContainer, startDockerNetwork } from "./fixtures.mjs";
 const confirmationPrompt =
   "Type PROCEED to clean up only the selected plans listed above, or CANCEL to stop.";
 const usage = `Task-owned local resources (new recorded resources only)
-  init --workspace <original-workspace> --plan .ai/plans/<name>.md --root <execution-root> [--resume <execution-UUID>]
+  init --workspace <original-workspace> --plan .ai/plans/<name>.md --root <execution-root> [--project-name <label>] [--resume <execution-UUID>]
   release | reconcile                          # use TASK_RESOURCES_CONTEXT
   ios-create --device-type <identifier> --runtime <identifier>
   docker-create                              # container configuration JSON on stdin
@@ -22,7 +22,8 @@ const usage = `Task-owned local resources (new recorded resources only)
   cleanup --workspace <original-workspace> --plan .ai/plans/<name>.md [--plan ...]
   cleanup-confirmed                           # JSON {preview,confirmation} on stdin
 init prints a JSON context. Set TASK_RESOURCES_CONTEXT to that exact JSON before
-resource creation. Release only after all agents/tests using the execution stop.
+resource creation. Project labels name new resources only; recorded labels stay stable.
+Release only after all agents/tests using the execution stop.
 Cleanup removes resources only: keep plans/worktrees until their separate
 confirmed file-cleanup phase succeeds. No resource manifest is auto-deleted.`;
 
@@ -95,6 +96,7 @@ export async function runCLI(
       "--plan",
       "--root",
       "--resume",
+      "--project-name",
     ]);
     if (!flags.workspace || !flags.root || flags.plan?.length !== 1)
       throw new Error(
@@ -105,6 +107,9 @@ export async function runCLI(
       plan: flags.plan[0],
       root: flags.root,
       resume: flags.resume,
+      ...(flags["project-name"] !== undefined
+        ? { projectName: flags["project-name"] }
+        : {}),
     };
     output(
       JSON.stringify(
@@ -173,6 +178,7 @@ export async function runCLI(
     output(
       JSON.stringify({
         id: container.getId(),
+        name: container.getName(),
         host: container.getHost(),
         ports: (configuration.ports ?? []).map((value) => {
           const port =

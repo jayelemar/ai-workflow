@@ -4,6 +4,7 @@ import { ownershipLabels, requireLoopbackPublications } from "./docker.mjs";
 import { readManifest } from "./store.mjs";
 import { validateTaskImage } from "./images.mjs";
 import { prepareContainerVolumes } from "./volumes.mjs";
+import { dockerName, imageDescription } from "./naming.mjs";
 
 const manager = new ResourceManager();
 const bindingOption = "com.docker.network.bridge.host_binding_ipv4";
@@ -172,7 +173,10 @@ export async function startDockerContainer(
 ) {
   const config = containerConfiguration(configuration);
   const context = requireContext(getContext);
-  await coordinator.context(context);
+  const { manifest } = await coordinator.context(context);
+  const description = imageDescription(config.image);
+  // Validate every descriptive segment before image pulls or network creation.
+  dockerName(manifest, description, context.executionId);
   const provider = await coordinator.docker.identity();
   const image = await validateTaskImage({
     manager: coordinator,
@@ -191,6 +195,7 @@ export async function startDockerContainer(
     provider,
     [network.id],
   );
+  const name = dockerName(manifest, description, entry.id);
   const allocated = await prepareContainerVolumes({
     manager: coordinator,
     context,
@@ -203,6 +208,8 @@ export async function startDockerContainer(
     [
       "container",
       "create",
+      "--name",
+      name,
       "--network",
       network.locator.id,
       ...labelArguments(labels),
@@ -290,6 +297,7 @@ export async function startDockerContainer(
   };
   return {
     getId: () => id,
+    getName: () => name,
     getHost: () => "127.0.0.1",
     getMappedPort: mappedPort,
     stop,
@@ -303,14 +311,14 @@ export async function startDockerNetwork({
   disposeAllocations = disposeDockerAllocations,
 } = {}) {
   const context = requireContext(getContext);
-  await coordinator.context(context);
+  const { manifest } = await coordinator.context(context);
   const provider = await coordinator.docker.identity();
   const { entry, labels } = await coordinator.reserve(
     context,
     "network",
     provider,
   );
-  const name = `ai-${entry.id}`;
+  const name = dockerName(manifest, "network", entry.id);
   const id = await coordinator.docker.command(
     [
       "network",

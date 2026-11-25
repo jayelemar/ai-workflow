@@ -13,6 +13,9 @@ const safeName = z
   .min(1)
   .max(255)
   .regex(/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/);
+export const ProjectNameSchema = text
+  .regex(/^[^\u007f-\u009f]+$/)
+  .refine((value) => value.trim().length > 0, "Project name cannot be blank");
 export const AbsolutePathSchema = z
   .string()
   .min(1)
@@ -168,6 +171,7 @@ export const ManifestSchema = z
     taskId: uuid,
     workspace: AbsolutePathSchema,
     plan: PlanSchema,
+    projectName: ProjectNameSchema.optional(),
     executions: z
       .array(
         z.strictObject({
