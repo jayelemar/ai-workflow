@@ -20,6 +20,7 @@ import {
   ContextSchema,
   MAX_MANIFEST_BYTES,
   PlanSchema,
+  ProjectNameSchema,
   RepositorySchema,
   parseManifest,
 } from "./schema.mjs";
@@ -588,7 +589,9 @@ export async function initExecution({
   repositories,
   resume,
   verifyResume,
+  projectName,
 }) {
+  if (projectName !== undefined) ProjectNameSchema.parse(projectName);
   await validateSource(workspace, plan);
   AbsolutePathSchema.parse(root);
   await noSymlinks(root);
@@ -627,6 +630,15 @@ export async function initExecution({
       executions: [],
       resources: [],
     };
+    if (
+      projectName !== undefined &&
+      manifest.projectName !== undefined &&
+      projectName !== manifest.projectName
+    )
+      fail("Project name conflicts with the recorded label");
+    manifest.projectName ??= ProjectNameSchema.parse(
+      projectName ?? path.basename(workspace),
+    );
     const context = { workspace, plan, executionId: resume ?? randomUUID() };
     if (resume) {
       const execution = manifest.executions.find(

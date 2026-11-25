@@ -84,7 +84,7 @@ class FakeDocker extends DockerProvider {
     assert.deepEqual(args.slice(0, 2), ["volume", "create"]);
     const resources = (await readManifest(this.context)).resources;
     const labels = {};
-    for (let i = 2; i < args.length; i += 2) {
+    for (let i = 2; i < args.length - (args.length % 2); i += 2) {
       assert.equal(args[i], "--label");
       const equal = args[i + 1].indexOf("=");
       labels[args[i + 1].slice(0, equal)] = args[i + 1].slice(equal + 1);
@@ -99,7 +99,9 @@ class FakeDocker extends DockerProvider {
     assert.equal(labels["ai.task"], (await readManifest(this.context)).taskId);
     if (this.failCreate && --this.failCreate === 0)
       throw new Error("Injected creation failure");
-    return this.create("volume", labels).name;
+    return this.create("volume", labels, {
+      ...(args.length % 2 === 1 ? { name: args.at(-1) } : {}),
+    }).name;
   }
   create(kind, labels, overrides = {}) {
     const id = randomBytes(32).toString("hex");
@@ -175,7 +177,7 @@ async function container(f, prepared) {
   return actual;
 }
 
-test("image data volumes are reserved and labelled before anonymous allocation, with exact declared targets", async (t) => {
+test("image data volumes are reserved and labelled before named allocation, with exact declared targets", async (t) => {
   const f = await fixture(t);
   const prepared = await prepareContainerVolumes(f.options);
   assert.deepEqual(
@@ -183,10 +185,13 @@ test("image data volumes are reserved and labelled before anonymous allocation, 
     ["/data", "/logs"],
   );
   assert.equal(prepared.entries.length, 2);
-  for (const entry of prepared.entries) {
+  for (const [index, entry] of prepared.entries.entries()) {
     assert.equal(entry.state, "present");
     assert.deepEqual(entry.dependencies, [f.parent.id]);
-    assert.match(entry.locator.name, /^[a-f0-9]{64}$/);
+    assert.equal(
+      entry.locator.name,
+      `${path.basename(f.context.workspace).toLowerCase()}-volumes-volume-${index}-${entry.id.replaceAll("-", "").slice(0, 12)}`,
+    );
     assert.equal(
       f.docker.objects.get(`volume:${entry.locator.name}`).labels[
         "ai.resource"
@@ -212,6 +217,22 @@ test("image data volumes are reserved and labelled before anonymous allocation, 
     ),
   );
   assert.equal(f.docker.objects.size, 0);
+});
+
+test("a returned volume name must match the exact requested allocation name", async (t) => {
+  const f = await fixture(t);
+  const command = f.docker.command.bind(f.docker);
+  f.docker.command = async (args, endpoint) => {
+    const result = await command(args, endpoint);
+    return args[0] === "volume" ? "a".repeat(64) : result;
+  };
+  await assert.rejects(prepareContainerVolumes(f.options), /requested.*name/);
+  const volumes = (await readManifest(f.context)).resources.filter(
+    (entry) => entry.kind === "volume",
+  );
+  assert.equal(volumes.length, 1);
+  assert.equal(volumes[0].state, "pending");
+  assert.equal(volumes[0].locator, null);
 });
 
 test("missing reference is pulled once while local sha256 IDs never require a reference match", async (t) => {

@@ -78,6 +78,63 @@ const artifact = (f) =>
   path.join(f.workspace, ".ai/artifacts/sample-task/resources.json");
 const clone = (value) => structuredClone(value);
 
+test("project labels persist without changing context and legacy records remain readable", async (t) => {
+  const f = await fixture(t);
+  const context = await initExecution({ ...f, projectName: "MyUse" });
+  assert.deepEqual(Object.keys(context).sort(), [
+    "executionId",
+    "plan",
+    "workspace",
+  ]);
+  assert.equal((await readManifest(context)).projectName, "MyUse");
+  const before = await readFile(artifact(f), "utf8");
+  await assert.rejects(
+    initExecution({ ...f, resume: context.executionId, projectName: "Other" }),
+    /project.*name|label/i,
+  );
+  assert.equal(await readFile(artifact(f), "utf8"), before);
+  assert.deepEqual(
+    await initExecution({ ...f, resume: context.executionId }),
+    context,
+  );
+  const legacy = await readManifest(context);
+  delete legacy.projectName;
+  await writeFile(artifact(f), JSON.stringify(legacy));
+  assert.equal((await readManifest(context)).projectName, undefined);
+  assert.equal(await readFile(artifact(f), "utf8"), JSON.stringify(legacy));
+  await initExecution({ ...f, projectName: "New Label" });
+  assert.equal((await readManifest(context)).projectName, "New Label");
+});
+
+test("invalid descriptive project labels fail before resource records are written", async (t) => {
+  const f = await fixture(t);
+  for (const projectName of ["", "\nprivate", " ", "a".repeat(257)])
+    await assert.rejects(initExecution({ ...f, projectName }));
+  await assert.rejects(lstat(artifact(f)), { code: "ENOENT" });
+});
+
+test("Unicode-only source labels remain usable on legacy init and resume", async (t) => {
+  const outer = await fixture(t);
+  const workspace = path.join(outer.workspace, "旅行");
+  await initGit(path.join(workspace, ".ai"));
+  await initGit(path.join(workspace, "app"));
+  await put(workspace, outer.plan, "# Unicode workspace task\n");
+  const context = await initExecution({ workspace, plan: outer.plan });
+  assert.equal((await readManifest(context)).projectName, "旅行");
+  await updateManifest(context, (manifest) => {
+    delete manifest.projectName;
+  });
+  assert.deepEqual(
+    await initExecution({
+      workspace,
+      plan: outer.plan,
+      resume: context.executionId,
+    }),
+    context,
+  );
+  assert.equal((await readManifest(context)).projectName, "旅行");
+});
+
 test("malformed resource JSON diagnostics omit input excerpts", async (t) => {
   const f = await fixture(t);
   const context = await initExecution(f);
@@ -116,7 +173,7 @@ function entry(manifest, context, overrides = {}) {
 
 test("main and native worktree executions share only the source manifest and resume exact identities", async (t) => {
   const f = await fixture(t);
-  const main = await initExecution(f);
+  const main = await initExecution({ ...f, projectName: "MyUse" });
   const before = await readManifest(main);
   const worktree = path.join(f.workspace, ".worktrees/sample-task/app");
   await mkdir(path.dirname(worktree), { recursive: true });
@@ -130,6 +187,8 @@ test("main and native worktree executions share only the source manifest and res
   );
   const work = await initExecution({ ...f, root: path.dirname(worktree) });
   const after = await readManifest(work);
+  assert.equal(before.projectName, "MyUse");
+  assert.equal(after.projectName, "MyUse");
   assert.equal(after.taskId, before.taskId);
   assert.notEqual(main.executionId, work.executionId);
   assert.deepEqual(

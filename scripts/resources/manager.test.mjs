@@ -1029,6 +1029,40 @@ test("Simulator provisioning reuses its verified device and retains interrupted 
   assert.equal(f.ios.devices.size, 1);
 });
 
+test("legacy simulator records keep names through reuse, release, verified resume and selected cleanup", async (t) => {
+  const f = await fixture(t);
+  const locator = await f.manager.createSimulator(
+    f.context,
+    simulatorConfiguration,
+  );
+  await updateManifest(f.context, (manifest) => {
+    delete manifest.projectName;
+  });
+  const before = await readFile(artifact(f.context), "utf8");
+  f.ios.failCreate = true;
+  assert.deepEqual(
+    await f.manager.createSimulator(f.context, simulatorConfiguration),
+    locator,
+  );
+  assert.equal(await readFile(artifact(f.context), "utf8"), before);
+  assert.equal(locator.name, "iPhone 17 — iOS 26");
+  await f.manager.release(f.context);
+  await f.manager.resumeExecution({
+    workspace: f.workspace,
+    plan: f.plan,
+    root: f.workspace,
+    resume: f.context.executionId,
+  });
+  assert.deepEqual(
+    (await readManifest(f.context)).resources[0].locator,
+    locator,
+  );
+  await f.manager.release(f.context);
+  const preview = await f.manager.inventory(f.workspace, [f.plan]);
+  await f.manager.cleanup(preview, "PROCEED");
+  assert.equal(f.ios.devices.size, 0);
+});
+
 test("Simulator provisioning skips busy owned devices, reuses available candidates and fails closed on invalid proof", async (t) => {
   const f = await fixture(t);
   const busyLocator = await f.manager.createSimulator(

@@ -68,6 +68,9 @@ changed code. A plan never replaces those repository conventions.
   run the relevant tests.
 - Prevent concurrent agents from editing the same file. Use isolated worktrees
   for genuinely parallel implementation.
+- Before any workflow-created local resource, read and follow
+  [Resource Naming](instructions/shared/resource-naming.md). Apply it to new
+  resources only; naming does not grant ownership or cleanup authority.
 - Do not create workflow runners, transition databases, status sidecars,
   review fingerprints, detailed event ledgers, or automatic delivery actions.
   The bounded task-resource record described below is an explicit exception,

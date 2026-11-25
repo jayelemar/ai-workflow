@@ -336,10 +336,15 @@ export class ResourceManager {
     }
     const provider = await this.ios.identity();
     const { entry } = await this.reserve(context, "ios-simulator", provider);
-    const locator = await this.ios.create(configuration, provider, {
-      ...entry.ownership,
-      workspace: context.workspace,
-    });
+    const locator = await this.ios.create(
+      configuration,
+      provider,
+      {
+        ...entry.ownership,
+        workspace: context.workspace,
+      },
+      manifest,
+    );
     await updateManifest(context, (manifest) => {
       const resource = manifest.resources.find((item) => item.id === entry.id);
       resource.locator = locator;

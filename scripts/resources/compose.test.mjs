@@ -84,9 +84,16 @@ async function fixture(
     daemonId: "fixture",
   };
   const execution = { root: workspace, mode: "main" };
+  const manifest = {
+    taskId: "task-id",
+    workspace,
+    plan: context.plan,
+    projectName: "MyUse",
+    resources: records,
+  };
   const manager = {
     context: async () => ({
-      manifest: { taskId: "task-id", resources: records },
+      manifest,
       execution,
     }),
     async reserve(_context, kind, _provider, dependencies, metadata) {
@@ -96,7 +103,7 @@ async function fixture(
         kind === "image" ? ["compose", "expectedTags"] : ["compose"],
       );
       if (kind === "image")
-        assert.match(metadata.expectedTags[0], /^ai-[a-z0-9_.-]+:task$/);
+        assert.match(metadata.expectedTags[0], /^[a-z0-9-]+-\d+:task$/);
       assert.equal(metadata.compose.directory, directory);
       events.push({ type: "reserve", kind });
       const entry = {
@@ -248,6 +255,7 @@ async function fixture(
     secret,
     config,
     execution,
+    manifest,
   };
 }
 
@@ -392,10 +400,61 @@ test("generated Compose ownership values escape literal dollars through build an
   }
 });
 
+test("Compose names use canonical source context and distinguish normalized build-service collisions", async (t) => {
+  const f = await fixture(t);
+  f.execution.mode = "worktree";
+  f.execution.root = f.directory;
+  f.manifest.projectName = "P".repeat(100);
+  f.manifest.plan = `.ai/plans/${"long-plan-".repeat(12)}task.md`;
+  const firstService = `${"W".repeat(50)}.A`;
+  const secondService = `${"w".repeat(50)}-a`;
+  f.config.services = {
+    [firstService]: { build: { context: f.directory } },
+    [secondService]: { build: { context: f.directory } },
+  };
+  const tracking = await trackedCompose(f.options, f.dependencies);
+  assert.match(
+    tracking.project,
+    new RegExp(
+      `^${"p".repeat(32)}-${"long-plan-".repeat(4).slice(0, 32)}-compose-[a-f0-9]{12}$`,
+    ),
+  );
+  assert.ok(tracking.project.length <= 128);
+  const tags = f.records
+    .filter((entry) => entry.kind === "image")
+    .map((entry) => entry.expectedTags[0]);
+  assert.deepEqual(tags, [
+    `${tracking.project}-${"w".repeat(32)}-0:task`,
+    `${tracking.project}-${"w".repeat(32)}-1:task`,
+  ]);
+  assert.ok(tags.every((tag) => tag.length <= 256));
+  const source = await readFile(tracking.overlayFile, "utf8");
+  assert.ok(source.includes(JSON.stringify(firstService)));
+  assert.ok(source.includes(JSON.stringify(secondService)));
+});
+
+test("Compose refuses generated names beyond provider bounds before reservations", async (t) => {
+  for (const kind of ["services", "volumes"]) {
+    const f = await fixture(t);
+    f.config[kind]["x".repeat(240)] =
+      kind === "services" ? { build: { context: f.directory } } : {};
+    await assert.rejects(
+      trackedCompose(f.options, f.dependencies),
+      /resource name exceeds 255/,
+    );
+    assert.deepEqual(f.records, []);
+    assert.equal(
+      f.events.some((event) => event.type === "build"),
+      false,
+    );
+  }
+});
+
 test("generic primary-directory Compose isolates resources and preserves caller configuration", async (t) => {
   const f = await fixture(t);
   const originalConfiguration = structuredClone(f.config);
   const tracking = await trackedCompose(f.options, f.dependencies);
+  assert.match(tracking.project, /^myuse-compose-task-compose-[a-f0-9]{12}$/);
   assert.equal(path.dirname(tracking.overlayFile), f.artifacts);
   assert.equal((await stat(tracking.overlayFile)).mode & 0o777, 0o600);
   assert.ok(
@@ -422,6 +481,13 @@ test("generic primary-directory Compose isolates resources and preserves caller 
   assert.ok(!source.includes("outside-image:shared"));
   const imageReservations = f.records.filter((entry) => entry.kind === "image");
   assert.equal(imageReservations.length, 2);
+  assert.deepEqual(
+    imageReservations.map((entry) => entry.expectedTags[0]),
+    [
+      `${tracking.project}-service-a-0:task`,
+      `${tracking.project}-worker-b-1:task`,
+    ],
+  );
   assert.equal(
     new Set(imageReservations.map((entry) => entry.expectedTags[0])).size,
     2,

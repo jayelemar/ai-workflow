@@ -731,6 +731,11 @@ async function iosFixture(
     addOwnedDevice,
     deviceSet,
     ownership,
+    naming: {
+      workspace: deviceSet,
+      projectName: "Sample",
+      plan: ".ai/plans/provider-check.md",
+    },
     options,
     proofPath,
   };
@@ -843,6 +848,7 @@ test("iOS creation refuses adoption when a pre-existing UDID is returned with di
       { deviceType, runtime },
       fixture.identity,
       fixture.ownership,
+      fixture.naming,
     ),
     /pre-existing identifier/,
   );
@@ -864,20 +870,26 @@ test("iOS refuses an unavailable recorded device or runtime", async (t) => {
 
 test("iOS creates a new dedicated device without adopting a matching existing device", async (t) => {
   const fixture = await iosFixture(t);
-  fixture.addDevice({ udid: otherUDID });
+  fixture.addDevice({
+    udid: otherUDID,
+    name: "Sample · provider-check · iPhone 17",
+  });
+  fixture.inventory.devices[`${runtime}-other`] =
+    fixture.inventory.devices[runtime].splice(0);
   const locator = await fixture.provider.create(
     { deviceType, runtime },
     fixture.identity,
     fixture.ownership,
+    fixture.naming,
   );
   assert.equal(locator.udid, udid);
-  assert.equal(locator.name, "iPhone 17 — iOS 26.0 (2)");
+  assert.equal(locator.name, "Sample · provider-check · iPhone 17 (2)");
   assert.deepEqual(JSON.parse(await readFile(fixture.proofPath(), "utf8")), {
     ...fixture.ownership,
     udid,
   });
   assert.equal((await stat(fixture.proofPath())).mode & 0o777, 0o600);
-  assert.equal(fixture.inventory.devices[runtime].length, 2);
+  assert.equal(fixture.inventory.devices[runtime].length, 1);
   assert.equal(
     (
       await fixture.provider.verify(
@@ -888,9 +900,9 @@ test("iOS creates a new dedicated device without adopting a matching existing de
     "present",
   );
   assert.ok(
-    fixture.inventory.devices[runtime].some(
-      (device) => device.udid === otherUDID,
-    ),
+    Object.values(fixture.inventory.devices)
+      .flat()
+      .some((device) => device.udid === otherUDID),
   );
 });
 
@@ -1020,12 +1032,14 @@ test("iOS never plants ownership on a returned existing device or a new mismatch
       { deviceType, runtime },
       existing.identity,
       existing.ownership,
+      existing.naming,
     ),
     /pre-existing identifier/,
   );
   await assert.rejects(readFile(existing.proofPath()), { code: "ENOENT" });
   for (const options of [
     { createdOverrides: { deviceTypeIdentifier: "personal-model" } },
+    { createdOverrides: { name: "unexpected name" } },
     { createdRuntime: `${runtime}-other` },
   ]) {
     const wrong = await iosFixture(t, options);
@@ -1034,8 +1048,9 @@ test("iOS never plants ownership on a returned existing device or a new mismatch
         { deviceType, runtime },
         wrong.identity,
         wrong.ownership,
+        wrong.naming,
       ),
-      /identity changed/,
+      /identity changed|display name/,
     );
     await assert.rejects(readFile(wrong.proofPath()), { code: "ENOENT" });
   }
@@ -1050,6 +1065,7 @@ test("iOS creation never overwrites an existing ownership file", async (t) => {
       { deviceType, runtime },
       fixture.identity,
       fixture.ownership,
+      fixture.naming,
     ),
     /ownership; allocation remains pending/,
   );
@@ -1077,6 +1093,7 @@ test("iOS creation refuses wrong platforms and unavailable models or runtimes be
       { deviceType, runtime },
       fixture.identity,
       fixture.ownership,
+      fixture.naming,
     ),
     /not installed and available/,
   );
@@ -1097,6 +1114,7 @@ test("iOS creation rejects a returned existing UDID and an uncorroborated new UD
       { deviceType, runtime },
       existing.identity,
       existing.ownership,
+      existing.naming,
     ),
     /pre-existing identifier/,
   );
@@ -1106,6 +1124,7 @@ test("iOS creation rejects a returned existing UDID and an uncorroborated new UD
       { deviceType, runtime },
       missing.identity,
       missing.ownership,
+      missing.naming,
     ),
     /not present|not found|corroborat|absent/,
   );
@@ -1118,6 +1137,7 @@ test("iOS creation rejects a returned existing UDID and an uncorroborated new UD
       { deviceType, runtime },
       invalid.identity,
       invalid.ownership,
+      invalid.naming,
     ),
     /allocation remains pending/,
   );
