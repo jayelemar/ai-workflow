@@ -106,8 +106,8 @@ Use these role defaults unless the user explicitly requests another runtime:
 | Role       | Model         | Reasoning effort | Assignment                         |
 | ---------- | ------------- | ---------------- | ---------------------------------- |
 | `scout`    | `gpt-6-luna`  | `high`           | Read-only exploration and research |
-| `builder`  | `gpt-6.1-sol` | `high`           | Implementation and focused fixes   |
-| `reviewer` | `gpt-6.1-sol` | `xhigh`          | Independent review; no edits       |
+| `builder`  | `gpt-6.2-sol` | `high`           | Implementation and focused fixes   |
+| `reviewer` | `gpt-6.2-sol` | `xhigh`          | Independent review; no edits       |
 
 - Inspect the exposed `spawn_agent` schema before spawning. Set the full
   `model` and `reasoning_effort` explicitly on every role spawn. In the audited
