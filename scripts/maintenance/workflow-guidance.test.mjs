@@ -135,6 +135,8 @@ test("delivery verifies documented hooks in the actual checkout before commits o
     /actual checkout[\s\S]+effective hook path/,
     /expected executable launchers[\s\S]+required helper files[\s\S]+hooks are enabled/,
     /Dependency installation[\s\S]+configured hook path[\s\S]+directly passing quality scripts alone do not prove hook readiness/,
+    /commands required by the hook resolve in the environment that launches Git/,
+    /git hook run pre-commit` in a disposable checkout with a clean index/,
     /missing or disabled[\s\S]+repository's documented initialization procedure[\s\S]+existing setup authorization/,
     /initialization or verification cannot succeed[\s\S]+report the concrete blocker and stop the commit or push/,
     /Do not bypass hooks or redirect shared Git configuration as a workaround/,
@@ -144,12 +146,13 @@ test("delivery verifies documented hooks in the actual checkout before commits o
 });
 
 test("plan worktree setup stays native, safe, and independent", async () => {
-  const [prepare, selection, checks, copy, readme, promptIndex] =
+  const [prepare, selection, checks, copy, toolchain, readme, promptIndex] =
     await Promise.all([
       read(".agents/skills/worktree-setup/SKILL.md"),
       read(".agents/skills/worktree-setup/references/context-selection.md"),
       read(".agents/skills/worktree-setup/references/worktree-checks.md"),
       read(".agents/skills/worktree-setup/references/context-copy.md"),
+      read(".agents/skills/worktree-setup/references/toolchain-setup.md"),
       read("README.md"),
       read("prompts/README.md"),
     ]);
@@ -208,8 +211,22 @@ test("plan worktree setup stays native, safe, and independent", async () => {
   );
   assert.match(
     prepare,
-    /Implementation handles\s+dependency setup, repository-documented hook initialization in each prepared\s+checkout, and application validation/,
+    /At the start of execution,\s+require \[toolchain readiness\]\(references\/toolchain-setup\.md\) in each\s+prepared checkout before development begins/,
   );
+  assert.match(toolchain, /Check each one in mixed-language projects/);
+  assert.match(toolchain, /## Node projects using Corepack/);
+  assert.match(toolchain, /## Python projects/);
+  const hookReference = toolchain.match(
+    /\[hook verification\]\(([^)#]+)#hook-verification\)/,
+  );
+  assert.ok(
+    hookReference,
+    "toolchain readiness must link to hook verification",
+  );
+  const hookGuidance = await read(
+    path.join(".agents/skills/worktree-setup/references", hookReference[1]),
+  );
+  assert.match(hookGuidance, /^## Hook verification$/m);
   assert.match(
     prepare,
     /\[Hook verification\]\(\.\.\/\.\.\/\.\.\/instructions\/shared\/delivery-hygiene\.md#hook-verification\)/,
@@ -240,7 +257,7 @@ test("successful setup emits only self-contained handoffs and failures cannot la
   assert.match(blocks[0][2], /<repository-id>=<absolute-worktree-path>/);
   assert.match(
     blocks[0][2],
-    /Implementation handles dependency setup, repository-documented hook initialization in each prepared checkout, and application validation/,
+    /Before development in each prepared checkout, follow \.ai\/\.agents\/skills\/worktree-setup\/references\/toolchain-setup\.md\./,
   );
   assert.match(
     blocks[0][2],
@@ -248,7 +265,7 @@ test("successful setup emits only self-contained handoffs and failures cannot la
   );
   assert.match(
     blocks[0][2],
-    /Preserve its boundaries[\s\S]+keep the task-local plan updated[\s\S]+run every required validation[\s\S]+definition of done is proven/,
+    /Preserve the plan's boundaries[\s\S]+keep it updated[\s\S]+run every required validation[\s\S]+definition of done is proven/,
   );
   assert.doesNotMatch(blocks[0][2], /reported above/);
   assert.match(
