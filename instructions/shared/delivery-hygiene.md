@@ -42,6 +42,17 @@ Before a commit or push in a repository with documented hooks:
   that hooks are enabled, including environment or startup settings that can
   disable them. Dependency installation, a configured hook path, or directly
   passing quality scripts alone do not prove hook readiness.
+- Check that the commands required by the hook resolve in the environment
+  that launches Git, including the hook manager's startup and PATH changes.
+  For example, Husky uses a non-interactive shell and may source its own
+  startup file. Check the same terminal, tmux pane, or Git client that will
+  run the hook. If only an interactive terminal resolves the command, use
+  the repository's documented runtime setup for the hook environment.
+- Use the repository's safe readiness procedure. When direct execution is
+  safe, use `rtk git hook run pre-commit` in a disposable checkout with a
+  clean index and verify the hook actually reaches its command. Some hooks
+  can modify files or staged changes. Keep verification off an active
+  developer index and avoid creating a commit to test the hook.
 - When hooks are missing or disabled, follow the repository's documented
   initialization procedure within existing setup authorization. If authorization
   is absent or initialization or verification cannot succeed, report the concrete

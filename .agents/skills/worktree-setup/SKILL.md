@@ -119,9 +119,10 @@ After context selection and every repository and context preflight pass:
 4. Complete destination verification in `worktree-checks.md`, including actual
    structural fidelity and isolation, and recheck every source and prepared
    checkout. Routine setup requires no dependency installation, package manager,
-   network access, or default/full workflow health. Implementation handles
-   dependency setup, repository-documented hook initialization in each prepared
-   checkout, and application validation. Creating worktrees does not
+   network access, or default/full workflow health. At the start of execution,
+   require [toolchain readiness](references/toolchain-setup.md) in each
+   prepared checkout before development begins. The context-copy procedure's
+   Node prerequisite belongs to the workflow itself. Creating worktrees does not
    authorize secret copying or dependency installation. Do not initialize a
    resource record, provision devices, or start containers during setup. Carry
    source identity in the handoff under
@@ -151,14 +152,14 @@ recorded label under Task Resources. This permits only the source resource
 artifact, temporary lock, and helper-owned source-plan marker writes described
 in [Task Resources](../../../instructions/shared/task-resources.md), with no
 source code edits. If that write is unavailable, stop before allocation.
-State that implementation handles dependency setup, repository-documented hook
-initialization in each prepared checkout, and application validation. Require
+Require the toolchain readiness reference before development in each prepared
+checkout. Execution owns application validation. Require
 [Hook verification](../../../instructions/shared/delivery-hygiene.md#hook-verification)
 before commits or pushes in the execution handoff.
 For controlled work, require the plan's independent final review before finishing:
 
 ```text
-/goal Implement <task-root>/.ai/plans/<plan-name>.md. Use these prepared worktrees for all plan-owned edits: <repository-id>=<absolute-worktree-path> (repeat for every repository). Preserve its boundaries, keep the task-local plan updated, run every required validation, and finish only when its definition of done is proven. Original workspace: <source-workspace>; source plan: .ai/plans/<plan-name>.md; source project label: <source-project-label>. Before the first resource allocation, follow .ai/instructions/shared/task-resources.md using <source-workspace>/.ai/scripts/resources/task-resources.mjs with that original workspace/source plan, <task-root> as execution root, and --project-name '<source-project-label>', preserving any recorded label. Pass its exact TASK_RESOURCES_CONTEXT JSON to every resource-creating child. Use the original helper and canonical source artifact, never a copied .ai resource record. Only its resource artifact, temporary lock, and helper-owned source-plan marker may be written outside the worktrees; stop before allocation if unavailable. Implementation handles dependency setup, repository-documented hook initialization in each prepared checkout, and application validation. Verify hooks before commits or pushes following .ai/instructions/shared/delivery-hygiene.md#hook-verification. Implementation and Goal execution have not started; delivery requires separate explicit authorization.
+/goal Implement <task-root>/.ai/plans/<plan-name>.md. Use these prepared worktrees for all plan-owned edits: <repository-id>=<absolute-worktree-path> (repeat for every repository). Before development in each prepared checkout, follow .ai/.agents/skills/worktree-setup/references/toolchain-setup.md. Preserve the plan's boundaries, keep it updated, run every required validation, and finish only when its definition of done is proven. Original workspace: <source-workspace>; source plan: .ai/plans/<plan-name>.md; source project label: <source-project-label>. Before the first resource allocation, follow .ai/instructions/shared/task-resources.md using <source-workspace>/.ai/scripts/resources/task-resources.mjs with that original workspace/source plan, <task-root> as execution root, and --project-name '<source-project-label>', preserving any recorded label. Pass its exact TASK_RESOURCES_CONTEXT JSON to every resource-creating child. Use the original helper and canonical source artifact, never a copied .ai resource record. Only its resource artifact, temporary lock, and helper-owned source-plan marker may be written outside the worktrees; stop before allocation if unavailable. Verify hooks before commits or pushes following .ai/instructions/shared/delivery-hygiene.md#hook-verification. Implementation and Goal execution have not started; delivery requires separate explicit authorization.
 ```
 
 The second block is the single two-pane launcher below, printed without starting
